@@ -15,4 +15,4 @@ This repository is intentionally public. Treat every commit, test fixture, issue
 
 Use Node 20+ and pnpm. Run `pnpm check` before opening a pull request. Keep packages dependency-light and browser APIs SSR-safe. Public API changes require tests and corresponding updates in `README.md` and `docs/`.
 
-Agents may create a synthetic sandbox using `pnpm dlx @mindbill/node signup`, but must save the one-time key to a gitignored file. An agent may request a Stripe Checkout URL; only a human may open it and provide payment information.
+The public packages are not yet published to npm. Until publication, `pnpm dlx @mindbill/node signup` is unavailable; agents should evaluate the cloned source with synthetic fixtures and use the hosted developer portal or MindBill sales for account activation. After publication, agents may use the CLI to create a synthetic sandbox, but must save the one-time key to a gitignored file. An agent may request a Stripe Checkout URL; only a human may open it and provide payment information.

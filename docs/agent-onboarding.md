@@ -2,7 +2,9 @@
 
 This flow is designed so a coding agent can build a complete synthetic-data integration while humans retain control over legal acceptance and payment.
 
-## 1. Create a sandbox
+> **Publication pending:** `@mindbill/node`, `@mindbill/embed`, and `@mindbill/react` are not yet available from npm or public CDNs. The package commands in this guide document the post-publication flow and currently return 404. For evaluation today, clone the [public source repository](https://github.com/incidentfox/mindbill-widgets), run `pnpm install --frozen-lockfile && pnpm check`, and inspect the local examples. Use the [hosted developer portal](https://app.mindbill.org/developers) or contact MindBill for account activation.
+
+## 1. Create a sandbox (after npm publication)
 
 ```bash
 pnpm dlx @mindbill/node signup \
@@ -19,7 +21,7 @@ Before passing `--accept-terms`, the account owner should review the current ter
 
 Add `.env.mindbill` to `.gitignore`. Load `MINDBILL_API_KEY` only in a server process or secret manager. Never put it in a browser bundle, mobile application, prompt, issue, CI log, analytics event, URL, or screenshot.
 
-## 3. Build with synthetic data
+## 3. Build with synthetic data (after npm publication)
 
 Use invented names, claim numbers, bill IDs, and attachments in sandbox. Do not copy a production payload and “anonymize” it; create a fixture from scratch.
 
@@ -37,7 +39,7 @@ The API key used by that command must include `embed:write`.
 
 Create embed sessions inside your authenticated backend, scoped to the current user and exact HTTPS origin. Forward the returned session token to the browser over your existing authenticated channel. Render `@mindbill/embed` or `@mindbill/react` and handle only documented events.
 
-## 5. Request live access
+## 5. Request live access (after npm publication)
 
 An authorized human completes organization onboarding and the BAA. An agent can then request a Stripe-hosted URL:
 

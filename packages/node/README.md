@@ -2,6 +2,8 @@
 
 Dependency-free Node 20+ SDK and an agent-safe CLI for the MindBill Partner API.
 
+> **Publication pending:** `@mindbill/node` is not yet available from npm. The import and `pnpm dlx` commands below document the post-publication interface and currently return 404. Clone the [source repository](https://github.com/incidentfox/mindbill-widgets) to evaluate it locally, or use the [hosted developer portal](https://app.mindbill.org/developers) for account activation.
+
 ```ts
 import { MindBillClient } from "@mindbill/node";
 

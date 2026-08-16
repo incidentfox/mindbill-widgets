@@ -4,6 +4,8 @@ Public, dependency-light building blocks for adding California workers’ compen
 
 > Sandbox data must be synthetic. Never send PHI until your organization is approved for live access and the required agreements are complete.
 
+> **Publication status:** the `@mindbill/node`, `@mindbill/embed`, and `@mindbill/react` packages are not yet published to npm. Registry, `pnpm dlx`, and CDN commands below are post-publication examples and currently return 404. To evaluate the code today, clone this repository, run `pnpm install --frozen-lockfile && pnpm check`, and use the source and examples locally. Account activation is available through the [hosted developer portal](https://app.mindbill.org/developers) or MindBill sales until package publication.
+
 ## Packages
 
 | Package | Use |
@@ -12,7 +14,7 @@ Public, dependency-light building blocks for adding California workers’ compen
 | `@mindbill/embed` | Framework-neutral custom elements |
 | `@mindbill/react` | React wrappers around the custom elements |
 
-## Fastest safe start
+## Fastest safe start (after npm publication)
 
 An agent can create a free sandbox without handling billing details:
 
@@ -26,7 +28,7 @@ pnpm dlx @mindbill/node signup \
 
 The one-time sandbox key is written to `.env.mindbill` with owner-only permissions and is not printed. Add that file to your project’s `.gitignore`. The command returns only identifiers, the key prefix, and the saved path.
 
-Then use the SDK on your server:
+After publication, use the SDK on your server:
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
@@ -46,7 +48,7 @@ const session = await mindbill.createEmbedSession({
 });
 ```
 
-Return only `token` and `embedUrl` from your own authenticated backend, then render:
+Return only `token` and `embedUrl` from your own authenticated backend. After package publication, render:
 
 ```html
 <script type="module" src="https://unpkg.com/@mindbill/embed@0.2.0/dist/index.js"></script>
