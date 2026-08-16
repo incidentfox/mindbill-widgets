@@ -1,0 +1,32 @@
+{
+  "name": "@mindbill/node",
+  "version": "0.1.0",
+  "description": "Typed Node SDK and agent-safe CLI for the MindBill Partner API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": { "mindbill": "./dist/cli.js" },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist"
+  },
+  "engines": { "node": ">=20" },
+  "keywords": ["mindbill", "api", "sdk", "cli", "medical-legal", "workers-compensation"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/incidentfox/mindbill-widgets.git",
+    "directory": "packages/node"
+  },
+  "homepage": "https://github.com/incidentfox/mindbill-widgets#readme",
+  "bugs": { "url": "https://github.com/incidentfox/mindbill-widgets/issues" },
+  "publishConfig": { "access": "public", "provenance": true }
+}

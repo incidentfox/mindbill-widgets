@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindBill timeline example</title>
+    <script type="module" src="https://unpkg.com/@mindbill/embed@0.2.0/dist/index.js"></script>
+    <style>body{font:16px system-ui;margin:2rem}mindbill-bill-timeline{min-height:620px}</style>
+  </head>
+  <body>
+    <h1>Bill timeline</h1>
+    <!-- Replace only with values returned by your authenticated backend. -->
+    <mindbill-bill-timeline id="timeline" theme="system"></mindbill-bill-timeline>
+    <script type="module">
+      const response = await fetch("/api/mindbill/embed-session", { method: "POST" });
+      if (!response.ok) throw new Error("Unable to create MindBill session");
+      const session = await response.json();
+      document.querySelector("#timeline").configure({
+        sessionToken: session.token,
+        embedUrl: session.embedUrl,
+        appearance: { theme: "system", accentColor: "#2563eb" },
+      });
+    </script>
+  </body>
+</html>

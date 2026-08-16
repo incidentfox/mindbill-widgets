@@ -1,0 +1,9 @@
+# @mindbill/react
+
+React wrappers for the secure `@mindbill/embed` custom elements. See the [widget guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/widgets.md).
+
+```tsx
+import { MindBillBillTimeline } from "@mindbill/react";
+```
+
+Create the short-lived embed session on your server; never send a Partner API key to React/browser code.

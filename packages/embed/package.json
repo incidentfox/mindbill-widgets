@@ -1,0 +1,31 @@
+{
+  "name": "@mindbill/embed",
+  "version": "0.2.0",
+  "description": "Secure framework-neutral web components for MindBill hosted workflows",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --sourcemap",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["mindbill", "medical-legal", "workers-compensation", "web-component", "widget"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/incidentfox/mindbill-widgets.git",
+    "directory": "packages/embed"
+  },
+  "homepage": "https://github.com/incidentfox/mindbill-widgets#readme",
+  "bugs": { "url": "https://github.com/incidentfox/mindbill-widgets/issues" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "sideEffects": true
+}

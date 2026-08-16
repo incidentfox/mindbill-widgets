@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "allowJs": false,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@mindbill/embed": ["packages/embed/src/index.ts"],
+      "@mindbill/node": ["packages/node/src/index.ts"],
+      "@mindbill/react": ["packages/react/src/index.tsx"]
+    },
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["packages/**/*.ts", "packages/**/*.tsx", "tests/**/*.ts"],
+  "exclude": ["node_modules", "packages/*/dist"]
+}

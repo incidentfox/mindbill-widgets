@@ -1,0 +1,261 @@
+export const MINDBILL_API_BASE_URL = "https://app.mindbill.org/partner/v1";
+export const MINDBILL_TERMS_VERSION = "2026-08-16";
+export const MINDBILL_BAA_VERSION = "2026-08-16";
+
+export type MindBillEnvironment = "sandbox" | "live";
+export const MINDBILL_COMPONENTS = ["bill-timeline", "bill-from-report", "collections", "onboarding"] as const;
+export type MindBillComponent = (typeof MINDBILL_COMPONENTS)[number];
+export const MINDBILL_SCOPES = [
+  "account:read",
+  "account:write",
+  "keys:write",
+  "orgs:read",
+  "orgs:write",
+  "bills:read",
+  "bills:write",
+  "bills:submit",
+  "events:read",
+  "settings:read",
+  "settings:write",
+  "embed:write",
+] as const;
+export type MindBillScope = (typeof MINDBILL_SCOPES)[number];
+
+export type MindBillClientOptions = {
+  apiKey: string;
+  organizationId?: string;
+  baseUrl?: string;
+  fetch?: typeof globalThis.fetch;
+};
+
+export type RequestOptions = { idempotencyKey?: string };
+
+export type DeveloperSignupRequest = {
+  companyName: string;
+  contactName: string;
+  email: string;
+  termsAccepted: true;
+  termsVersion: typeof MINDBILL_TERMS_VERSION;
+};
+
+export type DeveloperSignupResponse = {
+  partnerId: string;
+  partnerSlug: string;
+  accountId: string;
+  credentialId: string;
+  apiKey: string;
+  environment: "sandbox";
+};
+
+export type DeveloperAccount = {
+  id: string;
+  email: string;
+  contactName: string;
+  status: "active" | "suspended";
+  termsVersion: string;
+  termsAcceptedAt: string;
+  baaVersion: string | null;
+  baaAcceptedAt: string | null;
+  paymentMethodReady: boolean;
+  liveAccessStatus: "not_requested" | "pending" | "approved" | "suspended";
+  partnerSlug: string;
+  companyName: string;
+  ipAllowlist: string[];
+  rateLimitPerMinute: number;
+};
+
+export type DeveloperSecurity = { ipAllowlist: string[]; rateLimitPerMinute: number };
+export type BaaAcceptance = { baaVersion: string; baaAcceptedAt: string; acceptedBy: string };
+export type HostedSession = { id: string; url: string };
+export type LiveAccessResponse = { status: "pending"; checkout: HostedSession };
+export type MintCredentialRequest = {
+  name: string;
+  environment: MindBillEnvironment;
+  organizationId?: string;
+  scopes: MindBillScope[];
+};
+export type MintCredentialResponse = {
+  credentialId: string;
+  apiKey: string;
+  keyPrefix: string;
+  environment: MindBillEnvironment;
+  scopes: MindBillScope[];
+  organizationId: string | null;
+  createdAt: string;
+};
+
+export type EmbedSessionRequest = {
+  component: MindBillComponent;
+  allowedOrigin: string;
+  expiresIn?: number;
+  billId?: string;
+};
+export type EmbedSession = {
+  sessionId: string;
+  component: MindBillComponent;
+  token: string;
+  embedUrl: string;
+  expiresAt: string;
+};
+
+export type Bill = { id: string; status: string; externalId?: string | null; [key: string]: unknown };
+export type BillPage = { data?: Bill[]; bills?: Bill[]; nextCursor?: string | null; [key: string]: unknown };
+export type MindBillEvent = {
+  id: string;
+  sequence: string;
+  type: string;
+  apiVersion: string;
+  createdAt: string;
+  data: Record<string, unknown>;
+};
+
+export class MindBillError extends Error {
+  readonly name = "MindBillError";
+  constructor(
+    public readonly status: number,
+    public readonly problem: Record<string, unknown>,
+    public readonly requestId?: string,
+  ) {
+    super(String(problem.detail ?? problem.title ?? `MindBill API error ${status}`));
+  }
+}
+
+type RequestConfig = RequestOptions;
+
+function exactHttpsOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      url.pathname === "/" &&
+      !url.search &&
+      !url.hash
+      ? url.origin
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function parseResponse(response: Response): Promise<Record<string, unknown>> {
+  if (response.status === 204) return {};
+  return response.json().catch(() => ({})) as Promise<Record<string, unknown>>;
+}
+
+export class MindBillClient {
+  private readonly baseUrl: string;
+  private readonly fetcher: typeof globalThis.fetch;
+
+  constructor(private readonly options: MindBillClientOptions) {
+    if (!options.apiKey) throw new Error("apiKey is required");
+    this.baseUrl = (options.baseUrl ?? MINDBILL_API_BASE_URL).replace(/\/$/, "");
+    this.fetcher = options.fetch ?? globalThis.fetch;
+    if (!this.fetcher) throw new Error("A fetch implementation is required");
+  }
+
+  private async request<T>(method: string, path: string, body?: unknown, config: RequestConfig = {}): Promise<T> {
+    const response = await this.fetcher(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${this.options.apiKey}`,
+        accept: "application/json",
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...(this.options.organizationId ? { "x-mindbill-org-id": this.options.organizationId } : {}),
+        ...(config.idempotencyKey ? { "idempotency-key": config.idempotencyKey } : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const payload = await parseResponse(response);
+    if (!response.ok) {
+      const requestId = response.headers.get("x-request-id") ??
+        (typeof payload.requestId === "string" ? payload.requestId : undefined);
+      throw new MindBillError(response.status, payload, requestId);
+    }
+    return payload as T;
+  }
+
+  getDeveloperAccount(): Promise<DeveloperAccount> {
+    return this.request("GET", "/developer/account");
+  }
+  updateDeveloperSecurity(input: DeveloperSecurity): Promise<DeveloperSecurity> {
+    return this.request("PATCH", "/developer/account", input);
+  }
+  acceptBaa(input: { accepted: true; acceptedBy: string; baaVersion?: typeof MINDBILL_BAA_VERSION }): Promise<BaaAcceptance> {
+    return this.request("POST", "/developer/account/baa", {
+      ...input,
+      baaVersion: input.baaVersion ?? MINDBILL_BAA_VERSION,
+    });
+  }
+  requestLiveAccess(organizationId: string): Promise<LiveAccessResponse> {
+    return this.request("POST", "/developer/account/live-access", { organizationId });
+  }
+  createBillingPortalSession(): Promise<HostedSession> {
+    return this.request("POST", "/developer/account/billing-portal");
+  }
+  mintCredential(input: MintCredentialRequest): Promise<MintCredentialResponse> {
+    return this.request("POST", "/developer/account/keys", input);
+  }
+  quote<T = Record<string, unknown>>(input: unknown, idempotencyKey: string): Promise<T> {
+    return this.request("POST", "/quote", input, { idempotencyKey });
+  }
+  createBill<T = { bill: Bill }>(input: unknown, idempotencyKey: string): Promise<T> {
+    return this.request("POST", "/bills", input, { idempotencyKey });
+  }
+  getBill<T = { bill: Bill }>(id: string): Promise<T> {
+    return this.request("GET", `/bills/${encodeURIComponent(id)}`);
+  }
+  listBills<T = BillPage>(query: Record<string, string | number | boolean> = {}): Promise<T> {
+    const search = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)])).toString();
+    return this.request("GET", `/bills${search ? `?${search}` : ""}`);
+  }
+  submitBill<T = Record<string, unknown>>(id: string, input: unknown, idempotencyKey: string): Promise<T> {
+    return this.request("POST", `/bills/${encodeURIComponent(id)}/submit`, input, { idempotencyKey });
+  }
+  listEvents(cursor = "0", limit = 50): Promise<{ events: MindBillEvent[]; nextCursor: string | null }> {
+    return this.request("GET", `/events?cursor=${encodeURIComponent(cursor)}&limit=${limit}`);
+  }
+  listWebhookDeliveries(limit = 50): Promise<Record<string, unknown>> {
+    return this.request("GET", `/webhook-deliveries?limit=${limit}`);
+  }
+  createEmbedSession(input: EmbedSessionRequest): Promise<EmbedSession> {
+    if (!MINDBILL_COMPONENTS.includes(input.component)) {
+      throw new Error(`component must be one of: ${MINDBILL_COMPONENTS.join(", ")}`);
+    }
+    if (input.component === "bill-timeline" && !input.billId) {
+      throw new Error("billId is required for bill-timeline sessions");
+    }
+    if (input.component !== "bill-timeline" && input.billId !== undefined) {
+      throw new Error("billId is supported only for bill-timeline sessions");
+    }
+    const allowedOrigin = exactHttpsOrigin(input.allowedOrigin);
+    if (!allowedOrigin) {
+      throw new Error("allowedOrigin must be an exact HTTPS origin without credentials, path, query, or fragment");
+    }
+    if (input.expiresIn !== undefined && (!Number.isInteger(input.expiresIn) || input.expiresIn < 60 || input.expiresIn > 3600)) {
+      throw new Error("expiresIn must be an integer from 60 through 3600 seconds");
+    }
+    return this.request("POST", "/embed/sessions", { ...input, allowedOrigin });
+  }
+}
+
+export async function createDeveloperSandbox(
+  input: Omit<DeveloperSignupRequest, "termsAccepted" | "termsVersion"> & { termsAccepted: true },
+  options: { baseUrl?: string; fetch?: typeof globalThis.fetch } = {},
+): Promise<DeveloperSignupResponse> {
+  const fetcher = options.fetch ?? globalThis.fetch;
+  if (!fetcher) throw new Error("A fetch implementation is required");
+  const baseUrl = (options.baseUrl ?? MINDBILL_API_BASE_URL).replace(/\/$/, "");
+  const response = await fetcher(`${baseUrl}/developer/signup`, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify({ ...input, termsVersion: MINDBILL_TERMS_VERSION }),
+  });
+  const payload = await parseResponse(response);
+  if (!response.ok) {
+    const requestId = response.headers.get("x-request-id") ??
+      (typeof payload.requestId === "string" ? payload.requestId : undefined);
+    throw new MindBillError(response.status, payload, requestId);
+  }
+  return payload as DeveloperSignupResponse;
+}

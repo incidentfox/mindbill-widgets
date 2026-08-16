@@ -1,0 +1,33 @@
+{
+  "name": "@mindbill/react",
+  "version": "0.1.0",
+  "description": "React components for MindBill hosted billing workflows",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.tsx --format esm --dts --clean --sourcemap --external react --external react/jsx-runtime",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": { "react": ">=18" },
+  "dependencies": { "@mindbill/embed": "workspace:^" },
+  "keywords": ["mindbill", "react", "medical-legal", "workers-compensation", "widget"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/incidentfox/mindbill-widgets.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/incidentfox/mindbill-widgets#readme",
+  "bugs": { "url": "https://github.com/incidentfox/mindbill-widgets/issues" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "sideEffects": true
+}
