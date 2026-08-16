@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -28,6 +28,18 @@ try {
       const cliText = execFileSync("tar", ["-xOf", tarballPath, "package/dist/cli.js"], { encoding: "utf8" });
       if (!cliText.startsWith("#!/usr/bin/env node")) {
         throw new Error("@mindbill/node CLI is missing its executable shebang");
+      }
+      if (cliText.match(/^#!.*$/gm)?.length !== 1) {
+        throw new Error("@mindbill/node CLI must contain exactly one executable shebang");
+      }
+      const installDirectory = join(stagingDirectory, "node-package");
+      mkdirSync(installDirectory, { recursive: true });
+      execFileSync("tar", ["-xzf", tarballPath, "-C", installDirectory]);
+      const help = execFileSync(process.execPath, [join(installDirectory, "package/dist/cli.js"), "--help"], {
+        encoding: "utf8",
+      });
+      if (!help.includes("MindBill agent-safe CLI")) {
+        throw new Error("@mindbill/node packed CLI did not return its help output");
       }
     }
     process.stdout.write(`Packed ${manifest.name}@${manifest.version} (${tarballPath})\n`);

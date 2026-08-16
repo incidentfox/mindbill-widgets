@@ -14,6 +14,5 @@ export default defineConfig([
     dts: false,
     clean: false,
     sourcemap: true,
-    banner: { js: "#!/usr/bin/env node" },
   },
 ]);
