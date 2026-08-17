@@ -15,6 +15,41 @@ const mindbill = new MindBillClient({
 });
 ```
 
+The billing methods use the current Partner API wire shapes by default:
+
+```ts
+const quote = await mindbill.quote({
+  lineItems: [{ code: "ML200", units: 1 }],
+}, crypto.randomUUID());
+
+const created = await mindbill.createBill({
+  patient: { kind: "new" },
+  fields: { externalId: "synthetic-example-1" },
+  lineItems: [{ code: "ML200", units: 1 }],
+}, crypto.randomUUID());
+
+const submission = await mindbill.submitBill(
+  created.billId,
+  { route: "ebill" },
+  crypto.randomUUID(),
+);
+
+if ("sandbox" in submission) {
+  console.log(submission.state); // "paid" in the synthetic sandbox simulation
+} else {
+  console.log(submission.bill.status); // live workflow state, not payer proof
+}
+```
+
+`createBill` returns `{ patientId, injuryId, billId, billNumber }` directly. `getBill` returns
+`{ bill, multiple?, ids? }`; `listBills` returns a required pagination envelope; and
+`submitBill` returns a discriminated sandbox-or-live union. Responses are extensible, so avoid
+rejecting additive fields. Use a key containing `bills:quote` for `quote`.
+
+Webhook consumers can use `verifyMindBillWebhookSignature` with the exact raw body and
+`compareMindBillEventSequence` for decimal sequence strings that may exceed JavaScript's safe
+integer range. See the [webhook guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/webhooks.md).
+
 Create a synthetic sandbox without printing the returned key:
 
 ```bash

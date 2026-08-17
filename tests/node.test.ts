@@ -1,9 +1,13 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  compareMindBillEventSequence,
   createDeveloperSandbox,
+  MINDBILL_SCOPES,
   MINDBILL_TERMS_VERSION,
   MindBillClient,
   MindBillError,
+  verifyMindBillWebhookSignature,
 } from "../packages/node/src/index.js";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
@@ -38,14 +42,22 @@ describe("@mindbill/node", () => {
   });
 
   it("applies bearer auth, organization context, and idempotency", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ bill: { id: "bill_1" } }));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      patientId: "patient_1",
+      injuryId: "injury_1",
+      billId: "bill_1",
+      billNumber: 1001,
+    }));
     const client = new MindBillClient({
       apiKey: "mb_sandbox_secret",
       organizationId: "org_1",
       baseUrl: "https://example.test/partner/v1/",
       fetch: fetcher,
     });
-    await client.createBill({ externalId: "example-1" }, "example-idempotency-key");
+    const result = await client.createBill({
+      patient: { kind: "new" },
+      fields: { externalId: "example-1" },
+    }, "example-idempotency-key");
 
     const [url, request] = fetcher.mock.calls[0]!;
     const headers = new Headers(request?.headers);
@@ -53,6 +65,74 @@ describe("@mindbill/node", () => {
     expect(headers.get("authorization")).toBe("Bearer mb_sandbox_secret");
     expect(headers.get("x-mindbill-org-id")).toBe("org_1");
     expect(headers.get("idempotency-key")).toBe("example-idempotency-key");
+    expect(result).toEqual({
+      patientId: "patient_1",
+      injuryId: "injury_1",
+      billId: "bill_1",
+      billNumber: 1001,
+    });
+  });
+
+  it("exposes the quote scope and typed quote request", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      currency: "USD",
+      totalAllowed: 625,
+    }));
+    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
+    const quote = await client.quote({
+      lineItems: [{ code: "ML200", modifiers: ["-95"], units: 1 }],
+    }, "quote-idempotency-key");
+
+    expect(MINDBILL_SCOPES).toContain("bills:quote");
+    expect(quote.totalAllowed).toBe(625);
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(url).toBe("https://app.mindbill.org/partner/v1/quote");
+    expect(JSON.parse(String(request?.body))).toEqual({
+      lineItems: [{ code: "ML200", modifiers: ["-95"], units: 1 }],
+    });
+  });
+
+  it("returns the documented sandbox submission variant", async () => {
+    const response = {
+      ok: true as const,
+      sandbox: true as const,
+      billId: "bill_1",
+      controlNumber: "sandbox-control-1",
+      state: "paid" as const,
+      acknowledgments: [
+        { type: "999" as const, status: "accepted" as const },
+        { type: "277CA" as const, status: "accepted" as const },
+      ],
+      eor: { id: "eor_1", reportedPaid: 625 },
+      payments: [{ id: "payment_1", amount: 625 }],
+      balanceDue: 0 as const,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(response, { status: 202 }));
+    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
+    const result = await client.submitBill("bill_1", {}, "submit-idempotency-key");
+
+    expect(result).toEqual(response);
+    expect("sandbox" in result && result.sandbox).toBe(true);
+  });
+
+  it("returns the documented live submission variant", async () => {
+    const response = {
+      bill: { id: "bill_1", status: "submitted" },
+      transmissionState: "uploaded",
+      dryRun: false,
+      liveTransmit: true,
+      clearinghouse: "synthetic-clearinghouse",
+      billFilename: "synthetic-claim.edi",
+      uploaded: ["synthetic-claim.edi"],
+      artifactPath: "/synthetic/artifacts",
+      attachmentAdvisories: [{ id: "synthetic-advisory", message: "Synthetic advisory" }],
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(response));
+    const client = new MindBillClient({ apiKey: "mb_live_secret", fetch: fetcher });
+    const result = await client.submitBill("bill_1", { route: "ebill" }, "submit-live-idempotency-key");
+
+    expect(result).toEqual(response);
+    expect("bill" in result && result.uploaded).toEqual(["synthetic-claim.edi"]);
   });
 
   it("surfaces RFC 9457-style API errors with request IDs", async () => {
@@ -113,5 +193,28 @@ describe("@mindbill/node", () => {
       expiresIn: 59,
     })).toThrow("expiresIn must be an integer from 60 through 3600 seconds");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("verifies webhook signatures against the exact raw body", () => {
+    const secret = "synthetic_webhook_secret";
+    const timestamp = 1_800_000_000;
+    const rawBody = new TextEncoder().encode('{"id":"event_1","sequence":"9007199254740993"}');
+    const signature = createHmac("sha256", secret)
+      .update(`${timestamp}.`)
+      .update(rawBody)
+      .digest("hex");
+    const header = `t=${timestamp},v1=${"0".repeat(64)},v1=${signature}`;
+
+    expect(verifyMindBillWebhookSignature(rawBody, header, secret, { now: timestamp })).toBe(true);
+    expect(verifyMindBillWebhookSignature(new TextEncoder().encode("{}"), header, secret, { now: timestamp })).toBe(false);
+    expect(verifyMindBillWebhookSignature(rawBody, header, secret, { now: timestamp + 301 })).toBe(false);
+    expect(verifyMindBillWebhookSignature(rawBody, "t=not-a-time,v1=bad", secret, { now: timestamp })).toBe(false);
+  });
+
+  it("compares arbitrary-length decimal event sequences without Number coercion", () => {
+    expect(compareMindBillEventSequence("9007199254740993", "9007199254740992")).toBe(1);
+    expect(compareMindBillEventSequence("00042", "42")).toBe(0);
+    expect(compareMindBillEventSequence("99", "100")).toBe(-1);
+    expect(() => compareMindBillEventSequence("42.1", "43")).toThrow("decimal digits only");
   });
 });

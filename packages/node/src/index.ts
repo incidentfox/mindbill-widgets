@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
 export const MINDBILL_API_BASE_URL = "https://app.mindbill.org/partner/v1";
 export const MINDBILL_TERMS_VERSION = "2026-08-16";
 export const MINDBILL_BAA_VERSION = "2026-08-16";
@@ -13,6 +15,7 @@ export const MINDBILL_SCOPES = [
   "orgs:write",
   "bills:read",
   "bills:write",
+  "bills:quote",
   "bills:submit",
   "events:read",
   "settings:read",
@@ -98,8 +101,90 @@ export type EmbedSession = {
   expiresAt: string;
 };
 
-export type Bill = { id: string; status: string; externalId?: string | null; [key: string]: unknown };
-export type BillPage = { data?: Bill[]; bills?: Bill[]; nextCursor?: string | null; [key: string]: unknown };
+export type Money = { amount: number; currency: "USD" };
+export type ServiceLine = { code: string; modifiers?: string[]; units?: number };
+export type QuoteRequest = { lineItems: ServiceLine[] };
+export type Quote = {
+  currency?: "USD";
+  lineItems?: Record<string, unknown>[];
+  totalAllowed?: number;
+  [key: string]: unknown;
+};
+export type NewPatientReference = { kind: "new" };
+export type ExistingPatientReference = { kind: "existing"; id: string };
+export type CreateBillRequest = {
+  fields?: Record<string, string>;
+  patient: NewPatientReference | ExistingPatientReference;
+  claimsAdminId?: string;
+  renderingProviderId?: string;
+  placeOfServiceId?: string;
+  placeOfServiceCodeOverride?: string;
+  billingProviderId?: string;
+  lineItems?: ServiceLine[];
+  diagnosisCodes?: string[];
+  payerSlug?: string;
+  payerId?: string;
+  payerName?: string;
+  patientOverrides?: Record<string, string>;
+  injuryOverrides?: Record<string, string>;
+  allowDuplicatePatient?: boolean;
+};
+export type CreateBillResponse = {
+  patientId: string;
+  injuryId: string;
+  billId: string;
+  billNumber: number;
+};
+export type Bill = {
+  id: string;
+  status: string;
+  externalId?: string | null;
+  total?: Money;
+  [key: string]: unknown;
+};
+export type BillResponse = { bill: Bill; multiple?: number; ids?: string[] };
+export type BillPage = {
+  bills: Bill[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  truncated?: boolean;
+};
+export type SubmitRoute = "ebill" | "fax" | "mail" | "email";
+export type SubmitBillRequest = { route?: SubmitRoute };
+export type SandboxBillSubmission = {
+  ok: true;
+  sandbox: true;
+  billId: string;
+  controlNumber: string;
+  state: "paid";
+  acknowledgments: Array<{ type: "999" | "277CA"; status: "accepted" }>;
+  eor: { id: string; reportedPaid: number };
+  payments: Array<{ id: string; amount: number }>;
+  balanceDue: 0;
+  [key: string]: unknown;
+};
+export type LiveBillSubmission = {
+  bill: Bill;
+  transmissionState: string;
+  transmissionError?: string;
+  dryRun: boolean;
+  liveTransmit: boolean;
+  clearinghouse: string;
+  billFilename: string;
+  attachmentFilename?: string;
+  sbrPdfFilename?: string;
+  sbrPdfPath?: string;
+  uploaded: string[];
+  lastEdiKey?: string;
+  lastAttachmentKey?: string;
+  artifactPath: string;
+  clearinghouseUploadSkipped?: boolean;
+  attachmentAdvisories: Array<{ id: string; message: string }>;
+  [key: string]: unknown;
+};
+export type SubmitBillResponse = SandboxBillSubmission | LiveBillSubmission;
 export type MindBillEvent = {
   id: string;
   sequence: string;
@@ -107,6 +192,11 @@ export type MindBillEvent = {
   apiVersion: string;
   createdAt: string;
   data: Record<string, unknown>;
+};
+
+export type VerifyWebhookSignatureOptions = {
+  toleranceSeconds?: number;
+  now?: number;
 };
 
 export class MindBillError extends Error {
@@ -136,6 +226,55 @@ function exactHttpsOrigin(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeSequence(sequence: string): string {
+  if (!/^[0-9]+$/.test(sequence)) {
+    throw new Error("MindBill event sequence must contain decimal digits only");
+  }
+  return sequence.replace(/^0+(?=\d)/, "");
+}
+
+/** Compare arbitrary-length decimal event sequences without losing integer precision. */
+export function compareMindBillEventSequence(left: string, right: string): -1 | 0 | 1 {
+  const normalizedLeft = normalizeSequence(left);
+  const normalizedRight = normalizeSequence(right);
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return normalizedLeft.length < normalizedRight.length ? -1 : 1;
+  }
+  if (normalizedLeft === normalizedRight) return 0;
+  return normalizedLeft < normalizedRight ? -1 : 1;
+}
+
+/** Verify `MindBill-Signature` against the exact raw request body. */
+export function verifyMindBillWebhookSignature(
+  rawBody: string | Uint8Array,
+  signatureHeader: string | null | undefined,
+  secret: string,
+  options: VerifyWebhookSignatureOptions = {},
+): boolean {
+  if (!signatureHeader || !secret) return false;
+  const toleranceSeconds = options.toleranceSeconds ?? 300;
+  const now = options.now ?? Math.floor(Date.now() / 1000);
+  if (!Number.isFinite(toleranceSeconds) || toleranceSeconds < 0 || !Number.isFinite(now)) return false;
+
+  const values = signatureHeader.split(",").map((value) => value.trim());
+  const timestamps = values.filter((value) => value.startsWith("t=")).map((value) => value.slice(2));
+  const signatures = values.filter((value) => value.startsWith("v1=")).map((value) => value.slice(3));
+  if (timestamps.length !== 1 || signatures.length === 0 || !/^[0-9]+$/.test(timestamps[0]!)) return false;
+
+  const timestamp = Number(timestamps[0]);
+  if (!Number.isSafeInteger(timestamp) || Math.abs(now - timestamp) > toleranceSeconds) return false;
+  const expected = createHmac("sha256", secret)
+    .update(`${timestamps[0]}.`)
+    .update(rawBody)
+    .digest();
+
+  return signatures.some((signature) => {
+    if (!/^[0-9a-fA-F]{64}$/.test(signature)) return false;
+    const supplied = Buffer.from(signature, "hex");
+    return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+  });
 }
 
 async function parseResponse(response: Response): Promise<Record<string, unknown>> {
@@ -196,20 +335,20 @@ export class MindBillClient {
   mintCredential(input: MintCredentialRequest): Promise<MintCredentialResponse> {
     return this.request("POST", "/developer/account/keys", input);
   }
-  quote<T = Record<string, unknown>>(input: unknown, idempotencyKey: string): Promise<T> {
+  quote<T = Quote>(input: QuoteRequest, idempotencyKey: string): Promise<T> {
     return this.request("POST", "/quote", input, { idempotencyKey });
   }
-  createBill<T = { bill: Bill }>(input: unknown, idempotencyKey: string): Promise<T> {
+  createBill<T = CreateBillResponse>(input: CreateBillRequest, idempotencyKey: string): Promise<T> {
     return this.request("POST", "/bills", input, { idempotencyKey });
   }
-  getBill<T = { bill: Bill }>(id: string): Promise<T> {
+  getBill<T = BillResponse>(id: string): Promise<T> {
     return this.request("GET", `/bills/${encodeURIComponent(id)}`);
   }
   listBills<T = BillPage>(query: Record<string, string | number | boolean> = {}): Promise<T> {
     const search = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)])).toString();
     return this.request("GET", `/bills${search ? `?${search}` : ""}`);
   }
-  submitBill<T = Record<string, unknown>>(id: string, input: unknown, idempotencyKey: string): Promise<T> {
+  submitBill<T = SubmitBillResponse>(id: string, input: SubmitBillRequest, idempotencyKey: string): Promise<T> {
     return this.request("POST", `/bills/${encodeURIComponent(id)}/submit`, input, { idempotencyKey });
   }
   listEvents(cursor = "0", limit = 50): Promise<{ events: MindBillEvent[]; nextCursor: string | null }> {
