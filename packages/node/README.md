@@ -34,6 +34,28 @@ await mindbill.grantOrganizationUserAccess(
 );
 ```
 
+Synchronize only the partner-owned profile data required for billing so the customer does
+not enter it twice:
+
+```ts
+await mindbill.synchronizeOrganizationProfile(
+  customer.organizationId,
+  {
+    source: "acme-records",
+    practiceIdentity: { name: "Synthetic QME Practice" },
+    renderingProviders: [
+      { externalId: "provider_42", name: "Avery Example, MD", npi: "1234567893" },
+    ],
+  },
+  crypto.randomUUID(),
+);
+```
+
+Keep source workflow data in the partner product and billing lifecycle data in MindBill.
+Use stable external IDs, idempotency keys, signed webhooks, and event reconciliation to keep
+the documented overlap synchronized. Internal MindBill routing, payer intelligence, queues,
+notes, credentials, and cross-customer data are never part of the Partner API contract.
+
 The billing methods use the current Partner API wire shapes by default:
 
 ```ts

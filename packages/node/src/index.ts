@@ -165,7 +165,7 @@ export type SourceLocation = {
   active?: boolean;
 };
 export type SourceProfileRequest = {
-  /** Stable namespace for the partner system, such as `qme-companion`. */
+  /** Stable namespace for the partner system, such as `acme-records`. */
   source: string;
   practiceIdentity?: SourcePracticeIdentity;
   /** When supplied, this is the complete provider snapshot for this source. */
