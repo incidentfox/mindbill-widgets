@@ -4,7 +4,9 @@ Public, dependency-light building blocks for adding California workers’ compen
 
 > Sandbox data must be synthetic. Never send PHI until your organization is approved for live access and the required agreements are complete.
 
-All three packages are published publicly on npm with provenance from this repository.
+This repository is the canonical public source for all three packages and their
+provenance-backed release workflow. Check npm for current package availability;
+until a first-party release is present, do not install similarly named mirrors.
 
 ## Packages
 
@@ -14,9 +16,31 @@ All three packages are published publicly on npm with provenance from this repos
 | `@mindbill/embed` | Framework-neutral custom elements |
 | `@mindbill/react` | React wrappers around the custom elements |
 
+## See the widgets
+
+These are the real hosted MindBill surfaces rendered with synthetic demo data.
+Partners keep their own navigation and workflow while MindBill handles the
+billing-specific interface inside an origin-bound iframe.
+
+| Bill timeline | Bill from report |
+| --- | --- |
+| ![A compact MindBill bill timeline showing charges, payment progress, and current status](./docs/images/widget-bill-timeline.png) | ![A MindBill bill-from-report review showing extracted report fields and suggested service lines](./docs/images/widget-bill-from-report.png) |
+| **Collections** | **Onboarding** |
+| ![A MindBill collections work queue showing bill balances, aging, status, and EOR state](./docs/images/widget-collections.png) | ![A MindBill onboarding widget for practice identity, billing provider, rendering provider, and service location](./docs/images/widget-onboarding.png) |
+
+The layouts are responsive. For example, the same timeline and report-review
+flows collapse cleanly for a narrow host surface:
+
+<p align="center">
+  <img src="./docs/images/widget-bill-timeline-mobile.png" alt="MindBill bill timeline in a narrow mobile layout" width="330" />
+  &nbsp;&nbsp;
+  <img src="./docs/images/widget-bill-from-report-mobile.png" alt="MindBill bill-from-report review in a narrow mobile layout" width="330" />
+</p>
+
 ## Fastest safe start
 
-An agent can create a free sandbox without handling billing details:
+Once the first-party packages are available on npm, an agent can create a free
+sandbox without handling billing details:
 
 ```bash
 pnpm dlx @mindbill/node signup \
