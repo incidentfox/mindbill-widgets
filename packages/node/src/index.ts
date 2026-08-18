@@ -127,6 +127,65 @@ export type GrantOrganizationUserAccessRequest = {
   adminEmail: string;
 };
 
+export type SourcePracticeIdentity = Partial<{
+  name: string;
+  legalName: string;
+  taxId: string;
+  npi: string;
+  phone: string;
+  email: string;
+  website: string;
+  posCodes: Array<{ code: string; name: string }>;
+}>;
+export type SourceRenderingProvider = {
+  externalId: string;
+  name: string;
+  specialty?: string;
+  npi: string;
+  taxonomy?: string;
+  licenseNumber?: string;
+  licenseState?: string;
+  isQME?: boolean;
+  isAME?: boolean;
+  email?: string;
+  active?: boolean;
+};
+export type SourceLocation = {
+  externalId: string;
+  billingProviderId?: string;
+  name: string;
+  nickname?: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  county?: string;
+  posCode?: string;
+  isPrimary?: boolean;
+  active?: boolean;
+};
+export type SourceProfileRequest = {
+  /** Stable namespace for the partner system, such as `qme-companion`. */
+  source: string;
+  practiceIdentity?: SourcePracticeIdentity;
+  /** When supplied, this is the complete provider snapshot for this source. */
+  renderingProviders?: SourceRenderingProvider[];
+  /** When supplied, this is the complete location snapshot for this source. */
+  locations?: SourceLocation[];
+};
+export type SourceProfileMapping = { externalId: string; mindBillId: string };
+export type SourceProfileResponse = {
+  organizationId: string;
+  source: string;
+  synchronizedAt: string;
+  providers?: SourceProfileMapping[];
+  locations?: SourceProfileMapping[];
+  onboarding: {
+    complete: boolean;
+    checklist: Array<{ key: string; label: string; complete: boolean }>;
+  };
+};
+
 export type EmbedSessionRequest = {
   component: MindBillComponent;
   allowedOrigin: string;
@@ -394,6 +453,22 @@ export class MindBillClient {
     return this.request(
       "POST",
       `/orgs/${encodeURIComponent(organizationId)}/user-access`,
+      input,
+      { idempotencyKey },
+    );
+  }
+  /**
+   * Synchronize partner-owned practice, provider, and location data without
+   * creating a MindBill user or asking the customer to re-enter it.
+   */
+  synchronizeOrganizationProfile(
+    organizationId: string,
+    input: SourceProfileRequest,
+    idempotencyKey: string,
+  ): Promise<SourceProfileResponse> {
+    return this.request(
+      "PUT",
+      `/orgs/${encodeURIComponent(organizationId)}/source-profile`,
       input,
       { idempotencyKey },
     );

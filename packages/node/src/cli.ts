@@ -25,6 +25,7 @@ Usage:
   mindbill billing-portal [--env-file PATH]
   mindbill organization create --name NAME [--invite-admin-name NAME --invite-admin-email EMAIL] [--idempotency-key KEY]
   mindbill organization grant-access --organization-id ID --admin-name NAME --admin-email EMAIL [--idempotency-key KEY]
+  mindbill organization sync-profile --organization-id ID --input PATH [--idempotency-key KEY]
   mindbill key create --name NAME --environment sandbox|live --scopes CSV [--organization-id ID] [--output-env PATH]
   mindbill embed-session --component NAME --allowed-origin HTTPS_ORIGIN [--bill-id ID] [--expires-in SECONDS]
 
@@ -212,6 +213,18 @@ async function main(): Promise<void> {
       idempotencyKey,
       next: "The administrator invitation was requested. Treat any activation URL as a secret.",
     });
+    return;
+  }
+  if (command === "organization" && subcommand === "sync-profile") {
+    const inputPath = resolve(flag(args, "input", true)!);
+    const input = JSON.parse(await readFile(inputPath, "utf8")) as Record<string, unknown>;
+    const idempotencyKey = flag(args, "idempotency-key") ?? randomUUID();
+    const result = await mindbill.synchronizeOrganizationProfile(
+      flag(args, "organization-id", true)!,
+      input as Parameters<MindBillClient["synchronizeOrganizationProfile"]>[1],
+      idempotencyKey,
+    );
+    safeResult({ ...result, idempotencyKey });
     return;
   }
   if (command === "key" && subcommand === "create") {
