@@ -2,7 +2,7 @@
 
 Dependency-free Node 20+ SDK and an agent-safe CLI for the MindBill Partner API.
 
-> **Publication pending:** `@mindbill/node` is not yet available from npm. The import and `pnpm dlx` commands below document the post-publication interface and currently return 404. Clone the [source repository](https://github.com/incidentfox/mindbill-widgets) to evaluate it locally, or use the [hosted developer portal](https://app.mindbill.org/developers) for account activation.
+`@mindbill/node` is published publicly on npm with provenance from this repository.
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
@@ -13,6 +13,25 @@ const mindbill = new MindBillClient({
     ? { organizationId: process.env.MINDBILL_ORG_ID }
     : {}),
 });
+```
+
+Provision a customer organization without creating a MindBill user or sending an invitation:
+
+```ts
+const customer = await mindbill.provisionOrganization(
+  { name: "Synthetic QME Practice" },
+  crypto.randomUUID(),
+);
+```
+
+The managed organization is controlled through your server-side Partner API integration. Direct MindBill access is optional and explicit:
+
+```ts
+await mindbill.grantOrganizationUserAccess(
+  customer.organizationId,
+  { adminName: "Synthetic Owner", adminEmail: "owner@example.test" },
+  crypto.randomUUID(),
+);
 ```
 
 The billing methods use the current Partner API wire shapes by default:

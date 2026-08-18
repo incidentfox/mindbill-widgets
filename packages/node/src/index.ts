@@ -87,6 +87,46 @@ export type MintCredentialResponse = {
   createdAt: string;
 };
 
+export type ManagedOrganizationProvisioning = {
+  organizationId: string;
+  status: "configuring";
+  accessMode: "managed";
+};
+export type InvitedOrganizationProvisioning = {
+  organizationId: string;
+  status: "pending_activation";
+  accessMode: "invite";
+  /** One-time credential. Handle as a secret and never log it. */
+  activationUrl: string;
+  activationEmailSent: boolean;
+};
+export type ProvisionOrganizationSettings = {
+  practiceIdentity?: Record<string, unknown>;
+  billingProviders?: Record<string, unknown>[];
+  renderingProviders?: Record<string, unknown>[];
+  locations?: Record<string, unknown>[];
+};
+export type ProvisionManagedOrganizationRequest = ProvisionOrganizationSettings & {
+  name: string;
+  accessMode?: "managed";
+};
+export type ProvisionInvitedOrganizationRequest = ProvisionOrganizationSettings & {
+  name: string;
+  accessMode: "invite";
+  adminName: string;
+  adminEmail: string;
+};
+export type ProvisionOrganizationRequest =
+  | ProvisionManagedOrganizationRequest
+  | ProvisionInvitedOrganizationRequest;
+export type ProvisionOrganizationResponse =
+  | ManagedOrganizationProvisioning
+  | InvitedOrganizationProvisioning;
+export type GrantOrganizationUserAccessRequest = {
+  adminName: string;
+  adminEmail: string;
+};
+
 export type EmbedSessionRequest = {
   component: MindBillComponent;
   allowedOrigin: string;
@@ -334,6 +374,29 @@ export class MindBillClient {
   }
   mintCredential(input: MintCredentialRequest): Promise<MintCredentialResponse> {
     return this.request("POST", "/developer/account/keys", input);
+  }
+  /**
+   * Provision a partner-managed customer tenant. The default managed mode creates
+   * no MindBill user, invitation, or customer-facing onboarding step.
+   */
+  provisionOrganization(
+    input: ProvisionOrganizationRequest,
+    idempotencyKey: string,
+  ): Promise<ProvisionOrganizationResponse> {
+    return this.request("POST", "/orgs", input, { idempotencyKey });
+  }
+  /** Grant optional direct MindBill access after a managed tenant already exists. */
+  grantOrganizationUserAccess(
+    organizationId: string,
+    input: GrantOrganizationUserAccessRequest,
+    idempotencyKey: string,
+  ): Promise<InvitedOrganizationProvisioning> {
+    return this.request(
+      "POST",
+      `/orgs/${encodeURIComponent(organizationId)}/user-access`,
+      input,
+      { idempotencyKey },
+    );
   }
   quote<T = Quote>(input: QuoteRequest, idempotencyKey: string): Promise<T> {
     return this.request("POST", "/quote", input, { idempotencyKey });

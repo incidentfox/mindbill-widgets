@@ -2,6 +2,7 @@
 
 import { chmod, open, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 import {
   createDeveloperSandbox,
@@ -22,6 +23,8 @@ Usage:
   mindbill account [--env-file PATH]
   mindbill live-access --organization-id ID [--env-file PATH]
   mindbill billing-portal [--env-file PATH]
+  mindbill organization create --name NAME [--invite-admin-name NAME --invite-admin-email EMAIL] [--idempotency-key KEY]
+  mindbill organization grant-access --organization-id ID --admin-name NAME --admin-email EMAIL [--idempotency-key KEY]
   mindbill key create --name NAME --environment sandbox|live --scopes CSV [--organization-id ID] [--output-env PATH]
   mindbill embed-session --component NAME --allowed-origin HTTPS_ORIGIN [--bill-id ID] [--expires-in SECONDS]
 
@@ -158,6 +161,56 @@ async function main(): Promise<void> {
       portalUrl: result.url,
       sessionId: result.id,
       humanActionRequired: "An authorized human must open this Stripe-hosted URL.",
+    });
+    return;
+  }
+  if (command === "organization" && subcommand === "create") {
+    const idempotencyKey = flag(args, "idempotency-key") ?? randomUUID();
+    const adminName = flag(args, "invite-admin-name");
+    const adminEmail = flag(args, "invite-admin-email");
+    if ((adminName && !adminEmail) || (!adminName && adminEmail)) {
+      throw new Error("--invite-admin-name and --invite-admin-email must be provided together");
+    }
+    const result = await mindbill.provisionOrganization(
+      adminName && adminEmail
+        ? {
+            name: flag(args, "name", true)!,
+            accessMode: "invite",
+            adminName,
+            adminEmail,
+          }
+        : { name: flag(args, "name", true)! },
+      idempotencyKey,
+    );
+    safeResult({
+      ...result,
+      ...(result.accessMode === "invite"
+        ? { activationUrl: undefined, activationEmailSent: result.activationEmailSent }
+        : {}),
+      idempotencyKey,
+      next: result.accessMode === "managed"
+        ? "Configure and bill this organization through the Partner API; no customer invitation is required."
+        : "The administrator invitation was requested. Treat any activation URL as a secret.",
+    });
+    return;
+  }
+  if (command === "organization" && subcommand === "grant-access") {
+    const idempotencyKey = flag(args, "idempotency-key") ?? randomUUID();
+    const result = await mindbill.grantOrganizationUserAccess(
+      flag(args, "organization-id", true)!,
+      {
+        adminName: flag(args, "admin-name", true)!,
+        adminEmail: flag(args, "admin-email", true)!,
+      },
+      idempotencyKey,
+    );
+    safeResult({
+      organizationId: result.organizationId,
+      status: result.status,
+      accessMode: result.accessMode,
+      activationEmailSent: result.activationEmailSent,
+      idempotencyKey,
+      next: "The administrator invitation was requested. Treat any activation URL as a secret.",
     });
     return;
   }

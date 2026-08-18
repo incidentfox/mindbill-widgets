@@ -2,7 +2,7 @@
 
 React wrappers for the secure `@mindbill/embed` custom elements. See the [widget guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/widgets.md).
 
-> **Publication pending:** `@mindbill/react` and its `@mindbill/embed` dependency are not yet available from npm. The import below documents the post-publication interface and currently returns 404 through package registries. Clone the [source repository](https://github.com/incidentfox/mindbill-widgets) to evaluate it locally.
+Published on npm as [`@mindbill/react`](https://www.npmjs.com/package/@mindbill/react). Install it with `npm install @mindbill/react @mindbill/embed` or your preferred package manager.
 
 ```tsx
 import { MindBillBillTimeline } from "@mindbill/react";
