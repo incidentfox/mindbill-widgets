@@ -13,6 +13,8 @@ Use `Authorization: Bearer $MINDBILL_API_KEY` on every request except developer 
 | `POST` | `/developer/account/live-access` | Request live access and receive a Stripe-hosted Checkout URL |
 | `POST` | `/developer/account/billing-portal` | Receive a Stripe-hosted billing portal URL |
 | `POST` | `/developer/account/keys` | Mint a scoped sandbox or live key |
+| `POST` | `/orgs` | Provision a managed customer organization without an invitation by default |
+| `POST` | `/orgs/:id/user-access` | Optionally grant the customer direct MindBill access |
 | `POST` | `/quote` | Calculate a quote without creating a bill |
 | `POST` | `/bills` | Create a bill |
 | `GET` | `/bills` | List bills using cursor pagination |
@@ -21,6 +23,14 @@ Use `Authorization: Bearer $MINDBILL_API_KEY` on every request except developer 
 | `GET` | `/events` | Poll ordered lifecycle events |
 | `GET` | `/webhook-deliveries` | Inspect webhook delivery attempts |
 | `POST` | `/embed/sessions` | Mint a short-lived, origin-bound widget session |
+
+## Partner-managed organizations
+
+`POST /orgs` defaults to `{ "accessMode": "managed" }`. It creates a linked organization with no user, email invitation, activation token, or separate MindBill onboarding action. The partner can then configure the organization and run billing through server-side API calls and embedded components.
+
+If a customer later wants to use the MindBill web application directly, `POST /orgs/:id/user-access` creates the first administrator and one-time activation flow. Do not call it during routine embedded onboarding.
+
+The Partner API is deny-by-default: use only documented resources and fields. Keep case workflow data in the partner product, and treat MindBill as authoritative for billing lifecycle data. Consume signed webhooks in sequence and use `/events` reconciliation to recover missed deliveries.
 
 Widget-session credentials require the `embed:write` scope. Available key scopes are
 `account:read`, `account:write`, `keys:write`, `orgs:read`, `orgs:write`, `bills:read`,

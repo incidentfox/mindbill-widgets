@@ -4,7 +4,7 @@ Public, dependency-light building blocks for adding California workers’ compen
 
 > Sandbox data must be synthetic. Never send PHI until your organization is approved for live access and the required agreements are complete.
 
-> **Publication status:** the `@mindbill/node`, `@mindbill/embed`, and `@mindbill/react` packages are not yet published to npm. Registry, `pnpm dlx`, and CDN commands below are post-publication examples and currently return 404. To evaluate the code today, clone this repository, run `pnpm install --frozen-lockfile && pnpm check`, and use the source and examples locally. Account activation is available through the [hosted developer portal](https://app.mindbill.org/developers) or MindBill sales until package publication.
+All three packages are published publicly on npm with provenance from this repository.
 
 ## Packages
 
@@ -14,7 +14,7 @@ Public, dependency-light building blocks for adding California workers’ compen
 | `@mindbill/embed` | Framework-neutral custom elements |
 | `@mindbill/react` | React wrappers around the custom elements |
 
-## Fastest safe start (after npm publication)
+## Fastest safe start
 
 An agent can create a free sandbox without handling billing details:
 
@@ -28,7 +28,7 @@ pnpm dlx @mindbill/node signup \
 
 The one-time sandbox key is written to `.env.mindbill` with owner-only permissions and is not printed. Add that file to your project’s `.gitignore`. The command returns only identifiers, the key prefix, and the saved path.
 
-After publication, use the SDK on your server:
+Use the SDK on your server:
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
@@ -40,6 +40,13 @@ const mindbill = new MindBillClient({
     : {}),
 });
 
+// Default: provision a customer tenant without a MindBill user, invitation,
+// or separate customer onboarding flow.
+const customer = await mindbill.provisionOrganization(
+  { name: "Synthetic QME Practice" },
+  crypto.randomUUID(),
+);
+
 const session = await mindbill.createEmbedSession({
   component: "bill-timeline",
   billId: "synthetic_bill_123",
@@ -48,7 +55,7 @@ const session = await mindbill.createEmbedSession({
 });
 ```
 
-Return only `token` and `embedUrl` from your own authenticated backend. After package publication, render:
+Return only `token` and `embedUrl` from your own authenticated backend. Render:
 
 ```html
 <script type="module" src="https://unpkg.com/@mindbill/embed@0.2.0/dist/index.js"></script>
@@ -74,6 +81,12 @@ import { MindBillBillTimeline } from "@mindbill/react";
 ```
 
 The widget sends only documented, PHI-free lifecycle events to its host. Keep the API key and embed-session creation on your server.
+
+## Partner-managed customer accounts
+
+`provisionOrganization` defaults to `accessMode: "managed"`. Your product can configure the tenant, create and submit bills, and render MindBill widgets without asking the customer to accept a MindBill invitation or sign into a second application. If a customer later wants direct access to MindBill, call `grantOrganizationUserAccess` as an explicit, auditable action.
+
+Keep workflow and customer-facing data in your product. Treat MindBill as authoritative for bill IDs, submissions, acknowledgements, payments, denials, and ordered event sequences. Sync those documented fields with signed webhooks plus cursor reconciliation; undocumented MindBill data is not exposed by the Partner API.
 
 ## From sandbox to live
 

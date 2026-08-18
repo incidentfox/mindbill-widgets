@@ -73,6 +73,60 @@ describe("@mindbill/node", () => {
     });
   });
 
+  it("provisions a managed organization without an invitation by default", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      organizationId: "org_managed_1",
+      status: "configuring",
+      accessMode: "managed",
+    }, { status: 201 }));
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      baseUrl: "https://example.test/partner/v1",
+      fetch: fetcher,
+    });
+
+    const result = await client.provisionOrganization(
+      { name: "Synthetic QME Practice" },
+      "provision-synthetic-qme",
+    );
+
+    expect(result).toEqual({
+      organizationId: "org_managed_1",
+      status: "configuring",
+      accessMode: "managed",
+    });
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(url).toBe("https://example.test/partner/v1/orgs");
+    expect(new Headers(request?.headers).get("idempotency-key")).toBe("provision-synthetic-qme");
+    expect(JSON.parse(String(request?.body))).toEqual({ name: "Synthetic QME Practice" });
+  });
+
+  it("grants optional MindBill user access explicitly", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      organizationId: "org_managed_1",
+      status: "pending_activation",
+      accessMode: "invite",
+      activationUrl: "https://app.mindbill.org/invite/synthetic-one-time-token",
+      activationEmailSent: true,
+    }, { status: 201 }));
+    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
+
+    const result = await client.grantOrganizationUserAccess(
+      "org_managed_1",
+      { adminName: "Synthetic Owner", adminEmail: "owner@example.test" },
+      "grant-synthetic-access",
+    );
+
+    expect(result.accessMode).toBe("invite");
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(url).toBe("https://app.mindbill.org/partner/v1/orgs/org_managed_1/user-access");
+    expect(new Headers(request?.headers).get("idempotency-key")).toBe("grant-synthetic-access");
+    expect(JSON.parse(String(request?.body))).toEqual({
+      adminName: "Synthetic Owner",
+      adminEmail: "owner@example.test",
+    });
+  });
+
   it("exposes the quote scope and typed quote request", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       currency: "USD",

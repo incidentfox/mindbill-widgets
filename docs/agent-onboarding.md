@@ -2,9 +2,9 @@
 
 This flow is designed so a coding agent can build a complete synthetic-data integration while humans retain control over legal acceptance and payment.
 
-> **Publication pending:** `@mindbill/node`, `@mindbill/embed`, and `@mindbill/react` are not yet available from npm or public CDNs. The package commands in this guide document the post-publication flow and currently return 404. For evaluation today, clone the [public source repository](https://github.com/incidentfox/mindbill-widgets), run `pnpm install --frozen-lockfile && pnpm check`, and inspect the local examples. Use the [hosted developer portal](https://app.mindbill.org/developers) or contact MindBill for account activation.
+The packages are published publicly on npm with provenance from the [public source repository](https://github.com/incidentfox/mindbill-widgets).
 
-## 1. Create a sandbox (after npm publication)
+## 1. Create a sandbox
 
 ```bash
 pnpm dlx @mindbill/node signup \
@@ -21,7 +21,26 @@ Before passing `--accept-terms`, the account owner should review the current ter
 
 Add `.env.mindbill` to `.gitignore`. Load `MINDBILL_API_KEY` only in a server process or secret manager. Never put it in a browser bundle, mobile application, prompt, issue, CI log, analytics event, URL, or screenshot.
 
-## 3. Build with synthetic data (after npm publication)
+## 3. Provision a customer tenant and build with synthetic data
+
+Create a headless, partner-managed organization. This sends no invitation and requires no MindBill login:
+
+```bash
+pnpm dlx @mindbill/node organization create \
+  --name "Synthetic QME Practice" \
+  --idempotency-key synthetic-qme-practice-v1
+```
+
+Use the returned organization ID as `MINDBILL_ORG_ID`. Only when a customer explicitly asks for direct MindBill access should an authorized operator run:
+
+```bash
+pnpm dlx @mindbill/node organization grant-access \
+  --organization-id org_example \
+  --admin-name "Synthetic Owner" \
+  --admin-email owner@example.test
+```
+
+For normal partner UX, continue through your own application and the Partner API:
 
 Use invented names, claim numbers, bill IDs, and attachments in sandbox. Do not copy a production payload and “anonymize” it; create a fixture from scratch.
 
@@ -39,7 +58,7 @@ The API key used by that command must include `embed:write`.
 
 Create embed sessions inside your authenticated backend, scoped to the current user and exact HTTPS origin. Forward the returned session token to the browser over your existing authenticated channel. Render `@mindbill/embed` or `@mindbill/react` and handle only documented events.
 
-## 5. Request live access (after npm publication)
+## 5. Request live access
 
 An authorized human completes organization onboarding and the BAA. An agent can then request a Stripe-hosted URL:
 
@@ -58,3 +77,5 @@ The command does not accept card flags or stdin payment details. Send the URL to
 - “Powered by MindBill” remains visible.
 - Payment is handed to a human on Stripe-hosted pages.
 - Live credentials are organization-bound and least-privileged.
+- Customer tenants default to managed mode; no invitation or second login is required.
+- Direct MindBill user access is granted only after an explicit customer request.
