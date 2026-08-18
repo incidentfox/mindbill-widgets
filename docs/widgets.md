@@ -11,6 +11,27 @@ MindBill widgets are origin-bound iframe applications exposed through SSR-safe c
 | `<mindbill-onboarding>` | `onboarding` | Practice, provider, location, signature, and billing setup | Intended for an authenticated admin |
 | `<mindbill-bill-from-report>` | `bill-from-report` | Create a draft bill from a report | Contract-only; not self-serve |
 
+## Rendered examples
+
+The screenshots below come from the hosted production widget routes using
+synthetic data. They show the interface that appears inside the iframe; the host
+application keeps its own navigation, page chrome, and authorization model.
+
+| Bill timeline | Bill from report |
+| --- | --- |
+| ![Bill timeline widget with charges, paid amount, balance, and processing state](./images/widget-bill-timeline.png) | ![Bill-from-report widget with extracted fields, service-line suggestions, and billing configuration](./images/widget-bill-from-report.png) |
+| **Collections** | **Onboarding** |
+| ![Collections widget with aging, balances, status, and EOR state](./images/widget-collections.png) | ![Onboarding widget with practice, provider, and location configuration](./images/widget-onboarding.png) |
+
+Widget content reflows within the space supplied by the host. These two narrow
+captures show the same production surfaces without a separate mobile SDK:
+
+<p align="center">
+  <img src="./images/widget-bill-timeline-mobile.png" alt="Bill timeline widget in a narrow mobile host" width="330" />
+  &nbsp;&nbsp;
+  <img src="./images/widget-bill-from-report-mobile.png" alt="Bill-from-report widget in a narrow mobile host" width="330" />
+</p>
+
 ## Secure server flow
 
 1. Your authenticated browser asks your backend for a widget session.
