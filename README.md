@@ -2,6 +2,31 @@
 
 Public, dependency-light building blocks for adding California workers’ compensation medical-legal billing to another product. Use the Node SDK for server-to-server API calls and short-lived embed sessions; use the web component or React package for user-facing workflows.
 
+## Embedded billing, not a second system
+
+MindBill is designed to be distributed through the software customers already use. A
+partner can provision a managed billing organization, synchronize the minimum practice
+and provider data needed for billing, create or submit a bill, and surface its lifecycle
+inside the partner product. The customer does not need to accept an invitation, sign into
+a separate application, or maintain the same profile in two places.
+
+The ownership boundary is explicit:
+
+- Your product remains authoritative for its customer relationship, workflow, source
+  documents, and partner-owned profile fields.
+- MindBill remains authoritative for bill validation, submission, acknowledgements,
+  denials, payments, and accounts receivable.
+- Stable external IDs, idempotent writes, signed webhooks, and cursor reconciliation keep
+  the two systems synchronized.
+- The Partner API exposes only documented billing resources. Internal routing logic,
+  payer intelligence, operational queues, vendor credentials, and cross-customer data do
+  not cross the boundary.
+
+For a record-summary product, the natural handoff is: summary completes, the partner
+confirms page count and the minimum claim context, the user reviews the suggested billing
+configuration, and MindBill submits and tracks the bill. The timeline and collections
+widgets return that status to the same product where the user completed the summary.
+
 > Sandbox data must be synthetic. Never send PHI until your organization is approved for live access and the required agreements are complete.
 
 This repository is the canonical public source for all three packages and their
@@ -71,6 +96,28 @@ const customer = await mindbill.provisionOrganization(
   crypto.randomUUID(),
 );
 
+await mindbill.synchronizeOrganizationProfile(
+  customer.organizationId,
+  {
+    source: "acme-records",
+    practiceIdentity: { name: "Synthetic QME Practice" },
+    renderingProviders: [
+      { externalId: "provider_42", name: "Avery Example, MD", npi: "1234567893" },
+    ],
+    locations: [
+      {
+        externalId: "location_main",
+        name: "Main office",
+        street: "100 Example Avenue",
+        city: "Los Angeles",
+        state: "CA",
+        zip: "90012",
+      },
+    ],
+  },
+  crypto.randomUUID(),
+);
+
 const session = await mindbill.createEmbedSession({
   component: "bill-timeline",
   billId: "synthetic_bill_123",
@@ -110,7 +157,7 @@ The widget sends only documented, PHI-free lifecycle events to its host. Keep th
 
 `provisionOrganization` defaults to `accessMode: "managed"`. Your product can configure the tenant, create and submit bills, and render MindBill widgets without asking the customer to accept a MindBill invitation or sign into a second application. If a customer later wants direct access to MindBill, call `grantOrganizationUserAccess` as an explicit, auditable action.
 
-Keep workflow and customer-facing data in your product. Treat MindBill as authoritative for bill IDs, submissions, acknowledgements, payments, denials, and ordered event sequences. Sync those documented fields with signed webhooks plus cursor reconciliation; undocumented MindBill data is not exposed by the Partner API.
+Keep workflow and customer-facing data in your product. Treat MindBill as authoritative for bill IDs, submissions, acknowledgements, payments, denials, and ordered event sequences. Synchronize partner-owned practice fields with `synchronizeOrganizationProfile`; sync billing state back with signed webhooks plus cursor reconciliation. Undocumented MindBill data is not exposed by the Partner API.
 
 ## From sandbox to live
 

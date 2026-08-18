@@ -2,6 +2,11 @@
 
 MindBill widgets are origin-bound iframe applications exposed through SSR-safe custom elements. They provide a plug-and-play path without giving the browser a long-lived Partner API key.
 
+They are intended to make billing feel native to the host product. Keep the partner's
+navigation, identity, permissions, and source workflow in place; render only the MindBill
+billing surface at the point of action. A customer can complete onboarding, review a bill,
+and follow payment or denial status without moving to a second application.
+
 ## Available components
 
 | Element | Component | Purpose | Notes |
@@ -10,6 +15,19 @@ MindBill widgets are origin-bound iframe applications exposed through SSR-safe c
 | `<mindbill-collections>` | `collections` | AR and collections work queue | Subject to credential scopes |
 | `<mindbill-onboarding>` | `onboarding` | Practice, provider, location, signature, and billing setup | Intended for an authenticated admin |
 | `<mindbill-bill-from-report>` | `bill-from-report` | Create a draft bill from a report | Contract-only; not self-serve |
+
+For record-summary and report-generation products, the recommended sequence is:
+
+1. Finalize the source document and lock its page count.
+2. Create an origin-bound `bill-from-report` session using the partner's stable external
+   record ID.
+3. Let the user confirm suggested codes, units, provider, payer, and attachments in place.
+4. Submit idempotently through the partner server.
+5. Render `bill-timeline` on the source record and reconcile signed events server-side.
+
+The host should pass only the data required for billing. Widget lifecycle events contain
+documented opaque identifiers and statuses; they do not expose MindBill's proprietary
+routing rules, payer intelligence, internal notes, or operational queues.
 
 ## Rendered examples
 

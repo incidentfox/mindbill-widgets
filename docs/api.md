@@ -15,6 +15,7 @@ Use `Authorization: Bearer $MINDBILL_API_KEY` on every request except developer 
 | `POST` | `/developer/account/keys` | Mint a scoped sandbox or live key |
 | `POST` | `/orgs` | Provision a managed customer organization without an invitation by default |
 | `POST` | `/orgs/:id/user-access` | Optionally grant the customer direct MindBill access |
+| `PUT` | `/orgs/:id/source-profile` | Synchronize partner-owned practice, provider, and location data |
 | `POST` | `/quote` | Calculate a quote without creating a bill |
 | `POST` | `/bills` | Create a bill |
 | `GET` | `/bills` | List bills using cursor pagination |
@@ -31,6 +32,25 @@ Use `Authorization: Bearer $MINDBILL_API_KEY` on every request except developer 
 If a customer later wants to use the MindBill web application directly, `POST /orgs/:id/user-access` creates the first administrator and one-time activation flow. Do not call it during routine embedded onboarding.
 
 The Partner API is deny-by-default: use only documented resources and fields. Keep case workflow data in the partner product, and treat MindBill as authoritative for billing lifecycle data. Consume signed webhooks in sequence and use `/events` reconciliation to recover missed deliveries.
+
+## Distribution and data ownership
+
+The default integration keeps the customer inside the partner product. Provision the
+MindBill organization as part of the partner's onboarding, send a complete snapshot of
+partner-owned practice data through `PUT /orgs/:id/source-profile`, and store MindBill
+organization and bill IDs beside stable partner IDs. Do not match records by display name
+or email domain.
+
+MindBill does not become the source of truth for the partner's workflow. Conversely, a
+partner should not copy or infer MindBill's internal billing operations. Signed webhooks
+notify the partner of documented lifecycle changes; bill and event reads repair state after
+downtime or ambiguity. Direct MindBill access is an optional customer capability, not a
+requirement for embedded billing.
+
+A record-summary integration normally creates the bill after a summary is finalized and
+its page count is locked. The partner provides the summary artifact and minimum claim,
+provider, payer, and service context; the user reviews the billing result in the
+`bill-from-report` widget; MindBill then owns submission and downstream status.
 
 Widget-session credentials require the `embed:write` scope. Available key scopes are
 `account:read`, `account:write`, `keys:write`, `orgs:read`, `orgs:write`, `bills:read`,
