@@ -9,11 +9,15 @@ const mindbill = new MindBillClient({
 
 // Run only after authenticating and authorizing your own application user.
 const session = await mindbill.createEmbedSession({
-  component: "bill-timeline",
+  component: "bill-review",
   billId: "synthetic_bill_123",
   allowedOrigin: "https://your-product.example",
   expiresIn: 900,
 });
 
 // Return only these transient values to your browser, never MINDBILL_API_KEY.
-console.log({ token: session.token, embedUrl: session.embedUrl, expiresAt: session.expiresAt });
+console.log({
+  token: session.token,
+  embedUrl: session.embedUrl,
+  expiresAt: session.expiresAt,
+});

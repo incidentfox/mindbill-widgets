@@ -3,7 +3,11 @@
 import "@mindbill/embed";
 import type { CSSProperties, ReactElement } from "react";
 import { createElement, useEffect, useRef } from "react";
-import type { MindBillAppearance, MindBillErrorDetail, MindBillEventDetail } from "@mindbill/embed";
+import type {
+  MindBillAppearance,
+  MindBillErrorDetail,
+  MindBillEventDetail,
+} from "@mindbill/embed";
 
 export type MindBillWidgetProps = {
   sessionToken: string;
@@ -21,8 +25,10 @@ function widget(tagName: string, props: MindBillWidgetProps): ReactElement {
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const handleEvent = (event: Event) => onMindBill?.(event as CustomEvent<MindBillEventDetail>);
-    const handleError = (event: Event) => onMindBillError?.(event as CustomEvent<MindBillErrorDetail>);
+    const handleEvent = (event: Event) =>
+      onMindBill?.(event as CustomEvent<MindBillEventDetail>);
+    const handleError = (event: Event) =>
+      onMindBillError?.(event as CustomEvent<MindBillErrorDetail>);
     element.addEventListener("mindbill", handleEvent);
     element.addEventListener("mindbill-error", handleError);
     return () => {
@@ -46,7 +52,12 @@ function widget(tagName: string, props: MindBillWidgetProps): ReactElement {
 export function MindBillBillTimeline(props: MindBillWidgetProps): ReactElement {
   return widget("mindbill-bill-timeline", props);
 }
-export function MindBillBillFromReport(props: MindBillWidgetProps): ReactElement {
+export function MindBillBillReview(props: MindBillWidgetProps): ReactElement {
+  return widget("mindbill-bill-review", props);
+}
+export function MindBillBillFromReport(
+  props: MindBillWidgetProps,
+): ReactElement {
   return widget("mindbill-bill-from-report", props);
 }
 export function MindBillCollections(props: MindBillWidgetProps): ReactElement {
@@ -56,4 +67,14 @@ export function MindBillOnboarding(props: MindBillWidgetProps): ReactElement {
   return widget("mindbill-onboarding", props);
 }
 
-export type { MindBillAppearance, MindBillErrorDetail, MindBillEventDetail } from "@mindbill/embed";
+export const HostedBillTimeline = MindBillBillTimeline;
+export const HostedBillReview = MindBillBillReview;
+export const HostedBillFromReport = MindBillBillFromReport;
+export const HostedCollections = MindBillCollections;
+export const HostedOnboarding = MindBillOnboarding;
+
+export type {
+  MindBillAppearance,
+  MindBillErrorDetail,
+  MindBillEventDetail,
+} from "@mindbill/embed";
