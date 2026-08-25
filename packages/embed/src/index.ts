@@ -12,8 +12,26 @@ export type MindBillTheme = "light" | "dark" | "system";
 export type MindBillAppearance = {
   theme?: MindBillTheme;
   accentColor?: string;
+  backgroundColor?: string;
+  surfaceColor?: string;
+  textColor?: string;
+  mutedColor?: string;
+  borderColor?: string;
+  fontFamily?: string;
+  borderRadius?: string;
   locale?: string;
 };
+
+const appearanceAttributes = {
+  accentColor: "accent-color",
+  backgroundColor: "background-color",
+  surfaceColor: "surface-color",
+  textColor: "text-color",
+  mutedColor: "muted-color",
+  borderColor: "border-color",
+  fontFamily: "font-family",
+  borderRadius: "border-radius",
+} as const;
 
 export type MindBillEventDetail = {
   component: MindBillComponent;
@@ -120,6 +138,13 @@ export class MindBillEmbedElement extends HTMLElementBase {
     "embed-url",
     "theme",
     "accent-color",
+    "background-color",
+    "surface-color",
+    "text-color",
+    "muted-color",
+    "border-color",
+    "font-family",
+    "border-radius",
     "locale",
   ];
 
@@ -156,11 +181,16 @@ export class MindBillEmbedElement extends HTMLElementBase {
   }
 
   get appearance(): MindBillAppearance {
-    const accentColor = this.getAttribute("accent-color") ?? undefined;
     const locale = this.getAttribute("locale") ?? undefined;
+    const appearance = Object.fromEntries(
+      Object.entries(appearanceAttributes).flatMap(([key, attribute]) => {
+        const value = this.getAttribute(attribute);
+        return value ? [[key, value.slice(0, 160)]] : [];
+      }),
+    ) as MindBillAppearance;
     return {
       theme: validTheme(this.getAttribute("theme")),
-      ...(accentColor ? { accentColor: accentColor.slice(0, 100) } : {}),
+      ...appearance,
       ...(locale ? { locale: locale.slice(0, 35) } : {}),
     };
   }
@@ -188,8 +218,10 @@ export class MindBillEmbedElement extends HTMLElementBase {
     this.setAttribute("embed-url", input.embedUrl);
     if (input.appearance?.theme)
       this.setAttribute("theme", input.appearance.theme);
-    if (input.appearance?.accentColor)
-      this.setAttribute("accent-color", input.appearance.accentColor);
+    for (const [key, attribute] of Object.entries(appearanceAttributes)) {
+      const value = input.appearance?.[key as keyof MindBillAppearance];
+      if (value) this.setAttribute(attribute, value);
+    }
     if (input.appearance?.locale)
       this.setAttribute("locale", input.appearance.locale);
   }

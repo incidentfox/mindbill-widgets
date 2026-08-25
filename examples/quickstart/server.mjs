@@ -16,7 +16,7 @@ const page = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MindBill hosted billing</title>
-<script type="module" src="https://unpkg.com/@mindbill/embed@0.4.0/dist/index.js"></script>
+<script type="module" src="https://unpkg.com/@mindbill/embed@0.5.0/dist/index.js"></script>
 <main style="max-width:960px;margin:40px auto;padding:0 20px;font:16px system-ui">
   <h1>Billing</h1>
   <div id="flow">Loading secure billing review…</div>

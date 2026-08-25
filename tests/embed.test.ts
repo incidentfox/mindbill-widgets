@@ -58,4 +58,41 @@ describe("@mindbill/embed", () => {
     expect(element.querySelector("iframe")).toBeNull();
     expect(errors.at(-1)?.detail.code).toBe("invalid_embed_url");
   });
+
+  it("passes the complete partner appearance contract to the hosted flow", async () => {
+    await import("../packages/embed/src/index.js");
+    const element = document.createElement("mindbill-bill-review") as HTMLElement & {
+      appearance: Record<string, string>;
+      configure(input: Record<string, unknown>): void;
+    };
+    element.configure({
+      sessionToken: "secret-token",
+      embedUrl: "https://app.mindbill.org/embed/bill-review",
+      appearance: {
+        theme: "light",
+        accentColor: "#4b9ec1",
+        backgroundColor: "#f4f8fa",
+        surfaceColor: "#ffffff",
+        textColor: "#17232a",
+        mutedColor: "#66747b",
+        borderColor: "#d7e0e4",
+        fontFamily: "Inter, sans-serif",
+        borderRadius: "12px",
+        locale: "en-US",
+      },
+    });
+
+    expect(element.appearance).toEqual({
+      theme: "light",
+      accentColor: "#4b9ec1",
+      backgroundColor: "#f4f8fa",
+      surfaceColor: "#ffffff",
+      textColor: "#17232a",
+      mutedColor: "#66747b",
+      borderColor: "#d7e0e4",
+      fontFamily: "Inter, sans-serif",
+      borderRadius: "12px",
+      locale: "en-US",
+    });
+  });
 });

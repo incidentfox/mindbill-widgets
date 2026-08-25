@@ -45,7 +45,7 @@ importers:
   examples/quickstart:
     dependencies:
       '@mindbill/node':
-        specifier: ^0.4.0
+        specifier: ^0.5.0
         version: link:../../packages/node
 
   packages/embed: {}
