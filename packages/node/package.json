@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/node",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Typed Node SDK and agent-safe CLI for the MindBill Partner API",
   "type": "module",
   "main": "./dist/index.js",

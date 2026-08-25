@@ -210,6 +210,8 @@ export type EmbedSession = {
   component: MindBillComponent;
   token: string;
   embedUrl: string;
+  /** Bill-scoped, organization-authorized link for the complete MindBill lifecycle. */
+  mindBillUrl?: string;
   expiresAt: string;
 };
 
