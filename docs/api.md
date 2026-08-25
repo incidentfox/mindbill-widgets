@@ -4,26 +4,26 @@ Base URL: `https://app.mindbill.org/partner/v1`
 
 Use `Authorization: Bearer $MINDBILL_API_KEY` on every request except developer signup. If a key can access multiple organizations, also send `X-MindBill-Org-Id`. Send an `Idempotency-Key` on creates and submissions so retries cannot duplicate work.
 
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `POST` | `/developer/signup` | Create a sandbox developer account and one-time key |
-| `GET` | `/developer/account` | Read account, terms, BAA, billing, and live-access state |
-| `PATCH` | `/developer/account` | Configure IP allowlist and rate limit |
-| `POST` | `/developer/account/baa` | Accept the current BAA |
-| `POST` | `/developer/account/live-access` | Request live access and receive a Stripe-hosted Checkout URL |
-| `POST` | `/developer/account/billing-portal` | Receive a Stripe-hosted billing portal URL |
-| `POST` | `/developer/account/keys` | Mint a scoped sandbox or live key |
-| `POST` | `/orgs` | Provision a managed customer organization without an invitation by default |
-| `POST` | `/orgs/:id/user-access` | Optionally grant the customer direct MindBill access |
-| `PUT` | `/orgs/:id/source-profile` | Synchronize partner-owned practice, provider, and location data |
-| `POST` | `/quote` | Calculate a quote without creating a bill |
-| `POST` | `/bills` | Create a bill |
-| `GET` | `/bills` | List bills using cursor pagination |
-| `GET` | `/bills/:id` | Retrieve a bill and lifecycle state |
-| `POST` | `/bills/:id/submit` | Submit a ready bill |
-| `GET` | `/events` | Poll ordered lifecycle events |
-| `GET` | `/webhook-deliveries` | Inspect webhook delivery attempts |
-| `POST` | `/embed/sessions` | Mint a short-lived, origin-bound widget session |
+| Method  | Route                               | Purpose                                                                    |
+| ------- | ----------------------------------- | -------------------------------------------------------------------------- |
+| `POST`  | `/developer/signup`                 | Create a sandbox developer account and one-time key                        |
+| `GET`   | `/developer/account`                | Read account, terms, BAA, billing, and live-access state                   |
+| `PATCH` | `/developer/account`                | Configure IP allowlist and rate limit                                      |
+| `POST`  | `/developer/account/baa`            | Accept the current BAA                                                     |
+| `POST`  | `/developer/account/live-access`    | Request live access and receive a Stripe-hosted Checkout URL               |
+| `POST`  | `/developer/account/billing-portal` | Receive a Stripe-hosted billing portal URL                                 |
+| `POST`  | `/developer/account/keys`           | Mint a scoped sandbox or live key                                          |
+| `POST`  | `/orgs`                             | Provision a managed customer organization without an invitation by default |
+| `POST`  | `/orgs/:id/user-access`             | Optionally grant the customer direct MindBill access                       |
+| `PUT`   | `/orgs/:id/source-profile`          | Synchronize partner-owned practice, provider, and location data            |
+| `POST`  | `/quote`                            | Calculate a quote without creating a bill                                  |
+| `POST`  | `/bills`                            | Create a bill                                                              |
+| `GET`   | `/bills`                            | List bills using cursor pagination                                         |
+| `GET`   | `/bills/:id`                        | Retrieve a bill and lifecycle state                                        |
+| `POST`  | `/bills/:id/submit`                 | Submit a ready bill                                                        |
+| `GET`   | `/events`                           | Poll ordered lifecycle events                                              |
+| `GET`   | `/webhook-deliveries`               | Inspect webhook delivery attempts                                          |
+| `POST`  | `/embed/sessions`                   | Mint a short-lived, origin-bound widget session                            |
 
 ## Partner-managed organizations
 
@@ -48,9 +48,9 @@ downtime or ambiguity. Direct MindBill access is an optional customer capability
 requirement for embedded billing.
 
 A record-summary integration normally creates the bill after a summary is finalized and
-its page count is locked. The partner provides the summary artifact and minimum claim,
-provider, payer, and service context; the user reviews the billing result in the
-`bill-from-report` widget; MindBill then owns submission and downstream status.
+its page count is locked. The partner provides the report packet plus minimum claim,
+provider, payer, and service context, then renders the `bill-review` widget for the created
+bill. MindBill owns corrections made during review, submission, and downstream status.
 
 Widget-session credentials require the `embed:write` scope. Available key scopes are
 `account:read`, `account:write`, `keys:write`, `orgs:read`, `orgs:write`, `bills:read`,

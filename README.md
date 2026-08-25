@@ -24,7 +24,7 @@ The ownership boundary is explicit:
 
 For a record-summary product, the natural handoff is: summary completes, the partner
 confirms page count and the minimum claim context, the user reviews the suggested billing
-configuration, and MindBill submits and tracks the bill. The timeline and collections
+configuration, and MindBill submits and tracks the bill. The review, timeline, and collections
 widgets return that status to the same product where the user completed the summary.
 
 > Sandbox data must be synthetic. Never send PHI until your organization is approved for live access and the required agreements are complete.
@@ -35,11 +35,11 @@ until a first-party release is present, do not install similarly named mirrors.
 
 ## Packages
 
-| Package | Use |
-| --- | --- |
-| `@mindbill/node` | Typed Node client plus the `mindbill` agent-friendly CLI |
-| `@mindbill/embed` | Framework-neutral custom elements |
-| `@mindbill/react` | React wrappers around the custom elements |
+| Package           | Use                                                      |
+| ----------------- | -------------------------------------------------------- |
+| `@mindbill/node`  | Typed Node client plus the `mindbill` agent-friendly CLI |
+| `@mindbill/embed` | Framework-neutral custom elements                        |
+| `@mindbill/react` | React wrappers around the custom elements                |
 
 ## See the widgets
 
@@ -47,11 +47,11 @@ These are the real hosted MindBill surfaces rendered with synthetic demo data.
 Partners keep their own navigation and workflow while MindBill handles the
 billing-specific interface inside an origin-bound iframe.
 
-| Bill timeline | Bill from report |
-| --- | --- |
-| ![A compact MindBill bill timeline showing charges, payment progress, and current status](./docs/images/widget-bill-timeline.png) | ![A MindBill bill-from-report review showing extracted report fields and suggested service lines](./docs/images/widget-bill-from-report.png) |
-| **Collections** | **Onboarding** |
-| ![A MindBill collections work queue showing bill balances, aging, status, and EOR state](./docs/images/widget-collections.png) | ![A MindBill onboarding widget for practice identity, billing provider, rendering provider, and service location](./docs/images/widget-onboarding.png) |
+| Bill timeline                                                                                                                     | Bill from report                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ![A compact MindBill bill timeline showing charges, payment progress, and current status](./docs/images/widget-bill-timeline.png) | ![A MindBill bill-from-report review showing extracted report fields and suggested service lines](./docs/images/widget-bill-from-report.png)           |
+| **Collections**                                                                                                                   | **Onboarding**                                                                                                                                         |
+| ![A MindBill collections work queue showing bill balances, aging, status, and EOR state](./docs/images/widget-collections.png)    | ![A MindBill onboarding widget for practice identity, billing provider, rendering provider, and service location](./docs/images/widget-onboarding.png) |
 
 The layouts are responsive. For example, the same timeline and report-review
 flows collapse cleanly for a narrow host surface:
@@ -102,7 +102,11 @@ await mindbill.synchronizeOrganizationProfile(
     source: "acme-records",
     practiceIdentity: { name: "Synthetic QME Practice" },
     renderingProviders: [
-      { externalId: "provider_42", name: "Avery Example, MD", npi: "1234567893" },
+      {
+        externalId: "provider_42",
+        name: "Avery Example, MD",
+        npi: "1234567893",
+      },
     ],
     locations: [
       {
@@ -119,7 +123,7 @@ await mindbill.synchronizeOrganizationProfile(
 );
 
 const session = await mindbill.createEmbedSession({
-  component: "bill-timeline",
+  component: "bill-review",
   billId: "synthetic_bill_123",
   allowedOrigin: "https://your-product.example",
   expiresIn: 900,
@@ -129,21 +133,24 @@ const session = await mindbill.createEmbedSession({
 Return only `token` and `embedUrl` from your own authenticated backend. Render:
 
 ```html
-<script type="module" src="https://unpkg.com/@mindbill/embed@0.2.0/dist/index.js"></script>
-<mindbill-bill-timeline
+<script
+  type="module"
+  src="https://unpkg.com/@mindbill/embed@0.3.0/dist/index.js"
+></script>
+<mindbill-bill-review
   session-token="SHORT_LIVED_SESSION_TOKEN"
-  embed-url="https://app.mindbill.org/embed/bill-timeline"
+  embed-url="https://app.mindbill.org/embed/bill-review"
   theme="system"
   accent-color="#2563eb"
-></mindbill-bill-timeline>
+></mindbill-bill-review>
 ```
 
 For React:
 
 ```tsx
-import { MindBillBillTimeline } from "@mindbill/react";
+import { HostedBillReview } from "@mindbill/react";
 
-<MindBillBillTimeline
+<HostedBillReview
   sessionToken={session.token}
   embedUrl={session.embedUrl}
   appearance={{ theme: "system", accentColor: "#2563eb" }}

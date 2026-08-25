@@ -20,44 +20,56 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 
 describe("@mindbill/node", () => {
   it("creates a sandbox without sending authorization", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
-      partnerId: "partner_1",
-      partnerSlug: "example",
-      accountId: "account_1",
-      credentialId: "credential_1",
-      apiKey: "mb_sandbox_secret",
-      environment: "sandbox",
-    }));
-    await createDeveloperSandbox({
-      companyName: "Example",
-      contactName: "Developer",
-      email: "developer@example.test",
-      termsAccepted: true,
-    }, { fetch: fetcher });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        partnerId: "partner_1",
+        partnerSlug: "example",
+        accountId: "account_1",
+        credentialId: "credential_1",
+        apiKey: "mb_sandbox_secret",
+        environment: "sandbox",
+      }),
+    );
+    await createDeveloperSandbox(
+      {
+        companyName: "Example",
+        contactName: "Developer",
+        email: "developer@example.test",
+        termsAccepted: true,
+      },
+      { fetch: fetcher },
+    );
 
     const [, request] = fetcher.mock.calls[0]!;
     const headers = new Headers(request?.headers);
     expect(headers.has("authorization")).toBe(false);
-    expect(JSON.parse(String(request?.body))).toMatchObject({ termsVersion: MINDBILL_TERMS_VERSION });
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      termsVersion: MINDBILL_TERMS_VERSION,
+    });
   });
 
   it("applies bearer auth, organization context, and idempotency", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
-      patientId: "patient_1",
-      injuryId: "injury_1",
-      billId: "bill_1",
-      billNumber: 1001,
-    }));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        patientId: "patient_1",
+        injuryId: "injury_1",
+        billId: "bill_1",
+        billNumber: 1001,
+      }),
+    );
     const client = new MindBillClient({
       apiKey: "mb_sandbox_secret",
       organizationId: "org_1",
       baseUrl: "https://example.test/partner/v1/",
       fetch: fetcher,
     });
-    const result = await client.createBill({
-      patient: { kind: "new" },
-      fields: { externalId: "example-1" },
-    }, "example-idempotency-key");
+    const result = await client.createBill(
+      {
+        patient: { kind: "new" },
+        fields: { externalId: "example-1" },
+      },
+      "example-idempotency-key",
+    );
 
     const [url, request] = fetcher.mock.calls[0]!;
     const headers = new Headers(request?.headers);
@@ -74,11 +86,16 @@ describe("@mindbill/node", () => {
   });
 
   it("provisions a managed organization without an invitation by default", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
-      organizationId: "org_managed_1",
-      status: "configuring",
-      accessMode: "managed",
-    }, { status: 201 }));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          organizationId: "org_managed_1",
+          status: "configuring",
+          accessMode: "managed",
+        },
+        { status: 201 },
+      ),
+    );
     const client = new MindBillClient({
       apiKey: "mb_sandbox_secret",
       baseUrl: "https://example.test/partner/v1",
@@ -97,19 +114,32 @@ describe("@mindbill/node", () => {
     });
     const [url, request] = fetcher.mock.calls[0]!;
     expect(url).toBe("https://example.test/partner/v1/orgs");
-    expect(new Headers(request?.headers).get("idempotency-key")).toBe("provision-synthetic-qme");
-    expect(JSON.parse(String(request?.body))).toEqual({ name: "Synthetic QME Practice" });
+    expect(new Headers(request?.headers).get("idempotency-key")).toBe(
+      "provision-synthetic-qme",
+    );
+    expect(JSON.parse(String(request?.body))).toEqual({
+      name: "Synthetic QME Practice",
+    });
   });
 
   it("grants optional MindBill user access explicitly", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
-      organizationId: "org_managed_1",
-      status: "pending_activation",
-      accessMode: "invite",
-      activationUrl: "https://app.mindbill.org/invite/synthetic-one-time-token",
-      activationEmailSent: true,
-    }, { status: 201 }));
-    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          organizationId: "org_managed_1",
+          status: "pending_activation",
+          accessMode: "invite",
+          activationUrl:
+            "https://app.mindbill.org/invite/synthetic-one-time-token",
+          activationEmailSent: true,
+        },
+        { status: 201 },
+      ),
+    );
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
 
     const result = await client.grantOrganizationUserAccess(
       "org_managed_1",
@@ -119,8 +149,12 @@ describe("@mindbill/node", () => {
 
     expect(result.accessMode).toBe("invite");
     const [url, request] = fetcher.mock.calls[0]!;
-    expect(url).toBe("https://app.mindbill.org/partner/v1/orgs/org_managed_1/user-access");
-    expect(new Headers(request?.headers).get("idempotency-key")).toBe("grant-synthetic-access");
+    expect(url).toBe(
+      "https://app.mindbill.org/partner/v1/orgs/org_managed_1/user-access",
+    );
+    expect(new Headers(request?.headers).get("idempotency-key")).toBe(
+      "grant-synthetic-access",
+    );
     expect(JSON.parse(String(request?.body))).toEqual({
       adminName: "Synthetic Owner",
       adminEmail: "owner@example.test",
@@ -128,14 +162,22 @@ describe("@mindbill/node", () => {
   });
 
   it("exposes the quote scope and typed quote request", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
-      currency: "USD",
-      totalAllowed: 625,
-    }));
-    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
-    const quote = await client.quote({
-      lineItems: [{ code: "ML200", modifiers: ["-95"], units: 1 }],
-    }, "quote-idempotency-key");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        currency: "USD",
+        totalAllowed: 625,
+      }),
+    );
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+    const quote = await client.quote(
+      {
+        lineItems: [{ code: "ML200", modifiers: ["-95"], units: 1 }],
+      },
+      "quote-idempotency-key",
+    );
 
     expect(MINDBILL_SCOPES).toContain("bills:quote");
     expect(quote.totalAllowed).toBe(625);
@@ -161,9 +203,18 @@ describe("@mindbill/node", () => {
       payments: [{ id: "payment_1", amount: 625 }],
       balanceDue: 0 as const,
     };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(response, { status: 202 }));
-    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
-    const result = await client.submitBill("bill_1", {}, "submit-idempotency-key");
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(response, { status: 202 }));
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+    const result = await client.submitBill(
+      "bill_1",
+      {},
+      "submit-idempotency-key",
+    );
 
     expect(result).toEqual(response);
     expect("sandbox" in result && result.sandbox).toBe(true);
@@ -179,46 +230,103 @@ describe("@mindbill/node", () => {
       billFilename: "synthetic-claim.edi",
       uploaded: ["synthetic-claim.edi"],
       artifactPath: "/synthetic/artifacts",
-      attachmentAdvisories: [{ id: "synthetic-advisory", message: "Synthetic advisory" }],
+      attachmentAdvisories: [
+        { id: "synthetic-advisory", message: "Synthetic advisory" },
+      ],
     };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(response));
-    const client = new MindBillClient({ apiKey: "mb_live_secret", fetch: fetcher });
-    const result = await client.submitBill("bill_1", { route: "ebill" }, "submit-live-idempotency-key");
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse(response));
+    const client = new MindBillClient({
+      apiKey: "mb_live_secret",
+      fetch: fetcher,
+    });
+    const result = await client.submitBill(
+      "bill_1",
+      { route: "ebill" },
+      "submit-live-idempotency-key",
+    );
 
     expect(result).toEqual(response);
-    expect("bill" in result && result.uploaded).toEqual(["synthetic-claim.edi"]);
+    expect("bill" in result && result.uploaded).toEqual([
+      "synthetic-claim.edi",
+    ]);
   });
 
   it("surfaces RFC 9457-style API errors with request IDs", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(
-      { title: "Invalid request", detail: "The bill is invalid" },
-      { status: 422, headers: { "content-type": "application/problem+json", "x-request-id": "req_123" } },
-    ));
-    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
-    const error = await client.getBill("bill_1").catch((caught: unknown) => caught);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { title: "Invalid request", detail: "The bill is invalid" },
+          {
+            status: 422,
+            headers: {
+              "content-type": "application/problem+json",
+              "x-request-id": "req_123",
+            },
+          },
+        ),
+      );
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+    const error = await client
+      .getBill("bill_1")
+      .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(MindBillError);
-    expect(error).toMatchObject({ status: 422, requestId: "req_123", message: "The bill is invalid" });
+    expect(error).toMatchObject({
+      status: 422,
+      requestId: "req_123",
+      message: "The bill is invalid",
+    });
   });
 
   it("requires billId for a timeline embed before making a request", async () => {
     const fetcher = vi.fn<typeof fetch>();
-    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
-    expect(() => client.createEmbedSession({
-      component: "bill-timeline",
-      allowedOrigin: "https://partner.example.test",
-    })).toThrow("billId is required");
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+    expect(() =>
+      client.createEmbedSession({
+        component: "bill-timeline",
+        allowedOrigin: "https://partner.example.test",
+      }),
+    ).toThrow("billId is required");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("requires billId for a bill review embed before making a request", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+    expect(() =>
+      client.createEmbedSession({
+        component: "bill-review",
+        allowedOrigin: "https://partner.example.test",
+      }),
+    ).toThrow("billId is required for bill-review sessions");
     expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("normalizes an exact embed origin and submits a bounded expiry", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
-      sessionId: "session_1",
-      component: "collections",
-      token: "single-use-session-token",
-      embedUrl: "https://embed.mindbill.org/v1/collections",
-      expiresAt: "2026-08-16T01:00:00.000Z",
-    }));
-    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        sessionId: "session_1",
+        component: "collections",
+        token: "single-use-session-token",
+        embedUrl: "https://embed.mindbill.org/v1/collections",
+        expiresAt: "2026-08-16T01:00:00.000Z",
+      }),
+    );
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
     await client.createEmbedSession({
       component: "collections",
       allowedOrigin: "https://partner.example.test",
@@ -236,39 +344,71 @@ describe("@mindbill/node", () => {
 
   it("rejects invalid embed origins and expiries before making a request", () => {
     const fetcher = vi.fn<typeof fetch>();
-    const client = new MindBillClient({ apiKey: "mb_sandbox_secret", fetch: fetcher });
-    expect(() => client.createEmbedSession({
-      component: "collections",
-      allowedOrigin: "https://partner.example.test/path",
-    })).toThrow("allowedOrigin must be an exact HTTPS origin");
-    expect(() => client.createEmbedSession({
-      component: "collections",
-      allowedOrigin: "https://partner.example.test",
-      expiresIn: 59,
-    })).toThrow("expiresIn must be an integer from 60 through 3600 seconds");
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+    expect(() =>
+      client.createEmbedSession({
+        component: "collections",
+        allowedOrigin: "https://partner.example.test/path",
+      }),
+    ).toThrow("allowedOrigin must be an exact HTTPS origin");
+    expect(() =>
+      client.createEmbedSession({
+        component: "collections",
+        allowedOrigin: "https://partner.example.test",
+        expiresIn: 59,
+      }),
+    ).toThrow("expiresIn must be an integer from 60 through 3600 seconds");
     expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("verifies webhook signatures against the exact raw body", () => {
     const secret = "synthetic_webhook_secret";
     const timestamp = 1_800_000_000;
-    const rawBody = new TextEncoder().encode('{"id":"event_1","sequence":"9007199254740993"}');
+    const rawBody = new TextEncoder().encode(
+      '{"id":"event_1","sequence":"9007199254740993"}',
+    );
     const signature = createHmac("sha256", secret)
       .update(`${timestamp}.`)
       .update(rawBody)
       .digest("hex");
     const header = `t=${timestamp},v1=${"0".repeat(64)},v1=${signature}`;
 
-    expect(verifyMindBillWebhookSignature(rawBody, header, secret, { now: timestamp })).toBe(true);
-    expect(verifyMindBillWebhookSignature(new TextEncoder().encode("{}"), header, secret, { now: timestamp })).toBe(false);
-    expect(verifyMindBillWebhookSignature(rawBody, header, secret, { now: timestamp + 301 })).toBe(false);
-    expect(verifyMindBillWebhookSignature(rawBody, "t=not-a-time,v1=bad", secret, { now: timestamp })).toBe(false);
+    expect(
+      verifyMindBillWebhookSignature(rawBody, header, secret, {
+        now: timestamp,
+      }),
+    ).toBe(true);
+    expect(
+      verifyMindBillWebhookSignature(
+        new TextEncoder().encode("{}"),
+        header,
+        secret,
+        { now: timestamp },
+      ),
+    ).toBe(false);
+    expect(
+      verifyMindBillWebhookSignature(rawBody, header, secret, {
+        now: timestamp + 301,
+      }),
+    ).toBe(false);
+    expect(
+      verifyMindBillWebhookSignature(rawBody, "t=not-a-time,v1=bad", secret, {
+        now: timestamp,
+      }),
+    ).toBe(false);
   });
 
   it("compares arbitrary-length decimal event sequences without Number coercion", () => {
-    expect(compareMindBillEventSequence("9007199254740993", "9007199254740992")).toBe(1);
+    expect(
+      compareMindBillEventSequence("9007199254740993", "9007199254740992"),
+    ).toBe(1);
     expect(compareMindBillEventSequence("00042", "42")).toBe(0);
     expect(compareMindBillEventSequence("99", "100")).toBe(-1);
-    expect(() => compareMindBillEventSequence("42.1", "43")).toThrow("decimal digits only");
+    expect(() => compareMindBillEventSequence("42.1", "43")).toThrow(
+      "decimal digits only",
+    );
   });
 });

@@ -9,20 +9,22 @@ and follow payment or denial status without moving to a second application.
 
 ## Available components
 
-| Element | Component | Purpose | Notes |
-| --- | --- | --- | --- |
-| `<mindbill-bill-timeline>` | `bill-timeline` | Status, acknowledgements, EORs, denials, appeals, payments | Session requires `billId` |
-| `<mindbill-collections>` | `collections` | AR and collections work queue | Subject to credential scopes |
-| `<mindbill-onboarding>` | `onboarding` | Practice, provider, location, signature, and billing setup | Intended for an authenticated admin |
-| `<mindbill-bill-from-report>` | `bill-from-report` | Create a draft bill from a report | Contract-only; not self-serve |
+| Element                       | Component          | Purpose                                                                                    | Notes                               |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `<mindbill-bill-timeline>`    | `bill-timeline`    | Status, acknowledgements, EORs, denials, appeals, payments                                 | Session requires `billId`           |
+| `<mindbill-bill-review>`      | `bill-review`      | Review and correct a draft bill, manage its billing packet, then choose a submission route | Session requires `billId`           |
+| `<mindbill-collections>`      | `collections`      | AR and collections work queue                                                              | Subject to credential scopes        |
+| `<mindbill-onboarding>`       | `onboarding`       | Practice, provider, location, signature, and billing setup                                 | Intended for an authenticated admin |
+| `<mindbill-bill-from-report>` | `bill-from-report` | Create a draft bill from a report                                                          | Contract-only; not self-serve       |
 
 For record-summary and report-generation products, the recommended sequence is:
 
 1. Finalize the source document and lock its page count.
-2. Create an origin-bound `bill-from-report` session using the partner's stable external
-   record ID.
-3. Let the user confirm suggested codes, units, provider, payer, and attachments in place.
-4. Submit idempotently through the partner server.
+2. Create the draft through the Partner API, including stable external IDs and source
+   documents already available in the partner workflow.
+3. Create an origin-bound `bill-review` session for the resulting `billId`.
+4. Let the user confirm suggested codes, units, provider, payer, and attachments in place;
+   the hosted widget saves and submits through MindBill's billing engine.
 5. Render `bill-timeline` on the source record and reconcile signed events server-side.
 
 The host should pass only the data required for billing. Widget lifecycle events contain
@@ -35,11 +37,11 @@ The screenshots below come from the hosted production widget routes using
 synthetic data. They show the interface that appears inside the iframe; the host
 application keeps its own navigation, page chrome, and authorization model.
 
-| Bill timeline | Bill from report |
-| --- | --- |
+| Bill timeline                                                                                                       | Bill from report                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | ![Bill timeline widget with charges, paid amount, balance, and processing state](./images/widget-bill-timeline.png) | ![Bill-from-report widget with extracted fields, service-line suggestions, and billing configuration](./images/widget-bill-from-report.png) |
-| **Collections** | **Onboarding** |
-| ![Collections widget with aging, balances, status, and EOR state](./images/widget-collections.png) | ![Onboarding widget with practice, provider, and location configuration](./images/widget-onboarding.png) |
+| **Collections**                                                                                                     | **Onboarding**                                                                                                                              |
+| ![Collections widget with aging, balances, status, and EOR state](./images/widget-collections.png)                  | ![Onboarding widget with practice, provider, and location configuration](./images/widget-onboarding.png)                                    |
 
 Widget content reflows within the space supplied by the host. These two narrow
 captures show the same production surfaces without a separate mobile SDK:
@@ -86,13 +88,17 @@ mindbill-collections {
 Listen for the `mindbill` custom event:
 
 ```js
-document.querySelector("mindbill-bill-timeline")
+document
+  .querySelector("mindbill-bill-timeline")
   .addEventListener("mindbill", ({ detail }) => {
     if (detail.event === "bill.updated") refreshLocalSummary();
   });
 ```
 
 The SDK accepts messages only from the rendered iframe window and its exact origin, validates the envelope, and emits a small documented payload: `component`, `event`, and optional opaque `billId`/`status`. Never use event data as authorization; refetch sensitive state on your server.
+
+The bill-review widget emits `bill.updated`, `attachment.added`, `attachment.removed`, and
+`bill.submitted`. Use these only as refresh hints; refetch authoritative state server-side.
 
 ## Content Security Policy
 

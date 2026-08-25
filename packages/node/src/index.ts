@@ -5,7 +5,13 @@ export const MINDBILL_TERMS_VERSION = "2026-08-16";
 export const MINDBILL_BAA_VERSION = "2026-08-16";
 
 export type MindBillEnvironment = "sandbox" | "live";
-export const MINDBILL_COMPONENTS = ["bill-timeline", "bill-from-report", "collections", "onboarding"] as const;
+export const MINDBILL_COMPONENTS = [
+  "bill-timeline",
+  "bill-review",
+  "bill-from-report",
+  "collections",
+  "onboarding",
+] as const;
 export type MindBillComponent = (typeof MINDBILL_COMPONENTS)[number];
 export const MINDBILL_SCOPES = [
   "account:read",
@@ -67,8 +73,15 @@ export type DeveloperAccount = {
   rateLimitPerMinute: number;
 };
 
-export type DeveloperSecurity = { ipAllowlist: string[]; rateLimitPerMinute: number };
-export type BaaAcceptance = { baaVersion: string; baaAcceptedAt: string; acceptedBy: string };
+export type DeveloperSecurity = {
+  ipAllowlist: string[];
+  rateLimitPerMinute: number;
+};
+export type BaaAcceptance = {
+  baaVersion: string;
+  baaAcceptedAt: string;
+  acceptedBy: string;
+};
 export type HostedSession = { id: string; url: string };
 export type LiveAccessResponse = { status: "pending"; checkout: HostedSession };
 export type MintCredentialRequest = {
@@ -106,22 +119,22 @@ export type ProvisionOrganizationSettings = {
   renderingProviders?: Record<string, unknown>[];
   locations?: Record<string, unknown>[];
 };
-export type ProvisionManagedOrganizationRequest = ProvisionOrganizationSettings & {
-  name: string;
-  accessMode?: "managed";
-};
-export type ProvisionInvitedOrganizationRequest = ProvisionOrganizationSettings & {
-  name: string;
-  accessMode: "invite";
-  adminName: string;
-  adminEmail: string;
-};
+export type ProvisionManagedOrganizationRequest =
+  ProvisionOrganizationSettings & {
+    name: string;
+    accessMode?: "managed";
+  };
+export type ProvisionInvitedOrganizationRequest =
+  ProvisionOrganizationSettings & {
+    name: string;
+    accessMode: "invite";
+    adminName: string;
+    adminEmail: string;
+  };
 export type ProvisionOrganizationRequest =
-  | ProvisionManagedOrganizationRequest
-  | ProvisionInvitedOrganizationRequest;
+  ProvisionManagedOrganizationRequest | ProvisionInvitedOrganizationRequest;
 export type ProvisionOrganizationResponse =
-  | ManagedOrganizationProvisioning
-  | InvitedOrganizationProvisioning;
+  ManagedOrganizationProvisioning | InvitedOrganizationProvisioning;
 export type GrantOrganizationUserAccessRequest = {
   adminName: string;
   adminEmail: string;
@@ -201,7 +214,11 @@ export type EmbedSession = {
 };
 
 export type Money = { amount: number; currency: "USD" };
-export type ServiceLine = { code: string; modifiers?: string[]; units?: number };
+export type ServiceLine = {
+  code: string;
+  modifiers?: string[];
+  units?: number;
+};
 export type QuoteRequest = { lineItems: ServiceLine[] };
 export type Quote = {
   currency?: "USD";
@@ -305,7 +322,9 @@ export class MindBillError extends Error {
     public readonly problem: Record<string, unknown>,
     public readonly requestId?: string,
   ) {
-    super(String(problem.detail ?? problem.title ?? `MindBill API error ${status}`));
+    super(
+      String(problem.detail ?? problem.title ?? `MindBill API error ${status}`),
+    );
   }
 }
 
@@ -335,7 +354,10 @@ function normalizeSequence(sequence: string): string {
 }
 
 /** Compare arbitrary-length decimal event sequences without losing integer precision. */
-export function compareMindBillEventSequence(left: string, right: string): -1 | 0 | 1 {
+export function compareMindBillEventSequence(
+  left: string,
+  right: string,
+): -1 | 0 | 1 {
   const normalizedLeft = normalizeSequence(left);
   const normalizedRight = normalizeSequence(right);
   if (normalizedLeft.length !== normalizedRight.length) {
@@ -355,15 +377,33 @@ export function verifyMindBillWebhookSignature(
   if (!signatureHeader || !secret) return false;
   const toleranceSeconds = options.toleranceSeconds ?? 300;
   const now = options.now ?? Math.floor(Date.now() / 1000);
-  if (!Number.isFinite(toleranceSeconds) || toleranceSeconds < 0 || !Number.isFinite(now)) return false;
+  if (
+    !Number.isFinite(toleranceSeconds) ||
+    toleranceSeconds < 0 ||
+    !Number.isFinite(now)
+  )
+    return false;
 
   const values = signatureHeader.split(",").map((value) => value.trim());
-  const timestamps = values.filter((value) => value.startsWith("t=")).map((value) => value.slice(2));
-  const signatures = values.filter((value) => value.startsWith("v1=")).map((value) => value.slice(3));
-  if (timestamps.length !== 1 || signatures.length === 0 || !/^[0-9]+$/.test(timestamps[0]!)) return false;
+  const timestamps = values
+    .filter((value) => value.startsWith("t="))
+    .map((value) => value.slice(2));
+  const signatures = values
+    .filter((value) => value.startsWith("v1="))
+    .map((value) => value.slice(3));
+  if (
+    timestamps.length !== 1 ||
+    signatures.length === 0 ||
+    !/^[0-9]+$/.test(timestamps[0]!)
+  )
+    return false;
 
   const timestamp = Number(timestamps[0]);
-  if (!Number.isSafeInteger(timestamp) || Math.abs(now - timestamp) > toleranceSeconds) return false;
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    Math.abs(now - timestamp) > toleranceSeconds
+  )
+    return false;
   const expected = createHmac("sha256", secret)
     .update(`${timestamps[0]}.`)
     .update(rawBody)
@@ -372,11 +412,15 @@ export function verifyMindBillWebhookSignature(
   return signatures.some((signature) => {
     if (!/^[0-9a-fA-F]{64}$/.test(signature)) return false;
     const supplied = Buffer.from(signature, "hex");
-    return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+    return (
+      supplied.length === expected.length && timingSafeEqual(supplied, expected)
+    );
   });
 }
 
-async function parseResponse(response: Response): Promise<Record<string, unknown>> {
+async function parseResponse(
+  response: Response,
+): Promise<Record<string, unknown>> {
   if (response.status === 204) return {};
   return response.json().catch(() => ({})) as Promise<Record<string, unknown>>;
 }
@@ -387,26 +431,39 @@ export class MindBillClient {
 
   constructor(private readonly options: MindBillClientOptions) {
     if (!options.apiKey) throw new Error("apiKey is required");
-    this.baseUrl = (options.baseUrl ?? MINDBILL_API_BASE_URL).replace(/\/$/, "");
+    this.baseUrl = (options.baseUrl ?? MINDBILL_API_BASE_URL).replace(
+      /\/$/,
+      "",
+    );
     this.fetcher = options.fetch ?? globalThis.fetch;
     if (!this.fetcher) throw new Error("A fetch implementation is required");
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, config: RequestConfig = {}): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    config: RequestConfig = {},
+  ): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${this.options.apiKey}`,
         accept: "application/json",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
-        ...(this.options.organizationId ? { "x-mindbill-org-id": this.options.organizationId } : {}),
-        ...(config.idempotencyKey ? { "idempotency-key": config.idempotencyKey } : {}),
+        ...(this.options.organizationId
+          ? { "x-mindbill-org-id": this.options.organizationId }
+          : {}),
+        ...(config.idempotencyKey
+          ? { "idempotency-key": config.idempotencyKey }
+          : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const payload = await parseResponse(response);
     if (!response.ok) {
-      const requestId = response.headers.get("x-request-id") ??
+      const requestId =
+        response.headers.get("x-request-id") ??
         (typeof payload.requestId === "string" ? payload.requestId : undefined);
       throw new MindBillError(response.status, payload, requestId);
     }
@@ -416,22 +473,32 @@ export class MindBillClient {
   getDeveloperAccount(): Promise<DeveloperAccount> {
     return this.request("GET", "/developer/account");
   }
-  updateDeveloperSecurity(input: DeveloperSecurity): Promise<DeveloperSecurity> {
+  updateDeveloperSecurity(
+    input: DeveloperSecurity,
+  ): Promise<DeveloperSecurity> {
     return this.request("PATCH", "/developer/account", input);
   }
-  acceptBaa(input: { accepted: true; acceptedBy: string; baaVersion?: typeof MINDBILL_BAA_VERSION }): Promise<BaaAcceptance> {
+  acceptBaa(input: {
+    accepted: true;
+    acceptedBy: string;
+    baaVersion?: typeof MINDBILL_BAA_VERSION;
+  }): Promise<BaaAcceptance> {
     return this.request("POST", "/developer/account/baa", {
       ...input,
       baaVersion: input.baaVersion ?? MINDBILL_BAA_VERSION,
     });
   }
   requestLiveAccess(organizationId: string): Promise<LiveAccessResponse> {
-    return this.request("POST", "/developer/account/live-access", { organizationId });
+    return this.request("POST", "/developer/account/live-access", {
+      organizationId,
+    });
   }
   createBillingPortalSession(): Promise<HostedSession> {
     return this.request("POST", "/developer/account/billing-portal");
   }
-  mintCredential(input: MintCredentialRequest): Promise<MintCredentialResponse> {
+  mintCredential(
+    input: MintCredentialRequest,
+  ): Promise<MintCredentialResponse> {
     return this.request("POST", "/developer/account/keys", input);
   }
   /**
@@ -476,48 +543,87 @@ export class MindBillClient {
   quote<T = Quote>(input: QuoteRequest, idempotencyKey: string): Promise<T> {
     return this.request("POST", "/quote", input, { idempotencyKey });
   }
-  createBill<T = CreateBillResponse>(input: CreateBillRequest, idempotencyKey: string): Promise<T> {
+  createBill<T = CreateBillResponse>(
+    input: CreateBillRequest,
+    idempotencyKey: string,
+  ): Promise<T> {
     return this.request("POST", "/bills", input, { idempotencyKey });
   }
   getBill<T = BillResponse>(id: string): Promise<T> {
     return this.request("GET", `/bills/${encodeURIComponent(id)}`);
   }
-  listBills<T = BillPage>(query: Record<string, string | number | boolean> = {}): Promise<T> {
-    const search = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)])).toString();
+  listBills<T = BillPage>(
+    query: Record<string, string | number | boolean> = {},
+  ): Promise<T> {
+    const search = new URLSearchParams(
+      Object.entries(query).map(([key, value]) => [key, String(value)]),
+    ).toString();
     return this.request("GET", `/bills${search ? `?${search}` : ""}`);
   }
-  submitBill<T = SubmitBillResponse>(id: string, input: SubmitBillRequest, idempotencyKey: string): Promise<T> {
-    return this.request("POST", `/bills/${encodeURIComponent(id)}/submit`, input, { idempotencyKey });
+  submitBill<T = SubmitBillResponse>(
+    id: string,
+    input: SubmitBillRequest,
+    idempotencyKey: string,
+  ): Promise<T> {
+    return this.request(
+      "POST",
+      `/bills/${encodeURIComponent(id)}/submit`,
+      input,
+      { idempotencyKey },
+    );
   }
-  listEvents(cursor = "0", limit = 50): Promise<{ events: MindBillEvent[]; nextCursor: string | null }> {
-    return this.request("GET", `/events?cursor=${encodeURIComponent(cursor)}&limit=${limit}`);
+  listEvents(
+    cursor = "0",
+    limit = 50,
+  ): Promise<{ events: MindBillEvent[]; nextCursor: string | null }> {
+    return this.request(
+      "GET",
+      `/events?cursor=${encodeURIComponent(cursor)}&limit=${limit}`,
+    );
   }
   listWebhookDeliveries(limit = 50): Promise<Record<string, unknown>> {
     return this.request("GET", `/webhook-deliveries?limit=${limit}`);
   }
   createEmbedSession(input: EmbedSessionRequest): Promise<EmbedSession> {
     if (!MINDBILL_COMPONENTS.includes(input.component)) {
-      throw new Error(`component must be one of: ${MINDBILL_COMPONENTS.join(", ")}`);
+      throw new Error(
+        `component must be one of: ${MINDBILL_COMPONENTS.join(", ")}`,
+      );
     }
-    if (input.component === "bill-timeline" && !input.billId) {
-      throw new Error("billId is required for bill-timeline sessions");
+    const requiresBill =
+      input.component === "bill-timeline" || input.component === "bill-review";
+    if (requiresBill && !input.billId) {
+      throw new Error(`billId is required for ${input.component} sessions`);
     }
-    if (input.component !== "bill-timeline" && input.billId !== undefined) {
-      throw new Error("billId is supported only for bill-timeline sessions");
+    if (!requiresBill && input.billId !== undefined) {
+      throw new Error(
+        "billId is supported only for bill-timeline and bill-review sessions",
+      );
     }
     const allowedOrigin = exactHttpsOrigin(input.allowedOrigin);
     if (!allowedOrigin) {
-      throw new Error("allowedOrigin must be an exact HTTPS origin without credentials, path, query, or fragment");
+      throw new Error(
+        "allowedOrigin must be an exact HTTPS origin without credentials, path, query, or fragment",
+      );
     }
-    if (input.expiresIn !== undefined && (!Number.isInteger(input.expiresIn) || input.expiresIn < 60 || input.expiresIn > 3600)) {
-      throw new Error("expiresIn must be an integer from 60 through 3600 seconds");
+    if (
+      input.expiresIn !== undefined &&
+      (!Number.isInteger(input.expiresIn) ||
+        input.expiresIn < 60 ||
+        input.expiresIn > 3600)
+    ) {
+      throw new Error(
+        "expiresIn must be an integer from 60 through 3600 seconds",
+      );
     }
     return this.request("POST", "/embed/sessions", { ...input, allowedOrigin });
   }
 }
 
 export async function createDeveloperSandbox(
-  input: Omit<DeveloperSignupRequest, "termsAccepted" | "termsVersion"> & { termsAccepted: true },
+  input: Omit<DeveloperSignupRequest, "termsAccepted" | "termsVersion"> & {
+    termsAccepted: true;
+  },
   options: { baseUrl?: string; fetch?: typeof globalThis.fetch } = {},
 ): Promise<DeveloperSignupResponse> {
   const fetcher = options.fetch ?? globalThis.fetch;
@@ -530,7 +636,8 @@ export async function createDeveloperSandbox(
   });
   const payload = await parseResponse(response);
   if (!response.ok) {
-    const requestId = response.headers.get("x-request-id") ??
+    const requestId =
+      response.headers.get("x-request-id") ??
       (typeof payload.requestId === "string" ? payload.requestId : undefined);
     throw new MindBillError(response.status, payload, requestId);
   }
