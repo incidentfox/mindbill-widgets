@@ -320,6 +320,7 @@ describe("@mindbill/node", () => {
         component: "collections",
         token: "single-use-session-token",
         embedUrl: "https://embed.mindbill.org/v1/collections",
+        mindBillUrl: "https://app.mindbill.org/bills/synthetic_bill_1",
         expiresAt: "2026-08-16T01:00:00.000Z",
       }),
     );
@@ -327,7 +328,7 @@ describe("@mindbill/node", () => {
       apiKey: "mb_sandbox_secret",
       fetch: fetcher,
     });
-    await client.createEmbedSession({
+    const session = await client.createEmbedSession({
       component: "collections",
       allowedOrigin: "https://partner.example.test",
       expiresIn: 300,
@@ -340,6 +341,9 @@ describe("@mindbill/node", () => {
       allowedOrigin: "https://partner.example.test",
       expiresIn: 300,
     });
+    expect(session.mindBillUrl).toBe(
+      "https://app.mindbill.org/bills/synthetic_bill_1",
+    );
   });
 
   it("rejects invalid embed origins and expiries before making a request", () => {

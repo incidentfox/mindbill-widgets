@@ -89,7 +89,7 @@ rejecting additive fields. Use a key containing `bills:quote` for `quote`.
 
 Webhook consumers can use `verifyMindBillWebhookSignature` with the exact raw body and
 `compareMindBillEventSequence` for decimal sequence strings that may exceed JavaScript's safe
-integer range. See the [webhook guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/webhooks.md).
+integer range. See the repository's [10-minute quickstart](https://github.com/incidentfox/mindbill-widgets#add-mindbill-billing-in-10-minutes).
 
 Create a synthetic sandbox without printing the returned key:
 
@@ -101,4 +101,4 @@ pnpm dlx @mindbill/node signup \
   --accept-terms
 ```
 
-The key is written to `.env.mindbill` mode `0600`. Live-access and billing commands return Stripe-hosted URLs for an authorized human; the CLI never accepts card data. See the [agent onboarding guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/agent-onboarding.md).
+The key is written to `.env.mindbill` mode `0600`. Live-access and billing commands return Stripe-hosted URLs for an authorized human; the CLI never accepts card data.

@@ -1,151 +1,113 @@
-# MindBill SDKs and widgets
+# Add MindBill billing in 10 minutes
 
-Public, dependency-light building blocks for adding California workers’ compensation medical-legal billing to another product. Use the Node SDK for server-to-server API calls and short-lived embed sessions; use the web component or React package for user-facing workflows.
+The default integration is one hosted workflow, one compact status surface, and one organization-scoped link to MindBill. Your product supplies known structured data and documents. MindBill owns validation, submission, acknowledgements, payment, denial, and resubmission.
 
-## Embedded billing, not a second system
+Use synthetic data in sandbox. Never put a Partner API key in browser code.
 
-MindBill is designed to be distributed through the software customers already use. A
-partner can provision a managed billing organization, synchronize the minimum practice
-and provider data needed for billing, create or submit a bill, and surface its lifecycle
-inside the partner product. The customer does not need to accept an invitation, sign into
-a separate application, or maintain the same profile in two places.
-
-The ownership boundary is explicit:
-
-- Your product remains authoritative for its customer relationship, workflow, source
-  documents, and partner-owned profile fields.
-- MindBill remains authoritative for bill validation, submission, acknowledgements,
-  denials, payments, and accounts receivable.
-- Stable external IDs, idempotent writes, signed webhooks, and cursor reconciliation keep
-  the two systems synchronized.
-- The Partner API exposes only documented billing resources. Internal routing logic,
-  payer intelligence, operational queues, vendor credentials, and cross-customer data do
-  not cross the boundary.
-
-For a record-summary product, the natural handoff is: summary completes, the partner
-confirms page count and the minimum claim context, the user reviews the suggested billing
-configuration, and MindBill submits and tracks the bill. The review, timeline, and collections
-widgets return that status to the same product where the user completed the summary.
-
-> Sandbox data must be synthetic. Never send PHI until your organization is approved for live access and the required agreements are complete.
-
-This repository is the canonical public source for all three packages and their
-provenance-backed release workflow. Check npm for current package availability;
-until a first-party release is present, do not install similarly named mirrors.
-
-## Packages
-
-| Package           | Use                                                      |
-| ----------------- | -------------------------------------------------------- |
-| `@mindbill/node`  | Typed Node client plus the `mindbill` agent-friendly CLI |
-| `@mindbill/embed` | Framework-neutral custom elements                        |
-| `@mindbill/react` | React wrappers around the custom elements                |
-
-## See the widgets
-
-These are the real hosted MindBill surfaces rendered with synthetic demo data.
-Partners keep their own navigation and workflow while MindBill handles the
-billing-specific interface inside an origin-bound iframe.
-
-| Bill timeline                                                                                                                     | Bill from report                                                                                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ![A compact MindBill bill timeline showing charges, payment progress, and current status](./docs/images/widget-bill-timeline.png) | ![A MindBill bill-from-report review showing extracted report fields and suggested service lines](./docs/images/widget-bill-from-report.png)           |
-| **Collections**                                                                                                                   | **Onboarding**                                                                                                                                         |
-| ![A MindBill collections work queue showing bill balances, aging, status, and EOR state](./docs/images/widget-collections.png)    | ![A MindBill onboarding widget for practice identity, billing provider, rendering provider, and service location](./docs/images/widget-onboarding.png) |
-
-The layouts are responsive. For example, the same timeline and report-review
-flows collapse cleanly for a narrow host surface:
-
-<p align="center">
-  <img src="./docs/images/widget-bill-timeline-mobile.png" alt="MindBill bill timeline in a narrow mobile layout" width="330" />
-  &nbsp;&nbsp;
-  <img src="./docs/images/widget-bill-from-report-mobile.png" alt="MindBill bill-from-report review in a narrow mobile layout" width="330" />
-</p>
-
-## Fastest safe start
-
-Once the first-party packages are available on npm, an agent can create a free
-sandbox without handling billing details:
+## 1. Install and create a sandbox
 
 ```bash
-pnpm dlx @mindbill/node signup \
-  --company "Acme Integration Lab" \
-  --contact "Avery Agent" \
-  --email "developers@example.com" \
+npm install @mindbill/node @mindbill/react @mindbill/embed
+npx mindbill signup \
+  --company "Example Integration Lab" \
+  --contact "Avery Example" \
+  --email "developer@example.com" \
   --accept-terms
 ```
 
-The one-time sandbox key is written to `.env.mindbill` with owner-only permissions and is not printed. Add that file to your project’s `.gitignore`. The command returns only identifiers, the key prefix, and the saved path.
-
-Use the SDK on your server:
+The CLI saves the one-time sandbox key to `.env.mindbill` with owner-only permissions. Add that file to `.gitignore`.
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
 
 const mindbill = new MindBillClient({
   apiKey: process.env.MINDBILL_API_KEY!,
-  ...(process.env.MINDBILL_ORG_ID
-    ? { organizationId: process.env.MINDBILL_ORG_ID }
-    : {}),
+  organizationId: process.env.MINDBILL_ORG_ID,
 });
+```
 
-// Default: provision a customer tenant without a MindBill user, invitation,
-// or separate customer onboarding flow.
-const customer = await mindbill.provisionOrganization(
-  { name: "Synthetic QME Practice" },
+## 2. Set up the organization once
+
+Provision one managed organization per customer. Managed organizations need no separate MindBill invitation.
+
+```ts
+const organization = await mindbill.provisionOrganization(
+  { name: "Example Evaluations" },
   crypto.randomUUID(),
 );
 
 await mindbill.synchronizeOrganizationProfile(
-  customer.organizationId,
+  organization.organizationId,
   {
-    source: "acme-records",
-    practiceIdentity: { name: "Synthetic QME Practice" },
-    renderingProviders: [
-      {
-        externalId: "provider_42",
-        name: "Avery Example, MD",
-        npi: "1234567893",
-      },
-    ],
-    locations: [
-      {
-        externalId: "location_main",
-        name: "Main office",
-        street: "100 Example Avenue",
-        city: "Los Angeles",
-        state: "CA",
-        zip: "90012",
-      },
-    ],
+    source: "your-product",
+    practiceIdentity: {
+      name: "Example Evaluations",
+      legalName: "Example Evaluations Medical Group, Inc.",
+      taxId: "12-3456789",
+      npi: "1234567893",
+    },
+    renderingProviders: [{
+      externalId: "clinician_42",
+      name: "Avery Example, MD",
+      npi: "1234567893",
+      taxonomy: "208D00000X",
+      licenseNumber: "A12345",
+      licenseState: "CA",
+    }],
+    locations: [{
+      externalId: "location_main",
+      name: "Main office",
+      street: "100 Example Avenue",
+      city: "Los Angeles",
+      state: "CA",
+      zip: "90012",
+      isPrimary: true,
+    }],
   },
   crypto.randomUUID(),
 );
+```
 
+Open an `onboarding` hosted session for the customer to review genuinely missing fields and upload the organization W-9 and clinician signatures. Practice identity, tax ID, group NPI, locations, W-9, and clinician NPI/taxonomy/license/signature are reusable; do not ask for them again on every bill.
+
+## 3. Send a clean payer packet
+
+Create a draft from your server with stable external IDs, known case fields, and service lines. Service lines are not QME-specific: use the agreed code and `units` for a QME case, IME, malpractice review, hourly work, or another activity-based service.
+
+Default only billing documents that are sensible for the payer packet:
+
+- final report;
+- proof of service;
+- required billing forms;
+- intentionally selected supporting documents.
+
+Never silently auto-attach medical records. Keep any attorney report-service packet separate from the payer billing packet. The hosted review lets the user inspect defaults, remove a document, and intentionally add arbitrary supporting PDFs before submission.
+
+## 4. Mint an origin-bound session on your server
+
+After authenticating your own user and confirming access to the bill:
+
+```ts
 const session = await mindbill.createEmbedSession({
   component: "bill-review",
   billId: "synthetic_bill_123",
   allowedOrigin: "https://your-product.example",
   expiresIn: 900,
 });
+
+// Send only these transient values to your browser.
+return Response.json({
+  token: session.token,
+  embedUrl: session.embedUrl,
+  mindBillUrl: session.mindBillUrl,
+});
 ```
 
-Return only `token` and `embedUrl` from your own authenticated backend. Render:
+`allowedOrigin` must be the exact HTTPS origin. The token expires and is valid only from that origin.
 
-```html
-<script
-  type="module"
-  src="https://unpkg.com/@mindbill/embed@0.3.0/dist/index.js"
-></script>
-<mindbill-bill-review
-  session-token="SHORT_LIVED_SESSION_TOKEN"
-  embed-url="https://app.mindbill.org/embed/bill-review"
-  theme="system"
-  accent-color="#2563eb"
-></mindbill-bill-review>
-```
+## 5. Open the hosted billing flow
 
-For React:
+React:
 
 ```tsx
 import { HostedBillReview } from "@mindbill/react";
@@ -153,46 +115,94 @@ import { HostedBillReview } from "@mindbill/react";
 <HostedBillReview
   sessionToken={session.token}
   embedUrl={session.embedUrl}
-  appearance={{ theme: "system", accentColor: "#2563eb" }}
-  onMindBill={(event) => console.log(event.detail.event)}
-/>;
+  appearance={{ theme: "system", accentColor: "#176b65" }}
+  onMindBill={(event) => refreshBillStatus(event.detail.event)}
+/>
 ```
 
-The widget sends only documented, PHI-free lifecycle events to its host. Keep the API key and embed-session creation on your server.
+Framework-neutral HTML:
 
-## Partner-managed customer accounts
+```html
+<script type="module" src="https://unpkg.com/@mindbill/embed@0.4.0/dist/index.js"></script>
+<mindbill-bill-review
+  session-token="SHORT_LIVED_SESSION_TOKEN"
+  embed-url="https://app.mindbill.org/embed/bill-review"
+  theme="system"
+></mindbill-bill-review>
+```
 
-`provisionOrganization` defaults to `accessMode: "managed"`. Your product can configure the tenant, create and submit bills, and render MindBill widgets without asking the customer to accept a MindBill invitation or sign into a second application. If a customer later wants direct access to MindBill, call `grantOrganizationUserAccess` as an explicit, auditable action.
+The user reviews prefilled values and documents, fixes only missing or incorrect fields, selects the route, and submits. Your product should not recreate MindBill’s submission UI.
 
-Keep workflow and customer-facing data in your product. Treat MindBill as authoritative for bill IDs, submissions, acknowledgements, payments, denials, and ordered event sequences. Synchronize partner-owned practice fields with `synchronizeOrganizationProfile`; sync billing state back with signed webhooks plus cursor reconciliation. Undocumented MindBill data is not exposed by the Partner API.
+## 6. Show status and open the full lifecycle
 
-## From sandbox to live
+Use `HostedBillTimeline` as the lightweight embedded status/aging surface. It shows the current state, balance, age, and recent lifecycle activity without pulling collections operations into your product.
 
-Live access requires organization onboarding, BAA acceptance, and payment setup. The CLI can request a short-lived Stripe-hosted Checkout URL:
+```tsx
+import { HostedBillTimeline } from "@mindbill/react";
+
+<HostedBillTimeline sessionToken={timeline.token} embedUrl={timeline.embedUrl} />
+<a href={timeline.mindBillUrl}>Open in MindBill</a>
+```
+
+The bill-scoped `mindBillUrl` is authorized to the session organization. If a managed customer needs direct MindBill access, grant it once and explicitly:
+
+```ts
+await mindbill.grantOrganizationUserAccess(
+  organizationId,
+  { adminName: "Practice Owner", adminEmail: "owner@example.com" },
+  crypto.randomUUID(),
+);
+```
+
+## 7. Receive and reconcile status
+
+Verify signed webhooks against the exact raw request body, deduplicate event IDs, and persist the decimal `sequence` as text. Poll from the last cursor after downtime or a sequence gap.
+
+```ts
+import {
+  compareMindBillEventSequence,
+  verifyMindBillWebhookSignature,
+} from "@mindbill/node";
+
+const rawBody = new Uint8Array(await request.arrayBuffer());
+if (!verifyMindBillWebhookSignature(
+  rawBody,
+  request.headers.get("mindbill-signature"),
+  process.env.MINDBILL_WEBHOOK_SECRET!,
+)) return new Response("invalid signature", { status: 400 });
+
+const event = JSON.parse(new TextDecoder().decode(rawBody));
+if (compareMindBillEventSequence(event.sequence, durableCursor) > 0) {
+  await recordEventAndAdvanceCursor(event); // one durable transaction
+}
+
+const missed = await mindbill.listEvents(durableCursor);
+```
+
+Treat MindBill as authoritative for bill IDs, submission, clearinghouse and payer status, EORs, payments, denials, and resubmissions. Log request IDs and closed statuses—not patient details, document contents, API keys, or embed tokens.
+
+## Run the minimal example
+
+[`examples/quickstart/server.mjs`](./examples/quickstart/server.mjs) is a complete tiny server and browser host. It expects a synthetic sandbox bill and an exact HTTPS development origin (for example, a tunnel to local port 4173).
 
 ```bash
-pnpm dlx @mindbill/node live-access --organization-id org_example
+cd examples/quickstart
+npm install
+MINDBILL_API_KEY=... \
+MINDBILL_ORG_ID=... \
+MINDBILL_SYNTHETIC_BILL_ID=... \
+APP_ORIGIN=https://your-dev-origin.example \
+npm start
 ```
 
-Give that URL to an authorized human. Neither this CLI nor your coding agent accepts card numbers, Link credentials, or payment-method data. See [go-live](./docs/go-live.md).
+## Packages and reference
 
-## Documentation
-
-- [Agent-first onboarding](./docs/agent-onboarding.md)
-- [Widget integration and customization](./docs/widgets.md)
-- [API keys and security](./docs/security.md)
-- [Go-live and hosted payments](./docs/go-live.md)
-- [Billing lifecycle/domain guide](./docs/domain-guide.md)
-- [Examples](./examples)
+- `@mindbill/node`: server SDK, CLI, webhook verification.
+- `@mindbill/embed`: framework-neutral hosted elements.
+- `@mindbill/react`: React wrappers.
 - [Hosted API reference](https://app.mindbill.org/developers/reference)
-- [OpenAPI document](https://app.mindbill.org/partner-openapi.yaml)
+- [OpenAPI](https://app.mindbill.org/partner-openapi.yaml)
 
-Self-serve pricing is $10 per bill. Volume and partner programs are contact-sales. Report autofill is rails-exclusive and available only through a negotiated agreement.
+Live access requires organization onboarding, BAA acceptance, and hosted payment setup. Report autofill is negotiated, not self-serve. Public SDK issues must contain no PHI or credentials.
 
-## Support
-
-Open a GitHub issue for public SDK bugs without PHI or credentials. For security reports, production onboarding, autofill, or volume terms, contact MindBill through the developer portal.
-
-## License
-
-MIT. “MindBill” and related marks are trademarks of IncidentFox, Inc.; the license does not grant trademark rights.
+MIT. “MindBill” and related marks are trademarks of IncidentFox, Inc.

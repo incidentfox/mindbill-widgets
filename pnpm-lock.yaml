@@ -42,6 +42,12 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)(happy-dom@18.0.1)
 
+  examples/quickstart:
+    dependencies:
+      '@mindbill/node':
+        specifier: ^0.4.0
+        version: link:../../packages/node
+
   packages/embed: {}
 
   packages/node: {}

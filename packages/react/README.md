@@ -1,6 +1,6 @@
 # @mindbill/react
 
-React wrappers for the secure `@mindbill/embed` custom elements. See the [widget guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/widgets.md).
+React wrappers for the secure `@mindbill/embed` custom elements. See the repository's [10-minute quickstart](https://github.com/incidentfox/mindbill-widgets#add-mindbill-billing-in-10-minutes).
 
 Published on npm as [`@mindbill/react`](https://www.npmjs.com/package/@mindbill/react). Install it with `npm install @mindbill/react @mindbill/embed` or your preferred package manager.
 

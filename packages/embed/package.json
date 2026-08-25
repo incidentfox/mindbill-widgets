@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/embed",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Secure framework-neutral web components for MindBill hosted workflows",
   "type": "module",
   "main": "./dist/index.js",
