@@ -230,14 +230,54 @@ export type Quote = {
 };
 export type NewPatientReference = { kind: "new" };
 export type ExistingPatientReference = { kind: "existing"; id: string };
+export type BillingProviderSnapshot = {
+  taxId: string;
+  npi: string;
+  name: string;
+  billType: "Professional" | "Institutional";
+  phone?: string;
+  billingStreet?: string;
+  billingCity?: string;
+  billingState?: string;
+  billingZip?: string;
+};
+export type RenderingProviderSnapshot = {
+  name: string;
+  specialty?: string;
+  npi: string;
+  taxonomy?: string;
+  licenseNumber?: string;
+  licenseState?: string;
+  isQME?: boolean;
+  isAME?: boolean;
+  email?: string;
+};
+export type LocationSnapshot = {
+  billingProviderId?: string;
+  name: string;
+  nickname?: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  county?: string;
+  posCode?: string;
+  isPrimary?: boolean;
+};
 export type CreateBillRequest = {
+  /** Stable bill/work-item ID in the partner system. */
+  externalId?: string;
   fields?: Record<string, string>;
   patient: NewPatientReference | ExistingPatientReference;
   claimsAdminId?: string;
+  /** Optional saved MindBill record. Inline data wins and is frozen onto this bill. */
   renderingProviderId?: string;
+  renderingProvider?: RenderingProviderSnapshot;
   placeOfServiceId?: string;
+  placeOfService?: LocationSnapshot;
   placeOfServiceCodeOverride?: string;
   billingProviderId?: string;
+  billingProvider?: BillingProviderSnapshot;
   lineItems?: ServiceLine[];
   diagnosisCodes?: string[];
   payerSlug?: string;

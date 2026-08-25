@@ -26,53 +26,55 @@ const mindbill = new MindBillClient({
 });
 ```
 
-## 2. Set up the organization once
+## 2. Create a self-contained draft
 
-Provision one managed organization per customer. Managed organizations need no separate MindBill invitation.
+No onboarding or record synchronization is required. Send the values your product already knows; MindBill freezes them onto the bill and the hosted review asks for anything genuinely missing.
 
 ```ts
-const organization = await mindbill.provisionOrganization(
-  { name: "Example Evaluations" },
-  crypto.randomUUID(),
-);
-
-await mindbill.synchronizeOrganizationProfile(
-  organization.organizationId,
-  {
-    source: "your-product",
-    practiceIdentity: {
-      name: "Example Evaluations",
-      legalName: "Example Evaluations Medical Group, Inc.",
-      taxId: "12-3456789",
-      npi: "1234567893",
-    },
-    renderingProviders: [{
-      externalId: "clinician_42",
-      name: "Avery Example, MD",
-      npi: "1234567893",
-      taxonomy: "208D00000X",
-      licenseNumber: "A12345",
-      licenseState: "CA",
-    }],
-    locations: [{
-      externalId: "location_main",
-      name: "Main office",
-      street: "100 Example Avenue",
-      city: "Los Angeles",
-      state: "CA",
-      zip: "90012",
-      isPrimary: true,
-    }],
+const bill = await mindbill.createBill({
+  externalId: "work_item_123",
+  patient: { kind: "new" },
+  fields: {
+    patientFirstName: "Taylor",
+    patientLastName: "Example",
+    dateOfService: "2026-08-25",
   },
-  crypto.randomUUID(),
-);
+  billingProvider: {
+    name: "Example Evaluations Medical Group, Inc.",
+    taxId: "12-3456789",
+    npi: "1234567893",
+    billType: "Professional",
+  },
+  renderingProvider: {
+    name: "Avery Example, MD",
+    npi: "1234567893",
+    taxonomy: "208D00000X",
+    licenseNumber: "A12345",
+    licenseState: "CA",
+  },
+  placeOfService: {
+    name: "Main office",
+    street: "100 Example Avenue",
+    city: "Los Angeles",
+    state: "CA",
+    zip: "90012",
+    posCode: "11",
+  },
+  lineItems: [{ code: "ML201", modifiers: ["95"], units: 1 }],
+}, crypto.randomUUID());
 ```
 
-Open an `onboarding` hosted session for the customer to review genuinely missing fields and upload the organization W-9 and clinician signatures. Practice identity, tax ID, group NPI, locations, W-9, and clinician NPI/taxonomy/license/signature are reusable; do not ask for them again on every bill.
+This same contract supports all ownership models:
+
+- **Partner-owned:** send inline snapshots on each bill and keep your own database authoritative.
+- **MindBill-owned:** save provider and location records once, then send their MindBill IDs.
+- **Hybrid:** send an ID for a reusable record and overlay fresher inline values for this bill. Inline values win; the frozen bill never changes when either database changes later.
+
+Saved organization, provider, and location records remain optional conveniences for autofill, search, analytics, W-9 reuse, and signatures. Partners can adopt them later without changing the bill API.
 
 ## 3. Send a clean payer packet
 
-Create a draft from your server with stable external IDs, known case fields, and service lines. Service lines are not QME-specific: use the agreed code and `units` for a QME case, IME, malpractice review, hourly work, or another activity-based service.
+Create a draft from your server with a stable external ID, known case fields, and service lines. Service lines are not QME-specific: use the agreed code and `units` for a QME case, IME, malpractice review, hourly work, or another activity-based service.
 
 Default only billing documents that are sensible for the payer packet:
 
@@ -123,7 +125,7 @@ import { HostedBillReview } from "@mindbill/react";
 Framework-neutral HTML:
 
 ```html
-<script type="module" src="https://unpkg.com/@mindbill/embed@0.4.0/dist/index.js"></script>
+<script type="module" src="https://unpkg.com/@mindbill/embed@0.5.0/dist/index.js"></script>
 <mindbill-bill-review
   session-token="SHORT_LIVED_SESSION_TOKEN"
   embed-url="https://app.mindbill.org/embed/bill-review"
