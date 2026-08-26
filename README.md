@@ -1,38 +1,35 @@
-# Add MindBill billing in 10 minutes
+# MindBill partner SDK
 
-The default integration is one hosted workflow, one compact status surface, and one organization-scoped link to MindBill. Your product supplies known structured data and documents. MindBill owns validation, submission, acknowledgements, payment, denial, and resubmission.
+Add medical billing with one server route, one React surface, and one stored `billId`.
 
-Use synthetic data in sandbox. Never put a Partner API key in browser code.
+Your server holds the Partner API key. Your browser uses your own authenticated endpoints or a short-lived, origin-bound hosted session. MindBill owns submission, payer status, EORs, denials, payments, and reviews.
 
-## 1. Install and create a sandbox
+## 10-minute setup
+
+### 1. Install
 
 ```bash
-npm install @mindbill/node @mindbill/react @mindbill/embed
-npx mindbill signup \
-  --company "Example Integration Lab" \
-  --contact "Avery Example" \
-  --email "developer@example.com" \
-  --accept-terms
+npm install @mindbill/node @mindbill/react
 ```
 
-The CLI saves the one-time sandbox key to `.env.mindbill` with owner-only permissions. Add that file to `.gitignore`.
+Use synthetic data in sandbox. Never put a Partner API key in browser code.
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
 
-const mindbill = new MindBillClient({
+export const mindbill = new MindBillClient({
   apiKey: process.env.MINDBILL_API_KEY!,
   organizationId: process.env.MINDBILL_ORG_ID,
 });
 ```
 
-## 2. Create a self-contained draft
+### 2. Create a draft from data you already have
 
-No onboarding or record synchronization is required. Send the values your product already knows; MindBill freezes them onto the bill and the hosted review asks for anything genuinely missing.
+No provider, location, or patient synchronization is required. Send inline values and a stable external ID; MindBill freezes the values onto that bill.
 
 ```ts
-const bill = await mindbill.createBill({
-  externalId: "work_item_123",
+const draft = await mindbill.createBill({
+  externalId: "evaluation_123",
   patient: { kind: "new" },
   fields: {
     patientFirstName: "Taylor",
@@ -62,54 +59,66 @@ const bill = await mindbill.createBill({
   },
   lineItems: [{ code: "ML201", modifiers: ["95"], units: 1 }],
 }, crypto.randomUUID());
+
+// Persist draft.billId next to your evaluation/case ID.
 ```
 
-This same contract supports all ownership models:
+Saved MindBill provider and location records are optional conveniences for reuse, search, and reporting. Partners may keep all source data themselves, use MindBill records, or mix both models without changing the bill contract.
 
-- **Partner-owned:** send inline snapshots on each bill and keep your own database authoritative.
-- **MindBill-owned:** save provider and location records once, then send their MindBill IDs.
-- **Hybrid:** send an ID for a reusable record and overlay fresher inline values for this bill. Inline values win; the frozen bill never changes when either database changes later.
+### 3. Add the payer packet
 
-Saved organization, provider, and location records remain optional conveniences for autofill, search, analytics, W-9 reuse, and signatures. Partners can adopt them later without changing the bill API.
+```ts
+await mindbill.uploadBillAttachment(draft.billId, {
+  file: finalReportBlob,
+  filename: "final-report.pdf",
+  documentType: "final_report",
+  externalId: "document_456",
+}, crypto.randomUUID());
+```
 
-## 3. Send a clean payer packet
+Sensible defaults are the final report, proof of service, and required billing forms. Medical records are never silently attached. Users may review, remove, or intentionally add any supporting PDF. Keep the payer billing packet separate from attorney report service.
 
-Create a draft from your server with a stable external ID, known case fields, and service lines. Service lines are not QME-specific: use the agreed code and `units` for a QME case, IME, malpractice review, hourly work, or another activity-based service.
+### 4. Pick a UI
 
-Default only billing documents that are sensible for the payer packet:
+For a native experience, render controlled React components and connect their callbacks to your server:
 
-- final report;
-- proof of service;
-- required billing forms;
-- intentionally selected supporting documents.
+```tsx
+import { BillReviewForm, BillStatusSummary } from "@mindbill/react";
 
-Never silently auto-attach medical records. Keep any attorney report-service packet separate from the payer billing packet. The hosted review lets the user inspect defaults, remove a document, and intentionally add arbitrary supporting PDFs before submission.
+<BillReviewForm
+  data={review}
+  appearance={{ accentColor: "#32a9d6", textColor: "#203743" }}
+  onSave={(values) => api.saveReview(billId, values)}
+  onSubmit={(values, route) => api.submitBill(billId, values, route)}
+  onAddAttachment={(file, type, description) =>
+    api.addAttachment(billId, file, type, description)
+  }
+  onRemoveAttachment={(attachmentId) =>
+    api.removeAttachment(billId, attachmentId)
+  }
+/>
 
-## 4. Mint an origin-bound session on your server
+<BillStatusSummary
+  status={status.state}
+  totalCharge={status.totalCharge}
+  totalPaid={status.totalPaid}
+  balanceDue={status.balanceDue}
+  agingDays={agingDays}
+  updatedAt={status.updatedAt}
+  actions={statusActions}
+/>
+```
 
-After authenticating your own user and confirming access to the bill:
+For the fastest integration, mint a hosted session on your server and render `HostedBillReview`:
 
 ```ts
 const session = await mindbill.createEmbedSession({
   component: "bill-review",
-  billId: "synthetic_bill_123",
+  billId,
   allowedOrigin: "https://your-product.example",
   expiresIn: 900,
 });
-
-// Send only these transient values to your browser.
-return Response.json({
-  token: session.token,
-  embedUrl: session.embedUrl,
-  mindBillUrl: session.mindBillUrl,
-});
 ```
-
-`allowedOrigin` must be the exact HTTPS origin. The token expires and is valid only from that origin.
-
-## 5. Open the hosted billing flow
-
-React:
 
 ```tsx
 import { HostedBillReview } from "@mindbill/react";
@@ -117,94 +126,73 @@ import { HostedBillReview } from "@mindbill/react";
 <HostedBillReview
   sessionToken={session.token}
   embedUrl={session.embedUrl}
-  appearance={{ theme: "system", accentColor: "#176b65" }}
-  onMindBill={(event) => refreshBillStatus(event.detail.event)}
+  appearance={{ theme: "system", accentColor: "#32a9d6" }}
+  onMindBill={() => refreshStatus()}
 />
 ```
 
-Framework-neutral HTML:
+The hosted token is short-lived and valid only on the exact HTTPS origin. Both UI paths use the same bill and attachment APIs.
 
-```html
-<script type="module" src="https://unpkg.com/@mindbill/embed@0.5.0/dist/index.js"></script>
-<mindbill-bill-review
-  session-token="SHORT_LIVED_SESSION_TOKEN"
-  embed-url="https://app.mindbill.org/embed/bill-review"
-  theme="system"
-></mindbill-bill-review>
-```
-
-The user reviews prefilled values and documents, fixes only missing or incorrect fields, selects the route, and submits. Your product should not recreate MindBill’s submission UI.
-
-## 6. Show status and open the full lifecycle
-
-Use `HostedBillTimeline` as the lightweight embedded status/aging surface. It shows the current state, balance, age, and recent lifecycle activity without pulling collections operations into your product.
-
-```tsx
-import { HostedBillTimeline } from "@mindbill/react";
-
-<HostedBillTimeline sessionToken={timeline.token} embedUrl={timeline.embedUrl} />
-<a href={timeline.mindBillUrl}>Open in MindBill</a>
-```
-
-The bill-scoped `mindBillUrl` is authorized to the session organization. If a managed customer needs direct MindBill access, grant it once and explicitly:
+### 5. Read status and act
 
 ```ts
-await mindbill.grantOrganizationUserAccess(
-  organizationId,
-  { adminName: "Practice Owner", adminEmail: "owner@example.com" },
-  crypto.randomUUID(),
-);
-```
+const status = await mindbill.getBillStatus(billId);
 
-## 7. Receive and reconcile status
+if (status.data.state === "denied") {
+  const review = await mindbill.createBillReview(billId, {
+    type: "second_review",
+    reason: "The report satisfies the documented criteria.",
+    attachmentIds: supportingAttachmentIds,
+  }, crypto.randomUUID());
 
-Verify signed webhooks against the exact raw request body, deduplicate event IDs, and persist the decimal `sequence` as text. Poll from the last cursor after downtime or a sequence gap.
-
-```ts
-import {
-  compareMindBillEventSequence,
-  verifyMindBillWebhookSignature,
-} from "@mindbill/node";
-
-const rawBody = new Uint8Array(await request.arrayBuffer());
-if (!verifyMindBillWebhookSignature(
-  rawBody,
-  request.headers.get("mindbill-signature"),
-  process.env.MINDBILL_WEBHOOK_SECRET!,
-)) return new Response("invalid signature", { status: 400 });
-
-const event = JSON.parse(new TextDecoder().decode(rawBody));
-if (compareMindBillEventSequence(event.sequence, durableCursor) > 0) {
-  await recordEventAndAdvanceCursor(event); // one durable transaction
+  await mindbill.submitBillReview(
+    billId,
+    review.data.id,
+    crypto.randomUUID(),
+  );
 }
 
-const missed = await mindbill.listEvents(durableCursor);
+const eor = await mindbill.getBillEor(billId);
 ```
 
-Treat MindBill as authoritative for bill IDs, submission, clearinghouse and payer status, EORs, payments, denials, and resubmissions. Log request IDs and closed statuses—not patient details, document contents, API keys, or embed tokens.
+Your application normally stores only its own external ID plus `billId`. Use signed webhooks for live updates and `listEvents(cursor)` to recover gaps. Treat MindBill as authoritative for the billing lifecycle.
 
-## Run the minimal example
+## QME and IME workflows
 
-[`examples/quickstart/server.mjs`](./examples/quickstart/server.mjs) is a complete tiny server and browser host. It expects a synthetic sandbox bill and an exact HTTPS development origin (for example, a tunnel to local port 4173).
+The integration shape is shared: professional claim data, service lines, payer documents, status, and lifecycle actions. Pricing policy is separate:
+
+- California QME/med-legal billing uses configured med-legal codes, modifiers, and fee-schedule rules.
+- Generic IME, malpractice, hourly, activity-based, and fixed-fee work should send contract-backed service lines and amounts. A self-serve contract-pricing engine is not yet part of the public API.
+
+This separation keeps the API stable without applying California QME rules to unrelated evaluations.
+
+## What is available today
+
+- Draft creation, payer packet attachments, submission, status, EOR reads, and Second Bill Review.
+- Native React review/status components and hosted review/timeline components.
+- Optional organization/provider/location records and organization-scoped MindBill access.
+
+Payment posting, close, generic rejection resubmission, and Independent Bill Review are still handled in hosted/full MindBill rather than public SDK methods.
+
+## Sandbox and reference
 
 ```bash
-cd examples/quickstart
-npm install
-MINDBILL_API_KEY=... \
-MINDBILL_ORG_ID=... \
-MINDBILL_SYNTHETIC_BILL_ID=... \
-APP_ORIGIN=https://your-dev-origin.example \
-npm start
+npx mindbill signup \
+  --company "Example Integration Lab" \
+  --contact "Avery Example" \
+  --email "developer@example.com" \
+  --accept-terms
 ```
 
-## Packages and reference
+The one-time key is saved to `.env.mindbill` with owner-only permissions. Add it to `.gitignore`.
 
-- `@mindbill/node`: server SDK, CLI, webhook verification.
-- `@mindbill/embed`: framework-neutral hosted elements.
-- `@mindbill/react`: React wrappers.
-- [Hosted API reference](https://app.mindbill.org/developers/reference)
+- [`@mindbill/node`](./packages/node): server SDK and webhook verification
+- [`@mindbill/react`](./packages/react): native and hosted React components
+- [`@mindbill/embed`](./packages/embed): framework-neutral hosted elements
+- [Runnable example](./examples/quickstart)
+- [API reference](https://app.mindbill.org/developers/reference)
 - [OpenAPI](https://app.mindbill.org/partner-openapi.yaml)
 
-Live access requires organization onboarding, BAA acceptance, and hosted payment setup. Report autofill is negotiated, not self-serve. Public SDK issues must contain no PHI or credentials.
+Live access requires organization onboarding, BAA acceptance, and hosted payment setup. Public issues must contain no PHI, credentials, or embed tokens.
 
 MIT. “MindBill” and related marks are trademarks of IncidentFox, Inc.

@@ -103,5 +103,6 @@ export type {
   BillReviewLocation,
   BillReviewSaveInput,
   BillStatusSummaryProps,
+  BillStatusAction,
   BillSubmissionRoute,
 } from "./native-bill-review";

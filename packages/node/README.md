@@ -82,6 +82,35 @@ if ("sandbox" in submission) {
 }
 ```
 
+The same client covers the day-to-day lifecycle without exposing the Partner API key to
+the browser:
+
+```ts
+const status = await mindbill.getBillStatus(created.billId);
+const attachments = await mindbill.listBillAttachments(created.billId);
+const eor = await mindbill.getBillEor(created.billId);
+
+const review = await mindbill.createBillReview(
+  created.billId,
+  {
+    type: "second_review",
+    reason: "The report satisfies the documented criteria.",
+    attachmentIds: attachments.data.map((item) => item.id),
+  },
+  crypto.randomUUID(),
+);
+
+await mindbill.submitBillReview(
+  created.billId,
+  review.data.id,
+  crypto.randomUUID(),
+);
+```
+
+`uploadBillAttachment` accepts a `Blob`, filename, document type, and optional stable
+external ID. Default only payer-facing documents such as final reports, proof of service,
+and required forms; never silently attach medical records.
+
 `createBill` returns `{ patientId, injuryId, billId, billNumber }` directly. `getBill` returns
 `{ bill, multiple?, ids? }`; `listBills` returns a required pagination envelope; and
 `submitBill` returns a discriminated sandbox-or-live union. Responses are extensible, so avoid
