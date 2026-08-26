@@ -78,12 +78,12 @@ await mindbill.uploadBillAttachment(draft.billId, {
 
 Sensible defaults are the final report, proof of service, and required billing forms. Medical records are never silently attached. Users may review, remove, or intentionally add any supporting PDF. Keep the payer billing packet separate from attorney report service.
 
-### 4. Pick a UI
+### 4. Add the UI
 
-For a native experience, render controlled React components and connect their callbacks to your server:
+Use the native review form for bill edits and submission:
 
 ```tsx
-import { BillReviewForm, BillStatusSummary } from "@mindbill/react";
+import { BillReviewForm } from "@mindbill/react";
 
 <BillReviewForm
   data={review}
@@ -98,18 +98,47 @@ import { BillReviewForm, BillStatusSummary } from "@mindbill/react";
   }
 />
 
-<BillStatusSummary
-  status={status.state}
-  totalCharge={status.totalCharge}
-  totalPaid={status.totalPaid}
-  balanceDue={status.balanceDue}
-  agingDays={agingDays}
-  updatedAt={status.updatedAt}
-  actions={statusActions}
+```
+
+For status, add one tiny route that mints a short-lived browser session:
+
+```ts
+// app/api/mindbill/status-session/route.ts
+export async function POST(request: Request) {
+  const user = await requireUser(request);
+  const { billId } = await request.json();
+  await requireBillAccess(user, billId);
+
+  const session = await mindbill.createEmbedSession({
+    component: "bill-timeline",
+    billId,
+    allowedOrigin: new URL(request.url).origin,
+    expiresIn: 900,
+  });
+
+  return Response.json({ token: session.token, expiresAt: session.expiresAt });
+}
+```
+
+Then the component handles status fetching, token caching and renewal, polling, focus refresh, loading, and retry:
+
+```tsx
+import { ConnectedBillStatus } from "@mindbill/react";
+
+<ConnectedBillStatus
+  billId={billId}
+  actions={[
+    { id: "eor", label: "View EOR", onClick: openEor },
+    { id: "payment", label: "Post payment", onClick: postPayment, primary: true },
+  ]}
 />
 ```
 
-For the fastest integration, mint a hosted session on your server and render `HostedBillReview`:
+Use `useBillStatus({ billId })` for custom UI, or `createBillStatusClient` outside React. No billing proxy or status backend is required. Your route only applies your existing user authentication and bill authorization; the browser then reads status directly from MindBill.
+
+Never expose a permanent Partner API key in frontend code. A zero-server integration is possible only when MindBill-hosted authentication/SSO authenticates the end user.
+
+For a hosted review, mint a `bill-review` session and render `HostedBillReview`:
 
 ```ts
 const session = await mindbill.createEmbedSession({

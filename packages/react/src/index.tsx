@@ -106,3 +106,20 @@ export type {
   BillStatusAction,
   BillSubmissionRoute,
 } from "./native-bill-review";
+
+export {
+  ConnectedBillStatus,
+  createBillStatusClient,
+  useBillStatus,
+} from "./connected-bill-status";
+export type {
+  BillStatusClient,
+  BillStatusClientOptions,
+  BillStatusData,
+  BillStatusSession,
+  BillStatusSessionProvider,
+  BillStatusSessionRequest,
+  ConnectedBillStatusProps,
+  UseBillStatusOptions,
+  UseBillStatusResult,
+} from "./connected-bill-status";
