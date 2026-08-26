@@ -1,10 +1,60 @@
 # @mindbill/react
 
-Native React billing components plus wrappers for MindBill's secure hosted workflows. See the repository's [10-minute quickstart](https://github.com/incidentfox/mindbill-widgets#add-mindbill-billing-in-10-minutes).
+Native React billing components and connected lifecycle hooks. Install with:
 
-Published on npm as [`@mindbill/react`](https://www.npmjs.com/package/@mindbill/react). Install it with `npm install @mindbill/react @mindbill/embed` or your preferred package manager.
+```bash
+npm install @mindbill/react @mindbill/node
+```
 
-Use `BillReviewForm` when billing should feel like part of your product. Your server loads and mutates the review model with a short-lived MindBill session; the component remains controlled and never receives a Partner API key.
+## Connected status
+
+`ConnectedBillStatus` owns the status API call, loading and error states, session renewal, one-minute polling, and focus refresh.
+
+```tsx
+import { ConnectedBillStatus } from "@mindbill/react";
+
+<ConnectedBillStatus
+  billId={billId}
+  appearance={{ accentColor: "#32a9d6", textColor: "#203743" }}
+  actions={[
+    { id: "eor", label: "View EOR", onClick: openEor },
+    { id: "payment", label: "Post payment", onClick: postPayment, primary: true },
+  ]}
+/>
+```
+
+Add one authenticated route to your app. It verifies that the signed-in user may access the bill, then mints an exact-origin, bill-scoped token. The Partner API key stays on the server.
+
+```ts
+// app/api/mindbill/status-session/route.ts
+import { mindbill } from "@/lib/mindbill";
+
+export async function POST(request: Request) {
+  const user = await requireUser(request); // your existing auth
+  const { billId } = await request.json();
+  await requireBillAccess(user, billId); // your existing authorization
+
+  const session = await mindbill.createEmbedSession({
+    component: "bill-timeline",
+    billId,
+    allowedOrigin: new URL(request.url).origin,
+    expiresIn: 900,
+  });
+
+  return Response.json({
+    token: session.token,
+    expiresAt: session.expiresAt,
+  });
+}
+```
+
+Use `useBillStatus({ billId })` when you want to render your own UI. It returns `data`, `error`, `isLoading`, `isRefreshing`, and `refresh`. Use `createBillStatusClient` outside React.
+
+This is the minimum safe browser integration. A permanent Partner API key must never enter frontend code. A completely serverless partner integration requires MindBill-hosted sign-in/SSO so MindBill can authenticate the end user itself.
+
+## Review and submit
+
+`BillReviewForm` is the native, controlled review surface. Known bill values and payer documents remain explicit and editable before submission.
 
 ```tsx
 import { BillReviewForm } from "@mindbill/react";
@@ -23,8 +73,7 @@ import { BillReviewForm } from "@mindbill/react";
 />
 ```
 
-Use `BillStatusSummary` for a compact lifecycle surface with age, last update, balance,
-and state-aware actions:
+Use `BillStatusSummary` only when your application already owns status loading and wants a presentation-only component:
 
 ```tsx
 <BillStatusSummary
@@ -41,7 +90,6 @@ and state-aware actions:
 />
 ```
 
-`HostedBillReview` and `HostedBillTimeline` remain available when an origin-bound hosted
-flow is a better fit. Native and hosted UI paths use the same server API and bill ID.
+`HostedBillReview` and `HostedBillTimeline` remain available when a hosted flow is a better fit. Native and hosted UI paths use the same bill ID.
 
 Never send a Partner API key or long-lived credential to React/browser code.
