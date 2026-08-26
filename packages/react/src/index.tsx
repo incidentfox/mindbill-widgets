@@ -112,6 +112,29 @@ export {
   createBillStatusClient,
   useBillStatus,
 } from "./connected-bill-status";
+
+export {
+  ConnectedBillLifecycle,
+  createBillLifecycleClient,
+  useBillLifecycle,
+} from "./connected-bill-lifecycle";
+export type {
+  BillEorDocument,
+  BillLifecycleAction,
+  BillLifecycleActionId,
+  BillLifecycleClient,
+  BillLifecycleClientOptions,
+  BillLifecycleData,
+  BillLifecycleSession,
+  BillLifecycleSessionProvider,
+  BillLifecycleSessionRequest,
+  CloseBillInput,
+  ConnectedBillLifecycleProps,
+  PostBillPaymentInput,
+  SubmitSecondReviewInput,
+  UseBillLifecycleOptions,
+  UseBillLifecycleResult,
+} from "./connected-bill-lifecycle";
 export type {
   BillStatusClient,
   BillStatusClientOptions,
