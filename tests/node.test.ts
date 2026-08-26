@@ -253,6 +253,162 @@ describe("@mindbill/node", () => {
     ]);
   });
 
+  it("reads the compact bill status and EOR", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            billId: "bill_1",
+            externalId: "ime_42",
+            state: "denied",
+            nativeStatus: "denied",
+            totalCharge: 1200,
+            totalPaid: 0,
+            balanceDue: 1200,
+            lastEventId: "event_7",
+            updatedAt: "2026-08-25T23:00:00.000Z",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            billId: "bill_1",
+            reportedPaid: 0,
+            totalPaid: 0,
+            balanceDue: 1200,
+            payment: null,
+            payments: [],
+            lineItems: [],
+          },
+        }),
+      );
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+
+    expect((await client.getBillStatus("bill_1")).data.state).toBe("denied");
+    expect((await client.getBillEor("bill_1")).data.balanceDue).toBe(1200);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "https://app.mindbill.org/partner/v1/bills/bill_1/status",
+      "https://app.mindbill.org/partner/v1/bills/bill_1/eor",
+    ]);
+  });
+
+  it("uploads and removes a billing attachment with idempotency", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            id: "attachment_1",
+            externalId: "report_42",
+            filename: "final-report.pdf",
+            description: "Final report",
+            documentType: "final_report",
+            reportType: null,
+            reportTypeCode: null,
+            source: "partner",
+            addedAt: "2026-08-25T23:00:00.000Z",
+            contentUrl: "/partner/v1/bills/bill_1/attachments/attachment_1/content",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+
+    const uploaded = await client.uploadBillAttachment(
+      "bill_1",
+      {
+        file: new Blob(["synthetic pdf"], { type: "application/pdf" }),
+        filename: "final-report.pdf",
+        documentType: "final_report",
+        externalId: "report_42",
+      },
+      "attach-report-42",
+    );
+    expect(uploaded.data.id).toBe("attachment_1");
+    const [, uploadRequest] = fetcher.mock.calls[0]!;
+    const uploadHeaders = new Headers(uploadRequest?.headers);
+    expect(uploadHeaders.get("idempotency-key")).toBe("attach-report-42");
+    expect(uploadHeaders.has("content-type")).toBe(false);
+    expect(uploadRequest?.body).toBeInstanceOf(FormData);
+    const uploadBody = uploadRequest?.body as FormData;
+    expect(uploadBody.get("documentType")).toBe("final_report");
+    expect(uploadBody.get("externalId")).toBe("report_42");
+
+    await client.deleteBillAttachment(
+      "bill_1",
+      "attachment_1",
+      "remove-report-42",
+    );
+    const [deleteUrl, deleteRequest] = fetcher.mock.calls[1]!;
+    expect(deleteUrl).toBe(
+      "https://app.mindbill.org/partner/v1/bills/bill_1/attachments/attachment_1",
+    );
+    expect(deleteRequest?.method).toBe("DELETE");
+  });
+
+  it("creates and submits a second review", async () => {
+    const review = {
+      data: {
+        id: "review_1",
+        billId: "bill_1",
+        originalBillId: "bill_1",
+        externalId: "sbr_42",
+        type: "second_review" as const,
+        state: "draft" as const,
+        reason: "Payment does not match the allowed amount.",
+        disputedAmount: 1200,
+        payerClaimControlNumber: "payer_control_42",
+        attachmentIds: ["attachment_1"],
+        submittedAt: null,
+        createdAt: "2026-08-25T23:00:00.000Z",
+        updatedAt: "2026-08-25T23:00:00.000Z",
+      },
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(review, { status: 201 }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: { ...review.data, state: "submitted", submittedAt: review.data.updatedAt },
+        }),
+      );
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_secret",
+      fetch: fetcher,
+    });
+
+    const created = await client.createBillReview(
+      "bill_1",
+      {
+        externalId: "sbr_42",
+        type: "second_review",
+        reason: review.data.reason,
+        disputedAmount: 1200,
+        payerClaimControlNumber: "payer_control_42",
+        attachmentIds: ["attachment_1"],
+      },
+      "create-sbr-42",
+    );
+    expect(created.data.type).toBe("second_review");
+    const submitted = await client.submitBillReview(
+      "bill_1",
+      "review_1",
+      "submit-sbr-42",
+    );
+    expect(submitted.data.state).toBe("submitted");
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v1/bills/bill_1/reviews/review_1/submit",
+    );
+  });
+
   it("surfaces RFC 9457-style API errors with request IDs", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

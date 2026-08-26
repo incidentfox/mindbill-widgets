@@ -23,6 +23,25 @@ import { BillReviewForm } from "@mindbill/react";
 />
 ```
 
-Use `BillStatusSummary` for the compact lifecycle surface. `HostedBillReview` and `HostedBillTimeline` remain available when a hosted flow is a better fit.
+Use `BillStatusSummary` for a compact lifecycle surface with age, last update, balance,
+and state-aware actions:
+
+```tsx
+<BillStatusSummary
+  status={status.state}
+  totalCharge={status.totalCharge}
+  totalPaid={status.totalPaid}
+  balanceDue={status.balanceDue}
+  agingDays={42}
+  updatedAt={status.updatedAt}
+  actions={[
+    { id: "eor", label: "View EOR", onClick: openEor },
+    { id: "review", label: "Start second review", onClick: startReview, primary: true },
+  ]}
+/>
+```
+
+`HostedBillReview` and `HostedBillTimeline` remain available when an origin-bound hosted
+flow is a better fit. Native and hosted UI paths use the same server API and bill ID.
 
 Never send a Partner API key or long-lived credential to React/browser code.

@@ -343,6 +343,95 @@ export type LiveBillSubmission = {
   [key: string]: unknown;
 };
 export type SubmitBillResponse = SandboxBillSubmission | LiveBillSubmission;
+export type BillStatus = {
+  billId: string;
+  externalId: string | null;
+  state: string;
+  nativeStatus: string;
+  totalCharge: number;
+  totalPaid: number;
+  balanceDue: number;
+  lastEventId: string | null;
+  updatedAt: string | null;
+};
+export type BillStatusResponse = { data: BillStatus };
+export type BillEorLineItem = {
+  id: string;
+  code: string;
+  paid: number;
+  allowedAmount: number;
+  adjustmentAmount: number;
+  patientResponsibility: number;
+  reasonCodes: string[];
+};
+export type BillEor = {
+  billId: string;
+  reportedPaid: number | null;
+  totalPaid: number;
+  balanceDue: number;
+  payment: unknown | null;
+  payments: unknown[];
+  lineItems: BillEorLineItem[];
+};
+export type BillEorResponse = { data: BillEor };
+export const BILL_ATTACHMENT_DOCUMENT_TYPES = [
+  "final_report",
+  "proof_of_service",
+  "w9",
+  "medical_records",
+  "appeal",
+  "other",
+] as const;
+export type BillAttachmentDocumentType =
+  (typeof BILL_ATTACHMENT_DOCUMENT_TYPES)[number];
+export type BillAttachment = {
+  id: string;
+  externalId: string | null;
+  filename: string;
+  description: string | null;
+  documentType: BillAttachmentDocumentType;
+  reportType: string | null;
+  reportTypeCode: string | null;
+  source: string;
+  addedAt: string;
+  contentUrl: string;
+};
+export type BillAttachmentListResponse = { data: BillAttachment[] };
+export type BillAttachmentResponse = { data: BillAttachment };
+export type UploadBillAttachmentRequest = {
+  file: Blob;
+  filename: string;
+  documentType: BillAttachmentDocumentType;
+  externalId?: string;
+  description?: string;
+};
+export type BillReviewType = "second_review" | "independent_bill_review";
+export type BillReviewState = "draft" | "submitted";
+export type BillReview = {
+  id: string;
+  billId: string;
+  originalBillId: string;
+  externalId: string | null;
+  type: BillReviewType;
+  state: BillReviewState;
+  reason: string | null;
+  disputedAmount: number | null;
+  payerClaimControlNumber: string | null;
+  attachmentIds: string[];
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type CreateBillReviewRequest = {
+  externalId?: string;
+  type: BillReviewType;
+  reason?: string;
+  disputedAmount?: number;
+  payerClaimControlNumber?: string;
+  attachmentIds?: string[];
+};
+export type BillReviewResponse = { data: BillReview };
+export type BillReviewListResponse = { data: BillReview[] };
 export type MindBillEvent = {
   id: string;
   sequence: string;
@@ -512,6 +601,35 @@ export class MindBillClient {
     return payload as T;
   }
 
+  private async requestForm<T>(
+    path: string,
+    body: FormData,
+    config: RequestConfig = {},
+  ): Promise<T> {
+    const response = await this.fetcher(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.options.apiKey}`,
+        accept: "application/json",
+        ...(this.options.organizationId
+          ? { "x-mindbill-org-id": this.options.organizationId }
+          : {}),
+        ...(config.idempotencyKey
+          ? { "idempotency-key": config.idempotencyKey }
+          : {}),
+      },
+      body,
+    });
+    const payload = await parseResponse(response);
+    if (!response.ok) {
+      const requestId =
+        response.headers.get("x-request-id") ??
+        (typeof payload.requestId === "string" ? payload.requestId : undefined);
+      throw new MindBillError(response.status, payload, requestId);
+    }
+    return payload as T;
+  }
+
   getDeveloperAccount(): Promise<DeveloperAccount> {
     return this.request("GET", "/developer/account");
   }
@@ -611,6 +729,90 @@ export class MindBillClient {
       "POST",
       `/bills/${encodeURIComponent(id)}/submit`,
       input,
+      { idempotencyKey },
+    );
+  }
+  getBillStatus(id: string): Promise<BillStatusResponse> {
+    return this.request(
+      "GET",
+      `/bills/${encodeURIComponent(id)}/status`,
+    );
+  }
+  getBillEor(id: string): Promise<BillEorResponse> {
+    return this.request("GET", `/bills/${encodeURIComponent(id)}/eor`);
+  }
+  listBillAttachments(id: string): Promise<BillAttachmentListResponse> {
+    return this.request(
+      "GET",
+      `/bills/${encodeURIComponent(id)}/attachments`,
+    );
+  }
+  uploadBillAttachment(
+    id: string,
+    input: UploadBillAttachmentRequest,
+    idempotencyKey: string,
+  ): Promise<BillAttachmentResponse> {
+    if (!BILL_ATTACHMENT_DOCUMENT_TYPES.includes(input.documentType)) {
+      throw new Error(
+        `documentType must be one of: ${BILL_ATTACHMENT_DOCUMENT_TYPES.join(", ")}`,
+      );
+    }
+    const body = new FormData();
+    body.append("file", input.file, input.filename);
+    body.append("documentType", input.documentType);
+    if (input.externalId) body.append("externalId", input.externalId);
+    if (input.description) body.append("description", input.description);
+    return this.requestForm(
+      `/bills/${encodeURIComponent(id)}/attachments`,
+      body,
+      { idempotencyKey },
+    );
+  }
+  deleteBillAttachment(
+    id: string,
+    attachmentId: string,
+    idempotencyKey: string,
+  ): Promise<void> {
+    return this.request(
+      "DELETE",
+      `/bills/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`,
+      undefined,
+      { idempotencyKey },
+    );
+  }
+  createBillReview(
+    id: string,
+    input: CreateBillReviewRequest,
+    idempotencyKey: string,
+  ): Promise<BillReviewResponse> {
+    return this.request(
+      "POST",
+      `/bills/${encodeURIComponent(id)}/reviews`,
+      input,
+      { idempotencyKey },
+    );
+  }
+  listBillReviews(id: string): Promise<BillReviewListResponse> {
+    return this.request(
+      "GET",
+      `/bills/${encodeURIComponent(id)}/reviews`,
+    );
+  }
+  getBillReview(id: string, reviewId: string): Promise<BillReviewResponse> {
+    return this.request(
+      "GET",
+      `/bills/${encodeURIComponent(id)}/reviews/${encodeURIComponent(reviewId)}`,
+    );
+  }
+  submitBillReview(
+    id: string,
+    reviewId: string,
+    idempotencyKey: string,
+  ): Promise<BillReviewResponse> {
+    return this.request(
+      "POST",
+      `/bills/${encodeURIComponent(id)}/reviews/${encodeURIComponent(reviewId)}/submit`,
+      {},
       { idempotencyKey },
     );
   }
