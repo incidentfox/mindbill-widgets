@@ -54,6 +54,9 @@ export type BillLifecycleData = BillReviewData & {
   lifecycle: {
     state: string;
     nativeStatus: string;
+    submittedAt?: string | null;
+    agingDays?: number | null;
+    updatedAt?: string | null;
     actions: BillLifecycleAction[];
   };
   eors: BillEorDocument[];
@@ -817,6 +820,9 @@ export function ConnectedBillLifecycle({
         />
       : <BillStatusSummary
           status={data.lifecycle.state}
+          submittedAt={data.lifecycle.submittedAt ?? null}
+          agingDays={data.lifecycle.agingDays ?? null}
+          updatedAt={data.lifecycle.updatedAt ?? null}
           totalCharge={data.bill.totalCharge}
           totalPaid={data.bill.totalPaid}
           balanceDue={data.bill.balanceDue}

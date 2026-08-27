@@ -180,6 +180,9 @@ describe("connected bill lifecycle", () => {
     lifecycle: {
       state: "denied",
       nativeStatus: "DENIED",
+      submittedAt: "2026-08-01T12:00:00.000Z",
+      agingDays: 25,
+      updatedAt: "2026-08-04T12:00:00.000Z",
       actions: [
         { id: "second_review", label: "Submit Second Review", enabled: true },
         { id: "close", label: "Close bill", enabled: true },
@@ -202,7 +205,12 @@ describe("connected bill lifecycle", () => {
     });
 
     await expect(client.getLifecycle()).resolves.toMatchObject({
-      lifecycle: { state: "denied" },
+      lifecycle: {
+        state: "denied",
+        submittedAt: "2026-08-01T12:00:00.000Z",
+        agingDays: 25,
+        updatedAt: "2026-08-04T12:00:00.000Z",
+      },
     });
     await expect(client.submitSecondReview({
       reason: "The report supports the billed service.",
