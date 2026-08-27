@@ -80,39 +80,31 @@ Sensible defaults are the final report, proof of service, and required billing f
 
 ### 4. Add the UI
 
-Use the native review form for bill edits and submission:
-
-The connected form also includes claims-administrator lookup and payer intelligence. It combines payer-name aliases with the bill's claim-number pattern, explains each suggestion, shows whether electronic delivery is available, and never silently chooses a claim-pattern-only match.
+Use one connected component for review, payer matching, submission, status, and the next available lifecycle action:
 
 ```tsx
-import { BillReviewForm } from "@mindbill/react";
+import { ConnectedBillLifecycle } from "@mindbill/react";
+import "@mindbill/react/styles.css";
 
-<BillReviewForm
-  data={review}
+<ConnectedBillLifecycle
+  billId={billId}
+  sessionEndpoint="/api/mindbill/billing-session"
   appearance={{ accentColor: "#32a9d6", textColor: "#203743" }}
-  onSave={(values) => api.saveReview(billId, values)}
-  onSubmit={(values, route) => api.submitBill(billId, values, route)}
-  onAddAttachment={(file, type, description) =>
-    api.addAttachment(billId, file, type, description)
-  }
-  onRemoveAttachment={(attachmentId) =>
-    api.removeAttachment(billId, attachmentId)
-  }
+  onChanged={(lifecycle) => syncBillStatus(lifecycle.bill)}
 />
-
 ```
 
-For status, add one tiny route that mints a short-lived browser session:
+Add one tiny authenticated route that mints a short-lived browser session. It contains no billing business logic:
 
 ```ts
-// app/api/mindbill/status-session/route.ts
+// app/api/mindbill/billing-session/route.ts
 export async function POST(request: Request) {
   const user = await requireUser(request);
   const { billId } = await request.json();
   await requireBillAccess(user, billId);
 
   const session = await mindbill.createEmbedSession({
-    component: "bill-timeline",
+    component: "bill-review",
     billId,
     allowedOrigin: new URL(request.url).origin,
     expiresIn: 900,
@@ -122,13 +114,18 @@ export async function POST(request: Request) {
 }
 ```
 
-Then the component handles status fetching, token caching and renewal, polling, focus refresh, loading, and retry:
+The component loads the bill, caches and renews the token, searches the claims-administrator directory, saves edits, manages the explicit payer packet, submits, polls status, and renders EOR, payment, review, correction, and close actions only when available.
+
+Payer intelligence combines exact names and aliases with claim-number patterns, explains each signal, shows electronic-delivery availability, and never silently selects a claim-pattern-only suggestion.
+
+For a compact status-only surface, add a second session route using the same server pattern, mint `component: "bill-timeline"`, and render:
 
 ```tsx
 import { ConnectedBillStatus } from "@mindbill/react";
 
 <ConnectedBillStatus
   billId={billId}
+  sessionEndpoint="/api/mindbill/status-session"
   actions={[
     { id: "eor", label: "View EOR", onClick: openEor },
     { id: "payment", label: "Post payment", onClick: postPayment, primary: true },
@@ -199,11 +196,11 @@ This separation keeps the API stable without applying California QME rules to un
 
 ## What is available today
 
-- Draft creation, payer packet attachments, submission, status, EOR reads, and Second Bill Review.
-- Native React review/status components and hosted review/timeline components.
+- Draft creation, payer packet attachments, submission, status, EOR reads, payment posting, close, Second Bill Review, and correction/resubmission.
+- Connected native React lifecycle/status components and hosted review/timeline components.
 - Optional organization/provider/location records and organization-scoped MindBill access.
 
-Payment posting, close, generic rejection resubmission, and Independent Bill Review are still handled in hosted/full MindBill rather than public SDK methods.
+Independent Bill Review and lien workflows are still handled in hosted/full MindBill rather than public SDK methods.
 
 ## Sandbox and reference
 
