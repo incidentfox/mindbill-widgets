@@ -17,6 +17,8 @@ import {
   type BillReviewAttachment,
   type BillReviewData,
   type BillReviewDocumentType,
+  type BillReviewFeatures,
+  type BillReviewPayer,
   type BillReviewSaveInput,
   type BillSubmissionRoute,
 } from "./native-bill-review";
@@ -106,6 +108,7 @@ export type BillLifecycleClientOptions = {
 
 export type BillLifecycleClient = {
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
+  searchClaimsAdministrators: (query: string) => Promise<BillReviewPayer[]>;
   saveReview: (input: BillReviewSaveInput) => Promise<BillLifecycleData>;
   submitBill: (
     input: BillReviewSaveInput,
@@ -149,6 +152,7 @@ export type UseBillLifecycleResult = {
   isRefreshing: boolean;
   isMutating: boolean;
   refresh: () => Promise<void>;
+  searchClaimsAdministrators: BillLifecycleClient["searchClaimsAdministrators"];
   saveReview: BillLifecycleClient["saveReview"];
   submitBill: BillLifecycleClient["submitBill"];
   addAttachment: BillLifecycleClient["addAttachment"];
@@ -183,7 +187,7 @@ function isSessionFresh(session: BillLifecycleSession | null): boolean {
 
 function normalizeSession(value: unknown): BillLifecycleSession {
   if (!value || typeof value !== "object") {
-    throw new Error("The MindBill session endpoint returned an invalid response.");
+    throw new Error("The billing session endpoint returned an invalid response.");
   }
   const candidate = value as {
     token?: unknown;
@@ -198,7 +202,7 @@ function normalizeSession(value: unknown): BillLifecycleSession {
     : candidate;
   if (typeof session.token !== "string" || session.token.length < 8) {
     throw new Error(
-      "The MindBill session endpoint did not return a browser session token.",
+      "The billing session endpoint did not return a browser session token.",
     );
   }
   return {
@@ -214,7 +218,7 @@ function normalizeSession(value: unknown): BillLifecycleSession {
 
 function normalizeLifecycle(value: unknown): BillLifecycleData {
   if (!value || typeof value !== "object") {
-    throw new Error("MindBill returned an invalid bill lifecycle.");
+    throw new Error("The billing service returned an invalid bill lifecycle.");
   }
   const data = value as Partial<BillLifecycleData>;
   if (
@@ -225,7 +229,7 @@ function normalizeLifecycle(value: unknown): BillLifecycleData {
     || !Array.isArray(data.lifecycle.actions)
     || !Array.isArray(data.eors)
   ) {
-    throw new Error("MindBill returned an invalid bill lifecycle.");
+    throw new Error("The billing service returned an invalid bill lifecycle.");
   }
   return data as BillLifecycleData;
 }
@@ -274,7 +278,7 @@ export function createBillLifecycleClient({
         if (!response.ok) {
           throw await responseError(
             response,
-            "MindBill browser session could not be created.",
+            "The billing session could not be created.",
           );
         }
         return response.json();
@@ -323,6 +327,41 @@ export function createBillLifecycleClient({
     }
     const body = await response.json() as { data?: unknown };
     return normalizeLifecycle(body.data);
+  };
+
+  const searchClaimsAdministrators = async (
+    query: string,
+  ): Promise<BillReviewPayer[]> => {
+    const response = await request(
+      `/embed/api/bill-review/payers?q=${encodeURIComponent(query)}`,
+    );
+    if (!response.ok) {
+      throw await responseError(
+        response,
+        "Claims administrator search is unavailable.",
+      );
+    }
+    const body = await response.json() as { results?: unknown };
+    if (!Array.isArray(body.results)) {
+      throw new Error("Claims administrator search returned an invalid response.");
+    }
+    return body.results.flatMap((value): BillReviewPayer[] => {
+      if (!value || typeof value !== "object") return [];
+      const payer = value as Partial<BillReviewPayer>;
+      if (typeof payer.id !== "string" || typeof payer.name !== "string") {
+        return [];
+      }
+      return [{
+        id: payer.id,
+        name: payer.name,
+        ...(typeof payer.hasElectronic === "boolean"
+          ? { hasElectronic: payer.hasElectronic }
+          : {}),
+        ...(Array.isArray(payer.states)
+          ? { states: payer.states.filter((state): state is string => typeof state === "string") }
+          : {}),
+      }];
+    });
   };
 
   const mutation = async (
@@ -375,6 +414,7 @@ export function createBillLifecycleClient({
       sessionRequest = null;
     },
     getLifecycle: loadLifecycle,
+    searchClaimsAdministrators,
     saveReview,
     async submitBill(input, route) {
       await saveReview(input);
@@ -455,7 +495,7 @@ export function createBillLifecycleClient({
         data?: unknown;
       };
       if (typeof body.replacementBillId !== "string") {
-        throw new Error("MindBill did not return the correction bill ID.");
+        throw new Error("The billing service did not return the correction bill ID.");
       }
       return {
         replacementBillId: body.replacementBillId,
@@ -562,7 +602,7 @@ export function useBillLifecycle({
     } catch (cause) {
       const nextError = cause instanceof Error
         ? cause
-        : new Error("MindBill could not complete this request.");
+        : new Error("The billing service could not complete this request.");
       if (mounted.current) setError(nextError);
       throw nextError;
     } finally {
@@ -573,6 +613,10 @@ export function useBillLifecycle({
   const saveReview = useCallback(
     (input: BillReviewSaveInput) => mutate(() => client.saveReview(input)),
     [client, mutate],
+  );
+  const searchClaimsAdministrators = useCallback(
+    (query: string) => client.searchClaimsAdministrators(query),
+    [client],
   );
   const submitBill = useCallback(
     (input: BillReviewSaveInput, route: BillSubmissionRoute) =>
@@ -636,6 +680,7 @@ export function useBillLifecycle({
     isRefreshing,
     isMutating,
     refresh,
+    searchClaimsAdministrators,
     saveReview,
     submitBill,
     addAttachment,
@@ -651,6 +696,7 @@ export function useBillLifecycle({
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   appearance?: MindBillAppearance;
+  features?: BillReviewFeatures;
   className?: string;
   style?: CSSProperties;
   loadingFallback?: ReactNode;
@@ -720,6 +766,7 @@ function SupportingDocumentControl({
 
 export function ConnectedBillLifecycle({
   appearance,
+  features,
   className,
   style,
   loadingFallback,
@@ -811,7 +858,9 @@ export function ConnectedBillLifecycle({
       ? <BillReviewForm
           data={data}
           {...(appearance ? { appearance } : {})}
+          {...(features ? { features } : {})}
           disabled={lifecycle.isMutating}
+          onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
           onSave={lifecycle.saveReview}
           onSubmit={async (input, route) => { await complete("Bill submitted.", () => lifecycle.submitBill(input, route)); }}
           onAddAttachment={async (file, type, description) => { await lifecycle.addAttachment(file, type, description); }}
@@ -833,7 +882,7 @@ export function ConnectedBillLifecycle({
     <div className="mb-lifecycle-toolbar">
       <div>
         <strong>Bill #{data.bill.billNumber}</strong>
-        <span>{lifecycle.isRefreshing ? "Refreshing…" : "MindBill manages this lifecycle."}</span>
+        <span>{lifecycle.isRefreshing ? "Refreshing…" : "Status and actions update automatically."}</span>
       </div>
       <div className="mb-lifecycle-toolbar-actions">
         {has("view_eor") ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => document.getElementById(`mb-eors-${data.bill.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>View EOR</button> : null}
@@ -849,12 +898,12 @@ export function ConnectedBillLifecycle({
     {has("independent_bill_review") ? <div className="mb-lifecycle-info"><strong>{has("independent_bill_review")?.label}</strong><span>{has("independent_bill_review")?.reason}</span></div> : null}
 
     {panel === "correction" ? <section className="mb-lifecycle-panel">
-      <div><h3>Correct and resubmit</h3><p>MindBill will create a new correction draft and preserve this rejected bill in history. Review the copied values before submitting.</p></div>
+      <div><h3>Correct and resubmit</h3><p>A new correction draft will preserve this rejected bill in history. Review the copied values before submitting.</p></div>
       <div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void complete("Correction draft created.", lifecycle.startCorrection)}>{lifecycle.isMutating ? "Creating…" : "Create correction draft"}</button></div>
     </section> : null}
 
     {panel === "second_review" ? <section className="mb-lifecycle-panel wide">
-      <div><h3>Submit Second Review</h3><p>State why payment is disputed, confirm the payer control number, and choose the supporting documents MindBill should send.</p></div>
+      <div><h3>Submit Second Review</h3><p>State why payment is disputed, confirm the payer control number, and choose the supporting documents to send.</p></div>
       <div className="mb-lifecycle-fields two">
         <label><span>Reason for Second Review</span><textarea required value={review.reason} onChange={(event) => setReview((current) => ({ ...current, reason: event.target.value }))} /></label>
         <div className="mb-lifecycle-fields">
@@ -878,7 +927,7 @@ export function ConnectedBillLifecycle({
     </section> : null}
 
     {panel === "payment" ? <section className="mb-lifecycle-panel">
-      <div><h3>Post payment</h3><p>Record funds shown on the EOR. MindBill updates the balance and closes the bill automatically when configured.</p></div>
+      <div><h3>Post payment</h3><p>Record funds shown on the EOR. The balance updates and the bill closes automatically when configured.</p></div>
       <div className="mb-lifecycle-fields two">
         <label><span>Amount</span><input type="number" min="0.01" max={data.bill.balanceDue} step="0.01" required value={payment.amount || ""} onChange={(event) => setPayment((current) => ({ ...current, amount: Number(event.target.value) }))} /></label>
         <label><span>Method</span><select value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value as "check" | "eft" }))}><option value="check">Check</option><option value="eft">EFT</option></select></label>

@@ -20,6 +20,8 @@ describe("native bill review", () => {
       dos: "2026-08-24",
       dosEnd: "",
       authorizationNumber: "  AUTH-7  ",
+      claimsAdminId: "payer-1",
+      claimsAdminName: "Example Claims Administrator",
       billingProvider: {
         id: "provider-1",
         name: "Example Evaluators",
@@ -57,6 +59,7 @@ describe("native bill review", () => {
       dos: "2026-08-24",
       dosEnd: null,
       authorizationNumber: "AUTH-7",
+      claimsAdminId: "payer-1",
       billingProviderId: "provider-1",
       billingProvider: {
         name: "Example Evaluators",
