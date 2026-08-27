@@ -108,7 +108,10 @@ export type BillLifecycleClientOptions = {
 
 export type BillLifecycleClient = {
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
-  searchClaimsAdministrators: (query: string) => Promise<BillReviewPayer[]>;
+  searchClaimsAdministrators: (
+    query: string,
+    claimNumber?: string,
+  ) => Promise<BillReviewPayer[]>;
   saveReview: (input: BillReviewSaveInput) => Promise<BillLifecycleData>;
   submitBill: (
     input: BillReviewSaveInput,
@@ -331,9 +334,13 @@ export function createBillLifecycleClient({
 
   const searchClaimsAdministrators = async (
     query: string,
+    claimNumber?: string,
   ): Promise<BillReviewPayer[]> => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (claimNumber?.trim()) params.set("claimNumber", claimNumber.trim());
     const response = await request(
-      `/embed/api/bill-review/payers?q=${encodeURIComponent(query)}`,
+      `/embed/api/bill-review/payers?${params.toString()}`,
     );
     if (!response.ok) {
       throw await responseError(
@@ -359,6 +366,38 @@ export function createBillLifecycleClient({
           : {}),
         ...(Array.isArray(payer.states)
           ? { states: payer.states.filter((state): state is string => typeof state === "string") }
+          : {}),
+        ...(["high", "medium", "directory"].includes(payer.confidence ?? "")
+          ? {
+              confidence: payer.confidence as NonNullable<
+                BillReviewPayer["confidence"]
+              >,
+            }
+          : {}),
+        ...(typeof payer.recommended === "boolean"
+          ? { recommended: payer.recommended }
+          : {}),
+        ...(Array.isArray(payer.signals)
+          ? {
+              signals: payer.signals.flatMap((signal) => {
+                if (!signal || typeof signal !== "object") return [];
+                const candidate = signal as {
+                  kind?: unknown;
+                  state?: unknown;
+                  label?: unknown;
+                };
+                if (
+                  !["name", "claim_number"].includes(String(candidate.kind)) ||
+                  !["match", "warning"].includes(String(candidate.state)) ||
+                  typeof candidate.label !== "string"
+                ) return [];
+                return [{
+                  kind: candidate.kind as "name" | "claim_number",
+                  state: candidate.state as "match" | "warning",
+                  label: candidate.label,
+                }];
+              }),
+            }
           : {}),
       }];
     });
@@ -615,7 +654,8 @@ export function useBillLifecycle({
     [client, mutate],
   );
   const searchClaimsAdministrators = useCallback(
-    (query: string) => client.searchClaimsAdministrators(query),
+    (query: string, claimNumber?: string) =>
+      client.searchClaimsAdministrators(query, claimNumber),
     [client],
   );
   const submitBill = useCallback(

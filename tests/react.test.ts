@@ -271,6 +271,67 @@ describe("connected bill lifecycle", () => {
     }));
   });
 
+  it("passes claim context through payer search and preserves recommendation reasons", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-payer-session-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        recommendedId: "pd:example-claims",
+        results: [{
+          id: "pd:example-claims",
+          name: "Example Claims Services",
+          hasElectronic: true,
+          states: ["CA"],
+          confidence: "high",
+          recommended: true,
+          signals: [
+            {
+              kind: "name",
+              state: "match",
+              label: "Exact directory alias match.",
+            },
+            {
+              kind: "claim_number",
+              state: "warning",
+              label: "This claim number does not match the payer's usual format; selection is still allowed.",
+            },
+          ],
+        }],
+      }));
+    const client = createBillLifecycleClient({
+      billId: "bill_789",
+      fetch: fetcher,
+    });
+
+    await expect(
+      client.searchClaimsAdministrators("Example TPA", "OTHER123"),
+    ).resolves.toEqual([{
+      id: "pd:example-claims",
+      name: "Example Claims Services",
+      hasElectronic: true,
+      states: ["CA"],
+      confidence: "high",
+      recommended: true,
+      signals: [
+        {
+          kind: "name",
+          state: "match",
+          label: "Exact directory alias match.",
+        },
+        {
+          kind: "claim_number",
+          state: "warning",
+          label: "This claim number does not match the payer's usual format; selection is still allowed.",
+        },
+      ],
+    }]);
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/embed/api/bill-review/payers?q=Example+TPA&claimNumber=OTHER123",
+    );
+  });
+
   it("switches to the replacement ID returned for a correction draft", async () => {
     const replacement = {
       ...lifecycle,

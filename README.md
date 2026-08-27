@@ -82,6 +82,8 @@ Sensible defaults are the final report, proof of service, and required billing f
 
 Use the native review form for bill edits and submission:
 
+The connected form also includes claims-administrator lookup and payer intelligence. It combines payer-name aliases with the bill's claim-number pattern, explains each suggestion, shows whether electronic delivery is available, and never silently chooses a claim-pattern-only match.
+
 ```tsx
 import { BillReviewForm } from "@mindbill/react";
 

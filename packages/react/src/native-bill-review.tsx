@@ -84,6 +84,13 @@ export type BillReviewPayer = {
   name: string;
   hasElectronic?: boolean;
   states?: string[];
+  confidence?: "high" | "medium" | "directory";
+  recommended?: boolean;
+  signals?: Array<{
+    kind: "name" | "claim_number";
+    state: "match" | "warning";
+    label: string;
+  }>;
 };
 
 export type BillReviewFeatures = {
@@ -199,6 +206,7 @@ export type BillReviewFormProps = {
   onOpenAttachment?: (attachment: BillReviewAttachment) => void;
   onSearchClaimsAdministrators?: (
     query: string,
+    claimNumber?: string,
   ) => Promise<BillReviewPayer[]>;
   className?: string;
   style?: CSSProperties;
@@ -437,7 +445,12 @@ function Field({
   );
 }
 
-type ComboOption = { value: string; label: string; detail?: string };
+type ComboOption = {
+  value: string;
+  label: string;
+  detail?: string;
+  badge?: string;
+};
 
 function Combobox({ label, value, options, onChange, placeholder, required, disabled, name }: {
   label: string;
@@ -500,7 +513,7 @@ function Combobox({ label, value, options, onChange, placeholder, required, disa
     {open && filtered.length ? <ul id={listId} role="listbox" className="mb-native-combo-list">
       {filtered.map((option, index) => <li id={`${listId}-${index}`} role="option" aria-selected={index === active} key={`${option.value}-${index}`}>
         <button type="button" className={index === active ? "active" : ""} onMouseDown={(event) => event.preventDefault()} onClick={() => select(option)}>
-          <strong>{option.label}</strong>{option.detail ? <span>{option.detail}</span> : null}
+          <span className="mb-native-combo-title"><strong>{option.label}</strong>{option.badge ? <em>{option.badge}</em> : null}</span>{option.detail ? <span>{option.detail}</span> : null}
         </button>
       </li>)}
     </ul> : null}
@@ -587,7 +600,12 @@ export function BillReviewForm({
   }, [data]);
 
   useEffect(() => {
-    if (!onSearchClaimsAdministrators || payerQuery.trim().length < 2) {
+    const query = payerQuery.trim();
+    const claimNumber = draft.claimNumber.trim();
+    if (
+      !onSearchClaimsAdministrators ||
+      (query.length < 2 && claimNumber.length < 4)
+    ) {
       setPayerResults([]);
       setPayerBusy(false);
       return;
@@ -595,9 +613,24 @@ export function BillReviewForm({
     let current = true;
     const timer = window.setTimeout(() => {
       setPayerBusy(true);
-      void onSearchClaimsAdministrators(payerQuery.trim())
+      void onSearchClaimsAdministrators(query, claimNumber)
         .then((results) => {
-          if (current) setPayerResults(results);
+          if (!current) return;
+          setPayerResults(results);
+          const recommendation = results.find(
+            (payer) => payer.recommended && payer.confidence === "high",
+          );
+          if (!draft.claimsAdminId && recommendation) {
+            setDraft((currentDraft) => ({
+              ...currentDraft,
+              claimsAdminId: recommendation.id,
+              claimsAdminName: recommendation.name,
+            }));
+            setPayerQuery(recommendation.name);
+            setNotice(
+              "Claims administrator matched from the case data. Review and save to keep it on this bill.",
+            );
+          }
         })
         .catch((cause) => {
           if (current) {
@@ -617,7 +650,16 @@ export function BillReviewForm({
       current = false;
       window.clearTimeout(timer);
     };
-  }, [onSearchClaimsAdministrators, payerQuery]);
+  }, [
+    draft.claimNumber,
+    draft.claimsAdminId,
+    onSearchClaimsAdministrators,
+    payerQuery,
+  ]);
+
+  const selectedPayer = payerResults.find(
+    (payer) => payer.id === draft.claimsAdminId,
+  );
 
   const adjFormatValid =
     !draft.adjNumber ||
@@ -753,12 +795,25 @@ export function BillReviewForm({
             disabled={!editable}
             placeholder="Search by payer or administrator name"
             name="mindbill-payer-query"
-            options={payerResults.map((payer) => ({ value: payer.id, label: payer.name, detail: payer.hasElectronic ? "Electronic billing available" : "Billing route confirmed after review" }))}
+            options={payerResults.map((payer) => ({
+              value: payer.id,
+              label: payer.name,
+              ...(payer.recommended
+                ? { badge: "Recommended" }
+                : payer.confidence === "medium"
+                  ? { badge: "Claim match" }
+                  : {}),
+              detail: [
+                ...(payer.signals ?? []).map((signal) => signal.label),
+                payer.hasElectronic
+                  ? "Electronic billing available."
+                  : "Billing route confirmed after review.",
+              ].join(" "),
+            }))}
             onChange={(value, option) => {
               if (option) {
                 setDraft((current) => ({ ...current, claimsAdminId: option.value, claimsAdminName: option.label }));
                 setPayerQuery(option.label);
-                setPayerResults([]);
                 setNotice("Claims administrator selected. Save changes to keep it on this bill.");
               } else {
                 setPayerQuery(value);
@@ -769,6 +824,15 @@ export function BillReviewForm({
           {payerBusy ? <span className="mb-native-payer-help">Searching…</span> : null}
           {!payerBusy && payerQuery.trim().length > 1 && payerResults.length === 0 && !draft.claimsAdminId ? (
             <span className="mb-native-payer-help">No matching administrator selected yet.</span>
+          ) : null}
+          {selectedPayer?.signals?.length ? (
+            <div className="mb-native-payer-insight" role="status">
+              {selectedPayer.signals.map((signal) => (
+                <span className={signal.state} key={`${signal.kind}-${signal.label}`}>
+                  {signal.label}
+                </span>
+              ))}
+            </div>
           ) : null}
         </div>
       </section>
@@ -971,7 +1035,8 @@ const NATIVE_BILL_REVIEW_STYLES = `
 .mb-native-hint{color:var(--mb-muted);font-size:12px;font-weight:500}
 .mb-native-combo{position:relative;min-width:0}
 .mb-native-combo-list{position:absolute;z-index:20;top:calc(100% + 6px);right:0;left:0;max-height:300px;overflow:auto;list-style:none;margin:0;padding:6px;border:1px solid var(--mb-border);border-radius:10px;background:var(--mb-surface);box-shadow:0 18px 42px rgba(28,58,72,.18)}
-.mb-native-combo-list li{margin:0;padding:0}.mb-native-combo-list button{display:grid;width:100%;gap:2px;padding:11px 12px;border:0;border-radius:7px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mb-native-combo-list button:hover,.mb-native-combo-list button.active{background:var(--mb-soft);outline:0}.mb-native-combo-list span{color:var(--mb-muted);font-size:12px;font-weight:500}
+.mb-native-combo-list li{margin:0;padding:0}.mb-native-combo-list button{display:grid;width:100%;gap:4px;padding:11px 12px;border:0;border-radius:7px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mb-native-combo-list button:hover,.mb-native-combo-list button.active{background:var(--mb-soft);outline:0}.mb-native-combo-list button>span{color:var(--mb-muted);font-size:12px;font-weight:500}.mb-native-combo-list .mb-native-combo-title{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--mb-text);font-size:14px}.mb-native-combo-title em{border-radius:999px;background:#e9f6f3;color:#24725f;font-size:10px;font-style:normal;font-weight:800;letter-spacing:.03em;padding:3px 7px;text-transform:uppercase}
+.mb-native-payer-insight{display:grid;gap:5px;margin-top:10px;padding:11px 13px;border:1px solid #c9dfe7;border-radius:9px;background:#f4fafc}.mb-native-payer-insight span{color:#426570;font-size:12px}.mb-native-payer-insight span.warning{color:#8a5c17}
 .mb-native-presets{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:-2px 0 14px}.mb-native-presets button{min-height:36px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);cursor:pointer;font:inherit;font-weight:750;padding:7px 13px}.mb-native-presets button.active{border-color:var(--mb-accent);background:var(--mb-accent);color:#fff}.mb-native-presets span{margin-left:5px;color:var(--mb-muted);font-size:12px}
 .mb-native-modifiers{display:grid;gap:7px}.mb-native-chips{display:flex;flex-wrap:wrap;gap:5px}.mb-native-chips button{border:1px solid #c9dce3;border-radius:999px;background:#fff;color:var(--mb-text);cursor:pointer;font:inherit;font-size:11px;font-weight:750;padding:4px 8px}
 .mb-native-blockers{grid-column:1/-1;display:grid;gap:2px;padding:11px 13px;border:1px solid #e8cf9a;border-radius:8px;background:#fff9ea;color:#74531b}.mb-native-blockers span{font-size:12px}

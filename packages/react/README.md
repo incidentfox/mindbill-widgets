@@ -56,6 +56,8 @@ This is the minimum safe browser integration. A permanent Partner API key must n
 
 `BillReviewForm` is the native, controlled review surface. Known bill values and payer documents remain explicit and editable before submission.
 
+When you use `ConnectedBillLifecycle`, payer selection is batteries-included: the component searches MindBill's claims-administrator directory, sends the current claim number for pattern matching, explains name and claim-number evidence, shows delivery availability, and only preselects a high-confidence exact name or alias match. For a controlled `BillReviewForm`, provide the same behavior with `onSearchClaimsAdministrators={(query, claimNumber) => ...}`; return `BillReviewPayer` records with optional `confidence`, `recommended`, and `signals` fields.
+
 ```tsx
 import { BillReviewForm } from "@mindbill/react";
 
