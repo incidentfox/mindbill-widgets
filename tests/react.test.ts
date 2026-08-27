@@ -17,6 +17,16 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("native bill review", () => {
   it("freezes editable values into the MindBill review contract", () => {
     const draft: BillReviewDraft = {
+      patientFirstName: "Ada",
+      patientMiddleName: "",
+      patientLastName: "Example",
+      patientDob: "1980-01-01",
+      claimNumber: "CLAIM-7",
+      employer: "Example Employer",
+      doi: "2026-08-01",
+      injuryEndDate: "",
+      cumulativeTrauma: false,
+      adjNumber: "ADJ1234567",
       dos: "2026-08-24",
       dosEnd: "",
       authorizationNumber: "  AUTH-7  ",
@@ -56,6 +66,18 @@ describe("native bill review", () => {
     };
 
     expect(buildBillReviewSaveInput(draft)).toEqual({
+      patientOverrides: {
+        firstName: "Ada",
+        lastName: "Example",
+        dob: "1980-01-01",
+      },
+      injuryOverrides: {
+        claimNumber: "CLAIM-7",
+        employer: "Example Employer",
+        doi: "2026-08-01",
+        cumulativeTrauma: false,
+        adjNumber: "ADJ1234567",
+      },
       dos: "2026-08-24",
       dosEnd: null,
       authorizationNumber: "AUTH-7",

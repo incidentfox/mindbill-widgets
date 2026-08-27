@@ -1,8 +1,8 @@
 "use client";
 
 import type { MindBillAppearance } from "@mindbill/embed";
-import type { CSSProperties, FormEvent, ReactElement } from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import type { CSSProperties, FormEvent, KeyboardEvent, ReactElement } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 export type BillReviewDocumentType =
   | "final_report"
@@ -88,6 +88,16 @@ export type BillReviewPayer = {
 
 export type BillReviewFeatures = {
   authorizationNumber?: boolean;
+  serviceDateRange?: boolean;
+  wcabNumber?: boolean;
+  codingPresets?: boolean;
+};
+
+export type BillReviewClaimPatternStatus = {
+  state: "match" | "warning" | "unknown";
+  label: string;
+  detail?: string;
+  suggestion?: string;
 };
 
 export type BillReviewData = {
@@ -113,13 +123,23 @@ export type BillReviewData = {
     totalPaid: number;
     balanceDue: number;
   };
-  patient: { name: string; dob?: string };
+  patient: {
+    name: string;
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
+    dob?: string;
+  };
   injury: {
     claimNumber?: string;
     employer?: string;
     doi?: string;
+    injuryEndDate?: string;
+    cumulativeTrauma?: boolean;
+    adjNumber?: string;
     claimsAdminId?: string;
     claimsAdminName?: string;
+    claimPatternStatus?: BillReviewClaimPatternStatus;
   };
   options?: {
     billingProviders?: BillReviewBillingProvider[];
@@ -130,6 +150,20 @@ export type BillReviewData = {
 
 export type BillReviewSaveInput = {
   claimsAdminId: string;
+  patientOverrides?: {
+    firstName: string;
+    middleName?: string;
+    lastName: string;
+    dob?: string;
+  };
+  injuryOverrides?: {
+    claimNumber?: string;
+    employer?: string;
+    doi?: string;
+    injuryEndDate?: string;
+    cumulativeTrauma?: boolean;
+    adjNumber?: string;
+  };
   dos: string;
   dosEnd?: string | null;
   authorizationNumber?: string | null;
@@ -176,6 +210,16 @@ export type BillReviewFormProps = {
 export type BillReviewDraft = {
   claimsAdminId: string;
   claimsAdminName: string;
+  patientFirstName: string;
+  patientMiddleName: string;
+  patientLastName: string;
+  patientDob: string;
+  claimNumber: string;
+  employer: string;
+  doi: string;
+  injuryEndDate: string;
+  cumulativeTrauma: boolean;
+  adjNumber: string;
   dos: string;
   dosEnd: string;
   authorizationNumber: string;
@@ -217,6 +261,34 @@ const DOCUMENT_LABELS: Record<BillReviewDocumentType, string> = {
   other: "Other supporting document",
 };
 
+const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"];
+const PROCEDURES = [
+  ["ML200", "Missed med-legal appointment"],
+  ["ML201", "Comprehensive med-legal evaluation"],
+  ["ML202", "Follow-up med-legal evaluation"],
+  ["ML203", "Supplemental med-legal evaluation"],
+  ["ML204", "Medical-legal testimony"],
+  ["ML205", "Sub rosa recording review"],
+  ["MLPRR", "Medical record review"],
+] as const;
+const MODIFIERS = [
+  ["92", "Primary treating physician"], ["93", "Interpreter required"],
+  ["94", "Agreed medical evaluator (AME)"], ["95", "Qualified medical evaluator (QME)"],
+  ["96", "Psychiatric or psychological evaluation"], ["97", "Toxicology evaluation"],
+  ["98", "Oncology evaluation"],
+] as const;
+type CodingPreset = "qme" | "ame" | "psych_qme";
+const MANAGED_EVALUATOR_MODIFIERS = new Set(["94", "95", "96"]);
+const MODIFIER_CODES: Record<string, readonly string[]> = {
+  "92": ["ML201", "ML202", "ML203"],
+  "93": ["ML201", "ML202"],
+  "94": ["ML201", "ML202", "ML203"],
+  "95": ["ML200", "ML201", "ML202", "ML203", "MLPRR"],
+  "96": ["ML201", "ML202", "ML203"],
+  "97": ["ML201", "ML202", "ML203"],
+  "98": ["ML201", "ML202", "ML203"],
+};
+
 function withoutId<T extends { id?: string }>(value: T): Omit<T, "id"> {
   const result = { ...value };
   delete result.id;
@@ -225,9 +297,20 @@ function withoutId<T extends { id?: string }>(value: T): Omit<T, "id"> {
 
 function toDraft(data: BillReviewData): BillReviewDraft {
   const snapshot = data.bill.billingSnapshot;
+  const nameParts = data.patient.name.trim().split(/\s+/);
   return {
     claimsAdminId: data.injury.claimsAdminId || "",
     claimsAdminName: data.injury.claimsAdminName || "",
+    patientFirstName: data.patient.firstName || nameParts[0] || "",
+    patientMiddleName: data.patient.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : ""),
+    patientLastName: data.patient.lastName || (nameParts.length > 1 ? (nameParts.at(-1) || "") : ""),
+    patientDob: data.patient.dob || "",
+    claimNumber: data.injury.claimNumber || "",
+    employer: data.injury.employer || "",
+    doi: data.injury.doi || "",
+    injuryEndDate: data.injury.injuryEndDate || "",
+    cumulativeTrauma: Boolean(data.injury.cumulativeTrauma),
+    adjNumber: data.injury.adjNumber || "",
     dos: data.bill.dos || "",
     dosEnd: data.bill.dosEnd || "",
     authorizationNumber: data.bill.authorizationNumber || "",
@@ -246,6 +329,20 @@ export function buildBillReviewSaveInput(
 ): BillReviewSaveInput {
   return {
     claimsAdminId: draft.claimsAdminId,
+    patientOverrides: {
+      firstName: draft.patientFirstName.trim(),
+      ...(draft.patientMiddleName.trim() ? { middleName: draft.patientMiddleName.trim() } : {}),
+      lastName: draft.patientLastName.trim(),
+      ...(draft.patientDob ? { dob: draft.patientDob } : {}),
+    },
+    injuryOverrides: {
+      ...(draft.claimNumber.trim() ? { claimNumber: draft.claimNumber.trim() } : {}),
+      ...(draft.employer.trim() ? { employer: draft.employer.trim() } : {}),
+      ...(draft.doi ? { doi: draft.doi } : {}),
+      ...(draft.injuryEndDate ? { injuryEndDate: draft.injuryEndDate } : {}),
+      cumulativeTrauma: draft.cumulativeTrauma,
+      ...(draft.adjNumber.trim() ? { adjNumber: draft.adjNumber.trim().toUpperCase().replace(/\s+/g, "") } : {}),
+    },
     dos: draft.dos,
     dosEnd: draft.dosEnd || null,
     authorizationNumber: draft.authorizationNumber.trim() || null,
@@ -259,7 +356,7 @@ export function buildBillReviewSaveInput(
     renderingProvider: withoutId(draft.clinician),
     ...(draft.location.id ? { placeOfServiceId: draft.location.id } : {}),
     placeOfService: withoutId(draft.location),
-    lineItems: draft.lineItems.map(({ id, code, modifiers, units }) => ({
+    lineItems: draft.lineItems.filter((line) => line.code.trim()).map(({ id, code, modifiers, units }) => ({
       ...(id ? { id } : {}),
       code: code.trim().toUpperCase(),
       modifiers,
@@ -310,6 +407,8 @@ function Field({
   type = "text",
   optional,
   required,
+  disabled,
+  hint,
 }: {
   label: string;
   value: string;
@@ -317,6 +416,8 @@ function Field({
   type?: string;
   optional?: boolean;
   required?: boolean;
+  disabled?: boolean;
+  hint?: string;
 }): ReactElement {
   return (
     <label className="mb-native-field">
@@ -327,10 +428,127 @@ function Field({
         type={type}
         value={value}
         required={required}
+        disabled={disabled}
+        autoComplete="off"
         onChange={(event) => onChange(event.target.value)}
       />
+      {hint ? <small className="mb-native-hint">{hint}</small> : null}
     </label>
   );
+}
+
+type ComboOption = { value: string; label: string; detail?: string };
+
+function Combobox({ label, value, options, onChange, placeholder, required, disabled, name }: {
+  label: string;
+  value: string;
+  options: ComboOption[];
+  onChange: (value: string, option?: ComboOption) => void;
+  placeholder?: string;
+  required?: boolean;
+  disabled?: boolean;
+  name?: string;
+}): ReactElement {
+  const listId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const filtered = useMemo(() => {
+    const query = value.trim().toLowerCase();
+    return options.filter((option) => !query || option.label.toLowerCase().includes(query) || option.value.toLowerCase().includes(query)).slice(0, 40);
+  }, [options, value]);
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  const select = (option: ComboOption) => {
+    onChange(option.value, option);
+    setOpen(false);
+    setActive(0);
+  };
+  const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActive((value) => Math.min(value + 1, filtered.length - 1)); }
+    if (event.key === "ArrowUp") { event.preventDefault(); setActive((value) => Math.max(value - 1, 0)); }
+    if (event.key === "Enter" && open && filtered[active]) { event.preventDefault(); select(filtered[active]); }
+    if (event.key === "Escape") setOpen(false);
+  };
+  return <div className="mb-native-combo" ref={root}>
+    <label className="mb-native-field">
+      <span>{label}</span>
+      <input
+        role="combobox"
+        aria-autocomplete="list"
+        aria-controls={listId}
+        aria-expanded={open && filtered.length > 0}
+        aria-activedescendant={open && filtered[active] ? `${listId}-${active}` : undefined}
+        name={name || "mindbill-search-value"}
+        autoComplete="new-password"
+        data-1p-ignore="true"
+        data-lpignore="true"
+        value={value}
+        placeholder={placeholder}
+        required={required}
+        disabled={disabled}
+        onFocus={() => setOpen(true)}
+        onKeyDown={keyDown}
+        onChange={(event) => { onChange(event.target.value); setOpen(true); setActive(0); }}
+      />
+    </label>
+    {open && filtered.length ? <ul id={listId} role="listbox" className="mb-native-combo-list">
+      {filtered.map((option, index) => <li id={`${listId}-${index}`} role="option" aria-selected={index === active} key={`${option.value}-${index}`}>
+        <button type="button" className={index === active ? "active" : ""} onMouseDown={(event) => event.preventDefault()} onClick={() => select(option)}>
+          <strong>{option.label}</strong>{option.detail ? <span>{option.detail}</span> : null}
+        </button>
+      </li>)}
+    </ul> : null}
+  </div>;
+}
+
+function StateCombobox({ label, value, onChange, required, disabled }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; disabled?: boolean }): ReactElement {
+  return <Combobox
+    label={label}
+    value={value}
+    onChange={(next) => onChange(next.toUpperCase().slice(0, 2))}
+    options={US_STATES.map((state) => ({ value: state, label: state }))}
+    {...(required === undefined ? {} : { required })}
+    {...(disabled === undefined ? {} : { disabled })}
+    name="mindbill-state-value"
+  />;
+}
+
+function inferPreset(lines: BillReviewLineItem[]): CodingPreset {
+  const modifiers = new Set(lines.flatMap((line) => line.modifiers));
+  return modifiers.has("94") ? "ame" : modifiers.has("96") ? "psych_qme" : "qme";
+}
+
+function presetModifiersForCode(preset: CodingPreset, code: string): string[] {
+  if (code === "MLPRR") return ["95"];
+  if (preset === "qme" && ["ML200", "ML201", "ML202", "ML203"].includes(code)) return ["95"];
+  if (preset === "ame" && ["ML201", "ML202", "ML203"].includes(code)) return ["94"];
+  if (preset === "psych_qme") {
+    if (code === "ML200") return ["95"];
+    if (["ML201", "ML202", "ML203"].includes(code)) return ["96"];
+  }
+  return [];
+}
+
+function modifierAppliesToCode(modifier: string, code: string): boolean {
+  return !code || (MODIFIER_CODES[modifier]?.includes(code) ?? true);
+}
+
+function applyPreset(lines: BillReviewLineItem[], preset: CodingPreset): BillReviewLineItem[] {
+  return lines.map((line) => {
+    const preserved = line.modifiers.filter(
+      (value) => !MANAGED_EVALUATOR_MODIFIERS.has(value) && modifierAppliesToCode(value, line.code),
+    );
+    return {
+      ...line,
+      modifiers: [...new Set([...presetModifiersForCode(preset, line.code), ...preserved])],
+    };
+  });
 }
 
 export function BillReviewForm({
@@ -361,7 +579,6 @@ export function BillReviewForm({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const routeName = useId();
-  const payerListId = useId();
   const editable = data.bill.status === "incomplete" && !disabled;
 
   useEffect(() => {
@@ -402,26 +619,27 @@ export function BillReviewForm({
     };
   }, [onSearchClaimsAdministrators, payerQuery]);
 
-  const canSubmit = useMemo(
-    () =>
-      Boolean(
-        draft.dos &&
-          draft.claimsAdminId &&
-          draft.billingProvider.name.trim() &&
-          draft.billingProvider.taxId.trim() &&
-          draft.billingProvider.npi.trim() &&
-          draft.clinician.name.trim() &&
-          draft.clinician.npi.trim() &&
-          draft.location.name.trim() &&
-          draft.location.street.trim() &&
-          draft.location.city.trim() &&
-          draft.location.state.trim() &&
-          draft.location.zip.trim() &&
-          draft.lineItems.length &&
-          draft.lineItems.every((line) => line.code.trim() && line.units > 0),
-      ),
-    [draft],
-  );
+  const adjFormatValid =
+    !draft.adjNumber ||
+    /^ADJ\d{7,}$/i.test(draft.adjNumber.replace(/[\s-]/g, ""));
+  const blockers = useMemo(() => {
+    const result: string[] = [];
+    if (!draft.patientFirstName.trim() || !draft.patientLastName.trim()) result.push("Patient name");
+    if (!draft.claimsAdminId) result.push("Claims administrator");
+    if (!draft.claimNumber.trim()) result.push("Claim number");
+    if (!draft.doi) result.push("Date of injury");
+    if (!adjFormatValid) result.push("Valid WCAB / ADJ number");
+    if (!draft.dos) result.push("Date of service");
+    if (!draft.billingProvider.name.trim()) result.push("Practice name");
+    if (!draft.billingProvider.taxId.trim()) result.push("Tax ID");
+    if (!draft.billingProvider.npi.trim()) result.push("Billing NPI");
+    if (!draft.clinician.name.trim() || !draft.clinician.npi.trim()) result.push("Clinician and NPI");
+    if (![draft.location.name, draft.location.street, draft.location.city, draft.location.state, draft.location.zip].every((value) => value.trim())) result.push("Service location");
+    const completedLines = draft.lineItems.filter((line) => line.code.trim());
+    if (!completedLines.length || completedLines.some((line) => line.units <= 0)) result.push("Valid procedure line");
+    return result;
+  }, [adjFormatValid, draft]);
+  const canSubmit = blockers.length === 0;
 
   const updateBillingProvider = <K extends keyof BillReviewBillingProvider>(
     key: K,
@@ -514,10 +732,10 @@ export function BillReviewForm({
       </header>
 
       <dl className="mb-native-summary">
-        <div><dt>Patient</dt><dd>{data.patient.name || "—"}</dd></div>
-        <div><dt>Claim</dt><dd>{data.injury.claimNumber || "—"}</dd></div>
-        <div><dt>Employer</dt><dd>{data.injury.employer || "—"}</dd></div>
-        <div><dt>Date of injury</dt><dd>{data.injury.doi || "—"}</dd></div>
+        <div><dt>Patient</dt><dd>{[draft.patientFirstName, draft.patientMiddleName, draft.patientLastName].filter(Boolean).join(" ") || "—"}</dd></div>
+        <div><dt>Claim</dt><dd>{draft.claimNumber || "—"}</dd></div>
+        <div><dt>Employer</dt><dd>{draft.employer || "—"}</dd></div>
+        <div><dt>Date of injury</dt><dd>{draft.doi || "—"}</dd></div>
       </dl>
 
       <section className={sectionClass}>
@@ -529,64 +747,54 @@ export function BillReviewForm({
           {draft.claimsAdminId ? <span>Selected</span> : <span>Required</span>}
         </div>
         <div className="mb-native-payer-picker">
-          <label className="mb-native-field">
-            <span>Insurance company or claims administrator</span>
-            <input
-              role="combobox"
-              aria-autocomplete="list"
-              aria-controls={payerListId}
-              aria-expanded={payerResults.length > 0}
-              value={payerQuery}
-              disabled={!editable}
-              placeholder="Search by payer or administrator name"
-              onChange={(event) => {
-                const value = event.target.value;
+          <Combobox
+            label="Insurance company or claims administrator"
+            value={payerQuery}
+            disabled={!editable}
+            placeholder="Search by payer or administrator name"
+            name="mindbill-payer-query"
+            options={payerResults.map((payer) => ({ value: payer.id, label: payer.name, detail: payer.hasElectronic ? "Electronic billing available" : "Billing route confirmed after review" }))}
+            onChange={(value, option) => {
+              if (option) {
+                setDraft((current) => ({ ...current, claimsAdminId: option.value, claimsAdminName: option.label }));
+                setPayerQuery(option.label);
+                setPayerResults([]);
+                setNotice("Claims administrator selected. Save changes to keep it on this bill.");
+              } else {
                 setPayerQuery(value);
-                setDraft((current) => ({
-                  ...current,
-                  ...(value === current.claimsAdminName
-                    ? {}
-                    : { claimsAdminId: "", claimsAdminName: "" }),
-                }));
-              }}
-            />
-          </label>
+                setDraft((current) => value === current.claimsAdminName ? current : { ...current, claimsAdminId: "", claimsAdminName: "" });
+              }
+            }}
+          />
           {payerBusy ? <span className="mb-native-payer-help">Searching…</span> : null}
           {!payerBusy && payerQuery.trim().length > 1 && payerResults.length === 0 && !draft.claimsAdminId ? (
             <span className="mb-native-payer-help">No matching administrator selected yet.</span>
-          ) : null}
-          {payerResults.length > 0 ? (
-            <ul id={payerListId} className="mb-native-payer-results" role="listbox">
-              {payerResults.map((payer) => (
-                <li key={payer.id} role="option" aria-selected={payer.id === draft.claimsAdminId}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraft((current) => ({
-                        ...current,
-                        claimsAdminId: payer.id,
-                        claimsAdminName: payer.name,
-                      }));
-                      setPayerQuery(payer.name);
-                      setPayerResults([]);
-                    }}
-                  >
-                    <strong>{payer.name}</strong>
-                    <span>{payer.hasElectronic ? "Electronic billing available" : "Billing route confirmed after review"}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
           ) : null}
         </div>
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Claim and service</h3><p>These values print on the bill.</p></div></div>
-        <div className={`mb-native-grid ${features?.authorizationNumber === false ? "two" : "three"}`}>
-          <Field label="Date of service" type="date" required value={draft.dos} onChange={(dos) => setDraft((current) => ({ ...current, dos }))} />
-          <Field label="End date" type="date" optional value={draft.dosEnd} onChange={(dosEnd) => setDraft((current) => ({ ...current, dosEnd }))} />
-          {features?.authorizationNumber === false ? null : <Field label="Authorization number" optional value={draft.authorizationNumber} onChange={(authorizationNumber) => setDraft((current) => ({ ...current, authorizationNumber }))} />}
+        <div className="mb-native-section-head"><div><h3>Patient and claim</h3><p>Prefilled from the case. Correct anything that should print differently on this bill.</p></div><span>Editable</span></div>
+        <div className="mb-native-grid three">
+          <Field label="Patient first name" required disabled={!editable} value={draft.patientFirstName} onChange={(patientFirstName) => setDraft((current) => ({ ...current, patientFirstName }))} />
+          <Field label="Middle name" optional disabled={!editable} value={draft.patientMiddleName} onChange={(patientMiddleName) => setDraft((current) => ({ ...current, patientMiddleName }))} />
+          <Field label="Patient last name" required disabled={!editable} value={draft.patientLastName} onChange={(patientLastName) => setDraft((current) => ({ ...current, patientLastName }))} />
+          <Field label="Date of birth" type="date" required disabled={!editable} value={draft.patientDob} onChange={(patientDob) => setDraft((current) => ({ ...current, patientDob }))} />
+          <Field label="Claim number" required disabled={!editable} value={draft.claimNumber} onChange={(claimNumber) => setDraft((current) => ({ ...current, claimNumber }))} {...((data.injury.claimPatternStatus?.detail || data.injury.claimPatternStatus?.label) ? { hint: data.injury.claimPatternStatus?.detail || data.injury.claimPatternStatus?.label || "" } : {})} />
+          <Field label="Employer" disabled={!editable} value={draft.employer} onChange={(employer) => setDraft((current) => ({ ...current, employer }))} />
+          <Field label="Date of injury" type="date" required disabled={!editable} value={draft.doi} onChange={(doi) => setDraft((current) => ({ ...current, doi }))} />
+          {draft.cumulativeTrauma ? <Field label="Cumulative trauma end date" type="date" required disabled={!editable} value={draft.injuryEndDate} onChange={(injuryEndDate) => setDraft((current) => ({ ...current, injuryEndDate }))} /> : null}
+          {features?.wcabNumber === false ? null : <Field label="WCAB / ADJ number" optional disabled={!editable} value={draft.adjNumber} onChange={(adjNumber) => setDraft((current) => ({ ...current, adjNumber }))} hint={adjFormatValid ? "Use the EAMS case number shown as ADJ followed by digits." : "Expected format: ADJ followed by at least 7 digits."} />}
+        </div>
+        {features?.wcabNumber === false ? null : <p className="mb-native-eams">EAMS lookup requires California DWC verification. <a href="https://eams.dwc.ca.gov/WebEnhancement/" target="_blank" rel="noreferrer">Verify in EAMS</a>.</p>}
+      </section>
+
+      <section className={sectionClass}>
+        <div className="mb-native-section-head"><div><h3>Service</h3><p>The service date and optional payer authorization printed on this bill.</p></div></div>
+        <div className={`mb-native-grid ${features?.serviceDateRange || features?.authorizationNumber !== false ? "three" : "one"}`}>
+          <Field label="Date of service" type="date" required disabled={!editable} value={draft.dos} onChange={(dos) => setDraft((current) => ({ ...current, dos }))} />
+          {features?.serviceDateRange ? <Field label="Service end date" type="date" optional disabled={!editable} value={draft.dosEnd} onChange={(dosEnd) => setDraft((current) => ({ ...current, dosEnd }))} /> : null}
+          {features?.authorizationNumber === false ? null : <Field label="Authorization number" optional disabled={!editable} value={draft.authorizationNumber} onChange={(authorizationNumber) => setDraft((current) => ({ ...current, authorizationNumber }))} />}
         </div>
       </section>
 
@@ -599,7 +807,7 @@ export function BillReviewForm({
           <Field label="Phone" optional value={draft.billingProvider.phone || ""} onChange={(value) => updateBillingProvider("phone", value)} />
           <Field label="Billing street" required value={draft.billingProvider.billingStreet || ""} onChange={(value) => updateBillingProvider("billingStreet", value)} />
           <Field label="City" required value={draft.billingProvider.billingCity || ""} onChange={(value) => updateBillingProvider("billingCity", value)} />
-          <Field label="State" required value={draft.billingProvider.billingState || ""} onChange={(value) => updateBillingProvider("billingState", value)} />
+          <StateCombobox label="State" required disabled={!editable} value={draft.billingProvider.billingState || ""} onChange={(value) => updateBillingProvider("billingState", value)} />
           <Field label="ZIP" required value={draft.billingProvider.billingZip || ""} onChange={(value) => updateBillingProvider("billingZip", value)} />
         </div>
       </section>
@@ -612,7 +820,7 @@ export function BillReviewForm({
           <Field label="NPI" required value={draft.clinician.npi} onChange={(value) => updateClinician("npi", value)} />
           <Field label="Taxonomy" optional value={draft.clinician.taxonomy || ""} onChange={(value) => updateClinician("taxonomy", value)} />
           <Field label="License number" optional value={draft.clinician.licenseNumber || ""} onChange={(value) => updateClinician("licenseNumber", value)} />
-          <Field label="License state" optional value={draft.clinician.licenseState || ""} onChange={(value) => updateClinician("licenseState", value)} />
+          <StateCombobox label="License state (optional)" disabled={!editable} value={draft.clinician.licenseState || ""} onChange={(value) => updateClinician("licenseState", value)} />
         </div>
       </section>
 
@@ -622,20 +830,53 @@ export function BillReviewForm({
           <Field label="Location name" required value={draft.location.name} onChange={(value) => updateLocation("name", value)} />
           <Field label="Street" required value={draft.location.street} onChange={(value) => updateLocation("street", value)} />
           <Field label="City" required value={draft.location.city} onChange={(value) => updateLocation("city", value)} />
-          <Field label="State" required value={draft.location.state} onChange={(value) => updateLocation("state", value)} />
+          <StateCombobox label="State" required disabled={!editable} value={draft.location.state} onChange={(value) => updateLocation("state", value)} />
           <Field label="ZIP" required value={draft.location.zip} onChange={(value) => updateLocation("zip", value)} />
           <Field label="Place of service code" required value={draft.location.posCode || "11"} onChange={(value) => updateLocation("posCode", value)} />
         </div>
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Procedure lines</h3><p>The allowed amount is recalculated when changes are saved.</p></div><button type="button" className="mb-native-button quiet" disabled={!editable} onClick={() => setDraft((current) => ({ ...current, lineItems: [...current.lineItems, { code: "", modifiers: [], units: 1, charge: 0 }] }))}>+ Add line</button></div>
+        <div className="mb-native-section-head"><div><h3>Procedure lines</h3><p>Choose a billing profile, then review the codes and modifiers. Allowed amounts recalculate on save.</p></div><button type="button" className="mb-native-button quiet" disabled={!editable || draft.lineItems.length >= 50} onClick={() => setDraft((current) => ({ ...current, lineItems: [...current.lineItems, { code: "", modifiers: [], units: 1, charge: 0 }] }))}>+ Add line</button></div>
+        {features?.codingPresets === false ? null : <div className="mb-native-presets" role="group" aria-label="Evaluation billing profile">
+          {([['qme','QME'],['ame','AME'],['psych_qme','Psych QME']] as const).map(([value,label]) => <button type="button" key={value} className={inferPreset(draft.lineItems) === value ? "active" : ""} disabled={!editable} onClick={() => setDraft((current) => ({ ...current, lineItems: applyPreset(current.lineItems, value) }))}>{label}</button>)}
+          <span>Sets evaluator modifiers across med-legal lines. You can still edit each line.</span>
+        </div>}
         <div className="mb-native-lines">
           {draft.lineItems.map((line, index) => (
             <div className="mb-native-line" key={line.id || index}>
-              <Field label="Procedure" required value={line.code} onChange={(value) => setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, code: value } : item) }))} />
-              <Field label="Modifiers" value={line.modifiers.join(", ")} onChange={(value) => setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: value.split(",").map((part) => part.trim()).filter(Boolean) } : item) }))} />
-              <label className="mb-native-field"><span>Units</span><input type="number" min="1" required value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item) }))} /></label>
+              <label className="mb-native-field"><span>Procedure</span><select disabled={!editable} value={line.code} onChange={(event) => {
+                const code = event.target.value;
+                setDraft((current) => {
+                  const lineItems = current.lineItems.map((item, itemIndex) => {
+                    if (itemIndex !== index) return item;
+                    const presetLine = applyPreset(
+                      [{ ...item, code }],
+                      inferPreset(current.lineItems),
+                    )[0];
+                    return { ...item, code, modifiers: presetLine?.modifiers || [] };
+                  });
+                  if (
+                    code &&
+                    index === lineItems.length - 1 &&
+                    lineItems.length < 50
+                  ) {
+                    lineItems.push({
+                      code: "",
+                      modifiers: [],
+                      units: 1,
+                      charge: 0,
+                    });
+                  }
+                  return { ...current, lineItems };
+                });
+              }}>{line.code && !PROCEDURES.some(([code]) => code === line.code) ? <option value={line.code}>{line.code}</option> : null}<option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</select>{line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}</label>
+              <div className="mb-native-modifiers"><label className="mb-native-field"><span>Modifiers</span><select disabled={!editable} value="" onChange={(event) => {
+                const modifier = event.target.value;
+                if (!modifier) return;
+                setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: [...new Set([...item.modifiers, modifier])] } : item) }));
+              }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label><div className="mb-native-chips">{line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item) }))}>-{modifier} ×</button>)}</div></div>
+              <label className="mb-native-field"><span>Units</span><input type="number" min="1" required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item) }))} /></label>
               <div className="mb-native-allowed"><span>Allowed</span><strong>{money(line.charge)}</strong></div>
               <button type="button" className="mb-native-remove" aria-label={`Remove ${line.code || "procedure"}`} disabled={!editable || draft.lineItems.length === 1} onClick={() => setDraft((current) => ({ ...current, lineItems: current.lineItems.filter((_, itemIndex) => itemIndex !== index) }))}>×</button>
             </div>
@@ -669,6 +910,7 @@ export function BillReviewForm({
         <fieldset><legend>Send via</legend>{(["ebill", "fax", "mail", "email"] as const).map((value) => <label key={value}><input type="radio" name={routeName} value={value} checked={route === value} onChange={() => setRoute(value)} />{value === "ebill" ? "E-bill" : value.charAt(0).toUpperCase() + value.slice(1)}</label>)}</fieldset>
         {error ? <div className="mb-native-message error" role="alert">{error}</div> : null}
         {notice ? <div className="mb-native-message success" role="status">{notice}</div> : null}
+        {!canSubmit ? <div className="mb-native-blockers" role="status"><strong>Before you can submit:</strong><span>{blockers.join(" · ")}</span></div> : null}
         <div className="mb-native-actions">
           <button className="mb-native-button secondary" type="submit" disabled={!editable || busy !== ""}>{busy === "save" ? "Saving…" : "Save changes"}</button>
           <button className="mb-native-button primary" type="button" disabled={!editable || !canSubmit || busy !== ""} onClick={() => void handleSubmit()}>{busy === "submit" ? "Submitting…" : "Submit bill"}</button>
@@ -722,5 +964,17 @@ const NATIVE_BILL_REVIEW_STYLES = `
 .mb-native-payer-results button{display:grid;width:100%;gap:2px;padding:11px 12px;border:0;border-radius:7px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}
 .mb-native-payer-results button:hover,.mb-native-payer-results button:focus{background:var(--mb-soft);outline:0}
 .mb-native-payer-results span{color:var(--mb-muted);font-size:12px}
+.mb-native-grid.one{grid-template-columns:minmax(0,1fr)}
+.mb-native-field select{width:100%;min-height:43px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);font:inherit;padding:10px 36px 10px 12px}
+.mb-native-field select:focus{border-color:var(--mb-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mb-accent) 14%,transparent);outline:0}
+.mb-native-field input:disabled,.mb-native-field select:disabled{cursor:not-allowed;background:#f6f8f9;color:#667982}
+.mb-native-hint{color:var(--mb-muted);font-size:12px;font-weight:500}
+.mb-native-combo{position:relative;min-width:0}
+.mb-native-combo-list{position:absolute;z-index:20;top:calc(100% + 6px);right:0;left:0;max-height:300px;overflow:auto;list-style:none;margin:0;padding:6px;border:1px solid var(--mb-border);border-radius:10px;background:var(--mb-surface);box-shadow:0 18px 42px rgba(28,58,72,.18)}
+.mb-native-combo-list li{margin:0;padding:0}.mb-native-combo-list button{display:grid;width:100%;gap:2px;padding:11px 12px;border:0;border-radius:7px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mb-native-combo-list button:hover,.mb-native-combo-list button.active{background:var(--mb-soft);outline:0}.mb-native-combo-list span{color:var(--mb-muted);font-size:12px;font-weight:500}
+.mb-native-presets{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:-2px 0 14px}.mb-native-presets button{min-height:36px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);cursor:pointer;font:inherit;font-weight:750;padding:7px 13px}.mb-native-presets button.active{border-color:var(--mb-accent);background:var(--mb-accent);color:#fff}.mb-native-presets span{margin-left:5px;color:var(--mb-muted);font-size:12px}
+.mb-native-modifiers{display:grid;gap:7px}.mb-native-chips{display:flex;flex-wrap:wrap;gap:5px}.mb-native-chips button{border:1px solid #c9dce3;border-radius:999px;background:#fff;color:var(--mb-text);cursor:pointer;font:inherit;font-size:11px;font-weight:750;padding:4px 8px}
+.mb-native-blockers{grid-column:1/-1;display:grid;gap:2px;padding:11px 13px;border:1px solid #e8cf9a;border-radius:8px;background:#fff9ea;color:#74531b}.mb-native-blockers span{font-size:12px}
+.mb-native-eams{margin-top:13px!important;font-size:12px}.mb-native-eams a{color:var(--mb-accent);font-weight:750}
 @media(max-width:620px){.mb-native-review{padding:12px}.mb-native-grid.two{grid-template-columns:1fr}}
 `;
