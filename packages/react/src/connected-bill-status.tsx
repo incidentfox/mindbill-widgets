@@ -215,7 +215,7 @@ export function createBillStatusClient({
     signal: AbortSignal,
   ): Promise<Response> => {
     const baseUrl = (browserSession.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
-    return fetcher(`${baseUrl}/embed/api/bill-timeline`, {
+    return fetcher(`${baseUrl}/partner/v2/browser/status`, {
       headers: { authorization: `Bearer ${browserSession.token}` },
       signal,
     });

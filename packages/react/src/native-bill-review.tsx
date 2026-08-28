@@ -16,7 +16,6 @@ export type BillReviewDocumentType =
   | "other";
 
 export type BillReviewBillingProvider = {
-  id?: string;
   name: string;
   taxId: string;
   npi: string;
@@ -29,7 +28,6 @@ export type BillReviewBillingProvider = {
 };
 
 export type BillReviewClinician = {
-  id?: string;
   name: string;
   specialty: string;
   npi: string;
@@ -45,8 +43,6 @@ export type BillReviewClinician = {
 };
 
 export type BillReviewLocation = {
-  id?: string;
-  billingProviderId?: string;
   name: string;
   nickname?: string;
   street: string;
@@ -115,10 +111,7 @@ export type BillReviewData = {
     transmissionState?: string;
     dos: string;
     dosEnd?: string | null;
-    placeOfServiceId?: string;
     authorizationNumber?: string | null;
-    billingProviderId?: string;
-    renderingProviderId?: string;
     billingSnapshot?: {
       billingProvider?: BillReviewBillingProvider;
       renderingProvider?: BillReviewClinician;
@@ -148,11 +141,6 @@ export type BillReviewData = {
     claimsAdminName?: string;
     claimPatternStatus?: BillReviewClaimPatternStatus;
   };
-  options?: {
-    billingProviders?: BillReviewBillingProvider[];
-    renderingProviders?: BillReviewClinician[];
-    locations?: BillReviewLocation[];
-  };
 };
 
 export type BillReviewSaveInput = {
@@ -174,12 +162,9 @@ export type BillReviewSaveInput = {
   dos: string;
   dosEnd?: string | null;
   authorizationNumber?: string | null;
-  billingProviderId?: string;
-  billingProvider?: Omit<BillReviewBillingProvider, "id">;
-  renderingProviderId?: string;
-  renderingProvider?: Omit<BillReviewClinician, "id">;
-  placeOfServiceId?: string;
-  placeOfService?: Omit<BillReviewLocation, "id">;
+  billingProvider?: BillReviewBillingProvider;
+  renderingProvider?: BillReviewClinician;
+  placeOfService?: BillReviewLocation;
   lineItems: Array<{
     id?: string;
     code: string;
@@ -297,12 +282,6 @@ const MODIFIER_CODES: Record<string, readonly string[]> = {
   "98": ["ML201", "ML202", "ML203"],
 };
 
-function withoutId<T extends { id?: string }>(value: T): Omit<T, "id"> {
-  const result = { ...value };
-  delete result.id;
-  return result;
-}
-
 function toDraft(data: BillReviewData): BillReviewDraft {
   const snapshot = data.bill.billingSnapshot;
   const nameParts = data.patient.name.trim().split(/\s+/);
@@ -354,16 +333,9 @@ export function buildBillReviewSaveInput(
     dos: draft.dos,
     dosEnd: draft.dosEnd || null,
     authorizationNumber: draft.authorizationNumber.trim() || null,
-    ...(draft.billingProvider.id
-      ? { billingProviderId: draft.billingProvider.id }
-      : {}),
-    billingProvider: withoutId(draft.billingProvider),
-    ...(draft.clinician.id
-      ? { renderingProviderId: draft.clinician.id }
-      : {}),
-    renderingProvider: withoutId(draft.clinician),
-    ...(draft.location.id ? { placeOfServiceId: draft.location.id } : {}),
-    placeOfService: withoutId(draft.location),
+    billingProvider: { ...draft.billingProvider },
+    renderingProvider: { ...draft.clinician },
+    placeOfService: { ...draft.location },
     lineItems: draft.lineItems.filter((line) => line.code.trim()).map(({ id, code, modifiers, units }) => ({
       ...(id ? { id } : {}),
       code: code.trim().toUpperCase(),

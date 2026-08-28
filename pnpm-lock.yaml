@@ -45,7 +45,7 @@ importers:
   examples/quickstart:
     dependencies:
       '@mindbill/node':
-        specifier: ^0.5.0
+        specifier: ^0.7.0
         version: link:../../packages/node
 
   packages/embed: {}
@@ -55,7 +55,7 @@ importers:
   packages/react:
     dependencies:
       '@mindbill/embed':
-        specifier: workspace:^
+        specifier: ^0.6.0
         version: link:../embed
       react:
         specifier: '>=18'

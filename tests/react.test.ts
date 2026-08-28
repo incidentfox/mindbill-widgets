@@ -33,20 +33,17 @@ describe("native bill review", () => {
       claimsAdminId: "payer-1",
       claimsAdminName: "Example Claims Administrator",
       billingProvider: {
-        id: "provider-1",
         name: "Example Evaluators",
         taxId: "123456789",
         npi: "1234567890",
         billType: "Professional",
       },
       clinician: {
-        id: "clinician-1",
         name: "Ada Example, MD",
         specialty: "Occupational medicine",
         npi: "1098765432",
       },
       location: {
-        id: "location-1",
         name: "Downtown",
         street: "100 Main Street",
         city: "Sacramento",
@@ -82,20 +79,17 @@ describe("native bill review", () => {
       dosEnd: null,
       authorizationNumber: "AUTH-7",
       claimsAdminId: "payer-1",
-      billingProviderId: "provider-1",
       billingProvider: {
         name: "Example Evaluators",
         taxId: "123456789",
         npi: "1234567890",
         billType: "Professional",
       },
-      renderingProviderId: "clinician-1",
       renderingProvider: {
         name: "Ada Example, MD",
         specialty: "Occupational medicine",
         npi: "1098765432",
       },
-      placeOfServiceId: "location-1",
       placeOfService: {
         name: "Downtown",
         street: "100 Main Street",
@@ -151,7 +145,7 @@ describe("connected bill status", () => {
       body: JSON.stringify({ billId: "bill_123" }),
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/embed/api/bill-timeline",
+      "https://app.mindbill.org/partner/v2/browser/status",
     );
     expect(fetcher.mock.calls[1]?.[1]?.headers).toEqual({
       authorization: "Bearer short-lived-session-token",
@@ -251,10 +245,10 @@ describe("connected bill lifecycle", () => {
       body: JSON.stringify({ billId: "bill_789", component: "bill-review" }),
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/embed/api/bill-lifecycle",
+      "https://app.mindbill.org/partner/v2/browser/bill",
     );
     expect(fetcher.mock.calls[2]?.[0]).toBe(
-      "https://app.mindbill.org/embed/api/bill-lifecycle/actions",
+      "https://app.mindbill.org/partner/v2/browser/actions",
     );
     const actionHeaders = new Headers(fetcher.mock.calls[2]?.[1]?.headers);
     expect(actionHeaders.get("authorization")).toBe(
@@ -328,7 +322,7 @@ describe("connected bill lifecycle", () => {
       ],
     }]);
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/embed/api/bill-review/payers?q=Example+TPA&claimNumber=OTHER123",
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Example+TPA&claimNumber=OTHER123",
     );
   });
 

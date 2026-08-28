@@ -44,7 +44,7 @@ describe("@mindbill/embed", () => {
 
   it("rejects non-HTTPS, credential-bearing, and non-MindBill embed URLs", async () => {
     await import("../packages/embed/src/index.js");
-    const element = document.createElement("mindbill-collections");
+    const element = document.createElement("mindbill-bill-review");
     const errors: Array<CustomEvent> = [];
     element.addEventListener("mindbill-error", (event) => errors.push(event as CustomEvent));
     element.setAttribute("session-token", "secret-token");

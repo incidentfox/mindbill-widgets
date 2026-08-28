@@ -1,7 +1,7 @@
 {
   "name": "@mindbill/node",
-  "version": "0.6.0",
-  "description": "Typed Node SDK and agent-safe CLI for the MindBill Partner API",
+  "version": "0.7.0",
+  "description": "Typed server SDK for the MindBill Partner API",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -11,9 +11,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
-  },
-  "bin": {
-    "mindbill": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -30,7 +27,6 @@
     "mindbill",
     "api",
     "sdk",
-    "cli",
     "medical-legal",
     "workers-compensation"
   ],

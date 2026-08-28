@@ -62,23 +62,7 @@ export function MindBillBillTimeline(props: MindBillWidgetProps): ReactElement {
 export function MindBillBillReview(props: MindBillWidgetProps): ReactElement {
   return widget("mindbill-bill-review", props);
 }
-export function MindBillBillFromReport(
-  props: MindBillWidgetProps,
-): ReactElement {
-  return widget("mindbill-bill-from-report", props);
-}
-export function MindBillCollections(props: MindBillWidgetProps): ReactElement {
-  return widget("mindbill-collections", props);
-}
-export function MindBillOnboarding(props: MindBillWidgetProps): ReactElement {
-  return widget("mindbill-onboarding", props);
-}
 
-export const HostedBillTimeline = MindBillBillTimeline;
-export const HostedBillReview = MindBillBillReview;
-export const HostedBillFromReport = MindBillBillFromReport;
-export const HostedCollections = MindBillCollections;
-export const HostedOnboarding = MindBillOnboarding;
 
 export type {
   MindBillAppearance,

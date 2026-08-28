@@ -12,7 +12,6 @@ npm install @mindbill/react @mindbill/node
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
-import "@mindbill/react/styles.css";
 
 <ConnectedBillLifecycle
   billId={billId}
@@ -33,7 +32,7 @@ export async function POST(request: Request) {
   const { billId } = await request.json();
   await requireBillAccess(user, billId); // your existing authorization
 
-  const session = await mindbill.createEmbedSession({
+  const session = await mindbill.createBrowserSession({
     component: "bill-review",
     billId,
     allowedOrigin: new URL(request.url).origin,
@@ -108,6 +107,6 @@ Use `BillStatusSummary` only when your application already owns status loading a
 />
 ```
 
-`HostedBillReview` and `HostedBillTimeline` remain available when a hosted flow is a better fit. Native and hosted UI paths use the same bill ID.
+`MindBillBillReview` and `MindBillBillTimeline` are available when a hosted flow is a better fit. Native and hosted UI paths use the same bill ID.
 
 Never send a Partner API key or long-lived credential to React/browser code.

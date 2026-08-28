@@ -1,133 +1,91 @@
 # @mindbill/node
 
-Dependency-free Node 20+ SDK and an agent-safe CLI for the MindBill Partner API.
+Dependency-free Node 20+ client for the MindBill Partner API.
 
-`@mindbill/node` is published publicly on npm with provenance from this repository.
+```bash
+npm install @mindbill/node
+```
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
 
 const mindbill = new MindBillClient({
   apiKey: process.env.MINDBILL_API_KEY!,
-  ...(process.env.MINDBILL_ORG_ID
-    ? { organizationId: process.env.MINDBILL_ORG_ID }
-    : {}),
+  organizationId: process.env.MINDBILL_ORG_ID,
 });
 ```
 
-Provision a customer organization without creating a MindBill user or sending an invitation:
+The bill is the primary resource:
 
 ```ts
-const customer = await mindbill.provisionOrganization(
-  { name: "Synthetic QME Practice" },
-  crypto.randomUUID(),
-);
-```
-
-The managed organization is controlled through your server-side Partner API integration. Direct MindBill access is optional and explicit:
-
-```ts
-await mindbill.grantOrganizationUserAccess(
-  customer.organizationId,
-  { adminName: "Synthetic Owner", adminEmail: "owner@example.test" },
-  crypto.randomUUID(),
-);
-```
-
-Synchronize only the partner-owned profile data required for billing so the customer does
-not enter it twice:
-
-```ts
-await mindbill.synchronizeOrganizationProfile(
-  customer.organizationId,
-  {
-    source: "acme-records",
-    practiceIdentity: { name: "Synthetic QME Practice" },
-    renderingProviders: [
-      { externalId: "provider_42", name: "Avery Example, MD", npi: "1234567893" },
-    ],
+const bill = await mindbill.createBill({
+  externalId: "report_123",
+  patient: {
+    firstName: "Taylor",
+    lastName: "Example",
+    dateOfBirth: "1984-04-12",
+    address: {
+      line1: "100 Example Avenue",
+      city: "Los Angeles",
+      state: "CA",
+      postalCode: "90012",
+    },
   },
+  claim: {
+    claimNumber: "DEMO-12345",
+    employer: "Example Manufacturing",
+    dateOfInjury: "2026-06-20",
+    injuryState: "CA",
+  },
+  service: { date: "2026-08-25" },
+  diagnoses: ["M25.512"],
+  serviceLines: [{ code: "ML201", modifiers: ["95"], units: 1 }],
+}, crypto.randomUUID());
+
+await mindbill.updateBill(
+  bill.id,
+  { claim: { employer: "Corrected Employer" } },
   crypto.randomUUID(),
 );
 ```
 
-Keep source workflow data in the partner product and billing lifecycle data in MindBill.
-Use stable external IDs, idempotency keys, signed webhooks, and event reconciliation to keep
-the documented overlap synchronized. Internal MindBill routing, payer intelligence, queues,
-notes, credentials, and cross-customer data are never part of the Partner API contract.
-
-The billing methods use the current Partner API wire shapes by default:
+Documents and submission use the same bill ID:
 
 ```ts
-const quote = await mindbill.quote({
-  lineItems: [{ code: "ML200", units: 1 }],
+await mindbill.uploadBillDocument(bill.id, {
+  file: finalReport,
+  filename: "final-report.pdf",
+  documentType: "final_report",
 }, crypto.randomUUID());
 
-const created = await mindbill.createBill({
-  patient: { kind: "new" },
-  fields: { externalId: "synthetic-example-1" },
-  lineItems: [{ code: "ML200", units: 1 }],
-}, crypto.randomUUID());
-
-const submission = await mindbill.submitBill(
-  created.billId,
+await mindbill.submitBill(
+  bill.id,
   { route: "ebill" },
   crypto.randomUUID(),
 );
-
-if ("sandbox" in submission) {
-  console.log(submission.state); // "paid" in the synthetic sandbox simulation
-} else {
-  console.log(submission.bill.status); // live workflow state, not payer proof
-}
 ```
 
-The same client covers the day-to-day lifecycle without exposing the Partner API key to
-the browser:
+Read status and EORs, then perform an explicit lifecycle action:
 
 ```ts
-const status = await mindbill.getBillStatus(created.billId);
-const attachments = await mindbill.listBillAttachments(created.billId);
-const eor = await mindbill.getBillEor(created.billId);
+const status = await mindbill.getBillStatus(bill.id);
+const eor = await mindbill.getBillEor(bill.id);
 
-const review = await mindbill.createBillReview(
-  created.billId,
+await mindbill.performBillAction(
+  bill.id,
   {
-    type: "second_review",
-    reason: "The report satisfies the documented criteria.",
-    attachmentIds: attachments.data.map((item) => item.id),
+    action: "post_payment",
+    amount: 503.75,
+    method: "check",
+    checkNumber: "4811505",
+    depositDate: "2026-08-25",
   },
   crypto.randomUUID(),
 );
-
-await mindbill.submitBillReview(
-  created.billId,
-  review.data.id,
-  crypto.randomUUID(),
-);
 ```
 
-`uploadBillAttachment` accepts a `Blob`, filename, document type, and optional stable
-external ID. Default only payer-facing documents such as final reports, proof of service,
-and required forms; never silently attach medical records.
+Every mutation requires an idempotency key. Keep the API key on your server. To let native React components call MindBill without a billing proxy, authorize the signed-in user and call `createBrowserSession` from one server route.
 
-`createBill` returns `{ patientId, injuryId, billId, billNumber }` directly. `getBill` returns
-`{ bill, multiple?, ids? }`; `listBills` returns a required pagination envelope; and
-`submitBill` returns a discriminated sandbox-or-live union. Responses are extensible, so avoid
-rejecting additive fields. Use a key containing `bills:quote` for `quote`.
+Webhook consumers can use `verifyMindBillWebhookSignature` with the exact raw body and `compareMindBillEventSequence` for arbitrary-length sequence values.
 
-Webhook consumers can use `verifyMindBillWebhookSignature` with the exact raw body and
-`compareMindBillEventSequence` for decimal sequence strings that may exceed JavaScript's safe
-integer range. See the repository's [10-minute quickstart](https://github.com/incidentfox/mindbill-widgets#add-mindbill-billing-in-10-minutes).
-
-Create a synthetic sandbox without printing the returned key:
-
-```bash
-pnpm dlx @mindbill/node signup \
-  --company "Example Integration Lab" \
-  --contact "Integration Owner" \
-  --email "developer@example.com" \
-  --accept-terms
-```
-
-The key is written to `.env.mindbill` mode `0600`. Live-access and billing commands return Stripe-hosted URLs for an authorized human; the CLI never accepts card data.
+The public client intentionally has no organization, provider, or location synchronization API. Send the values that belong on each bill and retain the returned bill ID. Stable `externalId` values let you query the same bill, patient, or claim without duplicating your database model.

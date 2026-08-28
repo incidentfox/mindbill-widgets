@@ -324,7 +324,7 @@ export function createBillLifecycleClient({
   };
 
   const loadLifecycle = async (signal?: AbortSignal) => {
-    const response = await request("/embed/api/bill-lifecycle", {}, signal);
+    const response = await request("/partner/v2/browser/bill", {}, signal);
     if (!response.ok) {
       throw await responseError(response, "Bill lifecycle could not be loaded.");
     }
@@ -340,7 +340,7 @@ export function createBillLifecycleClient({
     if (query.trim()) params.set("q", query.trim());
     if (claimNumber?.trim()) params.set("claimNumber", claimNumber.trim());
     const response = await request(
-      `/embed/api/bill-review/payers?${params.toString()}`,
+      `/partner/v2/browser/claims-administrators?${params.toString()}`,
     );
     if (!response.ok) {
       throw await responseError(
@@ -420,7 +420,7 @@ export function createBillLifecycleClient({
     fallback: string,
   ): Promise<BillLifecycleData> => {
     const response = await mutation(
-      "/embed/api/bill-lifecycle/actions",
+      "/partner/v2/browser/actions",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -436,7 +436,7 @@ export function createBillLifecycleClient({
     input: BillReviewSaveInput,
   ): Promise<BillLifecycleData> => {
     await mutation(
-      "/embed/api/bill-review",
+      "/partner/v2/browser/bill",
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -458,7 +458,7 @@ export function createBillLifecycleClient({
     async submitBill(input, route) {
       await saveReview(input);
       await mutation(
-        "/embed/api/bill-review/submit",
+        "/partner/v2/browser/submissions",
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -474,7 +474,7 @@ export function createBillLifecycleClient({
       body.set("documentType", documentType);
       if (description) body.set("description", description);
       await mutation(
-        "/embed/api/bill-review/attachments",
+        "/partner/v2/browser/documents",
         { method: "POST", body },
         "Document could not be attached.",
       );
@@ -482,7 +482,7 @@ export function createBillLifecycleClient({
     },
     async removeAttachment(attachmentId) {
       await mutation(
-        `/embed/api/bill-review/attachments/${encodeURIComponent(attachmentId)}`,
+        `/partner/v2/browser/documents/${encodeURIComponent(attachmentId)}`,
         { method: "DELETE" },
         "Document could not be removed.",
       );
@@ -490,7 +490,7 @@ export function createBillLifecycleClient({
     },
     async getAttachment(attachmentId) {
       const response = await request(
-        `/embed/api/bill-review/attachments/${encodeURIComponent(attachmentId)}`,
+        `/partner/v2/browser/documents/${encodeURIComponent(attachmentId)}`,
       );
       if (!response.ok) {
         throw await responseError(response, "Document could not be opened.");
@@ -499,7 +499,7 @@ export function createBillLifecycleClient({
     },
     async getEor(documentId) {
       const response = await request(
-        `/embed/api/bill-lifecycle/eor/${encodeURIComponent(documentId)}`,
+        `/partner/v2/browser/eors/${encodeURIComponent(documentId)}`,
       );
       if (!response.ok) throw await responseError(response, "EOR could not be opened.");
       return response.blob();
@@ -521,7 +521,7 @@ export function createBillLifecycleClient({
     },
     async startCorrection() {
       const response = await mutation(
-        "/embed/api/bill-lifecycle/actions",
+        "/partner/v2/browser/actions",
         {
           method: "POST",
           headers: { "content-type": "application/json" },
