@@ -1,9 +1,6 @@
 export const MINDBILL_COMPONENTS = [
   "bill-timeline",
   "bill-review",
-  "bill-from-report",
-  "collections",
-  "onboarding",
 ] as const;
 
 export type MindBillComponent = (typeof MINDBILL_COMPONENTS)[number];
@@ -301,9 +298,6 @@ export class MindBillEmbedElement extends HTMLElementBase {
 const definitions: ReadonlyArray<[string, MindBillComponent, string]> = [
   ["mindbill-bill-timeline", "bill-timeline", "620px"],
   ["mindbill-bill-review", "bill-review", "980px"],
-  ["mindbill-bill-from-report", "bill-from-report", "760px"],
-  ["mindbill-collections", "collections", "720px"],
-  ["mindbill-onboarding", "onboarding", "760px"],
 ];
 
 export function registerMindBillElements(
@@ -332,8 +326,5 @@ declare global {
   interface HTMLElementTagNameMap {
     "mindbill-bill-timeline": MindBillEmbedElement;
     "mindbill-bill-review": MindBillEmbedElement;
-    "mindbill-bill-from-report": MindBillEmbedElement;
-    "mindbill-collections": MindBillEmbedElement;
-    "mindbill-onboarding": MindBillEmbedElement;
   }
 }
