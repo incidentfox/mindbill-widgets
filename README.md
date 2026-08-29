@@ -203,7 +203,7 @@ Available operations include submit, close, correction/resubmission, Second Bill
 - Keep billing in MindBill: query bills, documents, status, and events by organization.
 - Mix both: send your stable patient and claim IDs while MindBill remains the billing system of record. Every bill still freezes the exact values that were submitted.
 
-The current public implementation supports California med-legal billing. The contract reserves `billingMode: "professional"` for hourly and activity-based IME workflows, but the server currently returns `422 billing_mode_not_available`; no generic pricing behavior is implied yet.
+The same bill contract supports California med-legal billing and `billingMode: "professional"` for IME, treatment, malpractice, hourly, and activity-based workflows. Professional service lines carry the explicit charge supplied by the partner; med-legal lines use MindBill fee-schedule logic.
 
 ## Reference
 
@@ -213,7 +213,7 @@ The current public implementation supports California med-legal billing. The con
 - [`@mindbill/angular`](./packages/angular)
 - [`@mindbill/embed`](./packages/embed)
 - [Runnable server example](./examples/quickstart)
-- [API reference](https://app.mindbill.org/developers/reference)
+- [API reference](https://docs.mindbill.org/reference)
 - [OpenAPI](https://app.mindbill.org/partner-openapi.yaml)
 
 Use synthetic data in sandbox. Never put API keys, session tokens, or PHI in source control or public issues.
