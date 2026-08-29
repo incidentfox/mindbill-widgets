@@ -29,7 +29,7 @@ Choose a complete preset, then override only the tokens your design system owns.
 <ConnectedBillLifecycle
   billId={billId}
   appearance={{
-    preset: "brighterway",
+    preset: "orange-bright",
     accentColor: "#ff4f0a",
     fontFamily: "Inter, sans-serif",
     borderRadius: "8px",
@@ -37,7 +37,7 @@ Choose a complete preset, then override only the tokens your design system owns.
 />
 ```
 
-Available presets are `mindbill`, `qme-companion`, and `brighterway`. Supported overrides include accent, accent text, background, surface, input background, text, muted text, border, font, panel radius, control radius, shadow, danger, success, and warning colors.
+Available presets are `mindbill`, `qme-companion`, and `orange-bright`. Preset names describe visual styles rather than customer or partner brands. Supported overrides include accent, accent text, background, surface, input background, text, muted text, border, font, panel radius, control radius, shadow, danger, success, and warning colors.
 
 Add one authenticated route to your app. It verifies that the signed-in user may access the bill, then mints an exact-origin, bill-scoped token. The Partner API key stays on the server.
 

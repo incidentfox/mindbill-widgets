@@ -121,7 +121,7 @@ export function Billing({ billId }: { billId: string }) {
 }
 ```
 
-Use `preset: "brighterway"` for the compact orange partner theme, or override individual appearance tokens on either preset. The same theme covers the full native lifecycle, including payer search, attachments, status, EORs, payments, reviews, and resubmission.
+Use `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers the full native lifecycle, including payer search, attachments, status, EORs, payments, reviews, and resubmission.
 
 The browser never receives the permanent API key. Add one authenticated route that checks access and mints a short-lived, exact-origin session:
 
