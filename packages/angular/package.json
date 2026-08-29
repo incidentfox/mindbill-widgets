@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/angular",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Native Angular components for the complete MindBill bill lifecycle",
   "type": "module",
   "scripts": {

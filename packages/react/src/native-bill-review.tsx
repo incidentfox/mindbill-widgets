@@ -65,6 +65,30 @@ export type BillReviewLineItem = {
   feeSchedule?: number;
 };
 
+const EMPTY_PROCEDURE_LINE: BillReviewLineItem = {
+  code: "",
+  modifiers: [],
+  units: 1,
+  charge: 0,
+};
+
+function isEmptyProcedureLine(line: BillReviewLineItem): boolean {
+  return !line.code.trim() && line.modifiers.length === 0 && line.units === 1;
+}
+
+/** Keeps completed/partial lines plus one keyboard-ready empty row. */
+export function ensureTrailingProcedureLine(
+  lines: readonly BillReviewLineItem[],
+): BillReviewLineItem[] {
+  const entered = lines
+    .filter((line) => !isEmptyProcedureLine(line))
+    .map((line) => ({ ...line, modifiers: [...line.modifiers] }));
+
+  return entered.length < 50
+    ? [...entered, { ...EMPTY_PROCEDURE_LINE, modifiers: [] }]
+    : entered;
+}
+
 export type BillReviewAttachment = {
   id: string;
   filename: string;
@@ -308,7 +332,7 @@ function toDraft(data: BillReviewData): BillReviewDraft {
     },
     clinician: { ...EMPTY_CLINICIAN, ...(snapshot?.renderingProvider ?? {}) },
     location: { ...EMPTY_LOCATION, ...(snapshot?.placeOfService ?? {}) },
-    lineItems: data.bill.lineItems.map((line) => ({ ...line })),
+    lineItems: ensureTrailingProcedureLine(data.bill.lineItems),
   };
 }
 
@@ -847,9 +871,9 @@ export function BillReviewForm({
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Procedure lines</h3><p>Choose a billing profile, then review the codes and modifiers. Allowed amounts recalculate on save.</p></div><button type="button" className="mb-native-button quiet" disabled={!editable || draft.lineItems.length >= 50} onClick={() => setDraft((current) => ({ ...current, lineItems: [...current.lineItems, { code: "", modifiers: [], units: 1, charge: 0 }] }))}>+ Add line</button></div>
+        <div className="mb-native-section-head"><div><h3>Procedure lines</h3><p>Choose a billing profile, then review the codes and modifiers. A new row appears as you type; allowed amounts recalculate on save.</p></div></div>
         {features?.codingPresets === false ? null : <div className="mb-native-presets" role="group" aria-label="Evaluation billing profile">
-          {([['qme','QME'],['ame','AME'],['psych_qme','Psych QME']] as const).map(([value,label]) => <button type="button" key={value} className={inferPreset(draft.lineItems) === value ? "active" : ""} disabled={!editable} onClick={() => setDraft((current) => ({ ...current, lineItems: applyPreset(current.lineItems, value) }))}>{label}</button>)}
+          {([['qme','QME'],['ame','AME'],['psych_qme','Psych QME']] as const).map(([value,label]) => <button type="button" key={value} className={inferPreset(draft.lineItems) === value ? "active" : ""} disabled={!editable} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(applyPreset(current.lineItems, value)) }))}>{label}</button>)}
           <span>Sets evaluator modifiers across med-legal lines. You can still edit each line.</span>
         </div>}
         <div className="mb-native-lines">
@@ -866,29 +890,17 @@ export function BillReviewForm({
                     )[0];
                     return { ...item, code, modifiers: presetLine?.modifiers || [] };
                   });
-                  if (
-                    code &&
-                    index === lineItems.length - 1 &&
-                    lineItems.length < 50
-                  ) {
-                    lineItems.push({
-                      code: "",
-                      modifiers: [],
-                      units: 1,
-                      charge: 0,
-                    });
-                  }
-                  return { ...current, lineItems };
+                  return { ...current, lineItems: ensureTrailingProcedureLine(lineItems) };
                 });
               }}>{line.code && !PROCEDURES.some(([code]) => code === line.code) ? <option value={line.code}>{line.code}</option> : null}<option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</select>{line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}</label>
               <div className="mb-native-modifiers"><label className="mb-native-field"><span>Modifiers</span><select disabled={!editable} value="" onChange={(event) => {
                 const modifier = event.target.value;
                 if (!modifier) return;
-                setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: [...new Set([...item.modifiers, modifier])] } : item) }));
-              }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label><div className="mb-native-chips">{line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item) }))}>-{modifier} ×</button>)}</div></div>
-              <label className="mb-native-field"><span>Units</span><input type="number" min="1" required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item) }))} /></label>
+                setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: [...new Set([...item.modifiers, modifier])] } : item)) }));
+              }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label><div className="mb-native-chips">{line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item)) }))}>-{modifier} ×</button>)}</div></div>
+              <label className="mb-native-field"><span>Units</span><input type="number" min="1" required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item)) }))} /></label>
               <div className="mb-native-allowed"><span>Allowed</span><strong>{money(line.charge)}</strong></div>
-              <button type="button" className="mb-native-remove" aria-label={`Remove ${line.code || "procedure"}`} disabled={!editable || draft.lineItems.length === 1} onClick={() => setDraft((current) => ({ ...current, lineItems: current.lineItems.filter((_, itemIndex) => itemIndex !== index) }))}>×</button>
+              <button type="button" className="mb-native-remove" aria-label={`Remove ${line.code || "procedure"}`} disabled={!editable} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.filter((_, itemIndex) => itemIndex !== index)) }))}>×</button>
             </div>
           ))}
         </div>

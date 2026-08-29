@@ -84,6 +84,7 @@ export {
   BillReviewForm,
   BillStatusSummary,
   buildBillReviewSaveInput,
+  ensureTrailingProcedureLine,
 } from "./native-bill-review";
 export type {
   BillReviewAttachment,

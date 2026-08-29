@@ -22,6 +22,7 @@ import type {
   BillSubmissionRoute,
 } from "@mindbill/browser";
 import { MindBillLifecycleStore } from "./lifecycle-store";
+import { ensureTrailingProcedureLine } from "./procedure-lines";
 
 export type MindBillAngularThemePreset = "mindbill" | "qme-companion" | "orange-bright" | "clinical-blue";
 export type MindBillAngularAppearance = {
@@ -132,8 +133,8 @@ type BillDraft = {
             </section>
 
             <section class="card">
-              <div class="card-title"><div><h3>Charges</h3><p>Review procedure codes, modifiers, units, and allowed amounts.</p></div><button type="button" (click)="addLine()">+ Add line</button></div>
-              <div class="lines">@for (line of draft.bill.lineItems; track $index; let i=$index) { <div class="line"><label><span>Procedure</span><input required [(ngModel)]="line.code" [name]="'code'+i" (ngModelChange)="dirty=true"></label><label><span>Modifiers</span><input [ngModel]="line.modifiers.join(', ')" (ngModelChange)="setModifiers(line,$any($event))" [name]="'modifiers'+i" placeholder="95, 93"></label><label><span>Units</span><input required type="number" min="1" [(ngModel)]="line.units" [name]="'units'+i" (ngModelChange)="dirty=true"></label><div class="allowed"><span>Allowed</span><strong>{{ line.charge | currency }}</strong></div><button type="button" class="remove" (click)="removeLine(i)" aria-label="Remove line">×</button></div> }</div>
+              <div class="card-title"><div><h3>Charges</h3><p>Review procedure codes, modifiers, units, and allowed amounts. A new row appears as you type.</p></div></div>
+              <div class="lines">@for (line of draft.bill.lineItems; track $index; let i=$index) { <div class="line"><label><span>Procedure</span><input required [(ngModel)]="line.code" [name]="'code'+i" (ngModelChange)="lineChanged()"></label><label><span>Modifiers</span><input [ngModel]="line.modifiers.join(', ')" (ngModelChange)="setModifiers(line,$any($event))" [name]="'modifiers'+i" placeholder="95, 93"></label><label><span>Units</span><input required type="number" min="1" [(ngModel)]="line.units" [name]="'units'+i" (ngModelChange)="lineChanged()"></label><div class="allowed"><span>Allowed</span><strong>{{ line.charge | currency }}</strong></div><button type="button" class="remove" (click)="removeLine(i)" aria-label="Remove line">×</button></div> }</div>
             </section>
 
             <section class="card">
@@ -232,9 +233,9 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   async searchPayers(): Promise<void> { if (!this.payerQuery.trim()) { this.payerResults = []; return; } this.payerResults = await this.store.searchClaimsAdministrators(this.payerQuery, this.draft?.injury.claimNumber); }
   selectPayer(payer: BillReviewPayer): void { if (!this.draft) return; this.draft.injury.claimsAdminId = payer.id; this.draft.injury.claimsAdminName = payer.name; this.payerQuery = ""; this.payerResults = []; this.dirty = true; }
   clearPayer(): void { if (!this.draft) return; this.draft.injury.claimsAdminId = ""; this.draft.injury.claimsAdminName = ""; this.dirty = true; }
-  addLine(): void { this.draft?.bill.lineItems.push({ code: "", modifiers: [], units: 1, charge: 0 }); this.dirty = true; }
-  removeLine(index: number): void { this.draft?.bill.lineItems.splice(index, 1); this.dirty = true; }
-  setModifiers(line: { modifiers: string[] }, value: string): void { line.modifiers = value.split(",").map((item) => item.trim().replace(/^-/, "")).filter(Boolean); this.dirty = true; }
+  lineChanged(): void { this.normalizeLineItems(); this.dirty = true; }
+  removeLine(index: number): void { this.draft?.bill.lineItems.splice(index, 1); this.normalizeLineItems(); this.dirty = true; }
+  setModifiers(line: { modifiers: string[] }, value: string): void { line.modifiers = value.split(",").map((item) => item.trim().replace(/^-/, "")).filter(Boolean); this.normalizeLineItems(); this.dirty = true; }
   fileSelected(event: Event): void { this.pendingFile = (event.target as HTMLInputElement).files?.[0] ?? null; }
   async attach(): Promise<void> { if (!this.pendingFile) return; await this.store.addAttachment(this.pendingFile, this.documentType); this.pendingFile = null; this.notice = "Document attached."; }
   async removeAttachment(id: string): Promise<void> { await this.store.removeAttachment(id); this.notice = "Document removed."; }
@@ -271,7 +272,7 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
       billingProvider: this.draft.billingProvider,
       renderingProvider: this.draft.clinician,
       placeOfService: this.draft.location,
-      lineItems: this.draft.bill.lineItems.map((line) => ({
+      lineItems: this.draft.bill.lineItems.filter((line) => line.code.trim()).map((line) => ({
         ...(line.id ? { id: line.id } : {}),
         code: line.code,
         modifiers: line.modifiers,
@@ -282,7 +283,8 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   private makeDraft(data: BillLifecycleData): BillDraft {
     const snapshot = data.bill.billingSnapshot ?? {};
     const names = data.patient.name.trim().split(/\s+/);
-    return { patient: { ...data.patient, firstName: data.patient.firstName ?? names[0] ?? "", lastName: data.patient.lastName ?? names.slice(1).join(" ") }, injury: { ...data.injury }, bill: { ...data.bill, lineItems: data.bill.lineItems.map((line) => ({ ...line, modifiers: [...line.modifiers] })) }, billingProvider: snapshot.billingProvider ?? { name: "", taxId: "", npi: "", billType: "Professional" as const }, clinician: snapshot.renderingProvider ?? { name: "", specialty: "", npi: "" }, location: snapshot.placeOfService ?? { name: "", street: "", city: "", state: "", zip: "", posCode: "11" } };
+    return { patient: { ...data.patient, firstName: data.patient.firstName ?? names[0] ?? "", lastName: data.patient.lastName ?? names.slice(1).join(" ") }, injury: { ...data.injury }, bill: { ...data.bill, lineItems: ensureTrailingProcedureLine(data.bill.lineItems) }, billingProvider: snapshot.billingProvider ?? { name: "", taxId: "", npi: "", billType: "Professional" as const }, clinician: snapshot.renderingProvider ?? { name: "", specialty: "", npi: "" }, location: snapshot.placeOfService ?? { name: "", street: "", city: "", state: "", zip: "", posCode: "11" } };
   }
+  private normalizeLineItems(): void { if (this.draft) this.draft.bill.lineItems = ensureTrailingProcedureLine(this.draft.bill.lineItems); }
   private openBlob(blob: Blob, filename: string): void { const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noopener"; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000); }
 }

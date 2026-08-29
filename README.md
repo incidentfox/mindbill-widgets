@@ -108,6 +108,8 @@ Users can review, remove, and intentionally add supporting PDFs before submissio
 
 `ConnectedBillLifecycle` loads the bill, searches the payer directory, saves edits, manages documents, submits, polls status, displays EORs, and exposes only the actions valid for the current state.
 
+Both the React and Angular lifecycle forms keep one keyboard-ready procedure row after the entered lines and add the next row automatically as soon as typing begins.
+
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
 

@@ -32,6 +32,8 @@ export class CaseBillingComponent {
 
 The component loads and refreshes status, searches the payer directory, saves bill edits, manages the explicit payer packet, submits the bill, shows EORs, and exposes the correct payment, review, correction, resubmission, and close actions for the current state.
 
+Procedure entry always keeps one empty row after the entered lines. Starting a code, modifier, or non-default unit count opens the next row automatically; the empty row is never included in save or submit payloads.
+
 Add one authenticated server endpoint. It verifies that the signed-in user may access the bill, then mints a short-lived token bound to that bill and browser origin.
 
 ```ts
