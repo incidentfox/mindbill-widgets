@@ -6,6 +6,10 @@ import {
 } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
 import { createBillLifecycleClient } from "../packages/react/src/connected-bill-lifecycle";
+import {
+  mindBillAppearanceStyle,
+  resolveMindBillAppearance,
+} from "../packages/react/src/appearance";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -13,6 +17,36 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: { "content-type": "application/json" },
   });
 }
+
+describe("partner appearance presets", () => {
+  it("ships complete QME Companion and Brighterway presets", () => {
+    expect(resolveMindBillAppearance({ preset: "qme-companion" })).toMatchObject({
+      accentColor: "#53b5dc",
+      textColor: "#1d3440",
+      borderRadius: "12px",
+    });
+    expect(resolveMindBillAppearance({ preset: "brighterway" })).toMatchObject({
+      accentColor: "#ff4f0a",
+      textColor: "#111827",
+      controlRadius: "6px",
+    });
+  });
+
+  it("layers explicit tokens over the selected preset", () => {
+    const style = mindBillAppearanceStyle({
+      preset: "brighterway",
+      accentColor: "#f97316",
+      borderRadius: "4px",
+    });
+
+    expect(style).toMatchObject({
+      "--mb-accent": "#f97316",
+      "--mb-accent-contrast": "#ffffff",
+      "--mb-radius": "4px",
+      "--mb-control-radius": "6px",
+    });
+  });
+});
 
 describe("native bill review", () => {
   it("freezes editable values into the MindBill review contract", () => {

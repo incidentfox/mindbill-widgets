@@ -1,6 +1,7 @@
 "use client";
 
-import type { MindBillAppearance } from "@mindbill/embed";
+import type { MindBillReactAppearance } from "./appearance";
+import { mindBillAppearanceStyle } from "./appearance";
 import {
   useCallback,
   useEffect,
@@ -735,7 +736,7 @@ export function useBillLifecycle({
 }
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
-  appearance?: MindBillAppearance;
+  appearance?: MindBillReactAppearance;
   features?: BillReviewFeatures;
   className?: string;
   style?: CSSProperties;
@@ -750,22 +751,6 @@ function dateInputValue(): string {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function appearanceStyle(
-  appearance: MindBillAppearance | undefined,
-  style: CSSProperties | undefined,
-): CSSProperties {
-  return {
-    ...(appearance?.accentColor ? { "--mb-accent": appearance.accentColor } : {}),
-    ...(appearance?.textColor ? { "--mb-text": appearance.textColor } : {}),
-    ...(appearance?.mutedColor ? { "--mb-muted": appearance.mutedColor } : {}),
-    ...(appearance?.borderColor ? { "--mb-border": appearance.borderColor } : {}),
-    ...(appearance?.backgroundColor ? { "--mb-soft": appearance.backgroundColor } : {}),
-    ...(appearance?.surfaceColor ? { "--mb-surface": appearance.surfaceColor } : {}),
-    ...(appearance?.fontFamily ? { "--mb-font": appearance.fontFamily } : {}),
-    ...style,
-  } as CSSProperties;
 }
 
 function SupportingDocumentControl({
@@ -892,8 +877,9 @@ export function ConnectedBillLifecycle({
 
   const canEditAndSubmit = Boolean(has("edit_and_submit"));
 
-  return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={appearanceStyle(appearance, style)}>
+  return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
+    <style>{CONNECTED_THEME_OVERRIDE_STYLES}</style>
     {canEditAndSubmit
       ? <BillReviewForm
           data={data}
@@ -991,4 +977,21 @@ export function ConnectedBillLifecycle({
 
 const CONNECTED_LIFECYCLE_STYLES = `
 .mb-connected-lifecycle{--mb-accent:#238dbd;--mb-text:#203743;--mb-muted:#657982;--mb-border:#dbe6ea;--mb-soft:#f3f8fa;--mb-surface:#fff;display:grid;gap:14px;color:var(--mb-text);font:14px/1.45 var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}.mb-connected-lifecycle *{box-sizing:border-box}.mb-lifecycle-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border:1px solid var(--mb-border);border-radius:10px;background:var(--mb-surface)}.mb-lifecycle-toolbar>div:first-child{display:grid;gap:2px}.mb-lifecycle-toolbar span,.mb-lifecycle-card p,.mb-lifecycle-panel p,.mb-lifecycle-info span{color:var(--mb-muted)}.mb-lifecycle-toolbar-actions,.mb-lifecycle-panel-actions{display:flex;justify-content:flex-end;gap:8px}.mb-lifecycle-button{min-height:38px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);cursor:pointer;font:inherit;font-weight:750;padding:8px 13px}.mb-lifecycle-button.primary{border-color:var(--mb-accent);background:var(--mb-accent);color:#fff}.mb-lifecycle-button.quiet{border-color:transparent;background:transparent;color:var(--mb-muted)}.mb-lifecycle-button.danger{border-color:#b63d35;background:#b63d35;color:#fff}.mb-lifecycle-button:disabled{cursor:not-allowed;opacity:.5}.mb-lifecycle-card,.mb-lifecycle-panel{padding:18px;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface)}.mb-lifecycle-card header{display:flex;align-items:start;justify-content:space-between;gap:16px}.mb-lifecycle-card h3,.mb-lifecycle-panel h3{margin:0;font-size:18px}.mb-lifecycle-card p,.mb-lifecycle-panel p{margin:3px 0 0}.mb-lifecycle-card header>span{padding:5px 8px;border-radius:999px;background:var(--mb-soft);color:var(--mb-muted);font-size:11px;font-weight:800;text-transform:uppercase}.mb-lifecycle-documents{list-style:none;margin:12px 0 0;padding:0}.mb-lifecycle-documents li{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid var(--mb-border)}.mb-lifecycle-documents li>div{display:grid}.mb-lifecycle-documents span{color:var(--mb-muted);font-size:12px}.mb-lifecycle-info{display:grid;gap:3px;padding:13px 15px;border:1px solid #cddfe5;border-radius:10px;background:var(--mb-soft)}.mb-lifecycle-panel{display:grid;gap:16px;box-shadow:0 14px 38px rgba(30,56,68,.08)}.mb-lifecycle-panel.danger{border-color:#ecc5c2}.mb-lifecycle-panel label{display:grid;gap:6px;font-size:12px;font-weight:750}.mb-lifecycle-panel label small{color:var(--mb-muted);font-size:inherit;font-weight:500}.mb-lifecycle-panel input,.mb-lifecycle-panel select,.mb-lifecycle-panel textarea,.mb-lifecycle-upload input,.mb-lifecycle-upload select{width:100%;min-height:42px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);font:inherit;padding:9px 11px}.mb-lifecycle-panel textarea{min-height:100px;resize:vertical}.mb-lifecycle-fields{display:grid;gap:12px}.mb-lifecycle-fields.two{grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-fields .full{grid-column:1/-1}.mb-lifecycle-packet{display:grid;gap:0;margin:0;padding:0;border:0}.mb-lifecycle-packet legend{margin-bottom:7px;font-size:12px;font-weight:800}.mb-lifecycle-packet>label{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--mb-border)}.mb-lifecycle-packet>label>input{width:16px;min-height:16px}.mb-lifecycle-packet>label>span{display:grid}.mb-lifecycle-packet button{border:0;background:transparent;color:var(--mb-accent);cursor:pointer;font:inherit}.mb-lifecycle-upload{display:grid;grid-template-columns:220px 1fr auto;align-items:end;gap:10px;padding:12px;border-radius:9px;background:var(--mb-soft)}.mb-lifecycle-message,.mb-lifecycle-error,.mb-lifecycle-loading{padding:12px 14px;border-radius:9px}.mb-lifecycle-message.success{background:#edf9f2;color:#217449}.mb-lifecycle-message.error,.mb-lifecycle-error{background:#fff0ef;color:#9d3029}.mb-lifecycle-error{display:flex;align-items:center;gap:12px}.mb-lifecycle-error span{flex:1}.mb-lifecycle-error button{border:1px solid currentColor;border-radius:7px;background:transparent;color:inherit;padding:7px 10px}@media(max-width:760px){.mb-lifecycle-toolbar,.mb-lifecycle-card header{align-items:stretch;flex-direction:column}.mb-lifecycle-toolbar-actions,.mb-lifecycle-panel-actions{justify-content:start}.mb-lifecycle-fields.two,.mb-lifecycle-upload{grid-template-columns:1fr}.mb-lifecycle-documents li{align-items:start}.mb-lifecycle-packet>label{grid-template-columns:auto 1fr auto}}
+`;
+
+const CONNECTED_THEME_OVERRIDE_STYLES = `
+.mb-connected-lifecycle{color:var(--mb-text);font-family:var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}
+.mb-lifecycle-toolbar,.mb-lifecycle-card,.mb-lifecycle-panel{border-color:var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface)}
+.mb-lifecycle-panel{box-shadow:var(--mb-shadow)}
+.mb-lifecycle-toolbar span,.mb-lifecycle-card p,.mb-lifecycle-panel p,.mb-lifecycle-info span{color:var(--mb-muted)}
+.mb-lifecycle-button{border-color:var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text)}
+.mb-lifecycle-button.primary{border-color:var(--mb-accent);background:var(--mb-accent);color:var(--mb-accent-contrast)}
+.mb-lifecycle-button.primary:hover{filter:brightness(.96)}
+.mb-lifecycle-button.danger{border-color:var(--mb-danger);background:var(--mb-danger);color:white}
+.mb-lifecycle-card header>span,.mb-lifecycle-info,.mb-lifecycle-upload{background:var(--mb-soft)}
+.mb-lifecycle-info,.mb-lifecycle-panel input,.mb-lifecycle-panel select,.mb-lifecycle-panel textarea,.mb-lifecycle-upload input,.mb-lifecycle-upload select{border-color:var(--mb-border);border-radius:var(--mb-control-radius)}
+.mb-lifecycle-panel input,.mb-lifecycle-panel select,.mb-lifecycle-panel textarea,.mb-lifecycle-upload input,.mb-lifecycle-upload select{background:var(--mb-input);color:var(--mb-text)}
+.mb-lifecycle-message,.mb-lifecycle-error,.mb-lifecycle-loading,.mb-lifecycle-upload{border-radius:var(--mb-control-radius)}
+.mb-lifecycle-message.success{background:color-mix(in srgb,var(--mb-success) 10%,white);color:var(--mb-success)}
+.mb-lifecycle-message.error,.mb-lifecycle-error{background:color-mix(in srgb,var(--mb-danger) 10%,white);color:var(--mb-danger)}
 `;
