@@ -59,6 +59,9 @@ export type BillReviewLineItem = {
   units: number;
   charge: number;
   feeSchedule?: number;
+  serviceDate?: string | null;
+  serviceDateEnd?: string | null;
+  diagnosisPointers?: number[];
 };
 
 export type BillReviewAttachment = {
@@ -106,6 +109,7 @@ export type BillReviewData = {
     billNumber: string | number;
     status: string;
     transmissionState?: string;
+    billingMode: "med_legal" | "professional";
     dos: string;
     dosEnd?: string | null;
     authorizationNumber?: string | null;
@@ -167,10 +171,49 @@ export type BillReviewSaveInput = {
     code: string;
     modifiers: string[];
     units: number;
+    charge?: number;
+    serviceDate?: string | null;
+    serviceDateEnd?: string | null;
+    diagnosisPointers?: number[];
   }>;
 };
 
 export type BillSubmissionRoute = "ebill" | "fax" | "mail" | "email";
+export type BillDeliveryOption = {
+  route: BillSubmissionRoute;
+  label: string;
+  detail: string;
+  fallback: boolean;
+  confidence: string;
+  payerName: string;
+  target?: string;
+  chKey?: string;
+  payerId?: string;
+  printAndMail?: boolean;
+  costUsd?: number;
+};
+export type BillDeliveryOptions = {
+  payerName: string;
+  recommended: BillDeliveryOption;
+  options: BillDeliveryOption[];
+  contacts: {
+    faxNumber?: string | null;
+    claimsEmail?: string | null;
+    portalUrl?: string | null;
+    mailingAddress?: string | null;
+  };
+};
+export type SubmitBillInput = {
+  route: BillSubmissionRoute;
+  destination?: {
+    faxNumber?: string;
+    email?: string;
+    mailingAddress?: string;
+  };
+  attention?: string;
+  subject?: string;
+  note?: string;
+};
 export type BillLifecycleActionId =
   | "edit_and_submit"
   | "correct_and_resubmit"
@@ -251,8 +294,9 @@ export type BillLifecycleClientOptions = {
 export type BillLifecycleClient = {
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  getDeliveryOptions: () => Promise<BillDeliveryOptions>;
   saveReview: (input: BillReviewSaveInput) => Promise<BillLifecycleData>;
-  submitBill: (input: BillReviewSaveInput, route: BillSubmissionRoute) => Promise<BillLifecycleData>;
+  submitBill: (input: BillReviewSaveInput, submission: SubmitBillInput) => Promise<BillLifecycleData>;
   addAttachment: (file: File, documentType: BillReviewDocumentType, description?: string) => Promise<BillLifecycleData>;
   removeAttachment: (attachmentId: string) => Promise<BillLifecycleData>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
@@ -307,6 +351,24 @@ function normalizeLifecycle(value: unknown): BillLifecycleData {
     throw new Error("The billing service returned an invalid bill lifecycle.");
   }
   return data as BillLifecycleData;
+}
+
+function normalizeDeliveryOptions(value: unknown): BillDeliveryOptions {
+  if (!value || typeof value !== "object") {
+    throw new Error("The billing service returned invalid delivery options.");
+  }
+  const data = value as Partial<BillDeliveryOptions>;
+  if (
+    typeof data.payerName !== "string"
+    || !data.recommended
+    || typeof data.recommended !== "object"
+    || !["ebill", "fax", "mail", "email"].includes(data.recommended.route ?? "")
+    || !Array.isArray(data.options)
+    || !data.contacts
+  ) {
+    throw new Error("The billing service returned invalid delivery options.");
+  }
+  return data as BillDeliveryOptions;
 }
 
 function idempotencyKey(): string {
@@ -453,13 +515,19 @@ export function createBillLifecycleClient({
     clearSession() { session = null; sessionRequest = null; },
     getLifecycle: loadLifecycle,
     searchClaimsAdministrators,
+    async getDeliveryOptions() {
+      const response = await request("/partner/v2/browser/delivery-options");
+      if (!response.ok) throw await responseError(response, "Delivery options could not be loaded.");
+      const body = await response.json() as { data?: unknown };
+      return normalizeDeliveryOptions(body.data);
+    },
     saveReview,
-    async submitBill(input, route) {
+    async submitBill(input, submission) {
       await saveReview(input);
       await mutation("/partner/v2/browser/submissions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ route }),
+        body: JSON.stringify(submission),
       }, "Bill could not be submitted.");
       return loadLifecycle();
     },

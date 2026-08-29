@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/node",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Typed server SDK for the MindBill Partner API",
   "type": "module",
   "main": "./dist/index.js",

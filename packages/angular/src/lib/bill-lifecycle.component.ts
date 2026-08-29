@@ -19,7 +19,9 @@ import type {
   BillReviewLocation,
   BillReviewPayer,
   BillReviewSaveInput,
-  BillSubmissionRoute,
+  BillDeliveryOption,
+  BillDeliveryOptions,
+  SubmitBillInput,
 } from "@mindbill/browser";
 import { MindBillLifecycleStore } from "./lifecycle-store";
 import { ensureTrailingProcedureLine } from "./procedure-lines";
@@ -51,6 +53,7 @@ const DOCUMENT_TYPES: Array<{ value: BillReviewDocumentType; label: string }> = 
   { value: "proof_of_service", label: "Proof of service" },
   { value: "letter_of_attestation", label: "Letter of attestation" },
   { value: "form_122", label: "Required form" },
+  { value: "return_to_work_voucher", label: "Return-to-work voucher" },
   { value: "w9", label: "W-9" },
   { value: "appeal", label: "Appeal support" },
   { value: "medical_records", label: "Medical records (intentional)" },
@@ -133,8 +136,29 @@ type BillDraft = {
             </section>
 
             <section class="card">
-              <div class="card-title"><div><h3>Charges</h3><p>Review procedure codes, modifiers, units, and allowed amounts. A new row appears as you type.</p></div></div>
-              <div class="lines">@for (line of draft.bill.lineItems; track $index; let i=$index) { <div class="line"><label><span>Procedure</span><input required [(ngModel)]="line.code" [name]="'code'+i" (ngModelChange)="lineChanged()"></label><label><span>Modifiers</span><input [ngModel]="line.modifiers.join(', ')" (ngModelChange)="setModifiers(line,$any($event))" [name]="'modifiers'+i" placeholder="95, 93"></label><label><span>Units</span><input required type="number" min="1" [(ngModel)]="line.units" [name]="'units'+i" (ngModelChange)="lineChanged()"></label><div class="allowed"><span>Allowed</span><strong>{{ line.charge | currency }}</strong></div><button type="button" class="remove" (click)="removeLine(i)" aria-label="Remove line">×</button></div> }</div>
+              <div class="card-title"><div><h3>Charges</h3><p>{{ draft.bill.billingMode === 'professional' ? 'Enter each treatment or professional service.' : 'Choose medical-legal codes, modifiers, units, and allowed amounts.' }} A keyboard-ready row appears automatically.</p></div></div>
+              @if (draft.bill.billingMode === 'med_legal') {
+                <div class="presets"><button type="button" (click)="applyPreset('qme')">QME</button><button type="button" (click)="applyPreset('ame')">AME</button><button type="button" (click)="applyPreset('psych')">Psych QME</button></div>
+              }
+              <div class="lines">@for (line of draft.bill.lineItems; track $index; let i=$index) {
+                <div class="line" [class.professional]="draft.bill.billingMode === 'professional'">
+                  <label><span>Procedure</span>
+                    @if (draft.bill.billingMode === 'med_legal') {
+                      <select [(ngModel)]="line.code" [name]="'code'+i" (ngModelChange)="lineChanged()"><option value="">Choose code…</option>@for (code of medLegalCodes; track code) { <option [value]="code">{{ code }}</option> }</select>
+                    } @else { <input [(ngModel)]="line.code" [name]="'code'+i" (ngModelChange)="lineChanged()" placeholder="e.g. 99204"> }
+                  </label>
+                  <label><span>Modifiers</span><input [ngModel]="line.modifiers.join(', ')" (ngModelChange)="setModifiers(line,$any($event))" [name]="'modifiers'+i" placeholder="e.g. 25, 95"></label>
+                  @if (draft.bill.billingMode === 'professional') {
+                    <label><span>Service date</span><input type="date" [(ngModel)]="line.serviceDate" [name]="'serviceDate'+i" (ngModelChange)="lineChanged()"></label>
+                    <label><span>End date</span><input type="date" [(ngModel)]="line.serviceDateEnd" [name]="'serviceDateEnd'+i" (ngModelChange)="lineChanged()"></label>
+                    <label><span>Charge</span><input type="number" min="0" step="0.01" [(ngModel)]="line.charge" [name]="'charge'+i" (ngModelChange)="lineChanged()"></label>
+                    <label><span>Diagnosis pointers</span><input [ngModel]="(line.diagnosisPointers || []).join(', ')" (ngModelChange)="setDiagnosisPointers(line,$any($event))" [name]="'pointers'+i" placeholder="1, 2"></label>
+                  }
+                  <label><span>Units</span><input type="number" min="1" [(ngModel)]="line.units" [name]="'units'+i" (ngModelChange)="lineChanged()"></label>
+                  <div class="allowed"><span>{{ draft.bill.billingMode === 'professional' ? 'Charge' : 'Allowed' }}</span><strong>{{ line.charge | currency }}</strong></div>
+                  <button type="button" class="remove" (click)="removeLine(i)" aria-label="Remove line">×</button>
+                </div>
+              }</div>
             </section>
 
             <section class="card">
@@ -143,7 +167,25 @@ type BillDraft = {
               <div class="upload"><select [(ngModel)]="documentType" name="documentType">@for (type of documentTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }</select><input #fileInput type="file" accept="application/pdf" (change)="fileSelected($event)"><button type="button" [disabled]="!pendingFile || store.mutating()" (click)="attach()">Attach document</button></div>
             </section>
 
-            <section class="delivery"><div><span class="eyebrow">Delivery</span><h3>Submit this bill</h3><p>Submission and every later action remain available in this case.</p></div><div><div class="routes">@for (item of routes; track item.value) { <label><input type="radio" name="route" [value]="item.value" [(ngModel)]="route"> {{ item.label }}</label> }</div><div class="actions"><button type="button" (click)="save()" [disabled]="store.mutating()">Save changes</button><button class="primary" type="submit" [disabled]="store.mutating() || !canSubmit()">{{ store.mutating() ? 'Submitting…' : 'Submit bill' }}</button></div></div></section>
+            <section class="delivery"><div><span class="eyebrow">Delivery</span><h3>Submit this bill</h3><p>Review the exact electronic, fax, email, or mail destination before anything is sent.</p></div><div class="actions"><button type="button" (click)="save()" [disabled]="store.mutating()">Save changes</button><button class="primary" type="button" (click)="openSubmit()" [disabled]="store.mutating() || deliveryBusy || !canSubmit()">{{ deliveryBusy ? 'Loading routes…' : 'Review delivery' }}</button></div></section>
+
+            @if (showSubmit && deliveryOptions) {
+              <div class="modal-backdrop" (click)="closeSubmit()">
+                <section class="submit-modal" role="dialog" aria-modal="true" aria-labelledby="mb-submit-title" (click)="$event.stopPropagation()">
+                  <header><div><span class="eyebrow">Send bill</span><h3 id="mb-submit-title">Choose a delivery route</h3><p>{{ deliveryOptions.payerName }}</p></div><button type="button" class="close" (click)="closeSubmit()" aria-label="Close">×</button></header>
+                  <div class="route-list">@for (option of deliveryOptions.options; track option.route) {
+                    <button type="button" class="route-option" [class.selected]="submission.route === option.route" (click)="chooseDelivery(option)"><span class="radio"></span><span><strong>{{ option.label }}</strong><small>{{ option.detail }}</small></span>@if (option.route === deliveryOptions.recommended.route) { <b>Recommended</b> }</button>
+                  }</div>
+                  @if (selectedDelivery(); as option) {
+                    @if (option.route === 'fax') { <label><span>Fax number</span><input [ngModel]="submission.destination?.faxNumber || ''" (ngModelChange)="setDestination('faxNumber',$any($event))" name="submitFax"></label> }
+                    @if (option.route === 'email') { <label><span>Email address</span><input type="email" [ngModel]="submission.destination?.email || ''" (ngModelChange)="setDestination('email',$any($event))" name="submitEmail"></label><label><span>Subject</span><input [(ngModel)]="submission.subject" name="submitSubject"></label> }
+                    @if (option.route === 'mail') { <label><span>Mailing address</span><textarea [ngModel]="submission.destination?.mailingAddress || ''" (ngModelChange)="setDestination('mailingAddress',$any($event))" name="submitMail"></textarea></label> }
+                    @if (option.route !== 'ebill') { <label><span>Attention (optional)</span><input [(ngModel)]="submission.attention" name="submitAttention"></label> }
+                  }
+                  <footer><button type="button" (click)="closeSubmit()">Cancel</button><button type="button" class="primary" (click)="submit()" [disabled]="store.mutating() || !deliveryReady()">{{ store.mutating() ? 'Submitting…' : 'Submit bill' }}</button></footer>
+                </section>
+              </div>
+            }
           </form>
         } @else {
           <section class="card lifecycle">
@@ -163,7 +205,7 @@ type BillDraft = {
     </section>
   `,
   styles: [`
-    :host{display:block}.mb{--a:#238dbd;--ac:#fff;--bg:#f3f8fa;--s:#fff;--t:#203743;--m:#657982;--b:#dbe6ea;--r:12px;--cr:8px;display:grid;gap:16px;color:var(--t);font:14px/1.45 var(--font,Inter,system-ui,sans-serif)}*{box-sizing:border-box}h2,h3,h4,p{margin:0}.summary,.card,.delivery,.state{border:1px solid var(--b);border-radius:var(--r);background:var(--s)}.summary{display:flex;justify-content:space-between;gap:20px;padding:20px}.summary h2{font-size:24px}.summary p,.card p,.delivery p,small{color:var(--m)}.eyebrow{color:var(--m);font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.money{text-align:right}.money span{display:block;font-size:28px;font-weight:800}.money small{font-size:12px}.review{display:grid;gap:16px}.card{padding:20px}.card-title{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:18px}.card-title h3,.delivery h3{font-size:18px}.card-title>span{border-radius:999px;background:var(--bg);padding:5px 9px;color:var(--m);font-size:11px;font-weight:800;text-transform:uppercase}.grid{display:grid;gap:14px}.grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}label{display:grid;gap:6px;color:var(--t);font-size:12px;font-weight:700}input,select,textarea,button{font:inherit}input,select,textarea{width:100%;min-height:42px;border:1px solid var(--b);border-radius:var(--cr);background:#fff;color:var(--t);padding:9px 11px}textarea{min-height:90px;resize:vertical}button{min-height:38px;border:1px solid var(--b);border-radius:var(--cr);background:#fff;color:var(--t);padding:8px 13px;cursor:pointer;font-weight:700}button.primary{border-color:var(--a);background:var(--a);color:var(--ac)}button.danger{border-color:#d4380d;background:#d4380d;color:#fff}button:disabled{cursor:not-allowed;opacity:.5}.subhead{margin:18px 0 9px;border-top:1px solid var(--b);padding-top:15px;font-size:12px;font-weight:800}.selected{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--b);border-radius:var(--cr);padding:12px}.selected div{display:grid}.results{position:relative;z-index:3;display:grid;margin-top:5px;border:1px solid var(--b);border-radius:var(--cr);background:#fff;box-shadow:0 12px 30px rgba(31,45,61,.12);overflow:hidden}.results button{display:grid;gap:2px;text-align:left;border:0;border-bottom:1px solid var(--b);border-radius:0;padding:12px}.results span{color:var(--m);font-weight:400}.lines{display:grid;gap:10px}.line{display:grid;grid-template-columns:1.2fr 1.2fr 110px 120px 40px;align-items:end;gap:10px;border-radius:var(--cr);background:var(--bg);padding:12px}.allowed{display:grid;gap:7px;text-align:right}.allowed span{color:var(--m);font-size:11px;font-weight:800;text-transform:uppercase}.allowed strong{font-size:17px}.remove{border:0;background:transparent;font-size:20px}.docs{list-style:none;margin:0;padding:0}.docs li{display:flex;align-items:center;gap:8px;border-top:1px solid var(--b);padding:11px 0}.docs li>div{display:grid;flex:1}.upload{display:grid;grid-template-columns:240px 1fr auto;gap:10px;margin-top:12px;border-radius:var(--cr);background:var(--bg);padding:12px}.delivery{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:20px;background:color-mix(in srgb,var(--a) 5%,white)}.routes,.actions,.actionbar{display:flex;justify-content:flex-end;gap:8px}.routes{margin-bottom:10px}.routes label{display:flex;align-items:center;border:1px solid var(--b);border-radius:var(--cr);background:#fff;padding:9px 12px}.routes input{width:auto;min-height:auto}.lifecycle{display:grid;gap:16px}.actionbar{flex-wrap:wrap}.eors{display:grid;gap:8px}.eors>button{display:flex;align-items:center;justify-content:space-between;text-align:left}.eors span{display:grid}.panel{display:grid;gap:14px;border-top:1px solid var(--b);padding-top:16px}.notice,.state{padding:13px 15px}.notice{border-radius:var(--cr);background:#edf8f2;color:#23734c}.notice.error,.state.error{background:#fff2f0;color:#b42318}.state{display:grid;gap:10px}.state button{justify-self:start}.powered{text-align:right;color:var(--m);font-size:11px}@media(max-width:900px){.grid.four,.grid.three{grid-template-columns:repeat(2,minmax(0,1fr))}.line{grid-template-columns:1fr 1fr 90px}.allowed{grid-column:1/-2;text-align:left}.upload{grid-template-columns:1fr}.delivery{align-items:stretch;flex-direction:column}.routes,.actions{justify-content:flex-start}}@media(max-width:600px){.summary,.card-title{align-items:stretch;flex-direction:column}.money{text-align:left}.grid.four,.grid.three,.grid.two,.line{grid-template-columns:1fr}.allowed{grid-column:auto}.routes{flex-wrap:wrap}.docs li{align-items:flex-start;flex-wrap:wrap}}
+    :host{display:block}.mb{--a:#238dbd;--ac:#fff;--bg:#f3f8fa;--s:#fff;--t:#203743;--m:#657982;--b:#dbe6ea;--r:12px;--cr:8px;display:grid;gap:16px;color:var(--t);font:14px/1.45 var(--font,Inter,system-ui,sans-serif)}*{box-sizing:border-box}h2,h3,h4,p{margin:0}.summary,.card,.delivery,.state{border:1px solid var(--b);border-radius:var(--r);background:var(--s)}.summary{display:flex;justify-content:space-between;gap:20px;padding:20px}.summary h2{font-size:24px}.summary p,.card p,.delivery p,small{color:var(--m)}.eyebrow{color:var(--m);font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.money{text-align:right}.money span{display:block;font-size:28px;font-weight:800}.money small{font-size:12px}.review{display:grid;gap:16px}.card{padding:20px}.card-title{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:18px}.card-title h3,.delivery h3{font-size:18px}.card-title>span{border-radius:999px;background:var(--bg);padding:5px 9px;color:var(--m);font-size:11px;font-weight:800;text-transform:uppercase}.grid{display:grid;gap:14px}.grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}label{display:grid;gap:6px;color:var(--t);font-size:12px;font-weight:700}input,select,textarea,button{font:inherit}input,select,textarea{width:100%;min-height:42px;border:1px solid var(--b);border-radius:var(--cr);background:#fff;color:var(--t);padding:9px 11px}textarea{min-height:90px;resize:vertical}button{min-height:38px;border:1px solid var(--b);border-radius:var(--cr);background:#fff;color:var(--t);padding:8px 13px;cursor:pointer;font-weight:700}button.primary{border-color:var(--a);background:var(--a);color:var(--ac)}button.danger{border-color:#d4380d;background:#d4380d;color:#fff}button:disabled{cursor:not-allowed;opacity:.5}.subhead{margin:18px 0 9px;border-top:1px solid var(--b);padding-top:15px;font-size:12px;font-weight:800}.selected{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--b);border-radius:var(--cr);padding:12px}.selected div{display:grid}.results{position:relative;z-index:3;display:grid;margin-top:5px;border:1px solid var(--b);border-radius:var(--cr);background:#fff;box-shadow:0 12px 30px rgba(31,45,61,.12);overflow:hidden}.results button{display:grid;gap:2px;text-align:left;border:0;border-bottom:1px solid var(--b);border-radius:0;padding:12px}.results span{color:var(--m);font-weight:400}.presets{display:flex;gap:8px;margin:-4px 0 12px}.lines{display:grid;gap:10px}.line{display:grid;grid-template-columns:1.2fr 1.2fr 110px 120px 40px;align-items:end;gap:10px;border-radius:var(--cr);background:var(--bg);padding:12px}.line.professional{grid-template-columns:1.1fr 1fr 1fr 1fr 110px 1fr 90px 110px 40px}.allowed{display:grid;gap:7px;text-align:right}.allowed span{color:var(--m);font-size:11px;font-weight:800;text-transform:uppercase}.allowed strong{font-size:17px}.remove{border:0;background:transparent;font-size:20px}.docs{list-style:none;margin:0;padding:0}.docs li{display:flex;align-items:center;gap:8px;border-top:1px solid var(--b);padding:11px 0}.docs li>div{display:grid;flex:1}.upload{display:grid;grid-template-columns:240px 1fr auto;gap:10px;margin-top:12px;border-radius:var(--cr);background:var(--bg);padding:12px}.delivery{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:20px;background:color-mix(in srgb,var(--a) 5%,white)}.actions,.actionbar{display:flex;justify-content:flex-end;gap:8px}.lifecycle{display:grid;gap:16px}.actionbar{flex-wrap:wrap}.eors{display:grid;gap:8px}.eors>button{display:flex;align-items:center;justify-content:space-between;text-align:left}.eors span{display:grid}.panel{display:grid;gap:14px;border-top:1px solid var(--b);padding-top:16px}.notice,.state{padding:13px 15px}.notice{border-radius:var(--cr);background:#edf8f2;color:#23734c}.notice.error,.state.error{background:#fff2f0;color:#b42318}.state{display:grid;gap:10px}.state button{justify-self:start}.powered{text-align:right;color:var(--m);font-size:11px}.modal-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;background:rgba(15,32,40,.56);padding:20px}.submit-modal{display:grid;gap:18px;width:min(680px,100%);max-height:calc(100vh - 40px);overflow:auto;border:1px solid var(--b);border-radius:var(--r);background:var(--s);padding:22px;box-shadow:0 24px 80px rgba(15,32,40,.28)}.submit-modal>header,.submit-modal>footer{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.submit-modal>footer{justify-content:flex-end}.submit-modal .close{border:0;background:transparent;font-size:26px}.route-list{display:grid;gap:8px}.route-option{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:12px;text-align:left;padding:13px}.route-option>span:nth-child(2){display:grid}.route-option.selected{border-color:var(--a);box-shadow:0 0 0 2px color-mix(in srgb,var(--a) 18%,transparent)}.route-option .radio{width:16px;height:16px;border:2px solid var(--b);border-radius:50%}.route-option.selected .radio{border:5px solid var(--a)}.route-option b{color:var(--a);font-size:11px;text-transform:uppercase}@media(max-width:1100px){.line.professional{grid-template-columns:repeat(3,minmax(0,1fr))}.line.professional .allowed{grid-column:auto}}@media(max-width:900px){.grid.four,.grid.three{grid-template-columns:repeat(2,minmax(0,1fr))}.line{grid-template-columns:1fr 1fr 90px}.allowed{grid-column:1/-2;text-align:left}.upload{grid-template-columns:1fr}.delivery{align-items:stretch;flex-direction:column}.actions{justify-content:flex-start}}@media(max-width:600px){.summary,.card-title{align-items:stretch;flex-direction:column}.money{text-align:left}.grid.four,.grid.three,.grid.two,.line,.line.professional{grid-template-columns:1fr}.allowed{grid-column:auto}.docs li{align-items:flex-start;flex-wrap:wrap}.modal-backdrop{padding:8px}.submit-modal{max-height:calc(100vh - 16px);padding:16px}.route-option{grid-template-columns:20px 1fr}.route-option b{grid-column:2}}
   `],
 })
 export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
@@ -179,14 +221,17 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
 
   readonly store = new MindBillLifecycleStore();
   readonly documentTypes = DOCUMENT_TYPES;
-  readonly routes: Array<{ value: BillSubmissionRoute; label: string }> = [{ value: "ebill", label: "E-bill" }, { value: "fax", label: "Fax" }, { value: "mail", label: "Mail" }, { value: "email", label: "Email" }];
+  readonly medLegalCodes = ["ML200", "ML201", "ML202", "ML203", "ML204", "ML205", "ML206", "MLPRR"];
   draft: BillDraft | null = null;
   dirty = false;
   payerQuery = "";
   payerResults: BillReviewPayer[] = [];
   documentType: BillReviewDocumentType = "other";
   pendingFile: File | null = null;
-  route: BillSubmissionRoute = "ebill";
+  deliveryOptions: BillDeliveryOptions | null = null;
+  submission: SubmitBillInput = { route: "ebill" };
+  showSubmit = false;
+  deliveryBusy = false;
   panel = "";
   notice = "";
   closeReason = "";
@@ -236,14 +281,53 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   lineChanged(): void { this.normalizeLineItems(); this.dirty = true; }
   removeLine(index: number): void { this.draft?.bill.lineItems.splice(index, 1); this.normalizeLineItems(); this.dirty = true; }
   setModifiers(line: { modifiers: string[] }, value: string): void { line.modifiers = value.split(",").map((item) => item.trim().replace(/^-/, "")).filter(Boolean); this.normalizeLineItems(); this.dirty = true; }
+  setDiagnosisPointers(line: { diagnosisPointers?: number[] }, value: string): void { line.diagnosisPointers = value.split(",").map((item) => Number(item.trim())).filter((item) => Number.isInteger(item) && item >= 1 && item <= 12); this.normalizeLineItems(); this.dirty = true; }
+  applyPreset(kind: "qme" | "ame" | "psych"): void {
+    if (!this.draft) return;
+    const modifier = kind === "ame" ? "94" : kind === "psych" ? "96" : "95";
+    const entered = this.draft.bill.lineItems.filter((line) => line.code.trim());
+    if (entered.length === 0) entered.push({ code: "ML201", modifiers: [modifier], units: 1, charge: 0 });
+    else entered.forEach((line) => { if (!line.modifiers.length) line.modifiers = [modifier]; });
+    this.draft.bill.lineItems = ensureTrailingProcedureLine(entered);
+    this.dirty = true;
+  }
   fileSelected(event: Event): void { this.pendingFile = (event.target as HTMLInputElement).files?.[0] ?? null; }
   async attach(): Promise<void> { if (!this.pendingFile) return; await this.store.addAttachment(this.pendingFile, this.documentType); this.pendingFile = null; this.notice = "Document attached."; }
   async removeAttachment(id: string): Promise<void> { await this.store.removeAttachment(id); this.notice = "Document removed."; }
   async openAttachment(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getAttachment(id), filename); }
   async openEor(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getEor(id), filename); }
-  canSubmit(): boolean { const input = this.buildInput(); return Boolean(input && input.claimsAdminId && input.dos && input.billingProvider?.name && input.billingProvider.taxId && input.billingProvider.npi && input.renderingProvider?.name && input.renderingProvider.npi && input.lineItems.some((line) => line.code && line.units > 0)); }
+  canSubmit(): boolean {
+    const input = this.buildInput();
+    if (!input || !input.claimsAdminId || !input.billingProvider?.name || !input.billingProvider.taxId || !input.billingProvider.npi || !input.renderingProvider?.name || !input.renderingProvider.npi || !input.lineItems.length) return false;
+    return input.lineItems.every((line) => line.code && line.units > 0 && (this.draft?.bill.billingMode !== "professional" || Boolean(line.serviceDate && line.charge && line.charge > 0)));
+  }
   async save(): Promise<void> { const input = this.buildInput(); if (!input) return; const data = await this.store.saveReview(input); this.dirty = false; this.draft = this.makeDraft(data); this.notice = "Bill saved."; }
-  async submit(): Promise<void> { const input = this.buildInput(); if (!input || !this.canSubmit()) return; const data = await this.store.submitBill(input, this.route); this.dirty = false; this.draft = this.makeDraft(data); this.notice = "Bill submitted."; this.submitted.emit(data); }
+  async openSubmit(): Promise<void> {
+    if (!this.canSubmit()) return;
+    this.deliveryBusy = true;
+    try {
+      this.deliveryOptions = await this.store.getDeliveryOptions();
+      this.chooseDelivery(this.deliveryOptions.recommended);
+      this.showSubmit = true;
+    } finally { this.deliveryBusy = false; }
+  }
+  closeSubmit(): void { this.showSubmit = false; }
+  selectedDelivery(): BillDeliveryOption | undefined { return this.deliveryOptions?.options.find((option) => option.route === this.submission.route); }
+  chooseDelivery(option: BillDeliveryOption): void {
+    const destination = option.route === "fax" ? { faxNumber: option.target ?? this.deliveryOptions?.contacts.faxNumber ?? "" }
+      : option.route === "email" ? { email: option.target ?? this.deliveryOptions?.contacts.claimsEmail ?? "" }
+      : option.route === "mail" ? { mailingAddress: option.target ?? this.deliveryOptions?.contacts.mailingAddress ?? "" }
+      : undefined;
+    this.submission = { route: option.route, ...(destination ? { destination } : {}) };
+  }
+  setDestination(key: "faxNumber" | "email" | "mailingAddress", value: string): void { this.submission = { ...this.submission, destination: { ...this.submission.destination, [key]: value } }; }
+  deliveryReady(): boolean {
+    if (this.submission.route === "fax") return Boolean(this.submission.destination?.faxNumber?.trim());
+    if (this.submission.route === "email") return Boolean(this.submission.destination?.email?.trim());
+    if (this.submission.route === "mail") return Boolean(this.submission.destination?.mailingAddress?.trim());
+    return true;
+  }
+  async submit(): Promise<void> { const input = this.buildInput(); if (!input || !this.canSubmit() || !this.deliveryReady()) return; const data = await this.store.submitBill(input, this.submission); this.showSubmit = false; this.dirty = false; this.draft = this.makeDraft(data); this.notice = "Bill submitted."; this.submitted.emit(data); }
   beginAction(action: string): void { if (action === "post_payment") this.panel = "payment"; else if (action === "second_review" || action === "independent_bill_review") this.panel = "review"; else if (action === "close") this.panel = "close"; else if (action === "view_eor" && this.store.data()?.eors[0]) { const eor = this.store.data()!.eors[0]!; void this.openEor(eor.id, eor.filename); } else if (action === "correct_and_resubmit") void this.correct(); }
   async correct(): Promise<void> { const data = await this.store.startCorrection(); this.billIdChange.emit(this.store.billId()); this.dirty = false; this.draft = this.makeDraft(data); this.notice = "Correction draft created."; }
   async postPayment(): Promise<void> { await this.store.postPayment({ ...this.payment }); this.panel = ""; this.notice = "Payment posted."; }
@@ -277,6 +361,10 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
         code: line.code,
         modifiers: line.modifiers,
         units: line.units,
+        ...(line.charge > 0 ? { charge: line.charge } : {}),
+        ...(line.serviceDate ? { serviceDate: line.serviceDate } : {}),
+        ...(line.serviceDateEnd ? { serviceDateEnd: line.serviceDateEnd } : {}),
+        ...(line.diagnosisPointers?.length ? { diagnosisPointers: line.diagnosisPointers } : {}),
       })),
     };
   }

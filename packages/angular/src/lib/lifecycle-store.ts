@@ -6,9 +6,9 @@ import {
   type BillLifecycleData,
   type BillReviewDocumentType,
   type BillReviewSaveInput,
-  type BillSubmissionRoute,
   type CloseBillInput,
   type PostBillPaymentInput,
+  type SubmitBillInput,
   type SubmitSecondReviewInput,
 } from "@mindbill/browser";
 
@@ -58,8 +58,9 @@ export class MindBillLifecycleStore {
   searchClaimsAdministrators(query: string, claimNumber?: string) {
     return this.requireClient().searchClaimsAdministrators(query, claimNumber);
   }
+  getDeliveryOptions() { return this.requireClient().getDeliveryOptions(); }
   saveReview(input: BillReviewSaveInput) { return this.mutate(() => this.requireClient().saveReview(input)); }
-  submitBill(input: BillReviewSaveInput, route: BillSubmissionRoute) { return this.mutate(() => this.requireClient().submitBill(input, route)); }
+  submitBill(input: BillReviewSaveInput, submission: SubmitBillInput) { return this.mutate(() => this.requireClient().submitBill(input, submission)); }
   addAttachment(file: File, type: BillReviewDocumentType, description?: string) { return this.mutate(() => this.requireClient().addAttachment(file, type, description)); }
   removeAttachment(id: string) { return this.mutate(() => this.requireClient().removeAttachment(id)); }
   getAttachment(id: string) { return this.requireClient().getAttachment(id); }

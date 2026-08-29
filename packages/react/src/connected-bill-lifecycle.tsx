@@ -19,6 +19,7 @@ import {
   type BillReviewDocumentType,
   type BillReviewFeatures,
   type BillReviewSaveInput,
+  type BillSubmissionInput,
   type BillSubmissionRoute,
 } from "./native-bill-review";
 import {
@@ -71,6 +72,7 @@ export type UseBillLifecycleResult = {
   isMutating: boolean;
   refresh: () => Promise<void>;
   searchClaimsAdministrators: BillLifecycleClient["searchClaimsAdministrators"];
+  getDeliveryOptions: BillLifecycleClient["getDeliveryOptions"];
   saveReview: BillLifecycleClient["saveReview"];
   submitBill: BillLifecycleClient["submitBill"];
   addAttachment: BillLifecycleClient["addAttachment"];
@@ -197,9 +199,13 @@ export function useBillLifecycle({
       client.searchClaimsAdministrators(query, claimNumber),
     [client],
   );
+  const getDeliveryOptions = useCallback(
+    () => client.getDeliveryOptions(),
+    [client],
+  );
   const submitBill = useCallback(
-    (input: BillReviewSaveInput, route: BillSubmissionRoute) =>
-      mutate(() => client.submitBill(input, route)),
+    (input: BillReviewSaveInput, submission: BillSubmissionInput) =>
+      mutate(() => client.submitBill(input, submission)),
     [client, mutate],
   );
   const addAttachment = useCallback(
@@ -260,6 +266,7 @@ export function useBillLifecycle({
     isMutating,
     refresh,
     searchClaimsAdministrators,
+    getDeliveryOptions,
     saveReview,
     submitBill,
     addAttachment,
@@ -425,8 +432,9 @@ export function ConnectedBillLifecycle({
           {...(features ? { features } : {})}
           disabled={lifecycle.isMutating}
           onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
+          onGetDeliveryOptions={lifecycle.getDeliveryOptions}
           onSave={lifecycle.saveReview}
-          onSubmit={async (input, route) => { await complete("Bill submitted.", () => lifecycle.submitBill(input, route)); }}
+          onSubmit={async (input, submission) => { await complete("Bill submitted.", () => lifecycle.submitBill(input, submission)); }}
           onAddAttachment={async (file, type, description) => { await lifecycle.addAttachment(file, type, description); }}
           onRemoveAttachment={async (attachmentId) => { await lifecycle.removeAttachment(attachmentId); }}
           onOpenAttachment={(attachment) => void lifecycle.openAttachment(attachment).catch(() => undefined)}
