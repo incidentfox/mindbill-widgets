@@ -13,9 +13,11 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
+      "@mindbill/browser": ["packages/browser/src/index.ts"],
       "@mindbill/embed": ["packages/embed/src/index.ts"],
       "@mindbill/node": ["packages/node/src/index.ts"],
-      "@mindbill/react": ["packages/react/src/index.tsx"]
+      "@mindbill/react": ["packages/react/src/index.tsx"],
+      "@mindbill/angular": ["packages/angular/src/public-api.ts"]
     },
     "types": ["node", "vitest/globals"]
   },
