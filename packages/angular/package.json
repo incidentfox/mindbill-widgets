@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/angular",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Native Angular components for the complete MindBill bill lifecycle",
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
     "rxjs": ">=7.8 <9"
   },
   "dependencies": {
-    "@mindbill/browser": "^0.1.0",
+    "@mindbill/browser": "^0.2.0",
     "tslib": "^2.8.1"
   },
   "keywords": ["mindbill", "angular", "medical-billing", "workers-compensation"],

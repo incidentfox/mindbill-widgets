@@ -79,12 +79,18 @@ export type ServiceLine = {
   code: string;
   modifiers?: string[];
   units?: number;
+  /** Required per line for professional/treatment billing. */
+  serviceDate?: string;
+  serviceDateEnd?: string | null;
+  /** The exact amount billed for this professional service line. */
+  charge?: number;
+  /** One-based pointers into `diagnoses`, matching CMS-1500 box 24E. */
+  diagnosisPointers?: number[];
 };
 
 export type CreateBillRequest = {
   /** Stable report, case, or work-item ID in your system. */
   externalId?: string;
-  /** `professional` is reserved and currently returns a capability error. */
   billingMode?: "med_legal" | "professional";
   patient: PatientSnapshot;
   claim: ClaimSnapshot;
@@ -145,7 +151,7 @@ export type Bill = {
   id: string;
   externalId: string | null;
   state: string;
-  billingMode: "med_legal";
+  billingMode: "med_legal" | "professional";
   billNumber: number | null;
   patient: {
     firstName: string;
@@ -197,7 +203,41 @@ export type BillDocumentListResponse = { data: BillDocument[] };
 export type BillDocumentResponse = { data: BillDocument };
 
 export type SubmitRoute = "ebill" | "fax" | "mail" | "email";
-export type SubmitBillRequest = { route?: SubmitRoute };
+export type BillDeliveryOption = {
+  route: SubmitRoute;
+  label: string;
+  detail: string;
+  fallback: boolean;
+  confidence: "high" | "medium" | "low";
+  payerName: string;
+  target?: string;
+  chKey?: string;
+  payerId?: string;
+  printAndMail?: boolean;
+  costUsd?: number;
+};
+export type BillDeliveryOptions = {
+  payerName: string;
+  recommended: BillDeliveryOption;
+  options: BillDeliveryOption[];
+  contacts: {
+    faxNumber?: string;
+    claimsEmail?: string;
+    portalUrl?: string;
+    mailingAddress?: string;
+  };
+};
+export type SubmitBillRequest = {
+  route?: SubmitRoute;
+  destination?: {
+    faxNumber?: string;
+    email?: string;
+    mailingAddress?: string;
+  };
+  attention?: string;
+  subject?: string;
+  note?: string;
+};
 export type SandboxBillSubmission = {
   ok: true;
   sandbox: true;
@@ -438,6 +478,10 @@ export class MindBillClient {
 
   submitBill(billId: string, input: SubmitBillRequest, idempotencyKey: string): Promise<SubmitBillResponse> {
     return this.request("POST", `/partner/v2/bills/${encodeURIComponent(billId)}/submissions`, input, { idempotencyKey });
+  }
+
+  getBillDeliveryOptions(billId: string): Promise<BillDeliveryOptions> {
+    return this.request("GET", `/partner/v2/bills/${encodeURIComponent(billId)}/delivery-options`);
   }
 
   getBillStatus(billId: string): Promise<BillStatusResponse> {

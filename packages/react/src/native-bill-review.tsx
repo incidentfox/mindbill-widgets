@@ -63,6 +63,9 @@ export type BillReviewLineItem = {
   units: number;
   charge: number;
   feeSchedule?: number;
+  serviceDate?: string | null;
+  serviceDateEnd?: string | null;
+  diagnosisPointers?: number[];
 };
 
 const EMPTY_PROCEDURE_LINE: BillReviewLineItem = {
@@ -73,7 +76,7 @@ const EMPTY_PROCEDURE_LINE: BillReviewLineItem = {
 };
 
 function isEmptyProcedureLine(line: BillReviewLineItem): boolean {
-  return !line.code.trim() && line.modifiers.length === 0 && line.units === 1;
+  return !line.code.trim() && line.modifiers.length === 0 && line.units === 1 && !line.serviceDate && !line.serviceDateEnd && !line.charge && !(line.diagnosisPointers?.length);
 }
 
 /** Keeps completed/partial lines plus one keyboard-ready empty row. */
@@ -131,6 +134,7 @@ export type BillReviewClaimPatternStatus = {
 export type BillReviewData = {
   bill: {
     id: string;
+    billingMode: "med_legal" | "professional";
     billNumber: string | number;
     status: string;
     transmissionState?: string;
@@ -195,18 +199,61 @@ export type BillReviewSaveInput = {
     code: string;
     modifiers: string[];
     units: number;
+    charge?: number;
+    serviceDate?: string | null;
+    serviceDateEnd?: string | null;
+    diagnosisPointers?: number[];
   }>;
 };
 
 export type BillSubmissionRoute = "ebill" | "fax" | "mail" | "email";
+
+export type BillDeliveryOption = {
+  route: BillSubmissionRoute;
+  label: string;
+  detail: string;
+  fallback: boolean;
+  confidence: string;
+  payerName: string;
+  target?: string;
+  chKey?: string;
+  payerId?: string;
+  printAndMail?: boolean;
+  costUsd?: number;
+};
+
+export type BillDeliveryOptions = {
+  payerName: string;
+  recommended: BillDeliveryOption;
+  options: BillDeliveryOption[];
+  contacts: {
+    faxNumber?: string | null;
+    claimsEmail?: string | null;
+    portalUrl?: string | null;
+    mailingAddress?: string | null;
+  };
+};
+
+export type BillSubmissionInput = {
+  route: BillSubmissionRoute;
+  destination?: {
+    faxNumber?: string;
+    email?: string;
+    mailingAddress?: string;
+  };
+  attention?: string;
+  subject?: string;
+  note?: string;
+};
 
 export type BillReviewFormProps = {
   data: BillReviewData;
   onSave: (input: BillReviewSaveInput) => Promise<BillReviewData | void>;
   onSubmit: (
     input: BillReviewSaveInput,
-    route: BillSubmissionRoute,
+    submission: BillSubmissionInput,
   ) => Promise<void>;
+  onGetDeliveryOptions: () => Promise<BillDeliveryOptions>;
   onAddAttachment: (
     file: File,
     documentType: BillReviewDocumentType,
@@ -361,11 +408,15 @@ export function buildBillReviewSaveInput(
     billingProvider: { ...draft.billingProvider },
     renderingProvider: { ...draft.clinician },
     placeOfService: { ...draft.location },
-    lineItems: draft.lineItems.filter((line) => line.code.trim()).map(({ id, code, modifiers, units }) => ({
+    lineItems: draft.lineItems.filter((line) => line.code.trim()).map(({ id, code, modifiers, units, charge, serviceDate, serviceDateEnd, diagnosisPointers }) => ({
       ...(id ? { id } : {}),
       code: code.trim().toUpperCase(),
       modifiers,
       units,
+      ...(charge ? { charge } : {}),
+      ...(serviceDate ? { serviceDate } : {}),
+      ...(serviceDateEnd ? { serviceDateEnd } : {}),
+      ...(diagnosisPointers?.length ? { diagnosisPointers } : {}),
     })),
   };
 }
@@ -537,6 +588,7 @@ export function BillReviewForm({
   data,
   onSave,
   onSubmit,
+  onGetDeliveryOptions,
   onAddAttachment,
   onRemoveAttachment,
   onOpenAttachment,
@@ -553,14 +605,16 @@ export function BillReviewForm({
   );
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]);
   const [payerBusy, setPayerBusy] = useState(false);
-  const [route, setRoute] = useState<BillSubmissionRoute>("ebill");
+  const [deliveryOptions, setDeliveryOptions] = useState<BillDeliveryOptions | null>(null);
+  const [submission, setSubmission] = useState<BillSubmissionInput>({ route: "ebill" });
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [deliveryBusy, setDeliveryBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] =
     useState<BillReviewDocumentType>("other");
   const [busy, setBusy] = useState<"save" | "submit" | "attachment" | "">("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const routeName = useId();
   const editable = data.bill.status === "incomplete" && !disabled;
 
   useEffect(() => {
@@ -640,7 +694,7 @@ export function BillReviewForm({
     if (!draft.claimNumber.trim()) result.push("Claim number");
     if (!draft.doi) result.push("Date of injury");
     if (!adjFormatValid) result.push("Valid WCAB / ADJ number");
-    if (!draft.dos) result.push("Date of service");
+    if (data.bill.billingMode === "med_legal" && !draft.dos) result.push("Date of service");
     if (!draft.billingProvider.name.trim()) result.push("Practice name");
     if (!draft.billingProvider.taxId.trim()) result.push("Tax ID");
     if (!draft.billingProvider.npi.trim()) result.push("Billing NPI");
@@ -648,8 +702,11 @@ export function BillReviewForm({
     if (![draft.location.name, draft.location.street, draft.location.city, draft.location.state, draft.location.zip].every((value) => value.trim())) result.push("Service location");
     const completedLines = draft.lineItems.filter((line) => line.code.trim());
     if (!completedLines.length || completedLines.some((line) => line.units <= 0)) result.push("Valid procedure line");
+    if (data.bill.billingMode === "professional" && completedLines.some((line) => !line.serviceDate || line.charge <= 0)) {
+      result.push("Service date and charge on every procedure line");
+    }
     return result;
-  }, [adjFormatValid, draft]);
+  }, [adjFormatValid, data.bill.billingMode, draft]);
   const canSubmit = blockers.length === 0;
 
   const updateBillingProvider = <K extends keyof BillReviewBillingProvider>(
@@ -703,8 +760,50 @@ export function BillReviewForm({
     });
   };
 
-  const handleSubmit = () =>
-    run("submit", () => onSubmit(buildBillReviewSaveInput(draft), route));
+  const openSubmit = async () => {
+    setDeliveryBusy(true);
+    setError("");
+    try {
+      const next = await onGetDeliveryOptions();
+      setDeliveryOptions(next);
+      const recommended = next.recommended ?? next.options[0];
+      if (!recommended) throw new Error("No delivery route is available for this payer.");
+      setSubmission({ route: recommended.route });
+      setShowSubmit(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Delivery routes could not be loaded.");
+    } finally {
+      setDeliveryBusy(false);
+    }
+  };
+
+  const selectedDelivery = deliveryOptions?.options.find((option) => option.route === submission.route);
+  const destinationLabel = submission.route === "fax"
+    ? "Fax number"
+    : submission.route === "email"
+      ? "Email address"
+      : submission.route === "mail"
+        ? "Mailing address"
+        : "";
+  const destinationValue = submission.route === "fax"
+    ? submission.destination?.faxNumber ?? selectedDelivery?.target ?? deliveryOptions?.contacts.faxNumber ?? ""
+    : submission.route === "email"
+      ? submission.destination?.email ?? selectedDelivery?.target ?? deliveryOptions?.contacts.claimsEmail ?? ""
+      : submission.route === "mail"
+        ? submission.destination?.mailingAddress ?? selectedDelivery?.target ?? deliveryOptions?.contacts.mailingAddress ?? ""
+        : "";
+  const setDestination = (value: string) => setSubmission((current) => {
+    const destination = current.route === "fax"
+      ? { faxNumber: value }
+      : current.route === "email"
+        ? { email: value }
+        : { mailingAddress: value };
+    return { ...current, destination };
+  });
+  const handleSubmit = () => run("submit", async () => {
+    await onSubmit(buildBillReviewSaveInput(draft), submission);
+    setShowSubmit(false);
+  });
 
   const attach = async () => {
     if (!file) return;
@@ -731,6 +830,7 @@ export function BillReviewForm({
     >
       <style>{NATIVE_BILL_REVIEW_STYLES}</style>
       <style>{NATIVE_THEME_OVERRIDE_STYLES}</style>
+      <style>{NATIVE_SUBMISSION_DIALOG_STYLES}</style>
       <header className="mb-native-heading">
         <div>
           <span className="mb-native-eyebrow">Billing review</span>
@@ -871,34 +971,43 @@ export function BillReviewForm({
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Procedure lines</h3><p>Choose a billing profile, then review the codes and modifiers. A new row appears as you type; allowed amounts recalculate on save.</p></div></div>
-        {features?.codingPresets === false ? null : <div className="mb-native-presets" role="group" aria-label="Evaluation billing profile">
+        <div className="mb-native-section-head"><div><h3>Procedure lines</h3><p>{data.bill.billingMode === "professional" ? "Enter the professional services billed. Each line may carry its own date, charge, and diagnosis pointers." : "Choose a billing profile, then review the codes and modifiers."} A new row appears as you type.</p></div></div>
+        {data.bill.billingMode === "professional" || features?.codingPresets === false ? null : <div className="mb-native-presets" role="group" aria-label="Evaluation billing profile">
           {([['qme','QME'],['ame','AME'],['psych_qme','Psych QME']] as const).map(([value,label]) => <button type="button" key={value} className={inferPreset(draft.lineItems) === value ? "active" : ""} disabled={!editable} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(applyPreset(current.lineItems, value)) }))}>{label}</button>)}
           <span>Sets evaluator modifiers across med-legal lines. You can still edit each line.</span>
         </div>}
         <div className="mb-native-lines">
           {draft.lineItems.map((line, index) => (
-            <div className="mb-native-line" key={line.id || index}>
-              <label className="mb-native-field"><span>Procedure</span><select disabled={!editable} value={line.code} onChange={(event) => {
+            <div className={`mb-native-line ${data.bill.billingMode === "professional" ? "professional" : ""}`} key={line.id || index}>
+              <label className="mb-native-field"><span>Procedure</span>{data.bill.billingMode === "professional" ? <input disabled={!editable} placeholder="CPT / HCPCS code" value={line.code} onChange={(event) => {
+                const code = event.target.value.toUpperCase();
+                setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, code } : item)) }));
+              }} /> : <select disabled={!editable} value={line.code} onChange={(event) => {
                 const code = event.target.value;
                 setDraft((current) => {
                   const lineItems = current.lineItems.map((item, itemIndex) => {
                     if (itemIndex !== index) return item;
-                    const presetLine = applyPreset(
-                      [{ ...item, code }],
-                      inferPreset(current.lineItems),
-                    )[0];
+                    const presetLine = applyPreset([{ ...item, code }], inferPreset(current.lineItems))[0];
                     return { ...item, code, modifiers: presetLine?.modifiers || [] };
                   });
                   return { ...current, lineItems: ensureTrailingProcedureLine(lineItems) };
                 });
-              }}>{line.code && !PROCEDURES.some(([code]) => code === line.code) ? <option value={line.code}>{line.code}</option> : null}<option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</select>{line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}</label>
-              <div className="mb-native-modifiers"><label className="mb-native-field"><span>Modifiers</span><select disabled={!editable} value="" onChange={(event) => {
+              }}><option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</select>}{data.bill.billingMode === "med_legal" && line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}</label>
+              <div className="mb-native-modifiers">{data.bill.billingMode === "professional" ? <label className="mb-native-field"><span>Modifiers</span><input disabled={!editable} placeholder="e.g. 25, 59" value={line.modifiers.join(", ")} onChange={(event) => {
+                const modifiers = event.target.value.toUpperCase().split(/[ ,]+/).map((value) => value.replace(/^-/, "")).filter(Boolean);
+                setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers } : item)) }));
+              }} /></label> : <label className="mb-native-field"><span>Modifiers</span><select disabled={!editable} value="" onChange={(event) => {
                 const modifier = event.target.value;
                 if (!modifier) return;
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: [...new Set([...item.modifiers, modifier])] } : item)) }));
-              }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label><div className="mb-native-chips">{line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item)) }))}>-{modifier} ×</button>)}</div></div>
+              }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label>}<div className="mb-native-chips">{data.bill.billingMode === "med_legal" ? line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item)) }))}>-{modifier} ×</button>) : null}</div></div>
               <label className="mb-native-field"><span>Units</span><input type="number" min="1" required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item)) }))} /></label>
+              {data.bill.billingMode === "professional" ? <>
+                <label className="mb-native-field"><span>Service date</span><input type="date" required={Boolean(line.code)} disabled={!editable} value={line.serviceDate || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDate: event.target.value } : item)) }))} /></label>
+                <label className="mb-native-field"><span>End date <small>Optional</small></span><input type="date" disabled={!editable} value={line.serviceDateEnd || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDateEnd: event.target.value } : item)) }))} /></label>
+                <label className="mb-native-field"><span>Charge</span><input type="number" min="0.01" step="0.01" required={Boolean(line.code)} disabled={!editable} value={line.charge || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, charge: Number(event.target.value) } : item)) }))} /></label>
+                <label className="mb-native-field"><span>Diagnosis pointers <small>1–12</small></span><input inputMode="numeric" disabled={!editable} value={(line.diagnosisPointers || []).join(", ")} onChange={(event) => { const diagnosisPointers = event.target.value.split(/[ ,]+/).map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 12); setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, diagnosisPointers } : item)) })); }} /></label>
+              </> : null}
               <div className="mb-native-allowed"><span>Allowed</span><strong>{money(line.charge)}</strong></div>
               <button type="button" className="mb-native-remove" aria-label={`Remove ${line.code || "procedure"}`} disabled={!editable} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.filter((_, itemIndex) => itemIndex !== index)) }))}>×</button>
             </div>
@@ -929,15 +1038,23 @@ export function BillReviewForm({
 
       <section className="mb-native-submit">
         <div><span className="mb-native-eyebrow">Delivery</span><h3>Submit this bill</h3><p>After submission, status, payments, denials, and resubmissions stay available here.</p></div>
-        <fieldset><legend>Send via</legend>{(["ebill", "fax", "mail", "email"] as const).map((value) => <label key={value}><input type="radio" name={routeName} value={value} checked={route === value} onChange={() => setRoute(value)} />{value === "ebill" ? "E-bill" : value.charAt(0).toUpperCase() + value.slice(1)}</label>)}</fieldset>
         {error ? <div className="mb-native-message error" role="alert">{error}</div> : null}
         {notice ? <div className="mb-native-message success" role="status">{notice}</div> : null}
         {!canSubmit ? <div className="mb-native-blockers" role="status"><strong>Before you can submit:</strong><span>{blockers.join(" · ")}</span></div> : null}
         <div className="mb-native-actions">
           <button className="mb-native-button secondary" type="submit" disabled={!editable || busy !== ""}>{busy === "save" ? "Saving…" : "Save changes"}</button>
-          <button className="mb-native-button primary" type="button" disabled={!editable || !canSubmit || busy !== ""} onClick={() => void handleSubmit()}>{busy === "submit" ? "Submitting…" : "Submit bill"}</button>
+          <button className="mb-native-button primary" type="button" disabled={!editable || !canSubmit || busy !== "" || deliveryBusy} onClick={() => void openSubmit()}>{deliveryBusy ? "Loading delivery…" : "Review delivery"}</button>
         </div>
       </section>
+      {showSubmit && deliveryOptions ? <div className="mb-native-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && busy !== "submit") setShowSubmit(false); }}>
+        <section className="mb-native-modal" role="dialog" aria-modal="true" aria-labelledby="mb-native-submit-title">
+          <header><div><span className="mb-native-eyebrow">Send bill</span><h3 id="mb-native-submit-title">Choose a delivery route</h3><p>{deliveryOptions.payerName || "Claims administrator"}</p></div><button type="button" className="mb-native-close" aria-label="Close" disabled={busy === "submit"} onClick={() => setShowSubmit(false)}>×</button></header>
+          <fieldset className="mb-native-delivery-options"><legend>Available delivery routes</legend>{deliveryOptions.options.map((option) => <label className={submission.route === option.route ? "selected" : ""} key={`${option.route}-${option.target || "default"}`}><input type="radio" name="mindbill-delivery-route" checked={submission.route === option.route} onChange={() => setSubmission({ route: option.route })} /><span><strong>{option.label}</strong><small>{option.detail}</small>{option.target ? <code>{option.target}</code> : null}</span>{deliveryOptions.recommended?.route === option.route ? <em>Recommended</em> : null}</label>)}</fieldset>
+          {submission.route !== "ebill" ? <div className="mb-native-grid two"><Field label={destinationLabel} required value={destinationValue} onChange={setDestination} hint="You can override the payer directory value for this submission." /><Field label="Attention" optional value={submission.attention || ""} onChange={(attention) => setSubmission((current) => ({ ...current, attention }))} />{submission.route === "email" ? <Field label="Subject" optional value={submission.subject || ""} onChange={(subject) => setSubmission((current) => ({ ...current, subject }))} /> : null}</div> : null}
+          <Field label="Delivery note" optional value={submission.note || ""} onChange={(note) => setSubmission((current) => ({ ...current, note }))} />
+          <footer><button className="mb-native-button secondary" type="button" disabled={busy === "submit"} onClick={() => setShowSubmit(false)}>Cancel</button><button className="mb-native-button primary" type="button" disabled={busy === "submit" || (submission.route !== "ebill" && !destinationValue.trim())} onClick={() => void handleSubmit()}>{busy === "submit" ? "Submitting…" : `Send via ${selectedDelivery?.label || submission.route}`}</button></footer>
+        </section>
+      </div> : null}
     </form>
   );
 }
@@ -973,6 +1090,20 @@ export function BillStatusSummary({ status, submittedAt, agingDays, updatedAt, t
     {actions.length ? <div className="mb-native-status-actions">{actions.map((action) => <button key={action.id} type="button" className={`mb-native-button ${action.primary ? "primary" : "secondary"}`} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>)}</div> : null}
   </section>;
 }
+
+const NATIVE_SUBMISSION_DIALOG_STYLES = `
+.mb-native-field select{width:100%;min-height:43px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);font:inherit;padding:10px 12px}
+.mb-native-field select:focus{border-color:var(--mb-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mb-accent) 14%,transparent);outline:0}
+.mb-native-line.professional{grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) 86px 150px 150px 120px minmax(130px,1fr) 120px 28px;overflow-x:auto}
+.mb-native-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mb-native-modal-backdrop{position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:20px;background:rgba(20,38,46,.55);backdrop-filter:blur(3px)}
+.mb-native-modal{display:grid;gap:18px;width:min(720px,100%);max-height:min(820px,calc(100vh - 40px));overflow:auto;padding:22px;border:1px solid var(--mb-border);border-radius:16px;background:#fff;box-shadow:0 28px 80px rgba(14,35,44,.3)}
+.mb-native-modal>header,.mb-native-modal>footer{display:flex;align-items:start;justify-content:space-between;gap:16px}.mb-native-modal>footer{justify-content:flex-end}.mb-native-modal h3{margin:3px 0;font-size:22px}.mb-native-modal p{margin:0;color:var(--mb-muted)}
+.mb-native-close{border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);cursor:pointer;font-size:23px;line-height:1;padding:8px 12px}
+.mb-native-delivery-options{display:grid;gap:9px;margin:0;padding:0;border:0}.mb-native-delivery-options legend{margin-bottom:8px;font-weight:800}.mb-native-delivery-options label{display:grid;grid-template-columns:auto 1fr auto;align-items:start;gap:12px;padding:14px;border:1px solid var(--mb-border);border-radius:10px;cursor:pointer}.mb-native-delivery-options label.selected{border-color:var(--mb-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--mb-accent) 14%,transparent)}.mb-native-delivery-options label>span{display:grid;gap:2px}.mb-native-delivery-options small{color:var(--mb-muted)}.mb-native-delivery-options code{margin-top:4px;color:var(--mb-text);font:12px/1.4 ui-monospace,SFMono-Regular,monospace}.mb-native-delivery-options em{border-radius:999px;background:var(--mb-soft);color:var(--mb-accent-dark);font-size:10px;font-style:normal;font-weight:800;padding:5px 8px;text-transform:uppercase}
+@media(max-width:1100px){.mb-native-line.professional{grid-template-columns:repeat(2,minmax(0,1fr))}.mb-native-line.professional .mb-native-allowed{text-align:left}}
+@media(max-width:620px){.mb-native-grid.two,.mb-native-line.professional{grid-template-columns:1fr}.mb-native-modal-backdrop{padding:0}.mb-native-modal{width:100%;max-height:100vh;border-radius:0;padding:18px}.mb-native-delivery-options label{grid-template-columns:auto 1fr}.mb-native-delivery-options em{grid-column:2}}
+`;
 
 const NATIVE_BILL_REVIEW_STYLES = `
 .mb-native-review,.mb-native-status{font-family:var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}

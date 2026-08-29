@@ -5,6 +5,9 @@ export type ProcedureLine = {
   units: number;
   charge: number;
   feeSchedule?: number;
+  serviceDate?: string | null;
+  serviceDateEnd?: string | null;
+  diagnosisPointers?: number[];
 };
 
 const EMPTY_PROCEDURE_LINE: ProcedureLine = {
@@ -14,8 +17,14 @@ const EMPTY_PROCEDURE_LINE: ProcedureLine = {
   charge: 0,
 };
 
-function isEmptyProcedureLine(line: ProcedureLine): boolean {
-  return !line.code.trim() && line.modifiers.length === 0 && line.units === 1;
+export function isEmptyProcedureLine(line: ProcedureLine): boolean {
+  return !line.code.trim()
+    && line.modifiers.length === 0
+    && line.units === 1
+    && !line.serviceDate
+    && !line.serviceDateEnd
+    && !(line.diagnosisPointers?.length)
+    && !line.charge;
 }
 
 /** Keeps completed/partial lines plus one keyboard-ready empty row. */

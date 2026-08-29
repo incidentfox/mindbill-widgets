@@ -173,7 +173,7 @@ describe("native bill review", () => {
         posCode: "11",
       },
       lineItems: [
-        { id: "line-1", code: "ML201", modifiers: ["95"], units: 1 },
+        { id: "line-1", code: "ML201", modifiers: ["95"], units: 1, charge: 2015 },
       ],
     });
   });
