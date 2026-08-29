@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildBillReviewSaveInput,
+  ensureTrailingProcedureLine,
   type BillReviewDraft,
 } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
@@ -55,6 +56,38 @@ describe("partner appearance presets", () => {
 });
 
 describe("native bill review", () => {
+  it("keeps exactly one keyboard-ready procedure row", () => {
+    expect(ensureTrailingProcedureLine([])).toEqual([
+      { code: "", modifiers: [], units: 1, charge: 0 },
+    ]);
+
+    expect(ensureTrailingProcedureLine([
+      { code: "ML201", modifiers: ["95"], units: 1, charge: 2015 },
+      { code: "", modifiers: [], units: 1, charge: 0 },
+      { code: "", modifiers: [], units: 1, charge: 0 },
+    ])).toEqual([
+      { code: "ML201", modifiers: ["95"], units: 1, charge: 2015 },
+      { code: "", modifiers: [], units: 1, charge: 0 },
+    ]);
+  });
+
+  it("grows when the current row is partially entered", () => {
+    for (const partial of [
+      { code: "ML201", modifiers: [], units: 1, charge: 0 },
+      { code: "", modifiers: ["95"], units: 1, charge: 0 },
+      { code: "", modifiers: [], units: 2, charge: 0 },
+    ]) {
+      const lines = ensureTrailingProcedureLine([partial]);
+      expect(lines).toHaveLength(2);
+      expect(lines.at(-1)).toEqual({
+        code: "",
+        modifiers: [],
+        units: 1,
+        charge: 0,
+      });
+    }
+  });
+
   it("freezes editable values into the MindBill review contract", () => {
     const draft: BillReviewDraft = {
       patientFirstName: "Ada",
@@ -99,6 +132,7 @@ describe("native bill review", () => {
           units: 1,
           charge: 2015,
         },
+        { code: "", modifiers: [], units: 1, charge: 0 },
       ],
     };
 

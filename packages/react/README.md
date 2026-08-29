@@ -10,6 +10,8 @@ npm install @mindbill/react @mindbill/node
 
 `ConnectedBillLifecycle` is the default integration. It owns bill loading, payer lookup, editable review, attachments, submission, status refresh, EORs, payment posting, Second Bill Review, correction/resubmission, and close.
 
+Procedure entry is keyboard-first: the form always keeps one empty row after the entered lines, grows as soon as that row is partially filled, and omits the empty row from save and submit payloads.
+
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
 
