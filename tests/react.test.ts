@@ -19,13 +19,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("partner appearance presets", () => {
-  it("ships complete QME Companion and Brighterway presets", () => {
+  it("ships complete QME Companion and orange-bright presets", () => {
     expect(resolveMindBillAppearance({ preset: "qme-companion" })).toMatchObject({
       accentColor: "#53b5dc",
       textColor: "#1d3440",
       borderRadius: "12px",
     });
-    expect(resolveMindBillAppearance({ preset: "brighterway" })).toMatchObject({
+    expect(resolveMindBillAppearance({ preset: "orange-bright" })).toMatchObject({
       accentColor: "#ff4f0a",
       textColor: "#111827",
       controlRadius: "6px",
@@ -34,7 +34,7 @@ describe("partner appearance presets", () => {
 
   it("layers explicit tokens over the selected preset", () => {
     const style = mindBillAppearanceStyle({
-      preset: "brighterway",
+      preset: "orange-bright",
       accentColor: "#f97316",
       borderRadius: "4px",
     });

@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { MindBillAppearance } from "@mindbill/embed";
 
-export type MindBillThemePreset = "mindbill" | "qme-companion" | "brighterway";
+export type MindBillThemePreset = "mindbill" | "qme-companion" | "orange-bright";
 
 export type MindBillReactAppearance = MindBillAppearance & {
   /** A complete starting point. Individual tokens below always win. */
@@ -49,7 +49,7 @@ export const mindBillThemePresets = {
     warningColor: "#9a6418",
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
   },
-  brighterway: {
+  "orange-bright": {
     accentColor: "#ff4f0a",
     accentTextColor: "#ffffff",
     backgroundColor: "#fffaf6",
