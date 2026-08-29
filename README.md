@@ -8,6 +8,7 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 ```bash
 npm install @mindbill/node @mindbill/react
+# Angular: npm install @mindbill/node @mindbill/angular
 ```
 
 The permanent API key stays on your server:
@@ -123,6 +124,26 @@ export function Billing({ billId }: { billId: string }) {
 
 Use `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers the full native lifecycle, including payer search, attachments, status, EORs, payments, reviews, and resubmission.
 
+Angular uses the same bill ID, browser session, API calls, and lifecycle rules:
+
+```ts
+import { MindBillBillLifecycleComponent } from "@mindbill/angular";
+
+@Component({
+  standalone: true,
+  imports: [MindBillBillLifecycleComponent],
+  template: `
+    <mindbill-bill-lifecycle
+      [billId]="billId"
+      [appearance]="{ preset: 'clinical-blue' }"
+    />
+  `,
+})
+export class CaseBillingComponent {
+  billId = "bill_123";
+}
+```
+
 The browser never receives the permanent API key. Add one authenticated route that checks access and mints a short-lived, exact-origin session:
 
 ```ts
@@ -185,7 +206,9 @@ The current public implementation supports California med-legal billing. The con
 ## Reference
 
 - [`@mindbill/node`](./packages/node)
+- [`@mindbill/browser`](./packages/browser)
 - [`@mindbill/react`](./packages/react)
+- [`@mindbill/angular`](./packages/angular)
 - [`@mindbill/embed`](./packages/embed)
 - [Runnable server example](./examples/quickstart)
 - [API reference](https://app.mindbill.org/developers/reference)

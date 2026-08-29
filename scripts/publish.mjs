@@ -3,12 +3,20 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-const packageDirectories = ["packages/embed", "packages/react", "packages/node"];
+const packages = [
+  { source: "packages/browser" },
+  { source: "packages/embed" },
+  { source: "packages/react" },
+  { source: "packages/angular", pack: "packages/angular/dist" },
+  { source: "packages/node" },
+];
 const stagingDirectory = mkdtempSync(join(tmpdir(), "mindbill-publish-"));
 
 try {
-  for (const directory of packageDirectories) {
-    const manifest = JSON.parse(readFileSync(`${directory}/package.json`, "utf8"));
+  for (const packageConfig of packages) {
+    const sourceDirectory = packageConfig.source;
+    const packDirectory = packageConfig.pack ?? sourceDirectory;
+    const manifest = JSON.parse(readFileSync(`${sourceDirectory}/package.json`, "utf8"));
     const specifier = `${manifest.name}@${manifest.version}`;
     const lookup = spawnSync("npm", ["view", specifier, "version"], { encoding: "utf8" });
     const lookupOutput = `${lookup.stdout ?? ""}\n${lookup.stderr ?? ""}`;
@@ -23,7 +31,7 @@ try {
     const tarballName = execFileSync(
       "pnpm",
       ["pack", "--pack-destination", stagingDirectory],
-      { cwd: directory, encoding: "utf8" },
+      { cwd: packDirectory, encoding: "utf8" },
     ).trim().split("\n").at(-1);
     if (!tarballName) throw new Error(`pnpm pack did not produce a tarball for ${specifier}`);
     const tarballPath = join(stagingDirectory, basename(tarballName));

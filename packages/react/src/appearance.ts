@@ -1,7 +1,11 @@
 import type { CSSProperties } from "react";
 import type { MindBillAppearance } from "@mindbill/embed";
 
-export type MindBillThemePreset = "mindbill" | "qme-companion" | "orange-bright";
+export type MindBillThemePreset =
+  | "mindbill"
+  | "qme-companion"
+  | "orange-bright"
+  | "clinical-blue";
 
 export type MindBillReactAppearance = MindBillAppearance & {
   /** A complete starting point. Individual tokens below always win. */
@@ -65,6 +69,23 @@ export const mindBillThemePresets = {
     successColor: "#16794f",
     warningColor: "#9a5b13",
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+  },
+  "clinical-blue": {
+    accentColor: "#1677ff",
+    accentTextColor: "#ffffff",
+    backgroundColor: "#f5f7fa",
+    surfaceColor: "#ffffff",
+    inputBackgroundColor: "#ffffff",
+    textColor: "#1f2d3d",
+    mutedColor: "#66788a",
+    borderColor: "#d9e2ec",
+    borderRadius: "8px",
+    controlRadius: "6px",
+    shadow: "0 2px 8px rgba(31,45,61,.06)",
+    dangerColor: "#d4380d",
+    successColor: "#389e0d",
+    warningColor: "#d48806",
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
   },
 } as const satisfies Record<MindBillThemePreset, MindBillReactAppearance>;
 

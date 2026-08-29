@@ -1,0 +1,29 @@
+{
+  "name": "@mindbill/browser",
+  "version": "0.1.0",
+  "description": "Framework-neutral browser client for the MindBill bill lifecycle",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --sourcemap",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["mindbill", "browser", "billing", "workers-compensation"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/incidentfox/mindbill-widgets.git",
+    "directory": "packages/browser"
+  },
+  "publishConfig": { "access": "public", "provenance": true },
+  "sideEffects": false
+}
