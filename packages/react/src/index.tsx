@@ -71,6 +71,16 @@ export type {
 } from "@mindbill/embed";
 
 export {
+  mindBillAppearanceStyle,
+  mindBillThemePresets,
+  resolveMindBillAppearance,
+} from "./appearance";
+export type {
+  MindBillReactAppearance,
+  MindBillThemePreset,
+} from "./appearance";
+
+export {
   BillReviewForm,
   BillStatusSummary,
   buildBillReviewSaveInput,

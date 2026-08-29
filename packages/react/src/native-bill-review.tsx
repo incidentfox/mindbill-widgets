@@ -1,6 +1,7 @@
 "use client";
 
-import type { MindBillAppearance } from "@mindbill/embed";
+import type { MindBillReactAppearance } from "./appearance";
+import { mindBillAppearanceStyle } from "./appearance";
 import type { CSSProperties, FormEvent, KeyboardEvent, ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -195,7 +196,7 @@ export type BillReviewFormProps = {
   ) => Promise<BillReviewPayer[]>;
   className?: string;
   style?: CSSProperties;
-  appearance?: MindBillAppearance;
+  appearance?: MindBillReactAppearance;
   features?: BillReviewFeatures;
   disabled?: boolean;
 };
@@ -350,34 +351,6 @@ function money(value: number): string {
     style: "currency",
     currency: "USD",
   }).format(value);
-}
-
-function appearanceStyle(
-  appearance: MindBillAppearance | undefined,
-  style: CSSProperties | undefined,
-): CSSProperties {
-  return {
-    ...(appearance?.accentColor
-      ? { "--mb-accent": appearance.accentColor }
-      : {}),
-    ...(appearance?.textColor ? { "--mb-text": appearance.textColor } : {}),
-    ...(appearance?.mutedColor
-      ? { "--mb-muted": appearance.mutedColor }
-      : {}),
-    ...(appearance?.borderColor
-      ? { "--mb-border": appearance.borderColor }
-      : {}),
-    ...(appearance?.backgroundColor
-      ? { "--mb-soft": appearance.backgroundColor }
-      : {}),
-    ...(appearance?.surfaceColor
-      ? { "--mb-surface": appearance.surfaceColor }
-      : {}),
-    ...(appearance?.fontFamily
-      ? { "--mb-font": appearance.fontFamily }
-      : {}),
-    ...style,
-  } as CSSProperties;
 }
 
 function Field({
@@ -729,10 +702,11 @@ export function BillReviewForm({
   return (
     <form
       className={["mb-native-review", className].filter(Boolean).join(" ")}
-      style={appearanceStyle(appearance, style)}
+      style={mindBillAppearanceStyle(appearance, style)}
       onSubmit={handleSave}
     >
       <style>{NATIVE_BILL_REVIEW_STYLES}</style>
+      <style>{NATIVE_THEME_OVERRIDE_STYLES}</style>
       <header className="mb-native-heading">
         <div>
           <span className="mb-native-eyebrow">Billing review</span>
@@ -967,7 +941,7 @@ export type BillStatusSummaryProps = {
   actions?: BillStatusAction[];
   className?: string;
   style?: CSSProperties;
-  appearance?: MindBillAppearance;
+  appearance?: MindBillReactAppearance;
 };
 
 export type BillStatusAction = {
@@ -979,8 +953,9 @@ export type BillStatusAction = {
 };
 
 export function BillStatusSummary({ status, submittedAt, agingDays, updatedAt, totalCharge, totalPaid, balanceDue, actions = [], className, style, appearance }: BillStatusSummaryProps): ReactElement {
-  return <section className={["mb-native-status", className].filter(Boolean).join(" ")} style={appearanceStyle(appearance, style)}>
+  return <section className={["mb-native-status", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{NATIVE_BILL_REVIEW_STYLES}</style>
+    <style>{NATIVE_THEME_OVERRIDE_STYLES}</style>
     <div className="mb-native-status-copy"><span className="mb-native-eyebrow">Bill status</span><h3>{status.replaceAll("_", " ")}</h3><p>{submittedAt ? `Submitted ${new Date(submittedAt).toLocaleDateString()}` : "Not submitted"}{agingDays == null ? "" : ` · ${agingDays} day${agingDays === 1 ? "" : "s"} old`}{updatedAt ? ` · Updated ${new Date(updatedAt).toLocaleDateString()}` : ""}</p></div>
     <dl><div><dt>Charged</dt><dd>{money(totalCharge)}</dd></div><div><dt>Paid</dt><dd>{money(totalPaid)}</dd></div><div><dt>Balance</dt><dd>{money(balanceDue)}</dd></div></dl>
     {actions.length ? <div className="mb-native-status-actions">{actions.map((action) => <button key={action.id} type="button" className={`mb-native-button ${action.primary ? "primary" : "secondary"}`} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>)}</div> : null}
@@ -1014,4 +989,22 @@ const NATIVE_BILL_REVIEW_STYLES = `
 .mb-native-blockers{grid-column:1/-1;display:grid;gap:2px;padding:11px 13px;border:1px solid #e8cf9a;border-radius:8px;background:#fff9ea;color:#74531b}.mb-native-blockers span{font-size:12px}
 .mb-native-eams{margin-top:13px!important;font-size:12px}.mb-native-eams a{color:var(--mb-accent);font-weight:750}
 @media(max-width:620px){.mb-native-review{padding:12px}.mb-native-grid.two{grid-template-columns:1fr}}
+`;
+
+const NATIVE_THEME_OVERRIDE_STYLES = `
+.mb-native-review,.mb-native-status{color:var(--mb-text);font-family:var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}
+.mb-native-review{background:var(--mb-soft)}
+.mb-native-heading>div:first-child>p,.mb-native-section>header p,.mb-native-total span,.mb-native-status-copy p,.mb-native-status dt{color:var(--mb-muted)}
+.mb-native-summary,.mb-native-section,.mb-native-status{border-color:var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}
+.mb-native-field input,.mb-native-field select,.mb-native-field textarea,.mb-native-attachment-form input,.mb-native-attachment-form select{border-color:var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text)}
+.mb-native-line,.mb-native-note,.mb-native-file,.mb-native-attachment-form,.mb-native-payer-insight,.mb-native-blockers,.mb-native-message{border-radius:var(--mb-control-radius)}
+.mb-native-line,.mb-native-note,.mb-native-attachment-form,.mb-native-payer-insight{border-color:var(--mb-border);background:var(--mb-soft)}
+.mb-native-file{border-color:var(--mb-border);background:var(--mb-surface)}
+.mb-native-button.primary,.mb-native-presets button.active{border-color:var(--mb-accent);background:var(--mb-accent);color:var(--mb-accent-contrast)}
+.mb-native-button.primary:hover,.mb-native-presets button.active:hover{filter:brightness(.96)}
+.mb-native-button.secondary,.mb-native-presets button,.mb-native-chips button{border-color:var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text)}
+.mb-native-message.error{background:color-mix(in srgb,var(--mb-danger) 10%,white);color:var(--mb-danger)}
+.mb-native-message.success{background:color-mix(in srgb,var(--mb-success) 10%,white);color:var(--mb-success)}
+.mb-native-blockers{border-color:color-mix(in srgb,var(--mb-warning) 35%,white);background:color-mix(in srgb,var(--mb-warning) 8%,white);color:var(--mb-warning)}
+.mb-native-combo-list{border-color:var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}
 `;

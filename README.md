@@ -115,11 +115,13 @@ export function Billing({ billId }: { billId: string }) {
     <ConnectedBillLifecycle
       billId={billId}
       sessionEndpoint="/api/mindbill/session"
-      appearance={{ accentColor: "#32a9d6", textColor: "#203743" }}
+      appearance={{ preset: "qme-companion" }}
     />
   );
 }
 ```
+
+Use `preset: "brighterway"` for the compact orange partner theme, or override individual appearance tokens on either preset. The same theme covers the full native lifecycle, including payer search, attachments, status, EORs, payments, reviews, and resubmission.
 
 The browser never receives the permanent API key. Add one authenticated route that checks access and mints a short-lived, exact-origin session:
 

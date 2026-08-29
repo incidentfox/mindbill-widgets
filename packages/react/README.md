@@ -16,10 +16,28 @@ import { ConnectedBillLifecycle } from "@mindbill/react";
 <ConnectedBillLifecycle
   billId={billId}
   sessionEndpoint="/api/mindbill/billing-session"
-  appearance={{ accentColor: "#32a9d6", textColor: "#203743" }}
+  appearance={{ preset: "qme-companion" }}
   onChanged={(lifecycle) => syncBillStatus(lifecycle.bill)}
 />
 ```
+
+## Appearance
+
+Choose a complete preset, then override only the tokens your design system owns. The preset applies to review, payer search, attachments, submission, status, EOR, payment, denial, resubmission, and close states.
+
+```tsx
+<ConnectedBillLifecycle
+  billId={billId}
+  appearance={{
+    preset: "brighterway",
+    accentColor: "#ff4f0a",
+    fontFamily: "Inter, sans-serif",
+    borderRadius: "8px",
+  }}
+/>
+```
+
+Available presets are `mindbill`, `qme-companion`, and `brighterway`. Supported overrides include accent, accent text, background, surface, input background, text, muted text, border, font, panel radius, control radius, shadow, danger, success, and warning colors.
 
 Add one authenticated route to your app. It verifies that the signed-in user may access the bill, then mints an exact-origin, bill-scoped token. The Partner API key stays on the server.
 
@@ -60,7 +78,7 @@ import { ConnectedBillStatus } from "@mindbill/react";
 <ConnectedBillStatus
   billId={billId}
   sessionEndpoint="/api/mindbill/status-session"
-  appearance={{ accentColor: "#32a9d6", textColor: "#203743" }}
+  appearance={{ preset: "qme-companion" }}
 />
 ```
 
@@ -75,7 +93,7 @@ import { BillReviewForm } from "@mindbill/react";
 
 <BillReviewForm
   data={billReview}
-  appearance={{ accentColor: "#32a9d6", textColor: "#203743" }}
+  appearance={{ preset: "qme-companion" }}
   onSave={(input) => api.patch("/billing/review", input)}
   onSubmit={(input, route) => api.post("/billing/submit", { input, route })}
   onAddAttachment={(file, documentType, description) =>
