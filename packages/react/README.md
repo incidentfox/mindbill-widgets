@@ -84,6 +84,41 @@ import { ConnectedBillStatus } from "@mindbill/react";
 
 Use `useBillStatus({ billId })` when you want to render custom status UI. It returns `data`, `error`, `isLoading`, `isRefreshing`, and `refresh`. Use `createBillStatusClient` outside React.
 
+## Lifecycle actions
+
+MindBill returns the actions that are valid for the bill's current state. Render that server-authoritative list instead of duplicating rejection, EOR, denial, review, payment, and closure rules in your application.
+
+```tsx
+import { BillLifecycleActions } from "@mindbill/react";
+
+<BillLifecycleActions
+  actions={bill.data.lifecycle.actions}
+  onAction={(action) => {
+    switch (action.id) {
+      case "view_eor": return bill.openEor();
+      case "post_payment": return setPaymentOpen(true);
+      case "second_review": return setSecondReviewOpen(true);
+      case "correct_and_resubmit": return bill.startCorrection();
+      case "close": return bill.closeBill({ reason: "Resolved" });
+    }
+  }}
+/>
+```
+
+Disabled actions are hidden by default. Set `showUnavailable` to show them with the reason returned by the API.
+
+## Activity timeline
+
+`BillActivityTimeline` renders ordered lifecycle events. Feed it events stored from MindBill's signed webhooks so a reload does not depend on browser callback history.
+
+```tsx
+import { BillActivityTimeline } from "@mindbill/react";
+
+<BillActivityTimeline events={billEvents} />
+```
+
+Browser callbacks such as `onBillCreated`, `onBillIdChange`, and `onChanged` are for immediate UI, navigation, optimistic state, and analytics. Signed webhooks are the authoritative integration for durable server state.
+
 ## Controlled escape hatch
 
 Use `BillReviewForm` only when your application intentionally owns the API calls and local review state. Known bill values and payer documents remain explicit and editable.

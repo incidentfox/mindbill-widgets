@@ -111,6 +111,18 @@ export {
 } from "./connected-bill-status";
 
 export {
+  BillActivityTimeline,
+  BillLifecycleActions,
+  billActivityEventLabel,
+  visibleBillLifecycleActions,
+} from "./bill-lifecycle-surfaces";
+export type {
+  BillActivityEvent,
+  BillActivityTimelineProps,
+  BillLifecycleActionsProps,
+} from "./bill-lifecycle-surfaces";
+
+export {
   ConnectedBillLifecycle,
   createBillLifecycleClient,
   useBillLifecycle,
