@@ -12,6 +12,10 @@ import {
   mindBillAppearanceStyle,
   resolveMindBillAppearance,
 } from "../packages/react/src/appearance";
+import {
+  billActivityEventLabel,
+  visibleBillLifecycleActions,
+} from "../packages/react/src/bill-lifecycle-surfaces";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -53,6 +57,23 @@ describe("partner appearance presets", () => {
       "--mb-radius": "4px",
       "--mb-control-radius": "6px",
     });
+  });
+});
+
+describe("bill lifecycle surfaces", () => {
+  it("shows only enabled server-authoritative actions by default", () => {
+    const actions = [
+      { id: "view_eor", label: "View EOR", enabled: true },
+      { id: "second_review", label: "Second Bill Review", enabled: false, reason: "No EOR yet" },
+    ] as const;
+
+    expect(visibleBillLifecycleActions(actions)).toEqual([actions[0]]);
+    expect(visibleBillLifecycleActions(actions, true)).toEqual(actions);
+  });
+
+  it("labels known and future event types", () => {
+    expect(billActivityEventLabel("bill.denied")).toBe("Bill denied");
+    expect(billActivityEventLabel("bill.custom_follow_up")).toBe("Bill Custom Follow Up");
   });
 });
 
