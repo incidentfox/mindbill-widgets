@@ -1,5 +1,6 @@
 "use client";
 
+import { sanitizeBillReviewSaveInput } from "@mindbill/browser";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
 import type { CSSProperties, FormEvent, KeyboardEvent, ReactElement } from "react";
@@ -44,6 +45,7 @@ export type BillReviewClinician = {
 };
 
 export type BillReviewLocation = {
+  billingProviderId?: string;
   name: string;
   nickname?: string;
   street: string;
@@ -386,7 +388,7 @@ function toDraft(data: BillReviewData): BillReviewDraft {
 export function buildBillReviewSaveInput(
   draft: BillReviewDraft,
 ): BillReviewSaveInput {
-  return {
+  return sanitizeBillReviewSaveInput({
     claimsAdminId: draft.claimsAdminId,
     patientOverrides: {
       firstName: draft.patientFirstName.trim(),
@@ -418,7 +420,7 @@ export function buildBillReviewSaveInput(
       ...(serviceDateEnd ? { serviceDateEnd } : {}),
       ...(diagnosisPointers?.length ? { diagnosisPointers } : {}),
     })),
-  };
+  });
 }
 
 function money(value: number): string {

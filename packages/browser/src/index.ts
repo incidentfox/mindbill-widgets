@@ -40,6 +40,7 @@ export type BillReviewClinician = {
 };
 
 export type BillReviewLocation = {
+  billingProviderId?: string;
   name: string;
   nickname?: string;
   street: string;
@@ -177,6 +178,68 @@ export type BillReviewSaveInput = {
     diagnosisPointers?: number[];
   }>;
 };
+
+function pickDefined(
+  source: object,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const record = source as Record<string, unknown>;
+  return Object.fromEntries(
+    keys.flatMap((key) => record[key] === undefined ? [] : [[key, record[key]]]),
+  );
+}
+
+/**
+ * Removes read-only snapshot metadata before a review mutation is sent.
+ * Lifecycle reads can include display-only fields such as entity IDs; the v2
+ * write contract accepts only the values that should be frozen onto the bill.
+ */
+export function sanitizeBillReviewSaveInput(
+  input: BillReviewSaveInput,
+): BillReviewSaveInput {
+  return {
+    claimsAdminId: input.claimsAdminId,
+    ...(input.patientOverrides ? {
+      patientOverrides: pickDefined(input.patientOverrides, [
+        "firstName", "middleName", "lastName", "dob",
+      ]) as NonNullable<BillReviewSaveInput["patientOverrides"]>,
+    } : {}),
+    ...(input.injuryOverrides ? {
+      injuryOverrides: pickDefined(input.injuryOverrides, [
+        "claimNumber", "employer", "doi", "injuryEndDate",
+        "cumulativeTrauma", "adjNumber",
+      ]) as NonNullable<BillReviewSaveInput["injuryOverrides"]>,
+    } : {}),
+    dos: input.dos,
+    ...(input.dosEnd !== undefined ? { dosEnd: input.dosEnd } : {}),
+    ...(input.authorizationNumber !== undefined
+      ? { authorizationNumber: input.authorizationNumber }
+      : {}),
+    ...(input.billingProvider ? {
+      billingProvider: pickDefined(input.billingProvider, [
+        "name", "taxId", "npi", "billType", "phone", "billingStreet",
+        "billingCity", "billingState", "billingZip",
+      ]) as BillReviewBillingProvider,
+    } : {}),
+    ...(input.renderingProvider ? {
+      renderingProvider: pickDefined(input.renderingProvider, [
+        "name", "specialty", "npi", "taxonomy", "licenseNumber",
+        "licenseState", "signaturePng", "signatureKey", "isQME", "isAME",
+        "email", "active",
+      ]) as BillReviewClinician,
+    } : {}),
+    ...(input.placeOfService ? {
+      placeOfService: pickDefined(input.placeOfService, [
+        "billingProviderId", "name", "nickname", "street", "city", "state",
+        "zip", "county", "posCode", "isPrimary", "active",
+      ]) as BillReviewLocation,
+    } : {}),
+    lineItems: input.lineItems.map((line) => pickDefined(line, [
+      "id", "code", "modifiers", "units", "charge", "serviceDate",
+      "serviceDateEnd", "diagnosisPointers",
+    ]) as BillReviewSaveInput["lineItems"][number]),
+  };
+}
 
 export type BillSubmissionRoute = "ebill" | "fax" | "mail" | "email";
 export type BillDeliveryOption = {
@@ -506,7 +569,7 @@ export function createBillLifecycleClient({
     await mutation("/partner/v2/browser/bill", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify(sanitizeBillReviewSaveInput(input)),
     }, "Bill changes could not be saved.");
     return loadLifecycle();
   };

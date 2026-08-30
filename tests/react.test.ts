@@ -7,6 +7,7 @@ import {
 } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
 import { createBillLifecycleClient } from "../packages/react/src/connected-bill-lifecycle";
+import { sanitizeBillReviewSaveInput } from "../packages/browser/src/index";
 import {
   mindBillAppearanceStyle,
   resolveMindBillAppearance,
@@ -51,6 +52,75 @@ describe("partner appearance presets", () => {
       "--mb-accent-contrast": "#ffffff",
       "--mb-radius": "4px",
       "--mb-control-radius": "6px",
+    });
+  });
+});
+
+describe("bill review mutation snapshots", () => {
+  it("removes display-only lifecycle fields before a v2 save", () => {
+    const input = {
+      claimsAdminId: "payer-1",
+      dos: "2026-08-24",
+      billingProvider: {
+        id: "provider-1",
+        name: "Example Evaluators",
+        taxId: "123456789",
+        npi: "1234567890",
+        billType: "Professional",
+      },
+      renderingProvider: {
+        id: "clinician-1",
+        qmeSpecialty: "Psychiatry",
+        name: "Ada Example, MD",
+        specialty: "Psychiatry",
+        npi: "1098765432",
+      },
+      placeOfService: {
+        id: "location-1",
+        billingProviderId: "provider-1",
+        name: "Downtown",
+        street: "100 Main Street",
+        city: "Sacramento",
+        state: "CA",
+        zip: "95814",
+      },
+      lineItems: [{
+        id: "line-1",
+        feeSchedule: 2015,
+        code: "ML201",
+        modifiers: ["95"],
+        units: 1,
+      }],
+    } as unknown as Parameters<typeof sanitizeBillReviewSaveInput>[0];
+
+    expect(sanitizeBillReviewSaveInput(input)).toEqual({
+      claimsAdminId: "payer-1",
+      dos: "2026-08-24",
+      billingProvider: {
+        name: "Example Evaluators",
+        taxId: "123456789",
+        npi: "1234567890",
+        billType: "Professional",
+      },
+      renderingProvider: {
+        name: "Ada Example, MD",
+        specialty: "Psychiatry",
+        npi: "1098765432",
+      },
+      placeOfService: {
+        billingProviderId: "provider-1",
+        name: "Downtown",
+        street: "100 Main Street",
+        city: "Sacramento",
+        state: "CA",
+        zip: "95814",
+      },
+      lineItems: [{
+        id: "line-1",
+        code: "ML201",
+        modifiers: ["95"],
+        units: 1,
+      }],
     });
   });
 });
