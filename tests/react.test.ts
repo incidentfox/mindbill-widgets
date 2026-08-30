@@ -470,6 +470,48 @@ describe("connected bill lifecycle", () => {
     );
   });
 
+  it("reads the direct delivery-options response returned by the v2 browser endpoint", async () => {
+    const deliveryOptions = {
+      payerName: "Example Claims Services",
+      recommended: {
+        route: "ebill",
+        label: "E-bill",
+        detail: "Electronic submission through the payer connection.",
+      },
+      options: [
+        {
+          route: "ebill",
+          label: "E-bill",
+          detail: "Electronic submission through the payer connection.",
+        },
+        {
+          route: "fax",
+          label: "Fax",
+          detail: "Send to the payer fax number.",
+          target: "(555) 010-2040",
+        },
+      ],
+      contacts: {
+        fax: "(555) 010-2040",
+      },
+    };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-delivery-session-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(jsonResponse(deliveryOptions));
+    const client = createBillLifecycleClient({
+      billId: "bill_789",
+      fetch: fetcher,
+    });
+
+    await expect(client.getDeliveryOptions()).resolves.toEqual(deliveryOptions);
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/delivery-options",
+    );
+  });
+
   it("switches to the replacement ID returned for a correction draft", async () => {
     const replacement = {
       ...lifecycle,
