@@ -14,6 +14,7 @@ import {
 } from "../packages/react/src/appearance";
 import {
   billActivityEventLabel,
+  billLifecycleStage,
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
 
@@ -74,6 +75,12 @@ describe("bill lifecycle surfaces", () => {
   it("labels known and future event types", () => {
     expect(billActivityEventLabel("bill.denied")).toBe("Bill denied");
     expect(billActivityEventLabel("bill.custom_follow_up")).toBe("Bill Custom Follow Up");
+  });
+
+  it("maps native lifecycle states into the compact progress rail", () => {
+    expect(billLifecycleStage("rejected")).toBe("response");
+    expect(billLifecycleStage("processed")).toBe("response");
+    expect(billLifecycleStage("paid")).toBe("response");
   });
 });
 
@@ -373,6 +380,18 @@ describe("connected bill lifecycle", () => {
       ],
     },
     eors: [],
+    activity: [],
+    payments: [],
+    remittance: {
+      payerReportedPaid: null,
+      totalPaid: 0,
+      balanceDue: 2015,
+      denialReason: "Synthetic denial reason",
+    },
+    delivery: {
+      payerName: "Synthetic Claims Administrator",
+      contacts: {},
+    },
   };
 
   it("owns session exchange, lifecycle reads, and status-specific actions", async () => {

@@ -264,6 +264,9 @@ export type BillDeliveryOptions = {
     claimsEmail?: string | null;
     portalUrl?: string | null;
     mailingAddress?: string | null;
+    adjusterName?: string | null;
+    adjusterPhone?: string | null;
+    adjusterEmail?: string | null;
   };
 };
 export type SubmitBillInput = {
@@ -302,6 +305,47 @@ export type BillEorDocument = {
   contentUrl: string;
 };
 
+export type BillActivityRecord = {
+  id: string;
+  type: string;
+  createdAt: string;
+  description: string;
+  actor: string | null;
+  delivery: BillSubmissionRoute | null;
+  amount: number | null;
+  accepted: boolean | null;
+  stcCategory: string | null;
+};
+
+export type BillPaymentRecord = {
+  id: string;
+  method: "check" | "eft";
+  checkNumber: string;
+  status: string | null;
+  depositDate: string | null;
+  checkReceived: boolean | null;
+  receivedDate: string | null;
+  amount: number;
+  feeAmount: number | null;
+  feeReason: string | null;
+  source: "paper" | "835" | "portal";
+  postedAt: string;
+  updatedAt: string | null;
+  note: string | null;
+};
+
+export type BillRemittanceSummary = {
+  payerReportedPaid: number | null;
+  totalPaid: number;
+  balanceDue: number;
+  denialReason: string | null;
+};
+
+export type BillLifecycleDelivery = {
+  payerName: string;
+  contacts: BillDeliveryOptions["contacts"];
+};
+
 export type BillLifecycleData = BillReviewData & {
   lifecycle: {
     state: string;
@@ -312,6 +356,10 @@ export type BillLifecycleData = BillReviewData & {
     actions: BillLifecycleAction[];
   };
   eors: BillEorDocument[];
+  activity: BillActivityRecord[];
+  payments: BillPaymentRecord[];
+  remittance: BillRemittanceSummary;
+  delivery: BillLifecycleDelivery;
 };
 
 export type BillLifecycleSession = {
@@ -470,7 +518,22 @@ function normalizeLifecycle(value: unknown): BillLifecycleData {
     throw new Error("The billing service returned an invalid bill lifecycle.");
   }
   const data = value as Partial<BillLifecycleData>;
-  if (!data.bill || !data.patient || !data.injury || !data.lifecycle || !Array.isArray(data.lifecycle.actions) || !Array.isArray(data.eors)) {
+  if (
+    !data.bill
+    || !data.patient
+    || !data.injury
+    || !data.lifecycle
+    || !Array.isArray(data.lifecycle.actions)
+    || !Array.isArray(data.eors)
+    || !Array.isArray(data.activity)
+    || !Array.isArray(data.payments)
+    || !data.remittance
+    || typeof data.remittance !== "object"
+    || !data.delivery
+    || typeof data.delivery !== "object"
+    || !data.delivery.contacts
+    || typeof data.delivery.contacts !== "object"
+  ) {
     throw new Error("The billing service returned an invalid bill lifecycle.");
   }
   return data as BillLifecycleData;
