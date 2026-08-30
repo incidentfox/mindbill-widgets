@@ -582,7 +582,7 @@ export function createBillLifecycleClient({
       const response = await request("/partner/v2/browser/delivery-options");
       if (!response.ok) throw await responseError(response, "Delivery options could not be loaded.");
       const body = await response.json() as { data?: unknown };
-      return normalizeDeliveryOptions(body.data);
+      return normalizeDeliveryOptions(body.data ?? body);
     },
     saveReview,
     async submitBill(input, submission) {
