@@ -3,6 +3,18 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const MINDBILL_API_BASE_URL = "https://app.mindbill.org";
 export const MINDBILL_BROWSER_COMPONENTS = ["bill-review", "bill-timeline"] as const;
 export type MindBillBrowserComponent = (typeof MINDBILL_BROWSER_COMPONENTS)[number];
+export const MINDBILL_BROWSER_PERMISSIONS = [
+  "bills:create",
+  "bills:read",
+  "bills:edit",
+  "bills:submit",
+  "bills:act",
+  "documents:read",
+  "documents:write",
+  "payers:read",
+  "eors:read",
+] as const;
+export type MindBillBrowserPermission = (typeof MINDBILL_BROWSER_PERMISSIONS)[number];
 
 export type MindBillClientOptions = {
   /** A server credential. Never expose this value to browser code. */
@@ -343,17 +355,23 @@ export type EventPage = { events: MindBillEvent[]; nextCursor: string | null };
 export type WebhookDeliveryPage = { data: Record<string, unknown>[]; nextCursor: string | null };
 
 export type BrowserSessionRequest = {
-  component: MindBillBrowserComponent;
-  billId: string;
+  /** Stable ID for the signed-in user in your system. */
+  subject: string;
   /** Exact HTTPS origin, without path, query, fragment, or credentials. */
   allowedOrigin: string;
+  /** Grant only the browser operations this user is allowed to perform. */
+  permissions: MindBillBrowserPermission[];
+  /** Optional least-privilege restriction for a single existing bill. */
+  resource?: { billId: string };
   expiresIn?: number;
 };
 export type BrowserSession = {
   sessionId: string;
-  component: MindBillBrowserComponent;
+  organizationId: string;
+  subject: string;
+  permissions: MindBillBrowserPermission[];
+  resource: { billId: string } | null;
   token: string;
-  embedUrl: string;
   expiresAt: string;
 };
 
@@ -375,12 +393,12 @@ async function parseJson(response: Response): Promise<Record<string, unknown>> {
   return response.json().catch(() => ({})) as Promise<Record<string, unknown>>;
 }
 
-function exactHttpsOrigin(value: string): string | null {
+function exactBrowserOrigin(value: string): string | null {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash
-      ? url.origin
-      : null;
+    const isLoopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    const protocolAllowed = url.protocol === "https:" || (url.protocol === "http:" && isLoopback);
+    return protocolAllowed && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash ? url.origin : null;
   } catch {
     return null;
   }
@@ -521,16 +539,28 @@ export class MindBillClient {
   }
 
   createBrowserSession(input: BrowserSessionRequest): Promise<BrowserSession> {
-    if (!MINDBILL_BROWSER_COMPONENTS.includes(input.component)) {
-      throw new Error(`component must be one of: ${MINDBILL_BROWSER_COMPONENTS.join(", ")}`);
+    const subject = input.subject.trim();
+    if (!subject) throw new Error("subject is required");
+    if (input.permissions.length === 0) throw new Error("permissions must include at least one permission");
+    const invalidPermission = input.permissions.find((permission) => !MINDBILL_BROWSER_PERMISSIONS.includes(permission));
+    if (invalidPermission) throw new Error(`Unknown browser permission: ${invalidPermission}`);
+    if (new Set(input.permissions).size !== input.permissions.length) throw new Error("permissions must not contain duplicates");
+    const billId = input.resource?.billId.trim();
+    if (input.resource && !billId) throw new Error("resource.billId is required when resource is provided");
+    if (billId && input.permissions.includes("bills:create")) {
+      throw new Error("A bill-restricted session cannot include bills:create");
     }
-    if (!input.billId) throw new Error("billId is required");
-    const allowedOrigin = exactHttpsOrigin(input.allowedOrigin);
-    if (!allowedOrigin) throw new Error("allowedOrigin must be an exact HTTPS origin without credentials, path, query, or fragment");
+    const allowedOrigin = exactBrowserOrigin(input.allowedOrigin);
+    if (!allowedOrigin) throw new Error("allowedOrigin must be an exact HTTPS origin; sandbox sessions may use an HTTP loopback origin");
     if (input.expiresIn !== undefined && (!Number.isInteger(input.expiresIn) || input.expiresIn < 60 || input.expiresIn > 3600)) {
       throw new Error("expiresIn must be an integer from 60 through 3600 seconds");
     }
-    return this.request("POST", "/partner/v2/browser-sessions", { ...input, allowedOrigin });
+    return this.request("POST", "/partner/v2/browser-sessions", {
+      ...input,
+      subject,
+      allowedOrigin,
+      ...(billId ? { resource: { billId } } : {}),
+    });
   }
 }
 

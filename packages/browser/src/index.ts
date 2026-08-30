@@ -1,5 +1,5 @@
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
-export const DEFAULT_SESSION_ENDPOINT = "/api/mindbill/bill-session";
+export const DEFAULT_SESSION_ENDPOINT = "/api/mindbill/session";
 
 export type BillReviewDocumentType =
   | "final_report"
@@ -321,8 +321,6 @@ export type BillLifecycleSession = {
 };
 
 export type BillLifecycleSessionRequest = {
-  billId: string;
-  component: "bill-review";
   signal: AbortSignal;
 };
 
@@ -346,8 +344,68 @@ export type SubmitSecondReviewInput = {
   route: BillSubmissionRoute;
 };
 
+export type BrowserBillAddress = {
+  line1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+};
+
+/** Complete bill snapshot accepted by the browser create endpoint. */
+export type BrowserBillCreateInput = {
+  externalId?: string;
+  billingMode?: "med_legal" | "professional";
+  patient: {
+    id?: string;
+    externalId?: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
+    dateOfBirth?: string;
+    ssn?: string;
+    gender?: "M" | "F" | "X";
+    phone?: string;
+    address: BrowserBillAddress;
+  };
+  claim: {
+    id?: string;
+    externalId?: string;
+    claimNumber: string;
+    adjNumber?: string;
+    employer?: string;
+    dateOfInjury?: string;
+    injuryState?: string;
+    description?: string;
+    claimsAdministrator?: { id?: string; name: string };
+  };
+  service: { date?: string; endDate?: string | null; authorizationNumber?: string | null };
+  billingProvider?: { name?: string; taxId?: string; npi?: string; phone?: string; address?: BrowserBillAddress };
+  renderingProvider?: {
+    name?: string;
+    specialty?: string;
+    npi?: string;
+    taxonomy?: string;
+    licenseNumber?: string;
+    licenseState?: string;
+    isQme?: boolean;
+    isAme?: boolean;
+  };
+  serviceLocation?: { name?: string; address?: BrowserBillAddress; placeOfServiceCode?: string };
+  diagnoses?: string[];
+  serviceLines?: Array<{
+    code: string;
+    modifiers?: string[];
+    units?: number;
+    charge?: number;
+    serviceDate?: string;
+    serviceDateEnd?: string;
+    diagnosisPointers?: number[];
+  }>;
+};
+
 export type BillLifecycleClientOptions = {
-  billId: string;
+  /** Open an existing bill. Omit this to create one with `createBill`. */
+  billId?: string;
   sessionEndpoint?: string | undefined;
   getSession?: BillLifecycleSessionProvider | undefined;
   apiBaseUrl?: string | undefined;
@@ -355,6 +413,8 @@ export type BillLifecycleClientOptions = {
 };
 
 export type BillLifecycleClient = {
+  getBillId: () => string | null;
+  createBill: (input: BrowserBillCreateInput) => Promise<{ billId: string; data: BillLifecycleData }>;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
@@ -451,17 +511,19 @@ export function createBillLifecycleClient({
   if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   let session: BillLifecycleSession | null = null;
   let sessionRequest: Promise<BillLifecycleSession> | null = null;
+  let currentBillId = billId?.trim() || null;
+  let createRequest: Promise<{ billId: string; data: BillLifecycleData }> | null = null;
 
   const mintSession = async (signal: AbortSignal, force = false): Promise<BillLifecycleSession> => {
     if (!force && isSessionFresh(session)) return session as BillLifecycleSession;
     if (!force && sessionRequest) return sessionRequest;
     const pending = getSession
-      ? getSession({ billId, component: "bill-review", signal })
+      ? getSession({ signal })
       : fetcher(sessionEndpoint, {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ billId, component: "bill-review" }),
+        body: JSON.stringify({}),
         signal,
       }).then(async (response) => {
         if (!response.ok) throw await responseError(response, "The billing session could not be created.");
@@ -497,8 +559,17 @@ export function createBillLifecycleClient({
     return response;
   };
 
+  const requireBillId = (): string => {
+    if (!currentBillId) {
+      throw new Error("No bill is open. Pass billId or create a bill before using this operation.");
+    }
+    return currentBillId;
+  };
+  const billPath = (suffix = ""): string =>
+    `/partner/v2/browser/bills/${encodeURIComponent(requireBillId())}${suffix}`;
+
   const loadLifecycle = async (signal?: AbortSignal) => {
-    const response = await request("/partner/v2/browser/bill", {}, signal);
+    const response = await request(billPath("/lifecycle"), {}, signal);
     if (!response.ok) throw await responseError(response, "Bill lifecycle could not be loaded.");
     const body = await response.json() as { data?: unknown };
     return normalizeLifecycle(body.data);
@@ -557,7 +628,7 @@ export function createBillLifecycleClient({
     return response;
   };
   const action = async (input: Record<string, unknown>, fallback: string): Promise<BillLifecycleData> => {
-    const response = await mutation("/partner/v2/browser/actions", {
+    const response = await mutation(billPath("/actions"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -566,7 +637,7 @@ export function createBillLifecycleClient({
     return normalizeLifecycle(body.data);
   };
   const saveReview = async (input: BillReviewSaveInput): Promise<BillLifecycleData> => {
-    await mutation("/partner/v2/browser/bill", {
+    await mutation(billPath(), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(sanitizeBillReviewSaveInput(input)),
@@ -575,11 +646,34 @@ export function createBillLifecycleClient({
   };
 
   return {
+    getBillId() { return currentBillId; },
+    async createBill(input) {
+      if (currentBillId) throw new Error("A bill is already open in this lifecycle client.");
+      if (createRequest) return createRequest;
+      const pending = (async () => {
+        const response = await mutation("/partner/v2/browser/bills", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        }, "Bill could not be created.");
+        const body = await response.json() as { id?: unknown; data?: { id?: unknown } };
+        const nextBillId = typeof body.id === "string"
+          ? body.id
+          : typeof body.data?.id === "string" ? body.data.id : null;
+        if (!nextBillId) throw new Error("The billing service did not return the new bill ID.");
+        currentBillId = nextBillId;
+        return { billId: nextBillId, data: await loadLifecycle() };
+      })().finally(() => {
+        if (createRequest === pending) createRequest = null;
+      });
+      createRequest = pending;
+      return pending;
+    },
     clearSession() { session = null; sessionRequest = null; },
     getLifecycle: loadLifecycle,
     searchClaimsAdministrators,
     async getDeliveryOptions() {
-      const response = await request("/partner/v2/browser/delivery-options");
+      const response = await request(billPath("/delivery-options"));
       if (!response.ok) throw await responseError(response, "Delivery options could not be loaded.");
       const body = await response.json() as { data?: unknown };
       return normalizeDeliveryOptions(body.data ?? body);
@@ -587,7 +681,7 @@ export function createBillLifecycleClient({
     saveReview,
     async submitBill(input, submission) {
       await saveReview(input);
-      await mutation("/partner/v2/browser/submissions", {
+      await mutation(billPath("/submissions"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(submission),
@@ -599,20 +693,20 @@ export function createBillLifecycleClient({
       body.set("file", file);
       body.set("documentType", documentType);
       if (description) body.set("description", description);
-      await mutation("/partner/v2/browser/documents", { method: "POST", body }, "Document could not be attached.");
+      await mutation(billPath("/documents"), { method: "POST", body }, "Document could not be attached.");
       return loadLifecycle();
     },
     async removeAttachment(attachmentId) {
-      await mutation(`/partner/v2/browser/documents/${encodeURIComponent(attachmentId)}`, { method: "DELETE" }, "Document could not be removed.");
+      await mutation(billPath(`/documents/${encodeURIComponent(attachmentId)}`), { method: "DELETE" }, "Document could not be removed.");
       return loadLifecycle();
     },
     async getAttachment(attachmentId) {
-      const response = await request(`/partner/v2/browser/documents/${encodeURIComponent(attachmentId)}`);
+      const response = await request(billPath(`/documents/${encodeURIComponent(attachmentId)}`));
       if (!response.ok) throw await responseError(response, "Document could not be opened.");
       return response.blob();
     },
     async getEor(documentId) {
-      const response = await request(`/partner/v2/browser/eors/${encodeURIComponent(documentId)}`);
+      const response = await request(billPath(`/eors/${encodeURIComponent(documentId)}`));
       if (!response.ok) throw await responseError(response, "EOR could not be opened.");
       return response.blob();
     },
@@ -620,13 +714,14 @@ export function createBillLifecycleClient({
     postPayment(input) { return action({ action: "post_payment", ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
     async startCorrection() {
-      const response = await mutation("/partner/v2/browser/actions", {
+      const response = await mutation(billPath("/actions"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "start_correction" }),
       }, "Correction draft could not be created.");
       const body = await response.json() as { replacementBillId?: unknown; data?: unknown };
       if (typeof body.replacementBillId !== "string") throw new Error("The billing service did not return the correction bill ID.");
+      currentBillId = body.replacementBillId;
       return { replacementBillId: body.replacementBillId, data: normalizeLifecycle(body.data) };
     },
   };

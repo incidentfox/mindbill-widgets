@@ -4,6 +4,7 @@ import {
   type BillLifecycleClient,
   type BillLifecycleClientOptions,
   type BillLifecycleData,
+  type BrowserBillCreateInput,
   type BillReviewDocumentType,
   type BillReviewSaveInput,
   type CloseBillInput,
@@ -20,11 +21,20 @@ export class MindBillLifecycleStore {
   readonly mutating = signal(false);
   readonly ready = computed(() => this.data() !== null && !this.loading());
   private client: BillLifecycleClient | null = null;
+  private createInput: BrowserBillCreateInput | undefined;
+  private onBillCreated: ((billId: string, data: BillLifecycleData) => void) | undefined;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-  connect(options: BillLifecycleClientOptions, refreshInterval = 60_000): void {
+  connect(
+    options: BillLifecycleClientOptions,
+    refreshInterval = 60_000,
+    createInput?: BrowserBillCreateInput,
+    onBillCreated?: (billId: string, data: BillLifecycleData) => void,
+  ): void {
     this.disconnect();
-    this.billId.set(options.billId);
+    this.billId.set(options.billId ?? "");
+    this.createInput = createInput;
+    this.onBillCreated = onBillCreated;
     this.client = createBillLifecycleClient(options);
     void this.refresh();
     if (refreshInterval > 0) {
@@ -37,13 +47,27 @@ export class MindBillLifecycleStore {
     this.refreshTimer = null;
     this.client?.clearSession();
     this.client = null;
+    this.createInput = undefined;
+    this.onBillCreated = undefined;
   }
 
   async refresh(): Promise<BillLifecycleData | null> {
     if (!this.client) return null;
     this.loading.set(this.data() === null);
     try {
-      const data = await this.client.getLifecycle();
+      let data: BillLifecycleData;
+      if (!this.client.getBillId()) {
+        if (!this.createInput) {
+          throw new Error("Pass billId to open a bill or create to start a new one.");
+        }
+        const created = await this.client.createBill(this.createInput);
+        const isNew = !this.billId();
+        this.billId.set(created.billId);
+        if (isNew) this.onBillCreated?.(created.billId, created.data);
+        data = created.data;
+      } else {
+        data = await this.client.getLifecycle();
+      }
       this.data.set(data);
       this.error.set(null);
       return data;

@@ -7,17 +7,26 @@ const mindbill = new MindBillClient({
     : {}),
 });
 
-// Call this only after your server authorizes the signed-in user for this bill.
+// Call this only after your server authenticates the user and maps their role.
 const session = await mindbill.createBrowserSession({
-  component: "bill-review",
-  billId: "synthetic_bill_123",
+  subject: "synthetic_user_123",
   allowedOrigin: "https://your-product.example",
+  permissions: [
+    "bills:create",
+    "bills:read",
+    "bills:edit",
+    "bills:submit",
+    "bills:act",
+    "documents:read",
+    "documents:write",
+    "payers:read",
+    "eors:read",
+  ],
   expiresIn: 900,
 });
 
 // Return only these short-lived values to the browser. Never return the API key.
 console.log({
   token: session.token,
-  embedUrl: session.embedUrl,
   expiresAt: session.expiresAt,
 });

@@ -16,10 +16,10 @@ Procedure entry is keyboard-first: the form always keeps one empty row after the
 import { ConnectedBillLifecycle } from "@mindbill/react";
 
 <ConnectedBillLifecycle
-  billId={billId}
-  sessionEndpoint="/api/mindbill/billing-session"
+  create={knownBillValues}
+  sessionEndpoint="/api/mindbill/session"
   appearance={{ preset: "qme-companion" }}
-  onChanged={(lifecycle) => syncBillStatus(lifecycle.bill)}
+  onBillCreated={(billId) => navigate(`/bills/${billId}`)}
 />
 ```
 
@@ -41,21 +41,19 @@ Choose a complete preset, then override only the tokens your design system owns.
 
 Available presets are `mindbill`, `qme-companion`, `orange-bright`, and `clinical-blue`. Preset names describe visual styles rather than customer or partner brands. Supported overrides include accent, accent text, background, surface, input background, text, muted text, border, font, panel radius, control radius, shadow, danger, success, and warning colors.
 
-Add one authenticated route to your app. It verifies that the signed-in user may access the bill, then mints an exact-origin, bill-scoped token. The Partner API key stays on the server.
+Add one authenticated route to your app. It maps the signed-in user's role to billing permissions, then mints an exact-origin token for that user in your MindBill organization. The Partner API key stays on the server.
 
 ```ts
-// app/api/mindbill/billing-session/route.ts
+// Any server framework: POST /api/mindbill/session
 import { mindbill } from "@/lib/mindbill";
 
 export async function POST(request: Request) {
   const user = await requireUser(request); // your existing auth
-  const { billId } = await request.json();
-  await requireBillAccess(user, billId); // your existing authorization
 
   const session = await mindbill.createBrowserSession({
-    component: "bill-review",
-    billId,
+    subject: user.id,
     allowedOrigin: new URL(request.url).origin,
+    permissions: billingPermissionsFor(user.role),
     expiresIn: 900,
   });
 
@@ -68,18 +66,18 @@ export async function POST(request: Request) {
 
 The component searches MindBill's claims-administrator directory with both payer text and the current claim number. It explains name and claim-pattern evidence, shows delivery availability, and only preselects a high-confidence exact name or alias match.
 
-This is the minimum safe browser integration. A permanent Partner API key must never enter frontend code. A completely serverless partner integration requires MindBill-hosted sign-in/SSO so MindBill can authenticate the end user itself.
+The API key binds every session to one organization. `subject` identifies the user and `permissions` express the role. MindBill enforces the organization boundary on every bill request. A permanent Partner API key must never enter frontend code.
 
 ## Compact status
 
-Use `ConnectedBillStatus` when the partner page only needs a small status and aging surface. Add a second session route using the same server pattern and mint `component: "bill-timeline"`.
+Use `ConnectedBillStatus` when the partner page only needs a small status and aging surface. It reuses the same session route.
 
 ```tsx
 import { ConnectedBillStatus } from "@mindbill/react";
 
 <ConnectedBillStatus
   billId={billId}
-  sessionEndpoint="/api/mindbill/status-session"
+  sessionEndpoint="/api/mindbill/session"
   appearance={{ preset: "qme-companion" }}
 />
 ```

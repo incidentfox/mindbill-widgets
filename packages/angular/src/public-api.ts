@@ -9,6 +9,8 @@ export type {
   BillLifecycleData,
   BillLifecycleSession,
   BillLifecycleSessionProvider,
+  BrowserBillAddress,
+  BrowserBillCreateInput,
   BillReviewData,
   BillReviewDocumentType,
   BillReviewPayer,

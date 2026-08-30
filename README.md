@@ -146,7 +146,7 @@ export class CaseBillingComponent {
 }
 ```
 
-The browser never receives the permanent API key. Add one authenticated route that checks access and mints a short-lived, exact-origin session:
+The browser never receives the permanent API key. Add one authenticated route that maps your signed-in user to permissions and mints a short-lived, exact-origin session for your MindBill organization:
 
 ```ts
 // app/api/mindbill/session/route.ts
@@ -154,13 +154,12 @@ import { mindbill } from "@/lib/mindbill";
 
 export async function POST(request: Request) {
   const user = await requireUser(request);
-  const { billId } = await request.json();
-  await requireBillAccess(user, billId);
+  const permissions = billingPermissionsFor(user.role);
 
   const session = await mindbill.createBrowserSession({
-    component: "bill-review",
-    billId,
+    subject: user.id,
     allowedOrigin: new URL(request.url).origin,
+    permissions,
     expiresIn: 900,
   });
 
@@ -168,9 +167,9 @@ export async function POST(request: Request) {
 }
 ```
 
-This route contains authorization, not billing business logic. The component renews the session and calls MindBill directly.
+This route contains authorization, not billing business logic. The API key fixes the organization boundary; `subject` and `permissions` fix the user boundary. The component renews the session and calls MindBill directly to create, edit, submit, and act on bills.
 
-For a compact read-only surface, use `ConnectedBillStatus` with a `bill-timeline` session. For a custom interface, use `useBillLifecycle` or `useBillStatus`. `MindBillBillReview` is available when a hosted surface is preferable to native React.
+For a new bill, omit `billId` and pass a `create` snapshot to `ConnectedBillLifecycle`. Use `onBillCreated` for immediate navigation or local caching; use signed webhooks as the durable source of truth. For a compact read-only surface, use `ConnectedBillStatus` with the same session endpoint. For a custom interface, use `useBillLifecycle` or `useBillStatus`.
 
 ## Server-side lifecycle calls
 

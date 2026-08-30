@@ -13,6 +13,7 @@ import { FormsModule } from "@angular/forms";
 import type {
   BillLifecycleData,
   BillLifecycleSessionProvider,
+  BrowserBillCreateInput,
   BillReviewDocumentType,
   BillReviewBillingProvider,
   BillReviewClinician,
@@ -209,13 +210,15 @@ type BillDraft = {
   `],
 })
 export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
-  @Input({ required: true }) billId = "";
-  @Input() sessionEndpoint = "/api/mindbill/bill-session";
+  @Input() billId = "";
+  @Input() create?: BrowserBillCreateInput;
+  @Input() sessionEndpoint = "/api/mindbill/session";
   @Input() apiBaseUrl = "https://app.mindbill.org";
   @Input() getSession?: BillLifecycleSessionProvider;
   @Input() refreshInterval = 60_000;
   @Input() appearance: MindBillAngularAppearance = { preset: "mindbill" };
   @Output() billIdChange = new EventEmitter<string>();
+  @Output() billCreated = new EventEmitter<{ billId: string; data: BillLifecycleData }>();
   @Output() submitted = new EventEmitter<BillLifecycleData>();
   @Output() billingError = new EventEmitter<Error>();
 
@@ -249,8 +252,25 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if ((changes["billId"] || changes["sessionEndpoint"] || changes["apiBaseUrl"] || changes["getSession"]) && this.billId) {
-      this.store.connect({ billId: this.billId, sessionEndpoint: this.sessionEndpoint, apiBaseUrl: this.apiBaseUrl, ...(this.getSession ? { getSession: this.getSession } : {}) }, this.refreshInterval);
+    if (changes["billId"] || changes["create"] || changes["sessionEndpoint"] || changes["apiBaseUrl"] || changes["getSession"]) {
+      if (!this.billId && !this.create) {
+        this.store.disconnect();
+        return;
+      }
+      this.store.connect(
+        {
+          ...(this.billId ? { billId: this.billId } : {}),
+          sessionEndpoint: this.sessionEndpoint,
+          apiBaseUrl: this.apiBaseUrl,
+          ...(this.getSession ? { getSession: this.getSession } : {}),
+        },
+        this.refreshInterval,
+        this.create,
+        (billId, data) => {
+          this.billIdChange.emit(billId);
+          this.billCreated.emit({ billId, data });
+        },
+      );
     }
   }
   ngOnDestroy(): void { this.store.disconnect(); if (this.payerTimer) clearTimeout(this.payerTimer); }
