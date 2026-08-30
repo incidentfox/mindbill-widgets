@@ -6,7 +6,7 @@ Native Angular billing UI with built-in session renewal and lifecycle API calls.
 npm install @mindbill/angular @mindbill/node
 ```
 
-Import the standalone component and give it the one value your application keeps: the bill ID.
+Import the standalone component. Pass either an existing bill ID or the known values for a new bill.
 
 ```ts
 import { Component } from "@angular/core";
@@ -18,9 +18,10 @@ import { MindBillBillLifecycleComponent } from "@mindbill/angular";
   imports: [MindBillBillLifecycleComponent],
   template: `
     <mindbill-bill-lifecycle
-      [billId]="billId"
-      sessionEndpoint="/api/mindbill/bill-session"
+      [create]="knownBillValues"
+      sessionEndpoint="/api/mindbill/session"
       [appearance]="{ preset: 'clinical-blue' }"
+      (billCreated)="rememberBill($event)"
       (billIdChange)="billId = $event"
     />
   `,
@@ -34,19 +35,18 @@ The component loads and refreshes status, searches the payer directory, saves bi
 
 Procedure entry always keeps one empty row after the entered lines. Starting a code, modifier, or non-default unit count opens the next row automatically; the empty row is never included in save or submit payloads.
 
-Add one authenticated server endpoint. It verifies that the signed-in user may access the bill, then mints a short-lived token bound to that bill and browser origin.
+Add one authenticated server endpoint. It maps the signed-in user's role to permissions and mints a short-lived token bound to your organization, that user, and the browser origin.
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
 
 const mindbill = new MindBillClient({ apiKey: process.env["MINDBILL_API_KEY"]! });
 
-app.post("/api/mindbill/bill-session", requireUser, async (req, res) => {
-  await requireBillAccess(req.user, req.body.billId);
+app.post("/api/mindbill/session", requireUser, async (req, res) => {
   const session = await mindbill.createBrowserSession({
-    component: "bill-review",
-    billId: req.body.billId,
+    subject: req.user.id,
     allowedOrigin: `${req.protocol}://${req.get("host")}`,
+    permissions: billingPermissionsFor(req.user.role),
     expiresIn: 900,
   });
   res.json(session);

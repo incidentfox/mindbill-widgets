@@ -13,9 +13,11 @@ import {
   BillStatusSummary,
   type BillStatusSummaryProps,
 } from "./native-bill-review";
+import {
+  DEFAULT_API_BASE_URL,
+  DEFAULT_SESSION_ENDPOINT,
+} from "@mindbill/browser";
 
-const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
-const DEFAULT_SESSION_ENDPOINT = "/api/mindbill/status-session";
 const DEFAULT_REFRESH_INTERVAL = 60_000;
 
 export type BillStatusData = {
@@ -37,7 +39,6 @@ export type BillStatusSession = {
 };
 
 export type BillStatusSessionRequest = {
-  billId: string;
   signal: AbortSignal;
 };
 
@@ -47,7 +48,7 @@ export type BillStatusSessionProvider = (
 
 export type BillStatusClientOptions = {
   billId: string;
-  /** Same-origin route that mints a short-lived, bill-scoped browser session. */
+  /** Same-origin route that mints a short-lived organization/user browser session. */
   sessionEndpoint?: string;
   /** Advanced escape hatch for non-HTTP session exchange. */
   getSession?: BillStatusSessionProvider;
@@ -180,12 +181,12 @@ export function createBillStatusClient({
     if (!force && sessionRequest) return sessionRequest;
 
     const pending = getSession
-      ? getSession({ billId, signal })
+      ? getSession({ signal })
       : fetcher(sessionEndpoint, {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ billId }),
+        body: JSON.stringify({}),
         signal,
       }).then(async (response) => {
         if (!response.ok) {
@@ -215,7 +216,7 @@ export function createBillStatusClient({
     signal: AbortSignal,
   ): Promise<Response> => {
     const baseUrl = (browserSession.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
-    return fetcher(`${baseUrl}/partner/v2/browser/status`, {
+    return fetcher(`${baseUrl}/partner/v2/browser/bills/${encodeURIComponent(billId)}/status`, {
       headers: { authorization: `Bearer ${browserSession.token}` },
       signal,
     });

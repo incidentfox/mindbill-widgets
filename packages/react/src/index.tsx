@@ -125,6 +125,8 @@ export type {
   BillLifecycleSession,
   BillLifecycleSessionProvider,
   BillLifecycleSessionRequest,
+  BrowserBillAddress,
+  BrowserBillCreateInput,
   CloseBillInput,
   ConnectedBillLifecycleProps,
   PostBillPaymentInput,

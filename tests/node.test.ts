@@ -223,36 +223,49 @@ describe("@mindbill/node v2", () => {
     expect(submitted.data.state).toBe("submitted");
   });
 
-  it("mints only exact-origin, bill-scoped browser sessions", async () => {
+  it("mints exact-origin organization and user browser sessions", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       sessionId: "session_1",
-      component: "bill-review",
       token: "short-lived-token",
-      embedUrl: "https://app.mindbill.org/embed/bill-review",
+      organizationId: "org_1",
+      subject: "user_1",
+      permissions: ["bills:create", "bills:read", "bills:edit"],
+      resource: null,
       expiresAt: "2026-08-28T12:15:00.000Z",
     }));
     const client = new MindBillClient({ apiKey: "mb_test", fetch: fetcher });
 
     expect(() => client.createBrowserSession({
-      component: "bill-review",
-      billId: "bill_1",
+      subject: "user_1",
       allowedOrigin: "https://partner.example.test/path",
+      permissions: ["bills:read"],
     })).toThrow("allowedOrigin must be an exact HTTPS origin");
     const session = await client.createBrowserSession({
-      component: "bill-review",
-      billId: "bill_1",
+      subject: "user_1",
       allowedOrigin: "https://partner.example.test",
+      permissions: ["bills:create", "bills:read", "bills:edit"],
       expiresIn: 300,
     });
 
     expect(session.token).toBe("short-lived-token");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
-      component: "bill-review",
-      billId: "bill_1",
+      subject: "user_1",
       allowedOrigin: "https://partner.example.test",
+      permissions: ["bills:create", "bills:read", "bills:edit"],
       expiresIn: 300,
     });
+  });
+
+  it("rejects create permission on a bill-restricted browser session", () => {
+    const client = new MindBillClient({ apiKey: "mb_test", fetch: vi.fn<typeof fetch>() });
+
+    expect(() => client.createBrowserSession({
+      subject: "user_1",
+      allowedOrigin: "https://partner.example.test",
+      permissions: ["bills:create", "bills:read"],
+      resource: { billId: "bill_1" },
+    })).toThrow("A bill-restricted session cannot include bills:create");
   });
 
   it("surfaces structured API errors with request IDs", async () => {

@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "create-bill": "node scripts/create-bill.mjs"
+    "start": "next start"
   },
   "dependencies": {
     "@mindbill/node": "latest",

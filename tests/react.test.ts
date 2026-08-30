@@ -282,14 +282,14 @@ describe("connected bill status", () => {
     await client.getStatus();
 
     expect(fetcher).toHaveBeenCalledTimes(3);
-    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/mindbill/status-session");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/mindbill/session");
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
       method: "POST",
       credentials: "same-origin",
-      body: JSON.stringify({ billId: "bill_123" }),
+      body: JSON.stringify({}),
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/status",
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_123/status",
     );
     expect(fetcher.mock.calls[1]?.[1]?.headers).toEqual({
       authorization: "Bearer short-lived-session-token",
@@ -383,16 +383,16 @@ describe("connected bill lifecycle", () => {
       route: "ebill",
     })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
 
-    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/mindbill/bill-session");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/mindbill/session");
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
       method: "POST",
-      body: JSON.stringify({ billId: "bill_789", component: "bill-review" }),
+      body: JSON.stringify({}),
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bill",
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/lifecycle",
     );
     expect(fetcher.mock.calls[2]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/actions",
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
     );
     const actionHeaders = new Headers(fetcher.mock.calls[2]?.[1]?.headers);
     expect(actionHeaders.get("authorization")).toBe(
@@ -508,7 +508,7 @@ describe("connected bill lifecycle", () => {
 
     await expect(client.getDeliveryOptions()).resolves.toEqual(deliveryOptions);
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/delivery-options",
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/delivery-options",
     );
   });
 

@@ -31,6 +31,7 @@ import {
   type BillLifecycleClientOptions,
   type BillLifecycleData,
   type BillLifecycleActionId,
+  type BrowserBillCreateInput,
   type CloseBillInput,
   type PostBillPaymentInput,
   type SubmitSecondReviewInput,
@@ -46,6 +47,8 @@ export type {
   BillLifecycleSession,
   BillLifecycleSessionProvider,
   BillLifecycleSessionRequest,
+  BrowserBillAddress,
+  BrowserBillCreateInput,
   CloseBillInput,
   PostBillPaymentInput,
   SubmitSecondReviewInput,
@@ -54,17 +57,20 @@ export type {
 const DEFAULT_REFRESH_INTERVAL = 60_000;
 
 export type UseBillLifecycleOptions = BillLifecycleClientOptions & {
+  /** Initial bill snapshot used when no existing `billId` is supplied. */
+  create?: BrowserBillCreateInput;
   refreshInterval?: number;
   enabled?: boolean;
   initialData?: BillLifecycleData | null;
+  onBillCreated?: (billId: string, data: BillLifecycleData) => void | Promise<void>;
   onBillIdChange?: (
     billId: string,
-    previousBillId: string,
+    previousBillId: string | null,
   ) => void | Promise<void>;
 };
 
 export type UseBillLifecycleResult = {
-  billId: string;
+  billId: string | null;
   data: BillLifecycleData | null;
   error: Error | null;
   isLoading: boolean;
@@ -98,16 +104,18 @@ function openPdf(blob: Blob, filename: string): void {
 
 export function useBillLifecycle({
   billId: providedBillId,
+  create,
   sessionEndpoint = DEFAULT_SESSION_ENDPOINT,
   getSession,
   apiBaseUrl = DEFAULT_API_BASE_URL,
   refreshInterval = DEFAULT_REFRESH_INTERVAL,
   enabled = true,
   initialData = null,
+  onBillCreated,
   onBillIdChange,
   fetch: fetchOverride,
 }: UseBillLifecycleOptions): UseBillLifecycleResult {
-  const [billId, setBillId] = useState(providedBillId);
+  const [billId, setBillId] = useState<string | null>(providedBillId ?? null);
   const [data, setData] = useState<BillLifecycleData | null>(initialData);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(enabled && !initialData);
@@ -116,18 +124,18 @@ export function useBillLifecycle({
   const mounted = useRef(true);
 
   useEffect(() => {
-    setBillId(providedBillId);
+    setBillId(providedBillId ?? null);
     setData(initialData);
     setError(null);
   }, [initialData, providedBillId]);
 
   const client = useMemo(() => createBillLifecycleClient({
-    billId,
+    ...(providedBillId ? { billId: providedBillId } : {}),
     sessionEndpoint,
     getSession,
     apiBaseUrl,
     fetch: fetchOverride,
-  }), [apiBaseUrl, billId, fetchOverride, getSession, sessionEndpoint]);
+  }), [apiBaseUrl, fetchOverride, getSession, providedBillId, sessionEndpoint]);
 
   useEffect(() => {
     mounted.current = true;
@@ -141,7 +149,17 @@ export function useBillLifecycle({
     if (!enabled) return;
     setIsRefreshing(true);
     try {
-      const next = await client.getLifecycle();
+      let next: BillLifecycleData;
+      if (!client.getBillId()) {
+        if (!create) throw new Error("Pass billId to open a bill or create to start a new one.");
+        const created = await client.createBill(create);
+        await onBillCreated?.(created.billId, created.data);
+        await onBillIdChange?.(created.billId, null);
+        if (mounted.current) setBillId(created.billId);
+        next = created.data;
+      } else {
+        next = await client.getLifecycle();
+      }
       if (!mounted.current) return;
       setData(next);
       setError(null);
@@ -154,7 +172,7 @@ export function useBillLifecycle({
         setIsRefreshing(false);
       }
     }
-  }, [client, enabled]);
+  }, [client, create, enabled, onBillCreated, onBillIdChange]);
 
   useEffect(() => {
     if (!enabled) return;
