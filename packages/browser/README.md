@@ -15,5 +15,9 @@ const billing = createBillLifecycleClient({
 const bill = await billing.getLifecycle();
 ```
 
+Review mutations are normalized against the v2 write contract automatically.
+Read-only snapshot metadata returned for rendering is never sent back on save,
+so the same client is safe to use from React, Angular, or plain JavaScript.
+
 The session endpoint is the only required partner-server integration. See the
-[10-minute quickstart](https://app.mindbill.org/developers/reference).
+[10-minute quickstart](https://docs.mindbill.org/quickstart).
