@@ -113,13 +113,25 @@ export {
 export {
   BillActivityTimeline,
   BillLifecycleActions,
+  BillLifecycleProgress,
+  BillPaymentLedger,
+  BillPayerContactCard,
+  BillRemittanceCard,
+  BillSnapshotSummary,
   billActivityEventLabel,
+  billLifecycleStage,
   visibleBillLifecycleActions,
 } from "./bill-lifecycle-surfaces";
 export type {
   BillActivityEvent,
   BillActivityTimelineProps,
   BillLifecycleActionsProps,
+  BillLifecycleProgressProps,
+  BillLifecycleStage,
+  BillPaymentLedgerProps,
+  BillPayerContactCardProps,
+  BillRemittanceCardProps,
+  BillSnapshotSummaryProps,
 } from "./bill-lifecycle-surfaces";
 
 export {
@@ -129,16 +141,20 @@ export {
 } from "./connected-bill-lifecycle";
 export type {
   BillEorDocument,
+  BillActivityRecord,
   BillLifecycleAction,
   BillLifecycleActionId,
   BillLifecycleClient,
   BillLifecycleClientOptions,
   BillLifecycleData,
+  BillLifecycleDelivery,
   BillLifecycleSession,
   BillLifecycleSessionProvider,
   BillLifecycleSessionRequest,
   BrowserBillAddress,
   BrowserBillCreateInput,
+  BillPaymentRecord,
+  BillRemittanceSummary,
   CloseBillInput,
   ConnectedBillLifecycleProps,
   PostBillPaymentInput,
