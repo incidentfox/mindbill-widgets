@@ -18,7 +18,11 @@ import {
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
 import {
+  applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_REQUIRED_FIELDS,
+  ensureTrailingBillSubmissionLine,
+  formatBillSubmissionDate,
+  parseBillSubmissionDate,
   type BillSubmissionInput,
   validateBillSubmission,
 } from "../packages/react/src/bill-submission-form";
@@ -74,6 +78,7 @@ describe("atomic bill submission form contract", () => {
     patient: {
       firstName: "Ada",
       lastName: "Example",
+      dateOfBirth: "1980-01-02",
       address: {
         line1: "100 Main Street",
         city: "Sacramento",
@@ -81,7 +86,10 @@ describe("atomic bill submission form contract", () => {
         postalCode: "95814",
       },
     },
-    claim: { claimNumber: "CLAIM-7" },
+    claim: {
+      claimNumber: "CLAIM-7",
+      claimsAdministrator: { id: "payer_7", name: "Synthetic Claims Administrator" },
+    },
     service: { date: "2026-08-24" },
     serviceLines: [{ code: "ML201", units: 1 }],
   };
@@ -94,12 +102,57 @@ describe("atomic bill submission form contract", () => {
   });
 
   it("owns and exports required-field rules", () => {
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.dateOfBirth");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.address.state");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("claim.claimsAdministrator");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("serviceLines[].code");
     expect(validateBillSubmission(validBill)).toEqual({
       valid: true,
       fieldErrors: {},
     });
+  });
+
+  it("requires the claims administrator to come from the payer directory", () => {
+    const result = validateBillSubmission({
+      ...validBill,
+      claim: { ...validBill.claim, claimsAdministrator: { name: "Arbitrary payer text" } },
+    });
+
+    expect(result.fieldErrors["claim.claimsAdministrator"]).toBe(
+      "Select a claims administrator from the payer directory.",
+    );
+  });
+
+  it("accepts paste-friendly US dates and rejects impossible dates", () => {
+    expect(parseBillSubmissionDate("01/26/1985")).toBe("1985-01-26");
+    expect(parseBillSubmissionDate("01261985")).toBe("1985-01-26");
+    expect(formatBillSubmissionDate("1985-01-26")).toBe("01/26/1985");
+    expect(parseBillSubmissionDate("02/30/1985")).toBeUndefined();
+  });
+
+  it("keeps one automatic empty service line without submitting it", () => {
+    expect(ensureTrailingBillSubmissionLine([{ code: "ML201", units: 1 }])).toEqual([
+      { code: "ML201", modifiers: [], units: 1 },
+      { code: "", modifiers: [], units: 1 },
+    ]);
+
+    const result = validateBillSubmission({
+      ...validBill,
+      serviceLines: ensureTrailingBillSubmissionLine(validBill.serviceLines),
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("applies the evaluation modifier while preserving other modifiers", () => {
+    const lines = [{ code: "ML203", modifiers: ["93", "95"], units: 1 }];
+    expect(applyBillSubmissionEvaluationModifiers(lines, "ame")[0]?.modifiers).toEqual([
+      "94",
+      "93",
+    ]);
+    expect(applyBillSubmissionEvaluationModifiers(lines, "psych_qme")[0]?.modifiers).toEqual([
+      "96",
+      "93",
+    ]);
   });
 
   it("rejects missing required values and invalid professional charges", () => {
@@ -111,14 +164,13 @@ describe("atomic bill submission form contract", () => {
         firstName: "",
         address: { ...validBill.patient.address, state: "California" },
       },
-      serviceLines: [{ code: "", units: 0 }],
+      serviceLines: [{ code: "ML201", units: 0 }],
     });
 
     expect(result.valid).toBe(false);
     expect(result.fieldErrors).toMatchObject({
       "patient.firstName": "Required",
       "patient.address.state": "Use a 2-letter state code",
-      "serviceLines.0.code": "Required",
       "serviceLines.0.units": "Enter at least 1 unit",
       "serviceLines.0.charge": "Enter the billed charge",
     });

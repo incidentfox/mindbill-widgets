@@ -125,12 +125,29 @@ import { BillSubmissionForm } from "@mindbill/react";
 <BillSubmissionForm
   initialBill={bootstrap.bill}
   attachments={bootstrap.attachments}
+  getSession={() => fetch("/api/mindbill/session", { method: "POST" }).then(r => r.json())}
+  diagnosisOptions={bootstrap.diagnoses}
+  procedureOptions={bootstrap.procedures}
+  onLookupPostalCode={lookupPostalCode}
   appearance={{ preset: "qme-companion" }}
   onSubmit={({ bill, sourceAttachmentIds, uploads }) =>
     submitBill({ bill, sourceAttachmentIds, uploads })
   }
 />
 ```
+
+The component includes the interaction model, not just the markup:
+
+- a responsive two-column review form (one column on narrow screens);
+- paste-friendly `MM/DD/YYYY` date fields and required-field asterisks;
+- ZIP-to-city/state completion through `onLookupPostalCode`;
+- searchable ICD-10 multi-select with removable chips;
+- canonical claims-administrator search through the authenticated MindBill payer directory;
+- QME, AME, and Psych QME evaluation modes with medical-legal modifier defaults;
+- searchable procedure/modifier controls, fee-schedule amounts, totals, and an automatically maintained empty line;
+- auto-attached source documents, practice W-9 treatment, and click, panel-drop, or whole-page PDF upload.
+
+Partners supply tenant-specific bootstrap data and server callbacks. Required fields, validation, payer selection, service-line behavior, attachments, and submission UX stay inside `@mindbill/react`, so every integration receives the same billing workflow.
 
 `BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; its callback fires only when the user submits a locally valid snapshot.
 

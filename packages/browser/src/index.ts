@@ -458,6 +458,14 @@ export type BillLifecycleClientOptions = {
   fetch?: typeof globalThis.fetch | undefined;
 };
 
+/** Browser-session options for pre-submission reference-data lookups. */
+export type BillReferenceClientOptions = Omit<BillLifecycleClientOptions, "billId">;
+
+export type BillReferenceClient = {
+  searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  clearSession: () => void;
+};
+
 export type BillLifecycleClient = {
   getBillId: () => string;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
@@ -709,5 +717,24 @@ export function createBillLifecycleClient({
     closeBill(input) { return action({ action: "close", ...input }, "Bill could not be closed."); },
     postPayment(input) { return action({ action: "post_payment", ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
+  };
+}
+
+/**
+ * Browser-safe client for reference data needed before a bill exists.
+ *
+ * Partners can pass the same short-lived session provider used by the submitted-bill
+ * lifecycle without inventing a draft bill or exposing payer directory credentials.
+ */
+export function createBillReferenceClient(
+  options: BillReferenceClientOptions = {},
+): BillReferenceClient {
+  const lifecycle = createBillLifecycleClient({
+    ...options,
+    billId: "pre-submission-reference-data",
+  });
+  return {
+    searchClaimsAdministrators: lifecycle.searchClaimsAdministrators,
+    clearSession: lifecycle.clearSession,
   };
 }

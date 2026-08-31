@@ -98,7 +98,7 @@ await saveBillId({ externalId: "evaluation_123", billId: bill.id });
 
 The first public bill state is `submitted`. There is no draft, update, upload, delete, or separate submit operation: a successful response means MindBill accepted one immutable snapshot for delivery. Editing a provider in your application never rewrites a past claim.
 
-For React applications, `BillSubmissionForm` supplies the entire authoring UI and contract—fields, required-field asterisks, validation, service lines, attachments, and Submit. Your application only supplies initial values and forwards the submitted snapshot through its server.
+For React applications, `BillSubmissionForm` supplies the entire authoring UI and contract: a responsive two-column form, paste-friendly dates, ZIP completion, ICD-10 chips, canonical payer search, evaluation-mode modifier defaults, fee-aware service lines, rich attachment uploads, validation, and Submit. Your application only supplies tenant bootstrap data and forwards the submitted snapshot through its server.
 
 ```tsx
 import { BillSubmissionForm } from "@mindbill/react";
@@ -106,6 +106,10 @@ import { BillSubmissionForm } from "@mindbill/react";
 <BillSubmissionForm
   initialBill={bootstrap.bill}
   attachments={bootstrap.attachments}
+  getSession={getMindBillSession}
+  diagnosisOptions={bootstrap.diagnoses}
+  procedureOptions={bootstrap.procedures}
+  onLookupPostalCode={lookupPostalCode}
   onSubmit={submitBill}
 />
 ```

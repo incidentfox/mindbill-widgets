@@ -88,17 +88,26 @@ export {
 } from "./native-bill-review";
 
 export {
+  applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_DOCUMENT_TYPES,
   BILL_SUBMISSION_REQUIRED_FIELDS,
   BillSubmissionForm,
+  ensureTrailingBillSubmissionLine,
+  formatBillSubmissionDate,
+  parseBillSubmissionDate,
   validateBillSubmission,
 } from "./bill-submission-form";
 export type {
   BillSubmissionAddress,
+  BillSubmissionDiagnosisOption,
   BillSubmissionDocumentType,
+  BillSubmissionEvaluationType,
   BillSubmissionFormProps,
   BillSubmissionFormValue,
   BillSubmissionInput,
+  BillSubmissionModifierOption,
+  BillSubmissionPostalPlace,
+  BillSubmissionProcedureOption,
   BillSubmissionSourceAttachment,
   BillSubmissionUpload,
   BillSubmissionValidation,

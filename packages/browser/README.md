@@ -19,6 +19,22 @@ The browser client operates only on an already-submitted bill. Bill creation,
 document selection, review, and the atomic submission stay on the partner server.
 The same lifecycle client is safe to use from React, Angular, or plain JavaScript.
 
+Pre-submission components can query canonical routing reference data without
+inventing a draft bill:
+
+```ts
+import { createBillReferenceClient } from "@mindbill/browser";
+
+const references = createBillReferenceClient({
+  sessionEndpoint: "/api/mindbill/session",
+});
+
+const payers = await references.searchClaimsAdministrators("Zurich", "claim-123");
+```
+
+This client exposes reference-data operations only. It never creates or mutates
+a bill; the first persisted bill remains the submitted immutable snapshot.
+
 Pass `billId` for the submitted bill. An optional `resource: { billId }`
 restriction makes the session usable for only that bill.
 
