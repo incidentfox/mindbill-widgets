@@ -337,7 +337,7 @@ const styles: Record<string, CSSProperties> = {
 };
 
 function RequiredMark(): ReactElement {
-  return <span style={{ color: "var(--mb-danger)" }}> *</span>;
+  return <span className="required-mark" style={{ color: "var(--mb-danger)" }}> *</span>;
 }
 
 function Field({
@@ -372,7 +372,7 @@ export function BillSubmissionForm({
   attachments = EMPTY_ATTACHMENTS,
   onSubmit,
   appearance,
-  className,
+  className = "bill-submission-form",
   style,
   disabled = false,
   submitLabel = "Submit bill",
@@ -594,7 +594,7 @@ export function BillSubmissionForm({
       <fieldset style={styles.section} disabled={locked}>
         <legend style={styles.legend}>Service lines</legend>
         <div style={styles.tableWrap}>
-          <table style={styles.table}>
+          <table aria-label="Service lines" style={styles.table}>
             <thead><tr>
               <th style={styles.th}>Code<RequiredMark /></th>
               <th style={styles.th}>Modifiers</th>
