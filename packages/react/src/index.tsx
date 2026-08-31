@@ -87,6 +87,9 @@ export {
   ensureTrailingProcedureLine,
 } from "./native-bill-review";
 
+export { BillReadOnlyForm } from "./bill-read-only-form";
+export type { BillReadOnlyFormProps } from "./bill-read-only-form";
+
 export {
   applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_DOCUMENT_TYPES,
@@ -182,6 +185,7 @@ export type {
   CloseBillInput,
   ConnectedBillLifecycleProps,
   PostBillPaymentInput,
+  ReopenBillInput,
   SubmitSecondReviewInput,
   UseBillLifecycleOptions,
   UseBillLifecycleResult,

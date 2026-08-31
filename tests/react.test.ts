@@ -194,9 +194,12 @@ describe("bill lifecycle surfaces", () => {
   });
 
   it("maps native lifecycle states into the compact progress rail", () => {
-    expect(billLifecycleStage("rejected")).toBe("response");
-    expect(billLifecycleStage("processed")).toBe("response");
-    expect(billLifecycleStage("paid")).toBe("response");
+    expect(billLifecycleStage("submitted")).toBe("submitted");
+    expect(billLifecycleStage("accepted")).toBe("accepted");
+    expect(billLifecycleStage("rejected")).toBe("processed");
+    expect(billLifecycleStage("processed")).toBe("processed");
+    expect(billLifecycleStage("paid")).toBe("processed");
+    expect(billLifecycleStage("closed")).toBe("closed");
   });
 });
 
@@ -562,6 +565,34 @@ describe("connected bill lifecycle", () => {
       disputedAmount: 2015,
       attachmentIds: ["doc_1"],
       route: "ebill",
+    }));
+  });
+
+  it("downloads the immutable submission packet and reopens a closed bill", async () => {
+    const packet = new Blob(["synthetic packet"], { type: "application/pdf" });
+    const reopened = {
+      ...lifecycle,
+      lifecycle: { ...lifecycle.lifecycle, state: "processed", nativeStatus: "PROCESSED" },
+    };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-lifecycle-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(new Response(packet, { headers: { "content-type": "application/pdf" } }))
+      .mockResolvedValueOnce(jsonResponse({ data: reopened }));
+    const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
+
+    await expect(client.getPacket()).resolves.toBeInstanceOf(Blob);
+    await expect(client.reopenBill({ reason: "Continue payer follow-up." })).resolves.toMatchObject({
+      lifecycle: { state: "processed" },
+    });
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/packet",
+    );
+    expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
+      action: "reopen",
+      reason: "Continue payer follow-up.",
     }));
   });
 

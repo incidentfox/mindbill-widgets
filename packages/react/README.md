@@ -8,7 +8,7 @@ npm install @mindbill/react @mindbill/node
 
 ## Connected lifecycle
 
-`ConnectedBillLifecycle` starts after your server atomically creates and submits an immutable bill. It owns bill loading, status refresh, EORs, payment posting, Second Bill Review, and close.
+`ConnectedBillLifecycle` starts after your server atomically creates and submits an immutable bill. It owns the submitted-to-closed progress rail, a read-only rendering of the exact submitted snapshot, server-owned human-readable history, packet download, EORs, payment posting, Second Bill Review, close, and reopen. The only persistent header action is **Download packet**; status-dependent actions appear in the details view when MindBill makes them available.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
@@ -79,6 +79,20 @@ import { ConnectedBillStatus } from "@mindbill/react";
 
 Use `useBillStatus({ billId })` when you want to render custom status UI. It returns `data`, `error`, `isLoading`, `isRefreshing`, and `refresh`. Use `createBillStatusClient` outside React.
 
+The public lifecycle is `Submitted → Accepted → Processed → Closed`. Rejections and denials remain detailed states inside the Processed stage so the progress rail stays stable while the action sheet explains what the user can do next. Partner APIs and components do not expose draft or queued states.
+
+## Read-only bill details
+
+Use `BillReadOnlyForm` when you already loaded `BillLifecycleData` and only need the immutable detail surface. It uses the same section order and responsive layout as `BillSubmissionForm`, but renders values, calculated fees, and attachments without form controls.
+
+```tsx
+import { BillReadOnlyForm } from "@mindbill/react";
+
+<BillReadOnlyForm data={billLifecycleData} onOpenAttachment={openAttachment} />
+```
+
+`ConnectedBillLifecycle` composes this component with the Details / Bill history switch, so most partners should not assemble these pieces themselves.
+
 ## Lifecycle actions
 
 MindBill returns the actions that are valid for the bill's current state. Render that server-authoritative list instead of duplicating rejection, EOR, denial, review, payment, and closure rules in your application.
@@ -94,6 +108,7 @@ import { BillLifecycleActions } from "@mindbill/react";
       case "post_payment": return setPaymentOpen(true);
       case "second_review": return setSecondReviewOpen(true);
       case "close": return bill.closeBill({ reason: "Resolved" });
+      case "reopen": return bill.reopenBill({ reason: "Follow-up is continuing" });
     }
   }}
 />
@@ -103,15 +118,15 @@ Disabled actions are hidden by default. Set `showUnavailable` to show them with 
 
 ## Activity timeline
 
-`BillActivityTimeline` renders ordered lifecycle events. Feed it events stored from MindBill's signed webhooks so a reload does not depend on browser callback history.
+`BillActivityTimeline` renders the ordered, human-readable lifecycle events returned by MindBill. Partners do not need to store or reconstruct bill history.
 
 ```tsx
 import { BillActivityTimeline } from "@mindbill/react";
 
-<BillActivityTimeline events={billEvents} />
+<BillActivityTimeline events={bill.data.activity} />
 ```
 
-Browser callbacks such as `onChanged` are for immediate UI, navigation, optimistic state, and analytics. Signed webhooks are the authoritative integration for durable server state.
+Browser callbacks such as `onChanged` are for immediate UI, navigation, optimistic state, and analytics. MindBill remains authoritative for durable history; signed webhooks are available when your backend also needs event-driven synchronization.
 
 ## Bill submission form
 

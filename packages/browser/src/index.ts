@@ -131,6 +131,13 @@ export type BillReviewData = {
     middleName?: string;
     lastName?: string;
     dob?: string;
+    phone?: string;
+    address?: {
+      line1?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+    };
   };
   injury: {
     claimNumber?: string;
@@ -141,6 +148,8 @@ export type BillReviewData = {
     adjNumber?: string;
     claimsAdminId?: string;
     claimsAdminName?: string;
+    injuryDescription?: string;
+    diagnosisCodes?: string[];
     claimPatternStatus?: BillReviewClaimPatternStatus;
   };
 };
@@ -285,7 +294,8 @@ export type BillLifecycleActionId =
   | "independent_bill_review"
   | "view_eor"
   | "post_payment"
-  | "close";
+  | "close"
+  | "reopen";
 
 export type BillLifecycleAction = {
   id: BillLifecycleActionId;
@@ -307,6 +317,7 @@ export type BillActivityRecord = {
   id: string;
   type: string;
   createdAt: string;
+  title?: string;
   description: string;
   actor: string | null;
   delivery: BillSubmissionRoute | null;
@@ -375,6 +386,7 @@ export type BillLifecycleSessionProvider = (
 ) => Promise<BillLifecycleSession>;
 
 export type CloseBillInput = { reason: string };
+export type ReopenBillInput = { reason: string };
 export type PostBillPaymentInput = {
   amount: number;
   method: "check" | "eft";
@@ -473,7 +485,9 @@ export type BillLifecycleClient = {
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
+  getPacket: () => Promise<Blob>;
   closeBill: (input: CloseBillInput) => Promise<BillLifecycleData>;
+  reopenBill: (input: ReopenBillInput) => Promise<BillLifecycleData>;
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
   submitSecondReview: (input: SubmitSecondReviewInput) => Promise<BillLifecycleData>;
   clearSession: () => void;
@@ -714,7 +728,13 @@ export function createBillLifecycleClient({
       if (!response.ok) throw await responseError(response, "EOR could not be opened.");
       return response.blob();
     },
+    async getPacket() {
+      const response = await request(billPath("/packet"));
+      if (!response.ok) throw await responseError(response, "Submission packet could not be downloaded.");
+      return response.blob();
+    },
     closeBill(input) { return action({ action: "close", ...input }, "Bill could not be closed."); },
+    reopenBill(input) { return action({ action: "reopen", ...input }, "Bill could not be reopened."); },
     postPayment(input) { return action({ action: "post_payment", ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
   };
