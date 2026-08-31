@@ -20,7 +20,7 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 const bill = {
   id: "bill_1",
   externalId: "report_42",
-  state: "draft",
+  state: "submitted",
   billingMode: "med_legal" as const,
   billNumber: 1001,
   patient: {
@@ -62,7 +62,7 @@ const bill = {
 };
 
 describe("@mindbill/node v2", () => {
-  it("creates a bill with server auth, org context, and idempotency", async () => {
+  it("atomically creates and submits a bill with its documents", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(bill, { status: 201 }));
     const client = new MindBillClient({
       apiKey: "mb_sandbox_secret",
@@ -71,16 +71,25 @@ describe("@mindbill/node v2", () => {
       fetch: fetcher,
     });
 
-    const created = await client.createBill(
+    const created = await client.createAndSubmitBill(
       {
-        externalId: "report_42",
-        patient: {
-          firstName: "Alex",
-          lastName: "Morgan",
-          address: bill.patient.address,
+        bill: {
+          externalId: "report_42",
+          patient: {
+            firstName: "Alex",
+            lastName: "Morgan",
+            address: bill.patient.address,
+          },
+          claim: { claimNumber: "TEST-1001" },
+          service: { date: "2026-08-20" },
+          serviceLines: [{ code: "ML201", units: 1, charge: 2015 }],
         },
-        claim: { claimNumber: "TEST-1001" },
-        service: { date: "2026-08-20" },
+        submission: { route: "ebill" },
+        documents: [{
+          filename: "final-report.pdf",
+          documentType: "final_report",
+          contentBase64: "JVBERi0xLjQ=",
+        }],
       },
       "create-report-42",
     );
@@ -91,83 +100,29 @@ describe("@mindbill/node v2", () => {
     expect(headers.get("authorization")).toBe("Bearer mb_sandbox_secret");
     expect(headers.get("x-mindbill-org-id")).toBe("org_1");
     expect(headers.get("idempotency-key")).toBe("create-report-42");
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      bill: { externalId: "report_42" },
+      submission: { route: "ebill" },
+      documents: [{ filename: "final-report.pdf", documentType: "final_report" }],
+    });
     expect(created).toEqual(bill);
   });
 
-  it("updates nested snapshots and lists bills by partner IDs", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse(bill))
-      .mockResolvedValueOnce(jsonResponse({ data: [bill], nextCursor: null }));
+  it("lists submitted bills by partner IDs", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({ data: [bill], nextCursor: null }));
     const client = new MindBillClient({ apiKey: "mb_test", fetch: fetcher });
 
-    await client.updateBill(
-      "bill_1",
-      { patient: { address: { city: "Long Beach" } }, claim: { employer: "Updated Employer" } },
-      "update-report-42",
-    );
     const page = await client.listBills({ externalId: "report_42", patientExternalId: "patient_7", limit: 10 });
 
     expect(page.data).toHaveLength(1);
-    expect(fetcher.mock.calls[0]?.[0]).toBe("https://app.mindbill.org/partner/v2/bills/bill_1");
-    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
-      patient: { address: { city: "Long Beach" } },
-      claim: { employer: "Updated Employer" },
-    });
-    expect(fetcher.mock.calls[1]?.[0]).toBe(
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
       "https://app.mindbill.org/partner/v2/bills?externalId=report_42&patientExternalId=patient_7&limit=10",
     );
   });
 
-  it("uploads an explicit payer document without forcing a multipart content type", async () => {
-    const document = {
-      id: "document_1",
-      externalId: "final-report-42",
-      filename: "final-report.pdf",
-      description: "Final report",
-      documentType: "final_report",
-      reportType: null,
-      reportTypeCode: null,
-      source: "partner",
-      addedAt: "2026-08-25T23:00:00.000Z",
-      contentUrl: "/partner/v2/bills/bill_1/documents/document_1",
-    };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ data: document }, { status: 201 }));
-    const client = new MindBillClient({ apiKey: "mb_test", fetch: fetcher });
-
-    const result = await client.uploadBillDocument(
-      "bill_1",
-      {
-        file: new Blob(["synthetic pdf"], { type: "application/pdf" }),
-        filename: "final-report.pdf",
-        documentType: "final_report",
-        externalId: "final-report-42",
-        description: "Final report",
-      },
-      "attach-final-report-42",
-    );
-
-    const [, request] = fetcher.mock.calls[0]!;
-    const headers = new Headers(request?.headers);
-    const form = request?.body as FormData;
-    expect(headers.has("content-type")).toBe(false);
-    expect(headers.get("idempotency-key")).toBe("attach-final-report-42");
-    expect(form.get("documentType")).toBe("final_report");
-    expect(form.get("externalId")).toBe("final-report-42");
-    expect(result.data.id).toBe("document_1");
-  });
-
-  it("submits, reads status and EOR PDFs, and performs lifecycle actions", async () => {
+  it("reads status and EOR PDFs and performs lifecycle actions", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({
-        ok: true,
-        sandbox: true,
-        billId: "bill_1",
-        controlNumber: "sandbox-control-1",
-        state: "submitted",
-        acknowledgments: [{ type: "999", status: "accepted" }],
-      }, { status: 202 }))
       .mockResolvedValueOnce(jsonResponse({ data: {
         billId: "bill_1", externalId: "report_42", state: "processed", nativeStatus: "processed",
         totalCharge: 2015, totalPaid: 0, balanceDue: 2015, lastEventId: "event_7", updatedAt: "2026-08-25T23:00:00.000Z",
@@ -180,12 +135,10 @@ describe("@mindbill/node v2", () => {
       .mockResolvedValueOnce(jsonResponse({ ok: true, data: { state: "closed" } }));
     const client = new MindBillClient({ apiKey: "mb_test", fetch: fetcher });
 
-    const submission = await client.submitBill("bill_1", { route: "ebill" }, "submit-bill-1");
     const status = await client.getBillStatus("bill_1");
     const eor = await client.getBillEor("bill_1");
     const closed = await client.performBillAction("bill_1", { action: "close", reason: "Resolved" }, "close-bill-1");
 
-    expect("sandbox" in submission && submission.state).toBe("submitted");
     expect(status.data.state).toBe("processed");
     expect(eor.data.documents[0]?.filename).toBe("eor.pdf");
     expect(closed.ok).toBe(true);
@@ -229,7 +182,7 @@ describe("@mindbill/node v2", () => {
       token: "short-lived-token",
       organizationId: "org_1",
       subject: "user_1",
-      permissions: ["bills:create", "bills:read", "bills:edit"],
+      permissions: ["bills:create", "bills:read", "bills:act"],
       resource: null,
       expiresAt: "2026-08-28T12:15:00.000Z",
     }));
@@ -243,7 +196,7 @@ describe("@mindbill/node v2", () => {
     const session = await client.createBrowserSession({
       subject: "user_1",
       allowedOrigin: "https://partner.example.test",
-      permissions: ["bills:create", "bills:read", "bills:edit"],
+      permissions: ["bills:create", "bills:read", "bills:act"],
       expiresIn: 300,
     });
 
@@ -252,7 +205,7 @@ describe("@mindbill/node v2", () => {
     expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
       subject: "user_1",
       allowedOrigin: "https://partner.example.test",
-      permissions: ["bills:create", "bills:read", "bills:edit"],
+      permissions: ["bills:create", "bills:read", "bills:act"],
       expiresIn: 300,
     });
   });

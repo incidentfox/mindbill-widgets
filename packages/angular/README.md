@@ -6,7 +6,7 @@ Native Angular billing UI with built-in session renewal and lifecycle API calls.
 npm install @mindbill/angular @mindbill/node
 ```
 
-Import the standalone component. Pass either an existing bill ID or the known values for a new bill.
+Import the standalone component and pass the ID returned by your server's atomic create-and-submit request.
 
 ```ts
 import { Component } from "@angular/core";
@@ -18,11 +18,9 @@ import { MindBillBillLifecycleComponent } from "@mindbill/angular";
   imports: [MindBillBillLifecycleComponent],
   template: `
     <mindbill-bill-lifecycle
-      [create]="knownBillValues"
+      [billId]="billId"
       sessionEndpoint="/api/mindbill/session"
       [appearance]="{ preset: 'clinical-blue' }"
-      (billCreated)="rememberBill($event)"
-      (billIdChange)="billId = $event"
     />
   `,
 })
@@ -31,9 +29,7 @@ export class CaseBillingComponent {
 }
 ```
 
-The component loads and refreshes status, searches the payer directory, saves bill edits, manages the explicit payer packet, submits the bill, shows EORs, and exposes the correct payment, review, correction, resubmission, and close actions for the current state.
-
-Procedure entry always keeps one empty row after the entered lines. Starting a code, modifier, or non-default unit count opens the next row automatically; the empty row is never included in save or submit payloads.
+The component loads and refreshes submitted-bill status, shows EORs, and exposes the correct payment, review, and close actions for the current state. It never creates or edits a bill.
 
 Add one authenticated server endpoint. It maps the signed-in user's role to permissions and mints a short-lived token bound to your organization, that user, and the browser origin.
 

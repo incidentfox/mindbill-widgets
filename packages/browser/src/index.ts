@@ -281,8 +281,6 @@ export type SubmitBillInput = {
   note?: string;
 };
 export type BillLifecycleActionId =
-  | "edit_and_submit"
-  | "correct_and_resubmit"
   | "second_review"
   | "independent_bill_review"
   | "view_eor"
@@ -452,8 +450,8 @@ export type BrowserBillCreateInput = {
 };
 
 export type BillLifecycleClientOptions = {
-  /** Open an existing bill. Omit this to create one with `createBill`. */
-  billId?: string;
+  /** ID of an already-submitted bill. Bills are created only by the atomic server API. */
+  billId: string;
   sessionEndpoint?: string | undefined;
   getSession?: BillLifecycleSessionProvider | undefined;
   apiBaseUrl?: string | undefined;
@@ -461,21 +459,15 @@ export type BillLifecycleClientOptions = {
 };
 
 export type BillLifecycleClient = {
-  getBillId: () => string | null;
-  createBill: (input: BrowserBillCreateInput) => Promise<{ billId: string; data: BillLifecycleData }>;
+  getBillId: () => string;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
-  saveReview: (input: BillReviewSaveInput) => Promise<BillLifecycleData>;
-  submitBill: (input: BillReviewSaveInput, submission: SubmitBillInput) => Promise<BillLifecycleData>;
-  addAttachment: (file: File, documentType: BillReviewDocumentType, description?: string) => Promise<BillLifecycleData>;
-  removeAttachment: (attachmentId: string) => Promise<BillLifecycleData>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
   closeBill: (input: CloseBillInput) => Promise<BillLifecycleData>;
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
   submitSecondReview: (input: SubmitSecondReviewInput) => Promise<BillLifecycleData>;
-  startCorrection: () => Promise<{ replacementBillId: string; data: BillLifecycleData }>;
   clearSession: () => void;
 };
 
@@ -562,7 +554,7 @@ function idempotencyKey(): string {
   return `mb-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** Browser-safe, framework-neutral client for the complete bill lifecycle. */
+/** Browser-safe, framework-neutral client for an already-submitted bill. */
 export function createBillLifecycleClient({
   billId,
   sessionEndpoint = DEFAULT_SESSION_ENDPOINT,
@@ -574,8 +566,8 @@ export function createBillLifecycleClient({
   if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   let session: BillLifecycleSession | null = null;
   let sessionRequest: Promise<BillLifecycleSession> | null = null;
-  let currentBillId = billId?.trim() || null;
-  let createRequest: Promise<{ billId: string; data: BillLifecycleData }> | null = null;
+  const currentBillId = billId.trim();
+  if (!currentBillId) throw new Error("billId is required for the submitted-bill lifecycle client.");
 
   const mintSession = async (signal: AbortSignal, force = false): Promise<BillLifecycleSession> => {
     if (!force && isSessionFresh(session)) return session as BillLifecycleSession;
@@ -622,14 +614,8 @@ export function createBillLifecycleClient({
     return response;
   };
 
-  const requireBillId = (): string => {
-    if (!currentBillId) {
-      throw new Error("No bill is open. Pass billId or create a bill before using this operation.");
-    }
-    return currentBillId;
-  };
   const billPath = (suffix = ""): string =>
-    `/partner/v2/browser/bills/${encodeURIComponent(requireBillId())}${suffix}`;
+    `/partner/v2/browser/bills/${encodeURIComponent(currentBillId)}${suffix}`;
 
   const loadLifecycle = async (signal?: AbortSignal) => {
     const response = await request(billPath("/lifecycle"), {}, signal);
@@ -699,39 +685,8 @@ export function createBillLifecycleClient({
     const body = await response.json() as { data?: unknown };
     return normalizeLifecycle(body.data);
   };
-  const saveReview = async (input: BillReviewSaveInput): Promise<BillLifecycleData> => {
-    await mutation(billPath(), {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(sanitizeBillReviewSaveInput(input)),
-    }, "Bill changes could not be saved.");
-    return loadLifecycle();
-  };
-
   return {
     getBillId() { return currentBillId; },
-    async createBill(input) {
-      if (currentBillId) throw new Error("A bill is already open in this lifecycle client.");
-      if (createRequest) return createRequest;
-      const pending = (async () => {
-        const response = await mutation("/partner/v2/browser/bills", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(input),
-        }, "Bill could not be created.");
-        const body = await response.json() as { id?: unknown; data?: { id?: unknown } };
-        const nextBillId = typeof body.id === "string"
-          ? body.id
-          : typeof body.data?.id === "string" ? body.data.id : null;
-        if (!nextBillId) throw new Error("The billing service did not return the new bill ID.");
-        currentBillId = nextBillId;
-        return { billId: nextBillId, data: await loadLifecycle() };
-      })().finally(() => {
-        if (createRequest === pending) createRequest = null;
-      });
-      createRequest = pending;
-      return pending;
-    },
     clearSession() { session = null; sessionRequest = null; },
     getLifecycle: loadLifecycle,
     searchClaimsAdministrators,
@@ -740,28 +695,6 @@ export function createBillLifecycleClient({
       if (!response.ok) throw await responseError(response, "Delivery options could not be loaded.");
       const body = await response.json() as { data?: unknown };
       return normalizeDeliveryOptions(body.data ?? body);
-    },
-    saveReview,
-    async submitBill(input, submission) {
-      await saveReview(input);
-      await mutation(billPath("/submissions"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(submission),
-      }, "Bill could not be submitted.");
-      return loadLifecycle();
-    },
-    async addAttachment(file, documentType, description) {
-      const body = new FormData();
-      body.set("file", file);
-      body.set("documentType", documentType);
-      if (description) body.set("description", description);
-      await mutation(billPath("/documents"), { method: "POST", body }, "Document could not be attached.");
-      return loadLifecycle();
-    },
-    async removeAttachment(attachmentId) {
-      await mutation(billPath(`/documents/${encodeURIComponent(attachmentId)}`), { method: "DELETE" }, "Document could not be removed.");
-      return loadLifecycle();
     },
     async getAttachment(attachmentId) {
       const response = await request(billPath(`/documents/${encodeURIComponent(attachmentId)}`));
@@ -776,16 +709,5 @@ export function createBillLifecycleClient({
     closeBill(input) { return action({ action: "close", ...input }, "Bill could not be closed."); },
     postPayment(input) { return action({ action: "post_payment", ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
-    async startCorrection() {
-      const response = await mutation(billPath("/actions"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "start_correction" }),
-      }, "Correction draft could not be created.");
-      const body = await response.json() as { replacementBillId?: unknown; data?: unknown };
-      if (typeof body.replacementBillId !== "string") throw new Error("The billing service did not return the correction bill ID.");
-      currentBillId = body.replacementBillId;
-      return { replacementBillId: body.replacementBillId, data: normalizeLifecycle(body.data) };
-    },
   };
 }

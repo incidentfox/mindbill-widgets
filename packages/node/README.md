@@ -18,9 +18,10 @@ const mindbill = new MindBillClient({
 The bill is the primary resource:
 
 ```ts
-const bill = await mindbill.createBill({
-  externalId: "report_123",
-  patient: {
+const bill = await mindbill.createAndSubmitBill({
+  bill: {
+    externalId: "report_123",
+    patient: {
     firstName: "Taylor",
     lastName: "Example",
     dateOfBirth: "1984-04-12",
@@ -30,40 +31,27 @@ const bill = await mindbill.createBill({
       state: "CA",
       postalCode: "90012",
     },
-  },
-  claim: {
+    },
+    claim: {
     claimNumber: "DEMO-12345",
     employer: "Example Manufacturing",
     dateOfInjury: "2026-06-20",
     injuryState: "CA",
+    },
+    service: { date: "2026-08-25" },
+    diagnoses: ["M25.512"],
+    serviceLines: [{ code: "ML201", modifiers: ["95"], units: 1 }],
   },
-  service: { date: "2026-08-25" },
-  diagnoses: ["M25.512"],
-  serviceLines: [{ code: "ML201", modifiers: ["95"], units: 1 }],
+  submission: { route: "ebill" },
+  documents: [{
+    filename: "final-report.pdf",
+    documentType: "final_report",
+    contentBase64: finalReportBytes.toString("base64"),
+  }],
 }, crypto.randomUUID());
-
-await mindbill.updateBill(
-  bill.id,
-  { claim: { employer: "Corrected Employer" } },
-  crypto.randomUUID(),
-);
 ```
 
-Documents and submission use the same bill ID:
-
-```ts
-await mindbill.uploadBillDocument(bill.id, {
-  file: finalReport,
-  filename: "final-report.pdf",
-  documentType: "final_report",
-}, crypto.randomUUID());
-
-await mindbill.submitBill(
-  bill.id,
-  { route: "ebill" },
-  crypto.randomUUID(),
-);
-```
+The request atomically creates and submits the bill. Its first public state is `submitted`; the public client intentionally exposes no bill draft, update, document mutation, or separate submission API.
 
 Read status and EORs, then perform an explicit lifecycle action:
 
@@ -84,7 +72,7 @@ await mindbill.performBillAction(
 );
 ```
 
-Every mutation requires an idempotency key. Keep the API key on your server. To let native React components call MindBill without a billing proxy, authorize the signed-in user and call `createBrowserSession` from one server route.
+Every mutation requires an idempotency key. Keep the API key on your server. To let native React components read and act on a submitted bill without a billing proxy, authorize the signed-in user and call `createBrowserSession` from one server route.
 
 Webhook consumers can use `verifyMindBillWebhookSignature` with the exact raw body and `compareMindBillEventSequence` for arbitrary-length sequence values.
 

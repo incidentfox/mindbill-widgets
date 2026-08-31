@@ -6,11 +6,8 @@ export type MindBillBrowserComponent = (typeof MINDBILL_BROWSER_COMPONENTS)[numb
 export const MINDBILL_BROWSER_PERMISSIONS = [
   "bills:create",
   "bills:read",
-  "bills:edit",
-  "bills:submit",
   "bills:act",
   "documents:read",
-  "documents:write",
   "payers:read",
   "eors:read",
 ] as const;
@@ -115,22 +112,7 @@ export type CreateBillRequest = {
   renderingProvider?: RenderingProviderSnapshot;
   serviceLocation?: ServiceLocationSnapshot;
   diagnoses?: string[];
-  serviceLines?: Array<Omit<ServiceLine, "id">>;
-};
-
-type PatientPatch = Partial<Omit<PatientSnapshot, "id" | "externalId" | "address">> & {
-  address?: Partial<Address>;
-};
-
-export type UpdateBillRequest = {
-  patient?: PatientPatch;
-  claim?: Partial<Omit<ClaimSnapshot, "id" | "externalId">>;
-  service?: Partial<CreateBillRequest["service"]>;
-  billingProvider?: BillingProviderSnapshot;
-  renderingProvider?: RenderingProviderSnapshot;
-  serviceLocation?: ServiceLocationSnapshot;
-  diagnoses?: string[];
-  serviceLines?: ServiceLine[];
+  serviceLines: Array<Omit<ServiceLine, "id">>;
 };
 
 export const BILL_DOCUMENT_TYPES = [
@@ -204,10 +186,11 @@ export type ListBillsQuery = Partial<{
   state: string;
 }>;
 
-export type UploadBillDocumentRequest = {
-  file: Blob;
+export type SubmissionDocument = {
   filename: string;
   documentType: BillDocumentType;
+  /** Base64-encoded PDF bytes. */
+  contentBase64: string;
   externalId?: string;
   description?: string;
 };
@@ -249,6 +232,11 @@ export type SubmitBillRequest = {
   attention?: string;
   subject?: string;
   note?: string;
+};
+export type CreateAndSubmitBillRequest = {
+  bill: CreateBillRequest;
+  submission?: SubmitBillRequest;
+  documents?: SubmissionDocument[];
 };
 export type SandboxBillSubmission = {
   ok: true;
@@ -339,8 +327,7 @@ export type BillReviewListResponse = { data: BillReview[] };
 export type BillAction =
   | { action: "close"; reason: string }
   | { action: "post_payment"; amount: number; method: "check" | "eft"; checkNumber?: string; depositDate: string; note?: string }
-  | { action: "second_review"; reason: string; payerClaimControlNumber: string; disputedAmount?: number; attachmentIds?: string[]; route?: SubmitRoute }
-  | { action: "start_correction" };
+  | { action: "second_review"; reason: string; payerClaimControlNumber: string; disputedAmount?: number; attachmentIds?: string[]; route?: SubmitRoute };
 export type BillActionResponse = { ok: true; replacementBillId?: string; data: Record<string, unknown> | null };
 
 export type MindBillEvent = {
@@ -441,16 +428,12 @@ export class MindBillClient {
     return new MindBillError(response.status, payload, requestId);
   }
 
-  createBill(input: CreateBillRequest, idempotencyKey: string): Promise<Bill> {
+  createAndSubmitBill(input: CreateAndSubmitBillRequest, idempotencyKey: string): Promise<Bill> {
     return this.request("POST", "/partner/v2/bills", input, { idempotencyKey });
   }
 
   getBill(billId: string): Promise<Bill> {
     return this.request("GET", `/partner/v2/bills/${encodeURIComponent(billId)}`);
-  }
-
-  updateBill(billId: string, input: UpdateBillRequest, idempotencyKey: string): Promise<Bill> {
-    return this.request("PATCH", `/partner/v2/bills/${encodeURIComponent(billId)}`, input, { idempotencyKey });
   }
 
   listBills(query: ListBillsQuery = {}): Promise<BillPage> {
@@ -462,25 +445,6 @@ export class MindBillClient {
     return this.request("GET", `/partner/v2/bills/${encodeURIComponent(billId)}/documents`);
   }
 
-  async uploadBillDocument(billId: string, input: UploadBillDocumentRequest, idempotencyKey: string): Promise<BillDocumentResponse> {
-    if (!BILL_DOCUMENT_TYPES.includes(input.documentType)) {
-      throw new Error(`documentType must be one of: ${BILL_DOCUMENT_TYPES.join(", ")}`);
-    }
-    const body = new FormData();
-    body.append("file", input.file, input.filename);
-    body.append("documentType", input.documentType);
-    if (input.externalId) body.append("externalId", input.externalId);
-    if (input.description) body.append("description", input.description);
-    const response = await this.fetcher(`${this.baseUrl}/partner/v2/bills/${encodeURIComponent(billId)}/documents`, {
-      method: "POST",
-      headers: this.headers({ idempotencyKey }),
-      body,
-    });
-    const payload = await parseJson(response);
-    if (!response.ok) throw this.error(response, payload);
-    return payload as BillDocumentResponse;
-  }
-
   async getBillDocument(billId: string, documentId: string): Promise<Blob> {
     const response = await this.fetcher(
       `${this.baseUrl}/partner/v2/bills/${encodeURIComponent(billId)}/documents/${encodeURIComponent(documentId)}`,
@@ -488,14 +452,6 @@ export class MindBillClient {
     );
     if (!response.ok) throw this.error(response, await parseJson(response));
     return response.blob();
-  }
-
-  deleteBillDocument(billId: string, documentId: string, idempotencyKey: string): Promise<void> {
-    return this.request("DELETE", `/partner/v2/bills/${encodeURIComponent(billId)}/documents/${encodeURIComponent(documentId)}`, undefined, { idempotencyKey });
-  }
-
-  submitBill(billId: string, input: SubmitBillRequest, idempotencyKey: string): Promise<SubmitBillResponse> {
-    return this.request("POST", `/partner/v2/bills/${encodeURIComponent(billId)}/submissions`, input, { idempotencyKey });
   }
 
   getBillDeliveryOptions(billId: string): Promise<BillDeliveryOptions> {
