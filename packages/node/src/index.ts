@@ -36,7 +36,7 @@ export type PatientSnapshot = {
   firstName: string;
   middleName?: string;
   lastName: string;
-  dateOfBirth?: string;
+  dateOfBirth: string;
   ssn?: string;
   gender?: "M" | "F" | "X";
   phone?: string;
@@ -268,6 +268,66 @@ export type BillStatus = {
 };
 export type BillStatusResponse = { data: BillStatus };
 
+export type BillLifecycleActionId =
+  | "second_review"
+  | "independent_bill_review"
+  | "view_eor"
+  | "post_payment"
+  | "close"
+  | "reopen";
+export type BillLifecycleAction = {
+  id: BillLifecycleActionId;
+  label: string;
+  description?: string;
+  tone?: "default" | "primary" | "destructive";
+};
+export type BillLifecycleActivity = {
+  id: string;
+  type: string;
+  createdAt: string;
+  title: string;
+  description: string;
+  actor: string | null;
+  delivery: Record<string, unknown> | null;
+  amount: number | null;
+  accepted: boolean | null;
+  stcCategory: string | null;
+};
+export type BillLifecyclePayment = {
+  id: string;
+  amount: number;
+  method: string;
+  source: string;
+  postedAt: string;
+  [key: string]: unknown;
+};
+export type BillLifecycleResponse = {
+  data: {
+    bill: Record<string, unknown>;
+    patient: Record<string, unknown>;
+    injury: Record<string, unknown>;
+    options?: Record<string, unknown>;
+    lifecycle: {
+      state: string;
+      nativeStatus: string | null;
+      submittedAt: string | null;
+      agingDays: number;
+      updatedAt: string | null;
+      actions: BillLifecycleAction[];
+    };
+    eors: Array<Record<string, unknown>>;
+    activity: BillLifecycleActivity[];
+    payments: BillLifecyclePayment[];
+    remittance: {
+      payerReportedPaid: number | null;
+      totalPaid: number;
+      balanceDue: number;
+      denialReason: string | null;
+    };
+    delivery: { payerName: string; contacts: Record<string, unknown> };
+  };
+};
+
 export type BillEorLineItem = {
   id: string;
   code: string;
@@ -326,6 +386,7 @@ export type BillReviewListResponse = { data: BillReview[] };
 
 export type BillAction =
   | { action: "close"; reason: string }
+  | { action: "reopen"; reason: string }
   | { action: "post_payment"; amount: number; method: "check" | "eft"; checkNumber?: string; depositDate: string; note?: string }
   | { action: "second_review"; reason: string; payerClaimControlNumber: string; disputedAmount?: number; attachmentIds?: string[]; route?: SubmitRoute };
 export type BillActionResponse = { ok: true; replacementBillId?: string; data: Record<string, unknown> | null };
@@ -460,6 +521,19 @@ export class MindBillClient {
 
   getBillStatus(billId: string): Promise<BillStatusResponse> {
     return this.request("GET", `/partner/v2/bills/${encodeURIComponent(billId)}/status`);
+  }
+
+  getBillLifecycle(billId: string): Promise<BillLifecycleResponse> {
+    return this.request("GET", `/partner/v2/bills/${encodeURIComponent(billId)}/lifecycle`);
+  }
+
+  async downloadBillPacket(billId: string): Promise<Blob> {
+    const response = await this.fetcher(
+      `${this.baseUrl}/partner/v2/bills/${encodeURIComponent(billId)}/packet`,
+      { headers: this.headers({}) },
+    );
+    if (!response.ok) throw this.error(response, await parseJson(response));
+    return response.blob();
   }
 
   getBillEor(billId: string): Promise<BillEorResponse> {

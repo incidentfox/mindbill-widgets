@@ -419,7 +419,7 @@ export type BrowserBillCreateInput = {
     firstName: string;
     middleName?: string;
     lastName: string;
-    dateOfBirth?: string;
+    dateOfBirth: string;
     ssn?: string;
     gender?: "M" | "F" | "X";
     phone?: string;

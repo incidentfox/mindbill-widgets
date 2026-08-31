@@ -28,7 +28,7 @@ export type BillSubmissionInput = {
   billingMode?: "med_legal" | "professional";
   patient: {
     id?: string; externalId?: string; firstName: string; middleName?: string; lastName: string;
-    dateOfBirth?: string; ssn?: string; gender?: "M" | "F" | "X"; phone?: string;
+    dateOfBirth: string; ssn?: string; gender?: "M" | "F" | "X"; phone?: string;
     address: BillSubmissionAddress;
   };
   claim: {

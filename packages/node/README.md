@@ -53,11 +53,14 @@ const bill = await mindbill.createAndSubmitBill({
 
 The request atomically creates and submits the bill. Its first public state is `submitted`; the public client intentionally exposes no bill draft, update, document mutation, or separate submission API.
 
-Read status and EORs, then perform an explicit lifecycle action:
+Read the immutable bill, human-readable lifecycle/history, EORs, or complete
+submission packet, then perform an explicit lifecycle action:
 
 ```ts
 const status = await mindbill.getBillStatus(bill.id);
+const lifecycle = await mindbill.getBillLifecycle(bill.id);
 const eor = await mindbill.getBillEor(bill.id);
+const packet = await mindbill.downloadBillPacket(bill.id);
 
 await mindbill.performBillAction(
   bill.id,

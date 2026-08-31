@@ -78,6 +78,7 @@ describe("@mindbill/node v2", () => {
           patient: {
             firstName: "Alex",
             lastName: "Morgan",
+            dateOfBirth: "1980-01-01",
             address: bill.patient.address,
           },
           claim: { claimNumber: "TEST-1001" },
@@ -142,6 +143,39 @@ describe("@mindbill/node v2", () => {
     expect(status.data.state).toBe("processed");
     expect(eor.data.documents[0]?.filename).toBe("eor.pdf");
     expect(closed.ok).toBe(true);
+  });
+
+  it("reads the human lifecycle and downloads the complete submission packet", async () => {
+    const lifecycle = {
+      data: {
+        bill: { id: "bill_1" }, patient: {}, injury: {},
+        lifecycle: {
+          state: "processed", nativeStatus: "processed", submittedAt: "2026-08-25T20:00:00.000Z",
+          agingDays: 3, updatedAt: "2026-08-28T20:00:00.000Z", actions: [{ id: "view_eor", label: "View EOR" }],
+        },
+        eors: [],
+        activity: [{
+          id: "event_1", type: "submitted", createdAt: "2026-08-25T20:00:00.000Z",
+          title: "Bill submitted", description: "Sent electronically to Synthetic Payer.", actor: null,
+          delivery: { route: "ebill" }, amount: null, accepted: null, stcCategory: null,
+        }],
+        payments: [],
+        remittance: { payerReportedPaid: null, totalPaid: 0, balanceDue: 2015, denialReason: null },
+        delivery: { payerName: "Synthetic Payer", contacts: {} },
+      },
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(lifecycle))
+      .mockResolvedValueOnce(new Response("%PDF-synthetic", { status: 200, headers: { "content-type": "application/pdf" } }));
+    const client = new MindBillClient({ apiKey: "mb_test", fetch: fetcher });
+
+    const result = await client.getBillLifecycle("bill_1");
+    const packet = await client.downloadBillPacket("bill_1");
+
+    expect(result.data.activity[0]?.title).toBe("Bill submitted");
+    expect(await packet.text()).toBe("%PDF-synthetic");
+    expect(fetcher.mock.calls[1]?.[0]).toBe("https://app.mindbill.org/partner/v2/bills/bill_1/packet");
   });
 
   it("creates and submits a Second Bill Review with selected attachments", async () => {
