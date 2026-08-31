@@ -293,6 +293,7 @@ export type SubmitBillInput = {
   note?: string;
 };
 export type BillLifecycleActionId =
+  | "resubmit"
   | "second_review"
   | "independent_bill_review"
   | "view_eor"
@@ -359,6 +360,7 @@ export type BillLifecycleDelivery = {
 };
 
 export type BillLifecycleData = BillReviewData & {
+  environment: "sandbox" | "live";
   lifecycle: {
     state: string;
     nativeStatus: string;
@@ -403,6 +405,13 @@ export type SubmitSecondReviewInput = {
   disputedAmount: number | undefined;
   attachmentIds: string[];
   route: BillSubmissionRoute;
+};
+export type ResubmitBillInput = { reason?: string };
+export type SandboxSimulationScenario = "accepted" | "rejected" | "processed" | "denied" | "partial_payment" | "paid";
+export type SimulateSandboxBillInput = {
+  scenario: SandboxSimulationScenario;
+  amount?: number;
+  reasonCode?: string;
 };
 
 export type BrowserBillAddress = {
@@ -497,6 +506,8 @@ export type BillLifecycleClient = {
   reopenBill: (input: ReopenBillInput) => Promise<BillLifecycleData>;
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
   submitSecondReview: (input: SubmitSecondReviewInput) => Promise<BillLifecycleData>;
+  resubmitBill: (input?: ResubmitBillInput) => Promise<BillLifecycleData>;
+  simulateSandbox: (input: SimulateSandboxBillInput) => Promise<BillLifecycleData>;
   clearSession: () => void;
 };
 
@@ -540,7 +551,8 @@ function normalizeLifecycle(value: unknown): BillLifecycleData {
   }
   const data = value as Partial<BillLifecycleData>;
   if (
-    !data.bill
+    !["sandbox", "live"].includes(data.environment ?? "")
+    || !data.bill
     || !data.patient
     || !data.injury
     || !data.lifecycle
@@ -742,6 +754,15 @@ export function createBillLifecycleClient({
     const body = await response.json() as { data?: unknown };
     return normalizeLifecycle(body.data);
   };
+  const simulateSandbox = async (input: SimulateSandboxBillInput): Promise<BillLifecycleData> => {
+    const response = await mutation(billPath("/simulate"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    }, "Sandbox lifecycle could not be simulated.");
+    const body = await response.json() as { data?: unknown };
+    return normalizeLifecycle(body.data);
+  };
   return {
     getBillId() { return currentBillId; },
     clearSession() { session = null; sessionRequest = null; },
@@ -774,6 +795,8 @@ export function createBillLifecycleClient({
     reopenBill(input) { return action({ action: "reopen", ...input }, "Bill could not be reopened."); },
     postPayment(input) { return action({ action: "post_payment", ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
+    resubmitBill(input = {}) { return action({ action: "resubmit", ...input }, "Bill could not be resubmitted."); },
+    simulateSandbox,
   };
 }
 

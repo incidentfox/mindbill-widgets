@@ -14,6 +14,7 @@ import {
 } from "../packages/react/src/appearance";
 import {
   billActivityEventLabel,
+  billLifecycleDisplayLabel,
   billLifecycleStage,
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
@@ -49,9 +50,9 @@ describe("partner appearance presets", () => {
       borderRadius: "12px",
     });
     expect(resolveMindBillAppearance({ preset: "orange-bright" })).toMatchObject({
-      accentColor: "#ff4f0a",
-      textColor: "#111827",
-      controlRadius: "6px",
+      accentColor: "#f4510b",
+      textColor: "#090f1f",
+      controlRadius: "10px",
     });
     expect(resolveMindBillAppearance({ preset: "clinical-blue" })).toMatchObject({
       accentColor: "#1677ff",
@@ -72,7 +73,7 @@ describe("partner appearance presets", () => {
       "--mb-accent": "#f97316",
       "--mb-accent-contrast": "#ffffff",
       "--mb-radius": "4px",
-      "--mb-control-radius": "6px",
+      "--mb-control-radius": "10px",
     });
   });
 });
@@ -267,10 +268,18 @@ describe("bill lifecycle surfaces", () => {
   it("maps native lifecycle states into the compact progress rail", () => {
     expect(billLifecycleStage("submitted")).toBe("submitted");
     expect(billLifecycleStage("accepted")).toBe("accepted");
-    expect(billLifecycleStage("rejected")).toBe("processed");
+    expect(billLifecycleStage("rejected")).toBe("submitted");
+    expect(billLifecycleStage("second_review")).toBe("submitted");
     expect(billLifecycleStage("processed")).toBe("processed");
+    expect(billLifecycleStage("denied")).toBe("processed");
     expect(billLifecycleStage("paid")).toBe("processed");
     expect(billLifecycleStage("closed")).toBe("closed");
+  });
+
+  it("uses human labels while preserving immutable API states", () => {
+    expect(billLifecycleDisplayLabel("submitted", "SENT")).toBe("Sent");
+    expect(billLifecycleDisplayLabel("second_review", "appealing")).toBe("Second Review sent");
+    expect(billLifecycleDisplayLabel("partially_paid")).toBe("Partially paid");
   });
 });
 
@@ -547,6 +556,7 @@ describe("connected bill status", () => {
 
 describe("connected bill lifecycle", () => {
   const lifecycle = {
+    environment: "sandbox",
     bill: {
       id: "bill_789",
       billNumber: 789,
@@ -664,6 +674,41 @@ describe("connected bill lifecycle", () => {
     expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
       action: "reopen",
       reason: "Continue payer follow-up.",
+    }));
+  });
+
+  it("simulates sandbox payer responses and resubmits a rejected bill", async () => {
+    const rejected = {
+      ...lifecycle,
+      lifecycle: { ...lifecycle.lifecycle, state: "rejected", nativeStatus: "REJECTED" },
+    };
+    const submitted = {
+      ...lifecycle,
+      lifecycle: { ...lifecycle.lifecycle, state: "submitted", nativeStatus: "SENT" },
+    };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-lifecycle-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(jsonResponse({ data: rejected }))
+      .mockResolvedValueOnce(jsonResponse({ data: submitted }));
+    const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
+
+    await expect(client.simulateSandbox({ scenario: "rejected" })).resolves.toMatchObject({
+      lifecycle: { state: "rejected" },
+    });
+    await expect(client.resubmitBill({ reason: "Selected the correct payer route." })).resolves.toMatchObject({
+      lifecycle: { state: "submitted" },
+    });
+
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/simulate",
+    );
+    expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({ scenario: "rejected" }));
+    expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
+      action: "resubmit",
+      reason: "Selected the correct payer route.",
     }));
   });
 

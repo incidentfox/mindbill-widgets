@@ -148,6 +148,7 @@ describe("@mindbill/node v2", () => {
   it("reads the human lifecycle and downloads the complete submission packet", async () => {
     const lifecycle = {
       data: {
+        environment: "sandbox",
         bill: { id: "bill_1" }, patient: {}, injury: {},
         lifecycle: {
           state: "processed", nativeStatus: "processed", submittedAt: "2026-08-25T20:00:00.000Z",
@@ -176,6 +177,29 @@ describe("@mindbill/node v2", () => {
     expect(result.data.activity[0]?.title).toBe("Bill submitted");
     expect(await packet.text()).toBe("%PDF-synthetic");
     expect(fetcher.mock.calls[1]?.[0]).toBe("https://app.mindbill.org/partner/v2/bills/bill_1/packet");
+  });
+
+  it("drives explicit sandbox lifecycle simulations", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      data: { scenario: "processed", state: "processed" },
+    }));
+    const client = new MindBillClient({
+      apiKey: "mb_sandbox_test",
+      baseUrl: "https://example.test",
+      fetch: fetcher,
+    });
+
+    const result = await client.simulateSandboxBill(
+      "bill_1",
+      { scenario: "processed", amount: 650 },
+      "simulate-processed-bill-1",
+    );
+
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(url).toBe("https://example.test/partner/v2/sandbox/bills/bill_1/simulate");
+    expect(new Headers(request?.headers).get("idempotency-key")).toBe("simulate-processed-bill-1");
+    expect(JSON.parse(String(request?.body))).toEqual({ scenario: "processed", amount: 650 });
+    expect(result.data.state).toBe("processed");
   });
 
   it("creates and submits a Second Bill Review with selected attachments", async () => {
