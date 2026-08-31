@@ -8,19 +8,19 @@ the Partner API key never reaches the browser.
 import { createBillLifecycleClient } from "@mindbill/browser";
 
 const billing = createBillLifecycleClient({
+  billId: "bill_123",
   sessionEndpoint: "/api/mindbill/session",
 });
 
-const { billId, data } = await billing.createBill(knownBillValues);
+const { data } = await billing.load();
 ```
 
-Review mutations are normalized against the v2 write contract automatically.
-Read-only snapshot metadata returned for rendering is never sent back on save,
-so the same client is safe to use from React, Angular, or plain JavaScript.
+The browser client operates only on an already-submitted bill. Bill creation,
+document selection, review, and the atomic submission stay on the partner server.
+The same lifecycle client is safe to use from React, Angular, or plain JavaScript.
 
-Pass `billId` when opening an existing bill. The same organization/user session
-can create and work with any bill allowed by its permissions; an optional
-`resource: { billId }` restriction is available for unusually narrow access.
+Pass `billId` for the submitted bill. An optional `resource: { billId }`
+restriction makes the session usable for only that bill.
 
 The session endpoint is the only required partner-server integration. See the
 [10-minute quickstart](https://docs.mindbill.org/quickstart).

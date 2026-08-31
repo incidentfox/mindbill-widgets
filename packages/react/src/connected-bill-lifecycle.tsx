@@ -13,13 +13,8 @@ import {
   type ReactNode,
 } from "react";
 import {
-  BillReviewForm,
   BillStatusSummary,
   type BillReviewAttachment,
-  type BillReviewDocumentType,
-  type BillReviewFeatures,
-  type BillReviewSaveInput,
-  type BillSubmissionInput,
   type BillSubmissionRoute,
 } from "./native-bill-review";
 import {
@@ -39,7 +34,6 @@ import {
   type BillLifecycleClientOptions,
   type BillLifecycleData,
   type BillLifecycleActionId,
-  type BrowserBillCreateInput,
   type CloseBillInput,
   type PostBillPaymentInput,
   type SubmitSecondReviewInput,
@@ -58,7 +52,6 @@ export type {
   BillLifecycleSessionProvider,
   BillLifecycleSessionRequest,
   BrowserBillAddress,
-  BrowserBillCreateInput,
   BillPaymentRecord,
   BillRemittanceSummary,
   CloseBillInput,
@@ -69,20 +62,13 @@ export type {
 const DEFAULT_REFRESH_INTERVAL = 60_000;
 
 export type UseBillLifecycleOptions = BillLifecycleClientOptions & {
-  /** Initial bill snapshot used when no existing `billId` is supplied. */
-  create?: BrowserBillCreateInput;
   refreshInterval?: number;
   enabled?: boolean;
   initialData?: BillLifecycleData | null;
-  onBillCreated?: (billId: string, data: BillLifecycleData) => void | Promise<void>;
-  onBillIdChange?: (
-    billId: string,
-    previousBillId: string | null,
-  ) => void | Promise<void>;
 };
 
 export type UseBillLifecycleResult = {
-  billId: string | null;
+  billId: string;
   data: BillLifecycleData | null;
   error: Error | null;
   isLoading: boolean;
@@ -91,16 +77,11 @@ export type UseBillLifecycleResult = {
   refresh: () => Promise<void>;
   searchClaimsAdministrators: BillLifecycleClient["searchClaimsAdministrators"];
   getDeliveryOptions: BillLifecycleClient["getDeliveryOptions"];
-  saveReview: BillLifecycleClient["saveReview"];
-  submitBill: BillLifecycleClient["submitBill"];
-  addAttachment: BillLifecycleClient["addAttachment"];
-  removeAttachment: BillLifecycleClient["removeAttachment"];
   openAttachment: (attachment: BillReviewAttachment) => Promise<void>;
   openEor: (document: BillEorDocument) => Promise<void>;
   closeBill: BillLifecycleClient["closeBill"];
   postPayment: BillLifecycleClient["postPayment"];
   submitSecondReview: BillLifecycleClient["submitSecondReview"];
-  startCorrection: () => Promise<BillLifecycleData>;
 };
 
 function openPdf(blob: Blob, filename: string): void {
@@ -116,18 +97,15 @@ function openPdf(blob: Blob, filename: string): void {
 
 export function useBillLifecycle({
   billId: providedBillId,
-  create,
   sessionEndpoint = DEFAULT_SESSION_ENDPOINT,
   getSession,
   apiBaseUrl = DEFAULT_API_BASE_URL,
   refreshInterval = DEFAULT_REFRESH_INTERVAL,
   enabled = true,
   initialData = null,
-  onBillCreated,
-  onBillIdChange,
   fetch: fetchOverride,
 }: UseBillLifecycleOptions): UseBillLifecycleResult {
-  const [billId, setBillId] = useState<string | null>(providedBillId ?? null);
+  const billId = providedBillId;
   const [data, setData] = useState<BillLifecycleData | null>(initialData);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(enabled && !initialData);
@@ -136,13 +114,12 @@ export function useBillLifecycle({
   const mounted = useRef(true);
 
   useEffect(() => {
-    setBillId(providedBillId ?? null);
     setData(initialData);
     setError(null);
   }, [initialData, providedBillId]);
 
   const client = useMemo(() => createBillLifecycleClient({
-    ...(providedBillId ? { billId: providedBillId } : {}),
+    billId: providedBillId,
     sessionEndpoint,
     getSession,
     apiBaseUrl,
@@ -161,17 +138,7 @@ export function useBillLifecycle({
     if (!enabled) return;
     setIsRefreshing(true);
     try {
-      let next: BillLifecycleData;
-      if (!client.getBillId()) {
-        if (!create) throw new Error("Pass billId to open a bill or create to start a new one.");
-        const created = await client.createBill(create);
-        await onBillCreated?.(created.billId, created.data);
-        await onBillIdChange?.(created.billId, null);
-        if (mounted.current) setBillId(created.billId);
-        next = created.data;
-      } else {
-        next = await client.getLifecycle();
-      }
+      const next = await client.getLifecycle();
       if (!mounted.current) return;
       setData(next);
       setError(null);
@@ -184,7 +151,7 @@ export function useBillLifecycle({
         setIsRefreshing(false);
       }
     }
-  }, [client, create, enabled, onBillCreated, onBillIdChange]);
+  }, [client, enabled]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -220,10 +187,6 @@ export function useBillLifecycle({
     }
   }, []);
 
-  const saveReview = useCallback(
-    (input: BillReviewSaveInput) => mutate(() => client.saveReview(input)),
-    [client, mutate],
-  );
   const searchClaimsAdministrators = useCallback(
     (query: string, claimNumber?: string) =>
       client.searchClaimsAdministrators(query, claimNumber),
@@ -232,20 +195,6 @@ export function useBillLifecycle({
   const getDeliveryOptions = useCallback(
     () => client.getDeliveryOptions(),
     [client],
-  );
-  const submitBill = useCallback(
-    (input: BillReviewSaveInput, submission: BillSubmissionInput) =>
-      mutate(() => client.submitBill(input, submission)),
-    [client, mutate],
-  );
-  const addAttachment = useCallback(
-    (file: File, type: BillReviewDocumentType, description?: string) =>
-      mutate(() => client.addAttachment(file, type, description)),
-    [client, mutate],
-  );
-  const removeAttachment = useCallback(
-    (attachmentId: string) => mutate(() => client.removeAttachment(attachmentId)),
-    [client, mutate],
   );
   const closeBill = useCallback(
     (input: CloseBillInput) => mutate(() => client.closeBill(input)),
@@ -260,26 +209,6 @@ export function useBillLifecycle({
       mutate(() => client.submitSecondReview(input)),
     [client, mutate],
   );
-  const startCorrection = useCallback(async () => {
-    setIsMutating(true);
-    setError(null);
-    try {
-      const result = await client.startCorrection();
-      const previousBillId = billId;
-      await onBillIdChange?.(result.replacementBillId, previousBillId);
-      setBillId(result.replacementBillId);
-      setData(result.data);
-      return result.data;
-    } catch (cause) {
-      const nextError = cause instanceof Error
-        ? cause
-        : new Error("The correction could not be created.");
-      setError(nextError);
-      throw nextError;
-    } finally {
-      setIsMutating(false);
-    }
-  }, [billId, client, onBillIdChange]);
   const openAttachment = useCallback(async (attachment: BillReviewAttachment) => {
     openPdf(await client.getAttachment(attachment.id), attachment.filename);
   }, [client]);
@@ -297,22 +226,16 @@ export function useBillLifecycle({
     refresh,
     searchClaimsAdministrators,
     getDeliveryOptions,
-    saveReview,
-    submitBill,
-    addAttachment,
-    removeAttachment,
     openAttachment,
     openEor,
     closeBill,
     postPayment,
     submitSecondReview,
-    startCorrection,
   };
 }
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   appearance?: MindBillReactAppearance;
-  features?: BillReviewFeatures;
   className?: string;
   style?: CSSProperties;
   loadingFallback?: ReactNode;
@@ -320,7 +243,7 @@ export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   onChanged?: (data: BillLifecycleData) => void;
 };
 
-type Panel = "" | "correction" | "second_review" | "payment" | "close";
+type Panel = "" | "second_review" | "payment" | "close";
 
 function LifecycleDialog({
   children,
@@ -360,45 +283,8 @@ function dateInputValue(): string {
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 }
 
-function SupportingDocumentControl({
-  disabled,
-  onAdd,
-}: {
-  disabled: boolean;
-  onAdd: (
-    file: File,
-    type: BillReviewDocumentType,
-    description?: string,
-  ) => Promise<unknown>;
-}): ReactElement {
-  const [file, setFile] = useState<File | null>(null);
-  const [type, setType] = useState<BillReviewDocumentType>("appeal");
-  const [busy, setBusy] = useState(false);
-  return <div className="mb-lifecycle-upload">
-    <select aria-label="Supporting document type" value={type} disabled={disabled || busy} onChange={(event) => setType(event.target.value as BillReviewDocumentType)}>
-      <option value="appeal">Second Review support</option>
-      <option value="final_report">Final report</option>
-      <option value="proof_of_service">Proof of service</option>
-      <option value="letter_of_attestation">Letter of attestation</option>
-      <option value="form_122">DWC Form 122</option>
-      <option value="w9">W-9</option>
-      <option value="other">Other supporting document</option>
-    </select>
-    <input aria-label="Choose supporting PDF" type="file" accept="application/pdf,.pdf" disabled={disabled || busy} onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-    <button type="button" className="mb-lifecycle-button secondary" disabled={disabled || busy || !file} onClick={() => {
-      if (!file) return;
-      setBusy(true);
-      void onAdd(file, type)
-        .then(() => setFile(null))
-        .catch(() => undefined)
-        .finally(() => setBusy(false));
-    }}>{busy ? "Attaching…" : "Attach PDF"}</button>
-  </div>;
-}
-
 export function ConnectedBillLifecycle({
   appearance,
-  features,
   className,
   style,
   loadingFallback,
@@ -470,20 +356,17 @@ export function ConnectedBillLifecycle({
     }
   };
   const actionButtons = data.lifecycle.actions
-    .filter((action) => action.id !== "edit_and_submit" && action.id !== "view_eor" && action.id !== "independent_bill_review")
+    .filter((action) => action.id !== "view_eor" && action.id !== "independent_bill_review")
     .map((action) => ({
       ...action,
       onClick: () => {
         if (!action.enabled) return;
-        if (action.id === "correct_and_resubmit") selectPanel("correction");
         if (action.id === "second_review") selectPanel("second_review");
         if (action.id === "post_payment") selectPanel("payment");
         if (action.id === "close") selectPanel("close");
       },
       disabled: !action.enabled || lifecycle.isMutating,
     }));
-
-  const canEditAndSubmit = Boolean(has("edit_and_submit"));
 
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
@@ -503,31 +386,17 @@ export function ConnectedBillLifecycle({
       {...(appearance ? { appearance } : {})}
     />
 
-    {canEditAndSubmit
-      ? <BillReviewForm
-          data={data}
-          {...(appearance ? { appearance } : {})}
-          {...(features ? { features } : {})}
-          disabled={lifecycle.isMutating}
-          onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
-          onGetDeliveryOptions={lifecycle.getDeliveryOptions}
-          onSave={lifecycle.saveReview}
-          onSubmit={async (input, submission) => { await complete("Bill submitted.", () => lifecycle.submitBill(input, submission)); }}
-          onAddAttachment={async (file, type, description) => { await lifecycle.addAttachment(file, type, description); }}
-          onRemoveAttachment={async (attachmentId) => { await lifecycle.removeAttachment(attachmentId); }}
-          onOpenAttachment={(attachment) => void lifecycle.openAttachment(attachment).catch(() => undefined)}
-        />
-      : <BillStatusSummary
-          status={data.lifecycle.state}
-          submittedAt={data.lifecycle.submittedAt ?? null}
-          agingDays={data.lifecycle.agingDays ?? null}
-          updatedAt={data.lifecycle.updatedAt ?? null}
-          totalCharge={data.bill.totalCharge}
-          totalPaid={data.bill.totalPaid}
-          balanceDue={data.bill.balanceDue}
-          actions={actionButtons}
-          {...(appearance ? { appearance } : {})}
-        />}
+    <BillStatusSummary
+      status={data.lifecycle.state}
+      submittedAt={data.lifecycle.submittedAt ?? null}
+      agingDays={data.lifecycle.agingDays ?? null}
+      updatedAt={data.lifecycle.updatedAt ?? null}
+      totalCharge={data.bill.totalCharge}
+      totalPaid={data.bill.totalPaid}
+      balanceDue={data.bill.balanceDue}
+      actions={actionButtons}
+      {...(appearance ? { appearance } : {})}
+    />
 
     <div className="mb-lifecycle-toolbar">
       <div>
@@ -536,7 +405,7 @@ export function ConnectedBillLifecycle({
       </div>
       <div className="mb-lifecycle-toolbar-actions">
         {has("view_eor") ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => document.getElementById(`mb-eors-${data.bill.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>View EOR</button> : null}
-        {canEditAndSubmit && has("close") ? <button type="button" className="mb-lifecycle-button quiet" onClick={() => selectPanel("close")}>Close bill</button> : null}
+        {has("close") ? <button type="button" className="mb-lifecycle-button quiet" onClick={() => selectPanel("close")}>Close bill</button> : null}
       </div>
     </div>
 
@@ -555,11 +424,6 @@ export function ConnectedBillLifecycle({
 
     {has("independent_bill_review") ? <div className="mb-lifecycle-info"><strong>{has("independent_bill_review")?.label}</strong><span>{has("independent_bill_review")?.reason}</span></div> : null}
 
-    {panel === "correction" ? <LifecycleDialog title="Correct and resubmit" onClose={closePanel}><section className="mb-lifecycle-panel">
-      <div><h3>Correct and resubmit</h3><p>The rejected bill stays in history. A copied correction opens here so you can fix the rejected values and resubmit.</p></div>
-      <div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={closePanel}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void complete("Correction created.", lifecycle.startCorrection)}>{lifecycle.isMutating ? "Creating…" : "Create correction"}</button></div>
-    </section></LifecycleDialog> : null}
-
     {panel === "second_review" ? <LifecycleDialog title="Submit Second Review" onClose={closePanel}><section className="mb-lifecycle-panel wide">
       <div><h3>Submit Second Review</h3><p>State why payment is disputed, confirm the payer control number, and choose the supporting documents to send.</p></div>
       <div className="mb-lifecycle-fields two">
@@ -570,17 +434,7 @@ export function ConnectedBillLifecycle({
           <label><span>Send via</span><select value={review.route} onChange={(event) => setReview((current) => ({ ...current, route: event.target.value as BillSubmissionRoute }))}><option value="ebill">E-bill</option><option value="fax">Fax</option><option value="mail">Mail</option><option value="email">Email</option></select></label>
         </div>
       </div>
-      <fieldset className="mb-lifecycle-packet"><legend>Supporting packet</legend>{data.bill.attachments.map((attachment) => <label key={attachment.id}><input type="checkbox" checked={review.attachmentIds.includes(attachment.id)} onChange={(event) => setReview((current) => ({ ...current, attachmentIds: event.target.checked ? [...current.attachmentIds, attachment.id] : current.attachmentIds.filter((id) => id !== attachment.id) }))} /><span><strong>{attachment.filename}</strong><small>{attachment.description || attachment.documentType}</small></span><button type="button" onClick={() => void lifecycle.openAttachment(attachment).catch(() => undefined)}>View</button><button type="button" aria-label={`Remove ${attachment.filename}`} onClick={() => void lifecycle.removeAttachment(attachment.id).catch(() => undefined)}>×</button></label>)}</fieldset>
-      <SupportingDocumentControl disabled={lifecycle.isMutating} onAdd={async (file, type, description) => {
-        const next = await lifecycle.addAttachment(file, type, description);
-        setReview((current) => ({
-          ...current,
-          attachmentIds: Array.from(new Set([
-            ...current.attachmentIds,
-            ...next.bill.attachments.map((attachment) => attachment.id),
-          ])),
-        }));
-      }} />
+      <fieldset className="mb-lifecycle-packet"><legend>Supporting packet</legend>{data.bill.attachments.map((attachment) => <label key={attachment.id}><input type="checkbox" checked={review.attachmentIds.includes(attachment.id)} onChange={(event) => setReview((current) => ({ ...current, attachmentIds: event.target.checked ? [...current.attachmentIds, attachment.id] : current.attachmentIds.filter((id) => id !== attachment.id) }))} /><span><strong>{attachment.filename}</strong><small>{attachment.description || attachment.documentType}</small></span><button type="button" onClick={() => void lifecycle.openAttachment(attachment).catch(() => undefined)}>View</button></label>)}</fieldset>
       <div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={closePanel}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !review.reason.trim() || !review.payerClaimControlNumber.trim()} onClick={() => void complete("Second Review submitted.", () => lifecycle.submitSecondReview(review))}>{lifecycle.isMutating ? "Submitting…" : "Submit Second Review"}</button></div>
     </section></LifecycleDialog> : null}
 

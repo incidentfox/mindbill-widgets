@@ -22,14 +22,15 @@ export const mindbill = new MindBillClient({
 });
 ```
 
-## 1. Create one bill
+## 1. Create and submit one immutable bill
 
-Send the values that should be printed on the claim. `externalId` is your report, evaluation, or work-item ID. Every mutation takes an idempotency key.
+Collect and review every value and payer PDF in your application, then send the complete snapshot once. `externalId` is your report, evaluation, or work-item ID. The request requires an idempotency key.
 
 ```ts
-const bill = await mindbill.createBill({
-  externalId: "evaluation_123",
-  patient: {
+const bill = await mindbill.createAndSubmitBill({
+  bill: {
+    externalId: "evaluation_123",
+    patient: {
     externalId: "patient_42",
     firstName: "Taylor",
     lastName: "Example",
@@ -40,17 +41,17 @@ const bill = await mindbill.createBill({
       state: "CA",
       postalCode: "90012",
     },
-  },
-  claim: {
+    },
+    claim: {
     externalId: "claim_99",
     claimNumber: "DEMO-12345",
     employer: "Example Manufacturing",
     dateOfInjury: "2026-06-20",
     injuryState: "CA",
     claimsAdministrator: { name: "Example Claims Administrator" },
-  },
-  service: { date: "2026-08-25" },
-  billingProvider: {
+    },
+    service: { date: "2026-08-25" },
+    billingProvider: {
     name: "Example Evaluations Medical Group, Inc.",
     taxId: "12-3456789",
     npi: "1234567893",
@@ -61,16 +62,16 @@ const bill = await mindbill.createBill({
       state: "CA",
       postalCode: "90012",
     },
-  },
-  renderingProvider: {
+    },
+    renderingProvider: {
     name: "Avery Example, MD",
     npi: "1234567893",
     taxonomy: "208D00000X",
     licenseNumber: "A12345",
     licenseState: "CA",
     isQme: true,
-  },
-  serviceLocation: {
+    },
+    serviceLocation: {
     name: "Main office",
     address: {
       line1: "100 Example Avenue",
@@ -79,36 +80,27 @@ const bill = await mindbill.createBill({
       postalCode: "90012",
     },
     placeOfServiceCode: "11",
+    },
+    diagnoses: ["M25.512"],
+    serviceLines: [{ code: "ML201", modifiers: ["95"], units: 1 }],
   },
-  diagnoses: ["M25.512"],
-  serviceLines: [{ code: "ML201", modifiers: ["95"], units: 1 }],
+  submission: { route: "ebill" },
+  documents: [{
+    filename: "final-report.pdf",
+    documentType: "final_report",
+    contentBase64: finalReportBytes.toString("base64"),
+    externalId: "document_456",
+  }],
 }, crypto.randomUUID());
 
 await saveBillId({ externalId: "evaluation_123", billId: bill.id });
 ```
 
-The bill freezes these values. Editing a saved provider later never rewrites a past claim. To correct a draft, call `updateBill(bill.id, patch, idempotencyKey)`.
+The first public bill state is `submitted`. There is no draft, update, upload, delete, or separate submit operation: a successful response means MindBill accepted one immutable snapshot for delivery. Editing a provider in your application never rewrites a past claim.
 
-## 2. Add the payer packet
+## 2. Render the submitted lifecycle
 
-Documents are explicit. Default final reports, proof of service, W-9s, and required forms when appropriate. Never silently attach medical records, and keep the payer billing packet separate from attorney report service.
-
-```ts
-await mindbill.uploadBillDocument(bill.id, {
-  file: finalReportBlob,
-  filename: "final-report.pdf",
-  documentType: "final_report",
-  externalId: "document_456",
-}, crypto.randomUUID());
-```
-
-Users can review, remove, and intentionally add supporting PDFs before submission.
-
-## 3. Render the complete lifecycle
-
-`ConnectedBillLifecycle` loads the bill, searches the payer directory, saves edits, manages documents, submits, polls status, displays EORs, and exposes only the actions valid for the current state.
-
-Both the React and Angular lifecycle forms keep one keyboard-ready procedure row after the entered lines and add the next row automatically as soon as typing begins.
+`ConnectedBillLifecycle` starts after submission. It loads the immutable bill, polls status, displays EORs, and exposes only the post-submission actions valid for the current state.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
@@ -124,7 +116,7 @@ export function Billing({ billId }: { billId: string }) {
 }
 ```
 
-Use `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers the full native lifecycle, including payer search, attachments, status, EORs, payments, reviews, and resubmission.
+Use `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers status, EORs, payments, reviews, and close actions.
 
 Angular uses the same bill ID, browser session, API calls, and lifecycle rules:
 
@@ -167,9 +159,9 @@ export async function POST(request: Request) {
 }
 ```
 
-This route contains authorization, not billing business logic. The API key fixes the organization boundary; `subject` and `permissions` fix the user boundary. The component renews the session and calls MindBill directly to create, edit, submit, and act on bills.
+This route contains authorization, not billing business logic. The API key fixes the organization boundary; `subject` and `permissions` fix the user boundary. The component renews the session and calls MindBill directly to read and act on submitted bills.
 
-For a new bill, omit `billId` and pass a `create` snapshot to `ConnectedBillLifecycle`. Use `onBillCreated` for immediate navigation or local caching; use signed webhooks as the durable source of truth. For a compact read-only surface, use `ConnectedBillStatus` with the same session endpoint. For a custom interface, use `useBillLifecycle` or `useBillStatus`.
+Create and submit the bill from your server before rendering this component, then pass the returned `bill.id`. For a compact read-only surface, use `ConnectedBillStatus` with the same session endpoint. For a custom interface, use `useBillLifecycle` or `useBillStatus`. Signed webhooks remain the durable source of truth.
 
 ## Server-side lifecycle calls
 
@@ -194,7 +186,7 @@ if (status.data.state === "denied") {
 }
 ```
 
-Available operations include submit, close, correction/resubmission, Second Bill Review, EOR reads, and payment posting. Signed webhooks provide live updates; `listEvents(cursor)` recovers missed deliveries.
+Available operations include close, Second Bill Review, EOR reads, and payment posting. A submitted bill is never edited or corrected in place. Signed webhooks provide live updates; `listEvents(cursor)` recovers missed deliveries.
 
 ## Data ownership
 

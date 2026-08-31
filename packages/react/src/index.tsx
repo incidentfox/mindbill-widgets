@@ -151,8 +151,6 @@ export type {
   BillLifecycleSession,
   BillLifecycleSessionProvider,
   BillLifecycleSessionRequest,
-  BrowserBillAddress,
-  BrowserBillCreateInput,
   BillPaymentRecord,
   BillRemittanceSummary,
   CloseBillInput,

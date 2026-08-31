@@ -8,18 +8,15 @@ npm install @mindbill/react @mindbill/node
 
 ## Connected lifecycle
 
-`ConnectedBillLifecycle` is the default integration. It owns bill loading, payer lookup, editable review, attachments, submission, status refresh, EORs, payment posting, Second Bill Review, correction/resubmission, and close.
-
-Procedure entry is keyboard-first: the form always keeps one empty row after the entered lines, grows as soon as that row is partially filled, and omits the empty row from save and submit payloads.
+`ConnectedBillLifecycle` starts after your server atomically creates and submits an immutable bill. It owns bill loading, status refresh, EORs, payment posting, Second Bill Review, and close.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
 
 <ConnectedBillLifecycle
-  create={knownBillValues}
+  billId={billId}
   sessionEndpoint="/api/mindbill/session"
   appearance={{ preset: "qme-companion" }}
-  onBillCreated={(billId) => navigate(`/bills/${billId}`)}
 />
 ```
 
@@ -64,8 +61,6 @@ export async function POST(request: Request) {
 }
 ```
 
-The component searches MindBill's claims-administrator directory with both payer text and the current claim number. It explains name and claim-pattern evidence, shows delivery availability, and only preselects a high-confidence exact name or alias match.
-
 The API key binds every session to one organization. `subject` identifies the user and `permissions` express the role. MindBill enforces the organization boundary on every bill request. A permanent Partner API key must never enter frontend code.
 
 ## Compact status
@@ -98,7 +93,6 @@ import { BillLifecycleActions } from "@mindbill/react";
       case "view_eor": return bill.openEor();
       case "post_payment": return setPaymentOpen(true);
       case "second_review": return setSecondReviewOpen(true);
-      case "correct_and_resubmit": return bill.startCorrection();
       case "close": return bill.closeBill({ reason: "Resolved" });
     }
   }}
@@ -117,19 +111,19 @@ import { BillActivityTimeline } from "@mindbill/react";
 <BillActivityTimeline events={billEvents} />
 ```
 
-Browser callbacks such as `onBillCreated`, `onBillIdChange`, and `onChanged` are for immediate UI, navigation, optimistic state, and analytics. Signed webhooks are the authoritative integration for durable server state.
+Browser callbacks such as `onChanged` are for immediate UI, navigation, optimistic state, and analytics. Signed webhooks are the authoritative integration for durable server state.
 
 ## Controlled escape hatch
 
-Use `BillReviewForm` only when your application intentionally owns the API calls and local review state. Known bill values and payer documents remain explicit and editable.
+Use `BillReviewForm` only when your application owns the local, pre-submission review state and calls its own server endpoint for the atomic create-and-submit request. Required fields use a red asterisk; attachments remain local until submission.
 
 ```tsx
 import { BillReviewForm } from "@mindbill/react";
 
 <BillReviewForm
   data={billReview}
+  mode="submission"
   appearance={{ preset: "qme-companion" }}
-  onSave={(input) => api.patch("/billing/review", input)}
   onSubmit={(input, route) => api.post("/billing/submit", { input, route })}
   onAddAttachment={(file, documentType, description) =>
     api.upload("/billing/attachments", { file, documentType, description })

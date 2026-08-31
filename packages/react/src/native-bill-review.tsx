@@ -250,12 +250,14 @@ export type BillSubmissionInput = {
 
 export type BillReviewFormProps = {
   data: BillReviewData;
-  onSave: (input: BillReviewSaveInput) => Promise<BillReviewData | void>;
+  mode?: "review" | "submission";
+  initialSubmission?: BillSubmissionInput;
+  onSave?: (input: BillReviewSaveInput) => Promise<BillReviewData | void>;
   onSubmit: (
     input: BillReviewSaveInput,
     submission: BillSubmissionInput,
   ) => Promise<void>;
-  onGetDeliveryOptions: () => Promise<BillDeliveryOptions>;
+  onGetDeliveryOptions?: () => Promise<BillDeliveryOptions>;
   onAddAttachment: (
     file: File,
     documentType: BillReviewDocumentType,
@@ -452,7 +454,7 @@ function Field({
   return (
     <label className="mb-native-field">
       <span>
-        {label} {optional ? <small>Optional</small> : null}
+        {label}{required ? <span className="mb-native-required" aria-hidden="true"> *</span> : null}{optional ? <> <small>Optional</small></> : null}
       </span>
       <input
         type={type}
@@ -512,7 +514,7 @@ function Combobox({ label, value, options, onChange, placeholder, required, disa
   };
   return <div className="mb-native-combo" ref={root}>
     <label className="mb-native-field">
-      <span>{label}</span>
+      <span>{label}{required ? <span className="mb-native-required" aria-hidden="true"> *</span> : null}</span>
       <input
         role="combobox"
         aria-autocomplete="list"
@@ -588,6 +590,8 @@ function applyPreset(lines: BillReviewLineItem[], preset: CodingPreset): BillRev
 
 export function BillReviewForm({
   data,
+  mode = "review",
+  initialSubmission = { route: "ebill" },
   onSave,
   onSubmit,
   onGetDeliveryOptions,
@@ -608,7 +612,7 @@ export function BillReviewForm({
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]);
   const [payerBusy, setPayerBusy] = useState(false);
   const [deliveryOptions, setDeliveryOptions] = useState<BillDeliveryOptions | null>(null);
-  const [submission, setSubmission] = useState<BillSubmissionInput>({ route: "ebill" });
+  const [submission, setSubmission] = useState<BillSubmissionInput>(initialSubmission);
   const [showSubmit, setShowSubmit] = useState(false);
   const [deliveryBusy, setDeliveryBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -617,7 +621,7 @@ export function BillReviewForm({
   const [busy, setBusy] = useState<"save" | "submit" | "attachment" | "">("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const editable = data.bill.status === "incomplete" && !disabled;
+  const editable = (mode === "submission" || data.bill.status === "incomplete") && !disabled;
 
   useEffect(() => {
     setDraft(toDraft(data));
@@ -756,6 +760,12 @@ export function BillReviewForm({
 
   const handleSave = (event: FormEvent) => {
     event.preventDefault();
+    if (mode === "submission") {
+      if (!canSubmit) return;
+      void run("submit", () => onSubmit(buildBillReviewSaveInput(draft), initialSubmission));
+      return;
+    }
+    if (!onSave) return;
     void run("save", async () => {
       const updated = await onSave(buildBillReviewSaveInput(draft));
       if (updated) setDraft(toDraft(updated));
@@ -763,6 +773,7 @@ export function BillReviewForm({
   };
 
   const openSubmit = async () => {
+    if (!onGetDeliveryOptions) return;
     setDeliveryBusy(true);
     setError("");
     try {
@@ -833,7 +844,7 @@ export function BillReviewForm({
       <style>{NATIVE_BILL_REVIEW_STYLES}</style>
       <style>{NATIVE_THEME_OVERRIDE_STYLES}</style>
       <style>{NATIVE_SUBMISSION_DIALOG_STYLES}</style>
-      <header className="mb-native-heading">
+      {mode === "review" ? <><header className="mb-native-heading">
         <div>
           <span className="mb-native-eyebrow">Billing review</span>
           <h2>Bill #{data.bill.billNumber}</h2>
@@ -850,7 +861,7 @@ export function BillReviewForm({
         <div><dt>Claim</dt><dd>{draft.claimNumber || "—"}</dd></div>
         <div><dt>Employer</dt><dd>{draft.employer || "—"}</dd></div>
         <div><dt>Date of injury</dt><dd>{draft.doi || "—"}</dd></div>
-      </dl>
+      </dl></> : null}
 
       <section className={sectionClass}>
         <div className="mb-native-section-head">
@@ -858,11 +869,11 @@ export function BillReviewForm({
             <h3>Claims administrator</h3>
             <p>Select the carrier or administrator that should receive this bill.</p>
           </div>
-          {draft.claimsAdminId ? <span>Selected</span> : <span>Required</span>}
         </div>
         <div className="mb-native-payer-picker">
           <Combobox
             label="Insurance company or claims administrator"
+            required
             value={payerQuery}
             disabled={!editable}
             placeholder="Search by payer or administrator name"
@@ -910,7 +921,7 @@ export function BillReviewForm({
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Patient and claim</h3><p>Prefilled from the case. Correct anything that should print differently on this bill.</p></div><span>Editable</span></div>
+        <div className="mb-native-section-head"><div><h3>Patient and claim</h3><p>Review the case details that will print on this bill.</p></div></div>
         <div className="mb-native-grid three">
           <Field label="Patient first name" required disabled={!editable} value={draft.patientFirstName} onChange={(patientFirstName) => setDraft((current) => ({ ...current, patientFirstName }))} />
           <Field label="Middle name" optional disabled={!editable} value={draft.patientMiddleName} onChange={(patientMiddleName) => setDraft((current) => ({ ...current, patientMiddleName }))} />
@@ -935,40 +946,40 @@ export function BillReviewForm({
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Billing practice</h3><p>Payee identity and billing address for this claim.</p></div><span>Prefilled</span></div>
+        <div className="mb-native-section-head"><div><h3>Billing practice</h3><p>Payee identity and billing address for this claim.</p></div></div>
         <div className="mb-native-grid three">
-          <Field label="Practice name" required value={draft.billingProvider.name} onChange={(value) => updateBillingProvider("name", value)} />
-          <Field label="Tax ID" required value={draft.billingProvider.taxId} onChange={(value) => updateBillingProvider("taxId", value)} />
-          <Field label="Billing NPI" required value={draft.billingProvider.npi} onChange={(value) => updateBillingProvider("npi", value)} />
-          <Field label="Phone" optional value={draft.billingProvider.phone || ""} onChange={(value) => updateBillingProvider("phone", value)} />
-          <Field label="Billing street" required value={draft.billingProvider.billingStreet || ""} onChange={(value) => updateBillingProvider("billingStreet", value)} />
-          <Field label="City" required value={draft.billingProvider.billingCity || ""} onChange={(value) => updateBillingProvider("billingCity", value)} />
+          <Field label="Practice name" required disabled={!editable} value={draft.billingProvider.name} onChange={(value) => updateBillingProvider("name", value)} />
+          <Field label="Tax ID" required disabled={!editable} value={draft.billingProvider.taxId} onChange={(value) => updateBillingProvider("taxId", value)} />
+          <Field label="Billing NPI" required disabled={!editable} value={draft.billingProvider.npi} onChange={(value) => updateBillingProvider("npi", value)} />
+          <Field label="Phone" optional disabled={!editable} value={draft.billingProvider.phone || ""} onChange={(value) => updateBillingProvider("phone", value)} />
+          <Field label="Billing street" required disabled={!editable} value={draft.billingProvider.billingStreet || ""} onChange={(value) => updateBillingProvider("billingStreet", value)} />
+          <Field label="City" required disabled={!editable} value={draft.billingProvider.billingCity || ""} onChange={(value) => updateBillingProvider("billingCity", value)} />
           <StateCombobox label="State" required disabled={!editable} value={draft.billingProvider.billingState || ""} onChange={(value) => updateBillingProvider("billingState", value)} />
-          <Field label="ZIP" required value={draft.billingProvider.billingZip || ""} onChange={(value) => updateBillingProvider("billingZip", value)} />
+          <Field label="ZIP" required disabled={!editable} value={draft.billingProvider.billingZip || ""} onChange={(value) => updateBillingProvider("billingZip", value)} />
         </div>
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Clinician</h3><p>Provider identity printed on the claim.</p></div><span>Prefilled</span></div>
+        <div className="mb-native-section-head"><div><h3>Clinician</h3><p>Provider identity printed on the claim.</p></div></div>
         <div className="mb-native-grid three">
-          <Field label="Clinician name" required value={draft.clinician.name} onChange={(value) => updateClinician("name", value)} />
-          <Field label="Specialty" value={draft.clinician.specialty} onChange={(value) => updateClinician("specialty", value)} />
-          <Field label="NPI" required value={draft.clinician.npi} onChange={(value) => updateClinician("npi", value)} />
-          <Field label="Taxonomy" optional value={draft.clinician.taxonomy || ""} onChange={(value) => updateClinician("taxonomy", value)} />
-          <Field label="License number" optional value={draft.clinician.licenseNumber || ""} onChange={(value) => updateClinician("licenseNumber", value)} />
+          <Field label="Clinician name" required disabled={!editable} value={draft.clinician.name} onChange={(value) => updateClinician("name", value)} />
+          <Field label="Specialty" disabled={!editable} value={draft.clinician.specialty} onChange={(value) => updateClinician("specialty", value)} />
+          <Field label="NPI" required disabled={!editable} value={draft.clinician.npi} onChange={(value) => updateClinician("npi", value)} />
+          <Field label="Taxonomy" optional disabled={!editable} value={draft.clinician.taxonomy || ""} onChange={(value) => updateClinician("taxonomy", value)} />
+          <Field label="License number" optional disabled={!editable} value={draft.clinician.licenseNumber || ""} onChange={(value) => updateClinician("licenseNumber", value)} />
           <StateCombobox label="License state (optional)" disabled={!editable} value={draft.clinician.licenseState || ""} onChange={(value) => updateClinician("licenseState", value)} />
         </div>
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Service location</h3><p>The exact place of service for this bill.</p></div><span>Prefilled</span></div>
+        <div className="mb-native-section-head"><div><h3>Service location</h3><p>The exact place of service for this bill.</p></div></div>
         <div className="mb-native-grid three">
-          <Field label="Location name" required value={draft.location.name} onChange={(value) => updateLocation("name", value)} />
-          <Field label="Street" required value={draft.location.street} onChange={(value) => updateLocation("street", value)} />
-          <Field label="City" required value={draft.location.city} onChange={(value) => updateLocation("city", value)} />
+          <Field label="Location name" required disabled={!editable} value={draft.location.name} onChange={(value) => updateLocation("name", value)} />
+          <Field label="Street" required disabled={!editable} value={draft.location.street} onChange={(value) => updateLocation("street", value)} />
+          <Field label="City" required disabled={!editable} value={draft.location.city} onChange={(value) => updateLocation("city", value)} />
           <StateCombobox label="State" required disabled={!editable} value={draft.location.state} onChange={(value) => updateLocation("state", value)} />
-          <Field label="ZIP" required value={draft.location.zip} onChange={(value) => updateLocation("zip", value)} />
-          <Field label="Place of service code" required value={draft.location.posCode || "11"} onChange={(value) => updateLocation("posCode", value)} />
+          <Field label="ZIP" required disabled={!editable} value={draft.location.zip} onChange={(value) => updateLocation("zip", value)} />
+          <Field label="Place of service code" required disabled={!editable} value={draft.location.posCode || "11"} onChange={(value) => updateLocation("posCode", value)} />
         </div>
       </section>
 
@@ -981,7 +992,7 @@ export function BillReviewForm({
         <div className="mb-native-lines">
           {draft.lineItems.map((line, index) => (
             <div className={`mb-native-line ${data.bill.billingMode === "professional" ? "professional" : ""}`} key={line.id || index}>
-              <label className="mb-native-field"><span>Procedure</span>{data.bill.billingMode === "professional" ? <input disabled={!editable} placeholder="CPT / HCPCS code" value={line.code} onChange={(event) => {
+              <label className="mb-native-field"><span>Procedure<span className="mb-native-required" aria-hidden="true"> *</span></span>{data.bill.billingMode === "professional" ? <input disabled={!editable} placeholder="CPT / HCPCS code" value={line.code} onChange={(event) => {
                 const code = event.target.value.toUpperCase();
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, code } : item)) }));
               }} /> : <select disabled={!editable} value={line.code} onChange={(event) => {
@@ -1003,11 +1014,11 @@ export function BillReviewForm({
                 if (!modifier) return;
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: [...new Set([...item.modifiers, modifier])] } : item)) }));
               }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label>}<div className="mb-native-chips">{data.bill.billingMode === "med_legal" ? line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item)) }))}>-{modifier} ×</button>) : null}</div></div>
-              <label className="mb-native-field"><span>Units</span><input type="number" min="1" required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item)) }))} /></label>
+              <label className="mb-native-field"><span>Units<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min="1" required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item)) }))} /></label>
               {data.bill.billingMode === "professional" ? <>
-                <label className="mb-native-field"><span>Service date</span><input type="date" required={Boolean(line.code)} disabled={!editable} value={line.serviceDate || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDate: event.target.value } : item)) }))} /></label>
+                <label className="mb-native-field"><span>Service date<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="date" required={Boolean(line.code)} disabled={!editable} value={line.serviceDate || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDate: event.target.value } : item)) }))} /></label>
                 <label className="mb-native-field"><span>End date <small>Optional</small></span><input type="date" disabled={!editable} value={line.serviceDateEnd || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDateEnd: event.target.value } : item)) }))} /></label>
-                <label className="mb-native-field"><span>Charge</span><input type="number" min="0.01" step="0.01" required={Boolean(line.code)} disabled={!editable} value={line.charge || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, charge: Number(event.target.value) } : item)) }))} /></label>
+                <label className="mb-native-field"><span>Charge<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min="0.01" step="0.01" required={Boolean(line.code)} disabled={!editable} value={line.charge || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, charge: Number(event.target.value) } : item)) }))} /></label>
                 <label className="mb-native-field"><span>Diagnosis pointers <small>1–12</small></span><input inputMode="numeric" disabled={!editable} value={(line.diagnosisPointers || []).join(", ")} onChange={(event) => { const diagnosisPointers = event.target.value.split(/[ ,]+/).map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 12); setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, diagnosisPointers } : item)) })); }} /></label>
               </> : null}
               <div className="mb-native-allowed"><span>Allowed</span><strong>{money(line.charge)}</strong></div>
@@ -1018,7 +1029,7 @@ export function BillReviewForm({
       </section>
 
       <section className={sectionClass}>
-        <div className="mb-native-section-head"><div><h3>Payer billing packet</h3><p>Review exactly what will be sent with this bill.</p></div><span>{data.bill.attachments.length} files</span></div>
+        <div className="mb-native-section-head"><div><h3>Payer billing packet</h3><p>Review exactly what will be sent with this bill.</p></div></div>
         <div className="mb-native-note"><strong>Separate from attorney report service.</strong> Final reports, proof of service, and required billing forms may be preselected. Medical records are never silently attached.</div>
         <ul className="mb-native-documents">
           {data.bill.attachments.map((attachment) => (
@@ -1039,13 +1050,15 @@ export function BillReviewForm({
       </section>
 
       <section className="mb-native-submit">
-        <div><span className="mb-native-eyebrow">Delivery</span><h3>Submit this bill</h3><p>After submission, status, payments, denials, and resubmissions stay available here.</p></div>
+        <div><h3>Submit bill</h3><p>Submitting creates the bill as an immutable snapshot of the information and documents above.</p></div>
         {error ? <div className="mb-native-message error" role="alert">{error}</div> : null}
         {notice ? <div className="mb-native-message success" role="status">{notice}</div> : null}
         {!canSubmit ? <div className="mb-native-blockers" role="status"><strong>Before you can submit:</strong><span>{blockers.join(" · ")}</span></div> : null}
         <div className="mb-native-actions">
-          <button className="mb-native-button secondary" type="submit" disabled={!editable || busy !== ""}>{busy === "save" ? "Saving…" : "Save changes"}</button>
-          <button className="mb-native-button primary" type="button" disabled={!editable || !canSubmit || busy !== "" || deliveryBusy} onClick={() => void openSubmit()}>{deliveryBusy ? "Loading delivery…" : "Review delivery"}</button>
+          {mode === "submission" ? <button className="mb-native-button primary" type="submit" disabled={!editable || !canSubmit || busy !== ""}>{busy === "submit" ? "Submitting…" : "Submit bill"}</button> : <>
+            <button className="mb-native-button secondary" type="submit" disabled={!editable || busy !== ""}>{busy === "save" ? "Saving…" : "Save changes"}</button>
+            <button className="mb-native-button primary" type="button" disabled={!editable || !canSubmit || busy !== "" || deliveryBusy} onClick={() => void openSubmit()}>{deliveryBusy ? "Loading delivery…" : "Review delivery"}</button>
+          </>}
         </div>
       </section>
       {showSubmit && deliveryOptions ? <div className="mb-native-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && busy !== "submit") setShowSubmit(false); }}>
@@ -1109,7 +1122,7 @@ const NATIVE_SUBMISSION_DIALOG_STYLES = `
 
 const NATIVE_BILL_REVIEW_STYLES = `
 .mb-native-review,.mb-native-status{font-family:var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}
-.mb-native-review,.mb-native-status{--mb-accent:#238dbd;--mb-accent-dark:#176f98;--mb-text:#203743;--mb-muted:#657982;--mb-border:#dbe6ea;--mb-soft:#f3f8fa;--mb-surface:#fff;color:var(--mb-text);font:14px/1.45 Inter,ui-sans-serif,system-ui,sans-serif}.mb-native-review *,.mb-native-status *{box-sizing:border-box}.mb-native-review{display:grid;gap:16px}.mb-native-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:6px 2px}.mb-native-heading h2,.mb-native-section h3,.mb-native-submit h3,.mb-native-status h3{margin:3px 0 2px;line-height:1.2}.mb-native-heading h2{font-size:25px}.mb-native-heading p,.mb-native-section p,.mb-native-submit p,.mb-native-status p{margin:0;color:var(--mb-muted)}.mb-native-eyebrow{color:#59727d;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.mb-native-total{display:flex;align-items:center;gap:18px}.mb-native-total span,.mb-native-section-head>span{border-radius:999px;background:var(--mb-soft);color:#58717c;font-size:11px;font-weight:800;padding:6px 10px;text-transform:capitalize}.mb-native-total strong{font-size:24px}.mb-native-summary{display:grid;grid-template-columns:repeat(4,1fr);margin:0;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);overflow:hidden}.mb-native-summary div{padding:17px 20px;border-right:1px solid var(--mb-border)}.mb-native-summary div:last-child{border:0}.mb-native-summary dt,.mb-native-allowed span{color:#647982;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.mb-native-summary dd{margin:5px 0 0;font-weight:750}.mb-native-section{padding:20px;border:1px solid var(--mb-border);border-radius:14px;background:var(--mb-surface);box-shadow:0 8px 24px rgba(28,58,72,.04)}.mb-native-section-head{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:17px}.mb-native-section h3,.mb-native-submit h3,.mb-native-status h3{font-size:19px}.mb-native-grid{display:grid;gap:14px}.mb-native-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.mb-native-field{display:grid;gap:6px;min-width:0;color:var(--mb-text);font-size:12px;font-weight:750}.mb-native-field small{color:var(--mb-muted);font-size:inherit;font-weight:500}.mb-native-field input,.mb-native-attach select,.mb-native-attach input{width:100%;min-height:43px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);font:inherit;padding:10px 12px}.mb-native-field input:focus,.mb-native-attach select:focus,.mb-native-attach input:focus{border-color:var(--mb-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mb-accent) 14%,transparent);outline:0}.mb-native-lines{display:grid;gap:10px}.mb-native-line{display:grid;grid-template-columns:1.1fr 1.1fr 110px 120px 28px;align-items:end;gap:12px;padding:13px;background:var(--mb-soft);border:1px solid #e3edf0;border-radius:10px}.mb-native-allowed{display:grid;gap:5px;padding:0 8px 11px;text-align:right}.mb-native-allowed strong{font-size:16px}.mb-native-remove{border:0;background:transparent;color:#667d86;cursor:pointer;font-size:20px;padding:7px}.mb-native-note{padding:13px 15px;border:1px solid #bdd9e4;border-radius:9px;background:#f2f9fc;color:#526d78}.mb-native-note strong{color:var(--mb-text);margin-right:12px}.mb-native-documents{list-style:none;margin:14px 0;padding:0}.mb-native-documents li{display:grid;grid-template-columns:42px 1fr auto 28px;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--mb-border)}.mb-native-documents li>div{display:grid}.mb-native-documents li span{color:var(--mb-muted);font-size:12px}.mb-native-file{display:grid;place-items:center;width:40px;height:40px;border-radius:8px;background:#eaf5f9;color:var(--mb-accent)!important;font-size:11px!important;font-weight:850}.mb-native-attach{display:grid;grid-template-columns:1fr 230px minmax(220px,1fr) auto;align-items:end;gap:12px;padding:15px;border-radius:10px;background:var(--mb-soft)}.mb-native-attach>div{display:grid;gap:3px}.mb-native-attach span{color:var(--mb-muted);font-size:12px}.mb-native-button{min-height:40px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);cursor:pointer;font:inherit;font-weight:750;padding:9px 14px}.mb-native-button.primary{border-color:var(--mb-accent);background:var(--mb-accent);color:#fff}.mb-native-button.primary:hover{background:var(--mb-accent-dark)}.mb-native-button.secondary{background:#fff}.mb-native-button.quiet{min-height:auto;background:var(--mb-soft);padding:7px 11px}.mb-native-button:disabled,.mb-native-remove:disabled{cursor:not-allowed;opacity:.5}.mb-native-submit{display:grid;grid-template-columns:1fr auto;align-items:end;gap:18px;padding:22px;border:1px solid #bcd8e2;border-radius:14px;background:linear-gradient(135deg,#f3fafc,#eaf6fa)}.mb-native-submit fieldset{display:flex;gap:6px;margin:0;padding:0;border:0}.mb-native-submit legend{position:absolute;width:1px;height:1px;overflow:hidden}.mb-native-submit fieldset label{display:flex;align-items:center;gap:6px;padding:9px 11px;border:1px solid #c9dce3;border-radius:8px;background:#fff;font-weight:700}.mb-native-actions{display:flex;justify-content:flex-end;gap:10px;grid-column:1/-1}.mb-native-message{grid-column:1/-1;padding:10px 12px;border-radius:8px}.mb-native-message.error{background:#fff0ef;color:#9d3029}.mb-native-message.success{background:#edf9f2;color:#217449}.mb-native-status{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px;border:1px solid var(--mb-border);border-radius:12px;background:#fff}.mb-native-status h3{text-transform:capitalize}.mb-native-status dl{display:flex;margin:0}.mb-native-status dl div{min-width:110px;padding:0 18px;border-left:1px solid var(--mb-border)}.mb-native-status dt{color:var(--mb-muted);font-size:11px}.mb-native-status dd{margin:4px 0 0;font-size:17px;font-weight:800}@media(max-width:900px){.mb-native-grid.three{grid-template-columns:repeat(2,minmax(0,1fr))}.mb-native-summary{grid-template-columns:repeat(2,1fr)}.mb-native-summary div:nth-child(2){border-right:0}.mb-native-summary div:nth-child(-n+2){border-bottom:1px solid var(--mb-border)}.mb-native-line{grid-template-columns:1fr 1fr 90px}.mb-native-allowed{align-self:center}.mb-native-attach{grid-template-columns:1fr 1fr}.mb-native-submit{grid-template-columns:1fr}.mb-native-submit fieldset,.mb-native-actions{grid-column:1}.mb-native-actions{justify-content:start}}@media(max-width:620px){.mb-native-heading,.mb-native-total,.mb-native-status{align-items:start;flex-direction:column}.mb-native-grid.three,.mb-native-summary,.mb-native-line,.mb-native-attach{grid-template-columns:1fr}.mb-native-summary div,.mb-native-summary div:nth-child(2){border-right:0;border-bottom:1px solid var(--mb-border)}.mb-native-line{align-items:stretch}.mb-native-allowed{text-align:left}.mb-native-submit fieldset{display:grid;grid-template-columns:1fr 1fr}.mb-native-status dl{width:100%}.mb-native-status dl div{min-width:0;flex:1;padding:0 10px}.mb-native-status dl div:first-child{padding-left:0;border-left:0}}
+.mb-native-review,.mb-native-status{--mb-accent:#238dbd;--mb-accent-dark:#176f98;--mb-text:#203743;--mb-muted:#657982;--mb-border:#dbe6ea;--mb-soft:#f3f8fa;--mb-surface:#fff;color:var(--mb-text);font:14px/1.45 Inter,ui-sans-serif,system-ui,sans-serif}.mb-native-review *,.mb-native-status *{box-sizing:border-box}.mb-native-review{display:grid;gap:16px}.mb-native-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:6px 2px}.mb-native-heading h2,.mb-native-section h3,.mb-native-submit h3,.mb-native-status h3{margin:3px 0 2px;line-height:1.2}.mb-native-heading h2{font-size:25px}.mb-native-heading p,.mb-native-section p,.mb-native-submit p,.mb-native-status p{margin:0;color:var(--mb-muted)}.mb-native-eyebrow{color:#59727d;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.mb-native-total{display:flex;align-items:center;gap:18px}.mb-native-total span,.mb-native-section-head>span{border-radius:999px;background:var(--mb-soft);color:#58717c;font-size:11px;font-weight:800;padding:6px 10px;text-transform:capitalize}.mb-native-total strong{font-size:24px}.mb-native-summary{display:grid;grid-template-columns:repeat(4,1fr);margin:0;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);overflow:hidden}.mb-native-summary div{padding:17px 20px;border-right:1px solid var(--mb-border)}.mb-native-summary div:last-child{border:0}.mb-native-summary dt,.mb-native-allowed span{color:#647982;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.mb-native-summary dd{margin:5px 0 0;font-weight:750}.mb-native-section{padding:20px;border:1px solid var(--mb-border);border-radius:14px;background:var(--mb-surface);box-shadow:0 8px 24px rgba(28,58,72,.04)}.mb-native-section-head{display:flex;align-items:start;justify-content:space-between;gap:16px;margin-bottom:17px}.mb-native-section h3,.mb-native-submit h3,.mb-native-status h3{font-size:19px}.mb-native-grid{display:grid;gap:14px}.mb-native-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.mb-native-field{display:grid;gap:6px;min-width:0;color:var(--mb-text);font-size:12px;font-weight:750}.mb-native-required{color:#c5352e}.mb-native-field small{color:var(--mb-muted);font-size:inherit;font-weight:500}.mb-native-field input,.mb-native-attach select,.mb-native-attach input{width:100%;min-height:43px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);font:inherit;padding:10px 12px}.mb-native-field input:focus,.mb-native-attach select:focus,.mb-native-attach input:focus{border-color:var(--mb-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mb-accent) 14%,transparent);outline:0}.mb-native-lines{display:grid;gap:10px}.mb-native-line{display:grid;grid-template-columns:1.1fr 1.1fr 110px 120px 28px;align-items:end;gap:12px;padding:13px;background:var(--mb-soft);border:1px solid #e3edf0;border-radius:10px}.mb-native-allowed{display:grid;gap:5px;padding:0 8px 11px;text-align:right}.mb-native-allowed strong{font-size:16px}.mb-native-remove{border:0;background:transparent;color:#667d86;cursor:pointer;font-size:20px;padding:7px}.mb-native-note{padding:13px 15px;border:1px solid #bdd9e4;border-radius:9px;background:#f2f9fc;color:#526d78}.mb-native-note strong{color:var(--mb-text);margin-right:12px}.mb-native-documents{list-style:none;margin:14px 0;padding:0}.mb-native-documents li{display:grid;grid-template-columns:42px 1fr auto 28px;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--mb-border)}.mb-native-documents li>div{display:grid}.mb-native-documents li span{color:var(--mb-muted);font-size:12px}.mb-native-file{display:grid;place-items:center;width:40px;height:40px;border-radius:8px;background:#eaf5f9;color:var(--mb-accent)!important;font-size:11px!important;font-weight:850}.mb-native-attach{display:grid;grid-template-columns:1fr 230px minmax(220px,1fr) auto;align-items:end;gap:12px;padding:15px;border-radius:10px;background:var(--mb-soft)}.mb-native-attach>div{display:grid;gap:3px}.mb-native-attach span{color:var(--mb-muted);font-size:12px}.mb-native-button{min-height:40px;border:1px solid var(--mb-border);border-radius:8px;background:#fff;color:var(--mb-text);cursor:pointer;font:inherit;font-weight:750;padding:9px 14px}.mb-native-button.primary{border-color:var(--mb-accent);background:var(--mb-accent);color:#fff}.mb-native-button.primary:hover{background:var(--mb-accent-dark)}.mb-native-button.secondary{background:#fff}.mb-native-button.quiet{min-height:auto;background:var(--mb-soft);padding:7px 11px}.mb-native-button:disabled,.mb-native-remove:disabled{cursor:not-allowed;opacity:.5}.mb-native-submit{display:grid;grid-template-columns:1fr auto;align-items:end;gap:18px;padding:22px;border:1px solid #bcd8e2;border-radius:14px;background:linear-gradient(135deg,#f3fafc,#eaf6fa)}.mb-native-submit fieldset{display:flex;gap:6px;margin:0;padding:0;border:0}.mb-native-submit legend{position:absolute;width:1px;height:1px;overflow:hidden}.mb-native-submit fieldset label{display:flex;align-items:center;gap:6px;padding:9px 11px;border:1px solid #c9dce3;border-radius:8px;background:#fff;font-weight:700}.mb-native-actions{display:flex;justify-content:flex-end;gap:10px;grid-column:1/-1}.mb-native-message{grid-column:1/-1;padding:10px 12px;border-radius:8px}.mb-native-message.error{background:#fff0ef;color:#9d3029}.mb-native-message.success{background:#edf9f2;color:#217449}.mb-native-status{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px;border:1px solid var(--mb-border);border-radius:12px;background:#fff}.mb-native-status h3{text-transform:capitalize}.mb-native-status dl{display:flex;margin:0}.mb-native-status dl div{min-width:110px;padding:0 18px;border-left:1px solid var(--mb-border)}.mb-native-status dt{color:var(--mb-muted);font-size:11px}.mb-native-status dd{margin:4px 0 0;font-size:17px;font-weight:800}@media(max-width:900px){.mb-native-grid.three{grid-template-columns:repeat(2,minmax(0,1fr))}.mb-native-summary{grid-template-columns:repeat(2,1fr)}.mb-native-summary div:nth-child(2){border-right:0}.mb-native-summary div:nth-child(-n+2){border-bottom:1px solid var(--mb-border)}.mb-native-line{grid-template-columns:1fr 1fr 90px}.mb-native-allowed{align-self:center}.mb-native-attach{grid-template-columns:1fr 1fr}.mb-native-submit{grid-template-columns:1fr}.mb-native-submit fieldset,.mb-native-actions{grid-column:1}.mb-native-actions{justify-content:start}}@media(max-width:620px){.mb-native-heading,.mb-native-total,.mb-native-status{align-items:start;flex-direction:column}.mb-native-grid.three,.mb-native-summary,.mb-native-line,.mb-native-attach{grid-template-columns:1fr}.mb-native-summary div,.mb-native-summary div:nth-child(2){border-right:0;border-bottom:1px solid var(--mb-border)}.mb-native-line{align-items:stretch}.mb-native-allowed{text-align:left}.mb-native-submit fieldset{display:grid;grid-template-columns:1fr 1fr}.mb-native-status dl{width:100%}.mb-native-status dl div{min-width:0;flex:1;padding:0 10px}.mb-native-status dl div:first-child{padding-left:0;border-left:0}}
 .mb-native-status-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.mb-native-status-copy{min-width:150px}.mb-native-review,.mb-native-status{font-family:var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}
 .mb-native-review{padding:clamp(16px,2vw,24px)}
 .mb-native-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}

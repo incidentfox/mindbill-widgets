@@ -552,30 +552,9 @@ describe("connected bill lifecycle", () => {
     );
   });
 
-  it("switches to the replacement ID returned for a correction draft", async () => {
-    const replacement = {
-      ...lifecycle,
-      bill: { ...lifecycle.bill, id: "bill_790", status: "incomplete" },
-      lifecycle: {
-        state: "incomplete",
-        nativeStatus: "INCOMPLETE",
-        actions: [],
-      },
-    };
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ token: "correction-session-token" }))
-      .mockResolvedValueOnce(jsonResponse({
-        replacementBillId: "bill_790",
-        data: replacement,
-      }));
-    const client = createBillLifecycleClient({
-      billId: "bill_789",
-      fetch: fetcher,
-    });
-
-    await expect(client.startCorrection()).resolves.toMatchObject({
-      replacementBillId: "bill_790",
-      data: { bill: { id: "bill_790", status: "incomplete" } },
-    });
+  it("requires a submitted bill ID", () => {
+    expect(() => createBillLifecycleClient({ billId: "", fetch: vi.fn<typeof fetch>() })).toThrow(
+      "billId is required",
+    );
   });
 });
