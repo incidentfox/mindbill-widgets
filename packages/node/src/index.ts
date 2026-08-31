@@ -269,6 +269,7 @@ export type BillStatus = {
 export type BillStatusResponse = { data: BillStatus };
 
 export type BillLifecycleActionId =
+  | "resubmit"
   | "second_review"
   | "independent_bill_review"
   | "view_eor"
@@ -303,6 +304,7 @@ export type BillLifecyclePayment = {
 };
 export type BillLifecycleResponse = {
   data: {
+    environment: "sandbox" | "live";
     bill: Record<string, unknown>;
     patient: Record<string, unknown>;
     injury: Record<string, unknown>;
@@ -385,11 +387,31 @@ export type BillReviewResponse = { data: BillReview };
 export type BillReviewListResponse = { data: BillReview[] };
 
 export type BillAction =
+  | { action: "resubmit"; reason?: string }
   | { action: "close"; reason: string }
   | { action: "reopen"; reason: string }
   | { action: "post_payment"; amount: number; method: "check" | "eft"; checkNumber?: string; depositDate: string; note?: string }
   | { action: "second_review"; reason: string; payerClaimControlNumber: string; disputedAmount?: number; attachmentIds?: string[]; route?: SubmitRoute };
 export type BillActionResponse = { ok: true; replacementBillId?: string; data: Record<string, unknown> | null };
+
+export type SandboxSimulationScenario =
+  | "accepted"
+  | "processed"
+  | "rejected"
+  | "denied"
+  | "partial_payment"
+  | "paid";
+export type SandboxSimulationInput = {
+  scenario: SandboxSimulationScenario;
+  amount?: number;
+  reasonCode?: string;
+};
+export type SandboxSimulationResponse = {
+  data: Record<string, unknown> & {
+    state?: string;
+    scenario?: SandboxSimulationScenario;
+  };
+};
 
 export type MindBillEvent = {
   id: string;
@@ -542,6 +564,19 @@ export class MindBillClient {
 
   performBillAction(billId: string, input: BillAction, idempotencyKey: string): Promise<BillActionResponse> {
     return this.request("POST", `/partner/v2/bills/${encodeURIComponent(billId)}/actions`, input, { idempotencyKey });
+  }
+
+  simulateSandboxBill(
+    billId: string,
+    input: SandboxSimulationInput,
+    idempotencyKey: string,
+  ): Promise<SandboxSimulationResponse> {
+    return this.request(
+      "POST",
+      `/partner/v2/sandbox/bills/${encodeURIComponent(billId)}/simulate`,
+      input,
+      { idempotencyKey },
+    );
   }
 
   listBillReviews(billId: string): Promise<BillReviewListResponse> {

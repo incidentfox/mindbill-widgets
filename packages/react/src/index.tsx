@@ -154,6 +154,7 @@ export {
   BillRemittanceCard,
   BillSnapshotSummary,
   billActivityEventLabel,
+  billLifecycleDisplayLabel,
   billLifecycleStage,
   visibleBillLifecycleActions,
 } from "./bill-lifecycle-surfaces";

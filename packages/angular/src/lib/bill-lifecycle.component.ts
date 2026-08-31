@@ -22,7 +22,7 @@ export type MindBillAngularAppearance = {
 const THEMES: Record<MindBillAngularThemePreset, Required<MindBillAngularAppearance>> = {
   mindbill: { preset: "mindbill", accentColor: "#238dbd", accentTextColor: "#fff", backgroundColor: "#f3f8fa", surfaceColor: "#fff", textColor: "#203743", mutedColor: "#657982", borderColor: "#dbe6ea", borderRadius: "14px", controlRadius: "8px", fontFamily: "Inter,system-ui,sans-serif" },
   "qme-companion": { preset: "qme-companion", accentColor: "#53b5dc", accentTextColor: "#173542", backgroundColor: "#f2f8fb", surfaceColor: "#fff", textColor: "#1d3440", mutedColor: "#617783", borderColor: "#d7e5eb", borderRadius: "12px", controlRadius: "8px", fontFamily: "Inter,system-ui,sans-serif" },
-  "orange-bright": { preset: "orange-bright", accentColor: "#ff4f0a", accentTextColor: "#fff", backgroundColor: "#fffaf6", surfaceColor: "#fff", textColor: "#111827", mutedColor: "#626a73", borderColor: "#e5e1dc", borderRadius: "8px", controlRadius: "6px", fontFamily: "Inter,system-ui,sans-serif" },
+  "orange-bright": { preset: "orange-bright", accentColor: "#f4510b", accentTextColor: "#fff", backgroundColor: "#fffaf6", surfaceColor: "#fffefd", textColor: "#090f1f", mutedColor: "#626a73", borderColor: "#e7e1da", borderRadius: "16px", controlRadius: "10px", fontFamily: "Inter,system-ui,sans-serif" },
   "clinical-blue": { preset: "clinical-blue", accentColor: "#1677ff", accentTextColor: "#fff", backgroundColor: "#f5f7fa", surfaceColor: "#fff", textColor: "#1f2d3d", mutedColor: "#66788a", borderColor: "#d9e2ec", borderRadius: "8px", controlRadius: "6px", fontFamily: "Inter,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" },
 };
 
