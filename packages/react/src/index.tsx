@@ -86,6 +86,23 @@ export {
   buildBillReviewSaveInput,
   ensureTrailingProcedureLine,
 } from "./native-bill-review";
+
+export {
+  BILL_SUBMISSION_DOCUMENT_TYPES,
+  BILL_SUBMISSION_REQUIRED_FIELDS,
+  BillSubmissionForm,
+  validateBillSubmission,
+} from "./bill-submission-form";
+export type {
+  BillSubmissionAddress,
+  BillSubmissionDocumentType,
+  BillSubmissionFormProps,
+  BillSubmissionFormValue,
+  BillSubmissionInput,
+  BillSubmissionSourceAttachment,
+  BillSubmissionUpload,
+  BillSubmissionValidation,
+} from "./bill-submission-form";
 export type {
   BillReviewAttachment,
   BillReviewBillingProvider,

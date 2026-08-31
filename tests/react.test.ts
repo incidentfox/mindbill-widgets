@@ -17,6 +17,12 @@ import {
   billLifecycleStage,
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
+import {
+  BILL_SUBMISSION_REQUIRED_FIELDS,
+  type BillSubmissionInput,
+  validateBillSubmission,
+} from "../packages/react/src/bill-submission-form";
+import type { CreateBillRequest } from "../packages/node/src/index";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -57,6 +63,64 @@ describe("partner appearance presets", () => {
       "--mb-accent-contrast": "#ffffff",
       "--mb-radius": "4px",
       "--mb-control-radius": "6px",
+    });
+  });
+});
+
+describe("atomic bill submission form contract", () => {
+  const validBill: BillSubmissionInput = {
+    externalId: "evaluation_123",
+    billingMode: "med_legal",
+    patient: {
+      firstName: "Ada",
+      lastName: "Example",
+      address: {
+        line1: "100 Main Street",
+        city: "Sacramento",
+        state: "CA",
+        postalCode: "95814",
+      },
+    },
+    claim: { claimNumber: "CLAIM-7" },
+    service: { date: "2026-08-24" },
+    serviceLines: [{ code: "ML201", units: 1 }],
+  };
+
+  it("uses the same browser-safe bill shape as the server SDK", () => {
+    const sdkInput: CreateBillRequest = validBill;
+    const componentInput: BillSubmissionInput = sdkInput;
+
+    expect(componentInput).toBe(validBill);
+  });
+
+  it("owns and exports required-field rules", () => {
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.address.state");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("serviceLines[].code");
+    expect(validateBillSubmission(validBill)).toEqual({
+      valid: true,
+      fieldErrors: {},
+    });
+  });
+
+  it("rejects missing required values and invalid professional charges", () => {
+    const result = validateBillSubmission({
+      ...validBill,
+      billingMode: "professional",
+      patient: {
+        ...validBill.patient,
+        firstName: "",
+        address: { ...validBill.patient.address, state: "California" },
+      },
+      serviceLines: [{ code: "", units: 0 }],
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.fieldErrors).toMatchObject({
+      "patient.firstName": "Required",
+      "patient.address.state": "Use a 2-letter state code",
+      "serviceLines.0.code": "Required",
+      "serviceLines.0.units": "Enter at least 1 unit",
+      "serviceLines.0.charge": "Enter the billed charge",
     });
   });
 });

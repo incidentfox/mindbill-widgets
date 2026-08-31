@@ -98,6 +98,18 @@ await saveBillId({ externalId: "evaluation_123", billId: bill.id });
 
 The first public bill state is `submitted`. There is no draft, update, upload, delete, or separate submit operation: a successful response means MindBill accepted one immutable snapshot for delivery. Editing a provider in your application never rewrites a past claim.
 
+For React applications, `BillSubmissionForm` supplies the entire authoring UI and contract—fields, required-field asterisks, validation, service lines, attachments, and Submit. Your application only supplies initial values and forwards the submitted snapshot through its server.
+
+```tsx
+import { BillSubmissionForm } from "@mindbill/react";
+
+<BillSubmissionForm
+  initialBill={bootstrap.bill}
+  attachments={bootstrap.attachments}
+  onSubmit={submitBill}
+/>
+```
+
 ## 2. Render the submitted lifecycle
 
 `ConnectedBillLifecycle` starts after submission. It loads the immutable bill, polls status, displays EORs, and exposes only the post-submission actions valid for the current state.

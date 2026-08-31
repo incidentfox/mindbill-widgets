@@ -113,29 +113,28 @@ import { BillActivityTimeline } from "@mindbill/react";
 
 Browser callbacks such as `onChanged` are for immediate UI, navigation, optimistic state, and analytics. Signed webhooks are the authoritative integration for durable server state.
 
-## Controlled escape hatch
+## Bill submission form
 
-Use `BillReviewForm` only when your application owns the local, pre-submission review state and calls its own server endpoint for the atomic create-and-submit request. Required fields use a red asterisk; attachments remain local until submission.
+`BillSubmissionForm` owns the complete pre-submission experience: the bill field schema, required-field rules and red asterisks, validation, service-line editing, source-document selection, PDF uploads, and the single Submit action. Its `bill` value is structurally identical to the server SDK's `CreateBillRequest`.
+
+The partner application only loads initial values and sends the component's immutable snapshot to its authenticated server route. Uploaded files stay in the browser until the user submits.
 
 ```tsx
-import { BillReviewForm } from "@mindbill/react";
+import { BillSubmissionForm } from "@mindbill/react";
 
-<BillReviewForm
-  data={billReview}
-  mode="submission"
+<BillSubmissionForm
+  initialBill={bootstrap.bill}
+  attachments={bootstrap.attachments}
   appearance={{ preset: "qme-companion" }}
-  onSubmit={(input, route) => api.post("/billing/submit", { input, route })}
-  onAddAttachment={(file, documentType, description) =>
-    api.upload("/billing/attachments", { file, documentType, description })
-  }
-  onRemoveAttachment={(attachmentId) =>
-    api.delete(`/billing/attachments/${attachmentId}`)
-  }
-  onSearchClaimsAdministrators={(query, claimNumber) =>
-    api.searchPayers({ query, claimNumber })
+  onSubmit={({ bill, sourceAttachmentIds, uploads }) =>
+    submitBill({ bill, sourceAttachmentIds, uploads })
   }
 />
 ```
+
+`BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; its callback fires only when the user submits a locally valid snapshot.
+
+`BillReviewForm` remains available for legacy integrations that already own a custom review model. New integrations should use `BillSubmissionForm`.
 
 Use `BillStatusSummary` only when your application already owns status loading and wants a presentation-only component:
 
