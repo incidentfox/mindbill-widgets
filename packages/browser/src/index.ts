@@ -90,6 +90,9 @@ export type BillReviewPayer = {
   }>;
 };
 
+export type BillPostalPlace = { city: string; state: string };
+export type BillDiagnosisCode = { code: string; description: string };
+
 export type BillReviewFeatures = {
   authorizationNumber?: boolean;
   serviceDateRange?: boolean;
@@ -475,6 +478,8 @@ export type BillReferenceClientOptions = Omit<BillLifecycleClientOptions, "billI
 
 export type BillReferenceClient = {
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  searchDiagnosisCodes: (query: string, limit?: number) => Promise<BillDiagnosisCode[]>;
+  lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   clearSession: () => void;
 };
 
@@ -482,6 +487,8 @@ export type BillLifecycleClient = {
   getBillId: () => string;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  searchDiagnosisCodes: (query: string, limit?: number) => Promise<BillDiagnosisCode[]>;
+  lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
@@ -691,6 +698,33 @@ export function createBillLifecycleClient({
     });
   };
 
+  const searchDiagnosisCodes = async (query: string, limit = 30): Promise<BillDiagnosisCode[]> => {
+    const params = new URLSearchParams({ q: query.trim(), limit: String(Math.max(1, Math.min(100, limit))) });
+    const response = await request(`/partner/v2/browser/diagnosis-codes?${params.toString()}`);
+    if (!response.ok) throw await responseError(response, "Diagnosis-code search is unavailable.");
+    const body = await response.json() as { results?: unknown };
+    if (!Array.isArray(body.results)) throw new Error("Diagnosis-code search returned an invalid response.");
+    return body.results.flatMap((value): BillDiagnosisCode[] => {
+      if (!value || typeof value !== "object") return [];
+      const candidate = value as { code?: unknown; description?: unknown };
+      return typeof candidate.code === "string" && typeof candidate.description === "string"
+        ? [{ code: candidate.code, description: candidate.description }]
+        : [];
+    });
+  };
+
+  const lookupPostalCode = async (postalCode: string): Promise<BillPostalPlace | null> => {
+    const params = new URLSearchParams({ postalCode: postalCode.trim() });
+    const response = await request(`/partner/v2/browser/postal-codes?${params.toString()}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw await responseError(response, "ZIP lookup is unavailable.");
+    const body = await response.json() as { city?: unknown; state?: unknown };
+    if (typeof body.city !== "string" || typeof body.state !== "string") {
+      throw new Error("ZIP lookup returned an invalid response.");
+    }
+    return { city: body.city, state: body.state };
+  };
+
   const mutation = async (path: string, init: RequestInit, fallback: string) => {
     const headers = new Headers(init.headers);
     headers.set("idempotency-key", idempotencyKey());
@@ -712,6 +746,8 @@ export function createBillLifecycleClient({
     clearSession() { session = null; sessionRequest = null; },
     getLifecycle: loadLifecycle,
     searchClaimsAdministrators,
+    searchDiagnosisCodes,
+    lookupPostalCode,
     async getDeliveryOptions() {
       const response = await request(billPath("/delivery-options"));
       if (!response.ok) throw await responseError(response, "Delivery options could not be loaded.");
@@ -755,6 +791,8 @@ export function createBillReferenceClient(
   });
   return {
     searchClaimsAdministrators: lifecycle.searchClaimsAdministrators,
+    searchDiagnosisCodes: lifecycle.searchDiagnosisCodes,
+    lookupPostalCode: lifecycle.lookupPostalCode,
     clearSession: lifecycle.clearSession,
   };
 }

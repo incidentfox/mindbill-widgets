@@ -115,6 +115,12 @@ export type {
   BillSubmissionUpload,
   BillSubmissionValidation,
 } from "./bill-submission-form";
+export {
+  BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
+  calculateBillSubmissionAllowedAmount,
+  DEFAULT_BILL_SUBMISSION_MODIFIERS,
+  DEFAULT_BILL_SUBMISSION_PROCEDURES,
+} from "./billing-catalog";
 export type {
   BillReviewAttachment,
   BillReviewBillingProvider,

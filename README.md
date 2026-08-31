@@ -107,12 +107,15 @@ import { BillSubmissionForm } from "@mindbill/react";
   initialBill={bootstrap.bill}
   attachments={bootstrap.attachments}
   getSession={getMindBillSession}
-  diagnosisOptions={bootstrap.diagnoses}
-  procedureOptions={bootstrap.procedures}
-  onLookupPostalCode={lookupPostalCode}
   onSubmit={submitBill}
 />
 ```
+
+The single browser session powers MindBill's canonical claims-administrator directory,
+complete ICD-10 search, and ZIP-to-city/state lookup. The component bundles MindBill's
+curated workers-comp procedure and modifier catalog, medical-legal fee rules, diagnosis
+quick picks, and locked practice W-9 behavior. Pass optional catalog props only to add
+organization-specific choices.
 
 ## 2. Render the submitted lifecycle
 

@@ -36,6 +36,8 @@ const references = createBillReferenceClient({
 });
 
 const payers = await references.searchClaimsAdministrators("Zurich", "claim-123");
+const diagnoses = await references.searchDiagnosisCodes("left knee");
+const place = await references.lookupPostalCode("94403");
 ```
 
 This client exposes reference-data operations only. It never creates or mutates
