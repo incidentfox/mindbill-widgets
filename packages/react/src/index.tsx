@@ -87,18 +87,30 @@ export {
   ensureTrailingProcedureLine,
 } from "./native-bill-review";
 
+export { BillReadOnlyForm } from "./bill-read-only-form";
+export type { BillReadOnlyFormProps } from "./bill-read-only-form";
+
 export {
+  applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_DOCUMENT_TYPES,
   BILL_SUBMISSION_REQUIRED_FIELDS,
   BillSubmissionForm,
+  ensureTrailingBillSubmissionLine,
+  formatBillSubmissionDate,
+  parseBillSubmissionDate,
   validateBillSubmission,
 } from "./bill-submission-form";
 export type {
   BillSubmissionAddress,
+  BillSubmissionDiagnosisOption,
   BillSubmissionDocumentType,
+  BillSubmissionEvaluationType,
   BillSubmissionFormProps,
   BillSubmissionFormValue,
   BillSubmissionInput,
+  BillSubmissionModifierOption,
+  BillSubmissionPostalPlace,
+  BillSubmissionProcedureOption,
   BillSubmissionSourceAttachment,
   BillSubmissionUpload,
   BillSubmissionValidation,
@@ -173,6 +185,7 @@ export type {
   CloseBillInput,
   ConnectedBillLifecycleProps,
   PostBillPaymentInput,
+  ReopenBillInput,
   SubmitSecondReviewInput,
   UseBillLifecycleOptions,
   UseBillLifecycleResult,

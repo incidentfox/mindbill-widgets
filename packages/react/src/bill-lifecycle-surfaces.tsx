@@ -76,8 +76,6 @@ export type BillActivityTimelineProps = SurfaceProps & {
 };
 
 const activityLabels: Record<string, string> = {
-  "bill.created": "Bill created",
-  "bill.draft": "Bill saved",
   "bill.scrub_failed": "Submission needs attention",
   "bill.submitted": "Bill submitted",
   "bill.accepted": "Bill accepted",
@@ -129,14 +127,12 @@ export function BillActivityTimeline({ events, emptyLabel = "No bill activity ye
   );
 }
 
-export type BillLifecycleStage = "created" | "submitted" | "accepted" | "response" | "follow_up" | "closed";
+export type BillLifecycleStage = "submitted" | "accepted" | "processed" | "closed";
 
 const lifecycleStages: Array<{ id: BillLifecycleStage; label: string }> = [
-  { id: "created", label: "Created" },
   { id: "submitted", label: "Submitted" },
   { id: "accepted", label: "Accepted" },
-  { id: "response", label: "Payer response" },
-  { id: "follow_up", label: "Follow-up" },
+  { id: "processed", label: "Processed" },
   { id: "closed", label: "Closed" },
 ];
 
@@ -144,11 +140,9 @@ const lifecycleStages: Array<{ id: BillLifecycleStage; label: string }> = [
 export function billLifecycleStage(state: string): BillLifecycleStage {
   const value = state.toLowerCase();
   if (value.includes("closed") || value.includes("written_off")) return "closed";
-  if (value.includes("second_review") || value.includes("ibr") || value.includes("lien") || value.includes("appeal")) return "follow_up";
-  if (value.includes("processed") || value.includes("paid") || value.includes("denied") || value.includes("rejected") || value.includes("response")) return "response";
+  if (value.includes("processed") || value.includes("paid") || value.includes("denied") || value.includes("reject") || value.includes("partial") || value.includes("response") || value.includes("second_review") || value.includes("ibr") || value.includes("lien") || value.includes("appeal")) return "processed";
   if (value.includes("accepted")) return "accepted";
-  if (value.includes("submitted") || value.includes("queued") || value.includes("sent")) return "submitted";
-  return "created";
+  return "submitted";
 }
 
 export type BillLifecycleProgressProps = SurfaceProps & {
@@ -164,7 +158,7 @@ export function BillLifecycleProgress({ state, nativeStatus, submittedAt, agingD
   return (
     <section className={classes("mb-surface mb-progress", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill lifecycle">
       <style>{lifecycleSurfaceStyles}</style>
-      <header className="mb-surface-heading"><div><strong>{humanize(nativeStatus || state)}</strong><span>{submittedAt ? `Submitted ${defaultFormatDate(submittedAt)}` : "Not submitted"}{typeof agingDays === "number" ? ` · ${agingDays} days old` : ""}</span></div></header>
+      <header className="mb-surface-heading"><div><strong>{humanize(nativeStatus || state)}</strong><span>{submittedAt ? `Submitted ${defaultFormatDate(submittedAt)}` : "Submitted"}{typeof agingDays === "number" ? ` · ${agingDays} days old` : ""}</span></div></header>
       <ol className="mb-progress-list">
         {lifecycleStages.map((stage, index) => {
           const status = index < currentIndex ? "complete" : index === currentIndex ? "current" : "upcoming";
