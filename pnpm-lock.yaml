@@ -93,7 +93,7 @@ importers:
   packages/react:
     dependencies:
       '@mindbill/browser':
-        specifier: ^0.7.0
+        specifier: ^0.7.1
         version: link:../browser
       '@mindbill/embed':
         specifier: workspace:^

@@ -37,8 +37,12 @@ const references = createBillReferenceClient({
 
 const payers = await references.searchClaimsAdministrators("Zurich", "claim-123");
 const diagnoses = await references.searchDiagnosisCodes("left knee");
+const firstAlphabeticalPage = await references.searchDiagnosisCodes("", 100, 0);
+const nextAlphabeticalPage = await references.searchDiagnosisCodes("", 100, 100);
 const place = await references.lookupPostalCode("94403");
 ```
+
+`searchDiagnosisCodes(query, limit, offset)` supports directory browsing as well as search. Pass an empty query for ICD-10 code order; `limit` is capped at 100 and `offset` advances through the directory.
 
 This client exposes reference-data operations only. It never creates or mutates
 a bill; the first persisted bill remains the submitted immutable snapshot.

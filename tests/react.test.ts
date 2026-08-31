@@ -197,7 +197,7 @@ describe("atomic bill submission form contract", () => {
 
     expect(result.valid).toBe(false);
     expect(result.fieldErrors).toMatchObject({
-      "patient.firstName": "Required",
+      "patient.firstName": "Enter the patient's first name.",
       "patient.address.state": "Use a 2-letter state code",
       "serviceLines.0.units": "Enter at least 1 unit",
       "serviceLines.0.charge": "Enter the billed charge",
@@ -215,6 +215,9 @@ describe("pre-submission reference data", () => {
       .mockResolvedValueOnce(jsonResponse({
         results: [{ code: "M25.562", description: "Pain in left knee" }],
       }))
+      .mockResolvedValueOnce(jsonResponse({
+        results: [{ code: "B00.1", description: "Vesicular dermatitis" }],
+      }))
       .mockResolvedValueOnce(jsonResponse({ postalCode: "94403", city: "San Mateo", state: "CA" }));
     const client = createBillReferenceClient({ fetch: fetcher });
 
@@ -224,15 +227,20 @@ describe("pre-submission reference data", () => {
     await expect(client.searchDiagnosisCodes("left knee")).resolves.toEqual([
       { code: "M25.562", description: "Pain in left knee" },
     ]);
+    await expect(client.searchDiagnosisCodes("", 100, 100)).resolves.toEqual([
+      { code: "B00.1", description: "Vesicular dermatitis" },
+    ]);
     await expect(client.lookupPostalCode("94403")).resolves.toEqual({ city: "San Mateo", state: "CA" });
 
     expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
       "/api/mindbill/session",
       "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Zurich&claimNumber=TEST-1",
       "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=left+knee&limit=30",
+      "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=&limit=100&offset=100",
       "https://app.mindbill.org/partner/v2/browser/postal-codes?postalCode=94403",
     ]);
     expect(fetcher.mock.calls.slice(1).map((call) => new Headers(call[1]?.headers).get("authorization"))).toEqual([
+      "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",

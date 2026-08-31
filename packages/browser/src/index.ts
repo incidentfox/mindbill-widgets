@@ -478,7 +478,7 @@ export type BillReferenceClientOptions = Omit<BillLifecycleClientOptions, "billI
 
 export type BillReferenceClient = {
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
-  searchDiagnosisCodes: (query: string, limit?: number) => Promise<BillDiagnosisCode[]>;
+  searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   clearSession: () => void;
 };
@@ -487,7 +487,7 @@ export type BillLifecycleClient = {
   getBillId: () => string;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
-  searchDiagnosisCodes: (query: string, limit?: number) => Promise<BillDiagnosisCode[]>;
+  searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
@@ -698,8 +698,9 @@ export function createBillLifecycleClient({
     });
   };
 
-  const searchDiagnosisCodes = async (query: string, limit = 30): Promise<BillDiagnosisCode[]> => {
+  const searchDiagnosisCodes = async (query: string, limit = 30, offset = 0): Promise<BillDiagnosisCode[]> => {
     const params = new URLSearchParams({ q: query.trim(), limit: String(Math.max(1, Math.min(100, limit))) });
+    if (offset > 0) params.set("offset", String(Math.max(0, Math.floor(offset))));
     const response = await request(`/partner/v2/browser/diagnosis-codes?${params.toString()}`);
     if (!response.ok) throw await responseError(response, "Diagnosis-code search is unavailable.");
     const body = await response.json() as { results?: unknown };

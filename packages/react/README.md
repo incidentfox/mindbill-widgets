@@ -153,13 +153,15 @@ The component includes the interaction model, not just the markup:
 - a responsive two-column review form (one column on narrow screens);
 - paste-friendly `MM/DD/YYYY` date fields and required-field asterisks;
 - ZIP-to-city/state completion through MindBill's authenticated postal directory;
-- complete, server-backed ICD-10 search, common-injury quick picks, and removable chips;
+- complete, server-backed ICD-10 search with an alphabetized 100-code first page, automatic 100-code scroll paging, common-injury quick picks, and removable chips;
 - canonical claims-administrator search through the authenticated MindBill payer directory;
 - QME, AME, and Psych QME evaluation modes with medical-legal modifier defaults;
 - searchable workers-comp procedure/modifier controls, medical-legal fee-schedule amounts, totals, valid manual CPT/HCPCS entry, and an automatically maintained empty line;
 - removable source documents with new-tab previews, a locked auto-attached practice W-9, and a full-width click, panel-drop, or whole-page PDF upload area. Every visible source document is included until removed; uploaded PDFs do not require document-type tagging.
 
 Partners supply tenant-specific bootstrap data, one short-lived browser session callback, and the final server submission callback. Required fields, validation, ZIP lookup, ICD-10 and payer directories, service-line behavior, attachments, and submission UX stay inside `@mindbill/react`, so every integration receives the same billing workflow. Optional `diagnosisOptions`, `procedureOptions`, `modifierOptions`, and lookup callbacks extend or replace defaults when a partner has licensed or organization-specific data.
+
+Validation is component-owned as well. A missing routing payer is highlighted immediately; Submit highlights every invalid control with a specific message, focuses and scrolls to the first problem, and continues validating as the user corrects the form.
 
 `BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; its callback fires only when the user submits a locally valid snapshot.
 
