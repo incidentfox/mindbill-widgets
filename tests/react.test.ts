@@ -7,7 +7,7 @@ import {
 } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
 import { createBillLifecycleClient } from "../packages/react/src/connected-bill-lifecycle";
-import { sanitizeBillReviewSaveInput } from "../packages/browser/src/index";
+import { createBillReferenceClient, sanitizeBillReviewSaveInput } from "../packages/browser/src/index";
 import {
   mindBillAppearanceStyle,
   resolveMindBillAppearance,
@@ -27,6 +27,12 @@ import {
   validateBillSubmission,
 } from "../packages/react/src/bill-submission-form";
 import type { CreateBillRequest } from "../packages/node/src/index";
+import {
+  BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
+  calculateBillSubmissionAllowedAmount,
+  DEFAULT_BILL_SUBMISSION_MODIFIERS,
+  DEFAULT_BILL_SUBMISSION_PROCEDURES,
+} from "../packages/react/src/billing-catalog";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -155,6 +161,28 @@ describe("atomic bill submission form contract", () => {
     ]);
   });
 
+  it("ships general workers-comp code choices and calculates med-legal fees", () => {
+    expect(DEFAULT_BILL_SUBMISSION_PROCEDURES.map((item) => item.code)).toEqual(
+      expect.arrayContaining(["ML201", "99205", "97110", "72148", "L0650"]),
+    );
+    expect(DEFAULT_BILL_SUBMISSION_MODIFIERS.map((item) => item.code)).toEqual(
+      expect.arrayContaining(["95", "59", "XE", "XU"]),
+    );
+    expect(BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((item) => item.label)).toEqual(
+      expect.arrayContaining(["Back", "Neck", "Left hand", "Right knee"]),
+    );
+    expect(calculateBillSubmissionAllowedAmount({
+      code: "ML203",
+      modifiers: ["93", "95"],
+      units: 1,
+    })).toBe(715);
+    expect(calculateBillSubmissionAllowedAmount({
+      code: "ML201",
+      modifiers: ["96"],
+      units: 2,
+    })).toBe(8060);
+  });
+
   it("rejects missing required values and invalid professional charges", () => {
     const result = validateBillSubmission({
       ...validBill,
@@ -174,6 +202,41 @@ describe("atomic bill submission form contract", () => {
       "serviceLines.0.units": "Enter at least 1 unit",
       "serviceLines.0.charge": "Enter the billed charge",
     });
+  });
+});
+
+describe("pre-submission reference data", () => {
+  it("uses one authenticated browser session for payer, ICD-10, and ZIP lookups", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: "short-lived-reference-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        results: [{ id: "pd:zurich", name: "Zurich American Insurance Company", hasElectronic: true }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        results: [{ code: "M25.562", description: "Pain in left knee" }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({ postalCode: "94403", city: "San Mateo", state: "CA" }));
+    const client = createBillReferenceClient({ fetch: fetcher });
+
+    await expect(client.searchClaimsAdministrators("Zurich", "TEST-1")).resolves.toMatchObject([
+      { id: "pd:zurich", name: "Zurich American Insurance Company", hasElectronic: true },
+    ]);
+    await expect(client.searchDiagnosisCodes("left knee")).resolves.toEqual([
+      { code: "M25.562", description: "Pain in left knee" },
+    ]);
+    await expect(client.lookupPostalCode("94403")).resolves.toEqual({ city: "San Mateo", state: "CA" });
+
+    expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
+      "/api/mindbill/session",
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Zurich&claimNumber=TEST-1",
+      "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=left+knee&limit=30",
+      "https://app.mindbill.org/partner/v2/browser/postal-codes?postalCode=94403",
+    ]);
+    expect(fetcher.mock.calls.slice(1).map((call) => new Headers(call[1]?.headers).get("authorization"))).toEqual([
+      "Bearer short-lived-reference-token",
+      "Bearer short-lived-reference-token",
+      "Bearer short-lived-reference-token",
+    ]);
   });
 });
 

@@ -9,6 +9,12 @@ import {
 } from "@mindbill/browser";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import {
+  BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
+  calculateBillSubmissionAllowedAmount,
+  DEFAULT_BILL_SUBMISSION_MODIFIERS,
+  DEFAULT_BILL_SUBMISSION_PROCEDURES,
+} from "./billing-catalog";
 
 export const BILL_SUBMISSION_DOCUMENT_TYPES = [
   "final_report", "proof_of_service", "letter_of_attestation", "form_122",
@@ -99,25 +105,6 @@ export const BILL_SUBMISSION_REQUIRED_FIELDS = [
 
 export type BillSubmissionValidation = { valid: boolean; fieldErrors: Record<string, string> };
 
-const PROCEDURES: BillSubmissionProcedureOption[] = [
-  { code: "ML200", description: "Missed appointment for a medical-legal evaluation" },
-  { code: "ML201", description: "Comprehensive medical-legal evaluation" },
-  { code: "ML202", description: "Follow-up medical-legal evaluation" },
-  { code: "ML203", description: "Supplemental medical-legal evaluation" },
-  { code: "ML204", description: "Medical-legal testimony" },
-  { code: "ML205", description: "Review of sub rosa recordings" },
-  { code: "MLPRR", description: "Medical-legal record review" },
-];
-const MODIFIERS: BillSubmissionModifierOption[] = [
-  { code: "92", description: "Primary Treating Physician evaluation" },
-  { code: "93", description: "Interpreter required" },
-  { code: "94", description: "Agreed Medical Evaluator" },
-  { code: "95", description: "Qualified Medical Evaluator" },
-  { code: "96", description: "Psychiatric/psychological evaluation" },
-  { code: "97", description: "Toxicology evaluation" },
-  { code: "98", description: "Oncology evaluation" },
-  { code: "59", description: "Distinct procedural service" },
-];
 const documentLabels: Record<BillSubmissionDocumentType, string> = {
   final_report: "Final report", proof_of_service: "Proof of service",
   letter_of_attestation: "Letter of attestation", form_122: "Form 122",
@@ -222,12 +209,12 @@ const css = `
 .mbsf{display:grid;gap:20px;color:var(--mb-text);font-family:var(--mb-font);font-size:15px}.mbsf *{box-sizing:border-box}
 .mbsf-head,.mbsf-section-head,.mbsf-attach-row,.mbsf-actions{display:flex;align-items:center;justify-content:space-between;gap:16px}.mbsf-title{margin:0;font-size:24px}.mbsf-copy,.mbsf-help{color:var(--mb-muted);margin:5px 0 0}.mbsf-required{font-size:13px;color:var(--mb-muted);white-space:nowrap}.mbsf-star,.mbsf-error{color:var(--mb-danger)}
 .mbsf-card{min-width:0;margin:0;padding:24px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}.mbsf-legend{padding:0 10px;font-size:18px;font-weight:760}.mbsf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}.mbsf-span{grid-column:1/-1}.mbsf-field{display:grid;align-content:start;gap:7px;min-width:0}.mbsf-label{font-weight:680}.mbsf-input,.mbsf-select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbsf-input:focus,.mbsf-select:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}
-.mbsf-combo{position:relative}.mbsf-menu{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:300px;overflow:auto;padding:7px;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);box-shadow:0 14px 35px rgba(17,38,49,.16)}.mbsf-option{display:grid;width:100%;gap:2px;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mbsf-option:hover,.mbsf-option:focus{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}.mbsf-option small{color:var(--mb-muted)}
-.mbsf-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}
+.mbsf-combo{position:relative}.mbsf-menu{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:min(300px,42vh);overflow:auto;overscroll-behavior:contain;padding:7px;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);box-shadow:0 14px 35px rgba(17,38,49,.16)}.mbsf-option{display:grid;width:100%;gap:2px;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mbsf-option:hover,.mbsf-option:focus{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}.mbsf-option small{color:var(--mb-muted)}
+.mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
 .mbsf-lines{margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(220px,1.5fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
 .mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;place-items:center;min-height:180px;padding:24px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
-@media(max-width:820px){.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px}.mbsf-line-head{display:none}.mbsf-line{grid-template-columns:1fr 1fr}.mbsf-line>*:nth-child(1),.mbsf-line>*:nth-child(2){grid-column:1/-1}.mbsf-money{text-align:left}.mbsf-line .mbsf-icon-btn{justify-self:end}.mbsf-total{padding-right:18px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:1fr}.mbsf-segment{border-right:0;border-bottom:1px solid var(--mb-border)}.mbsf-segment:last-child{border-bottom:0}}
+@media(max-width:820px){.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head{display:none}.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2){grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf-submit{width:100%}}
 `;
 
 function RequiredMark(): ReactElement { return <span className="mbsf-star"> *</span>; }
@@ -245,10 +232,22 @@ function TextDateInput({ value, onChange, disabled, required, ariaLabel }: { val
 }
 
 type ComboOption = { id: string; label: string; detail?: string };
-function ComboBox({ value, placeholder, options, disabled, loading, onQuery, onSelect, ariaLabel }: { value: string; placeholder: string; options: ComboOption[]; disabled: boolean; loading?: boolean; onQuery?: (query: string) => void; onSelect: (option: ComboOption) => void; ariaLabel: string }): ReactElement {
+function ComboBox({ value, placeholder, options, disabled, loading, onQuery, onSelect, createOption, ariaLabel }: { value: string; placeholder: string; options: ComboOption[]; disabled: boolean; loading?: boolean; onQuery?: (query: string) => void; onSelect: (option: ComboOption) => void; createOption?: (query: string) => ComboOption | null; ariaLabel: string }): ReactElement {
   const [open, setOpen] = useState(false); const [query, setQuery] = useState("");
-  const visible = useMemo(() => { const q = query.trim().toLowerCase(); return q ? options.filter((option) => `${option.id} ${option.label} ${option.detail ?? ""}`.toLowerCase().includes(q)) : options; }, [options, query]);
-  return <div className="mbsf-combo"><input className="mbsf-input" role="combobox" aria-label={ariaLabel} aria-expanded={open} autoComplete="off" disabled={disabled} placeholder={placeholder} value={open ? query : value} onFocus={() => { setOpen(true); setQuery(""); onQuery?.(""); }} onChange={(event) => { setOpen(true); setQuery(event.target.value); onQuery?.(event.target.value); }} onBlur={() => setTimeout(() => setOpen(false), 120)} />{open ? <div className="mbsf-menu" role="listbox">{loading ? <div className="mbsf-option">Searching…</div> : visible.length ? visible.map((option) => <button className="mbsf-option" type="button" role="option" key={option.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(option); setOpen(false); setQuery(""); }}><strong>{option.label}</strong>{option.detail ? <small>{option.detail}</small> : null}</button>) : <div className="mbsf-option">No matches</div>}</div> : null}</div>;
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matches = q ? options.filter((option) => `${option.id} ${option.label} ${option.detail ?? ""}`.toLowerCase().includes(q)) : options;
+    const custom = createOption?.(query) ?? null;
+    return custom && !matches.some((option) => option.id.toUpperCase() === custom.id.toUpperCase()) ? [...matches, custom] : matches;
+  }, [createOption, options, query]);
+  const showMenu = open && (loading || visible.length > 0 || query.trim().length >= 2);
+  return <div className="mbsf-combo"><input className="mbsf-input" role="combobox" aria-label={ariaLabel} aria-expanded={showMenu} autoComplete="off" disabled={disabled} placeholder={placeholder} value={open ? query : value} onFocus={() => { setOpen(true); setQuery(""); }} onChange={(event) => { setOpen(true); setQuery(event.target.value); onQuery?.(event.target.value); }} onBlur={() => setTimeout(() => setOpen(false), 120)} />{showMenu ? <div className="mbsf-menu" role="listbox">{loading ? <div className="mbsf-option">Searching…</div> : visible.length ? visible.map((option) => <button className="mbsf-option" type="button" role="option" key={option.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(option); setOpen(false); setQuery(""); }}><strong>{option.label}</strong>{option.detail ? <small>{option.detail}</small> : null}</button>) : <div className="mbsf-option">No matches</div>}</div> : null}</div>;
+}
+
+function customProcedureOption(query: string): ComboOption | null {
+  const code = query.trim().toUpperCase().replace(/\s+/g, "");
+  if (!/^(?:\d{5}|[A-Z]\d{4}|ML(?:20[0-5]|PRR))$/.test(code)) return null;
+  return { id: code, label: code, detail: "Use this CPT, HCPCS, or medical-legal code" };
 }
 
 function mergeOptions<T extends { code: string }>(defaults: T[], supplied: T[] | undefined): T[] {
@@ -264,22 +263,23 @@ export function BillSubmissionForm({
   description = "Review the bill details, add attachments, and submit.",
 }: BillSubmissionFormProps): ReactElement {
   const [bill, setBill] = useState(() => cloneBill(initialBill));
-  const [selectedIds, setSelectedIds] = useState(() => attachments.filter((item) => item.selected !== false || item.autoAttached).map((item) => item.id));
+  const [selectedIds, setSelectedIds] = useState(() => attachments.filter((item) => item.selected !== false || item.autoAttached || item.documentType === "w9").map((item) => item.id));
+  const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
   const [uploads, setUploads] = useState<BillSubmissionUpload[]>([]); const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]); const [payerLoading, setPayerLoading] = useState(false);
   const [diagnosisResults, setDiagnosisResults] = useState(diagnosisOptions); const [diagnosisLoading, setDiagnosisLoading] = useState(false);
   const [postalStatus, setPostalStatus] = useState<string | null>(null); const [dragActive, setDragActive] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const procedures = useMemo(() => mergeOptions(PROCEDURES, procedureOptions), [procedureOptions]);
-  const modifiers = useMemo(() => mergeOptions(MODIFIERS, modifierOptions), [modifierOptions]);
+  const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, procedureOptions), [procedureOptions]);
+  const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
   const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialBill.renderingProvider?.isAme ? "ame" : initialBill.renderingProvider?.specialty?.toLowerCase().includes("psych") ? "psych_qme" : "qme");
   const referenceClient = useMemo(() => getSession ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride]);
   const locked = disabled || submitting;
 
   useEffect(() => {
-    setBill(cloneBill(initialBill)); setSelectedIds(attachments.filter((item) => item.selected !== false || item.autoAttached).map((item) => item.id));
-    setUploads([]); setErrors({}); setFormError(null);
+    setBill(cloneBill(initialBill)); setSelectedIds(attachments.filter((item) => item.selected !== false || item.autoAttached || item.documentType === "w9").map((item) => item.id));
+    setRemovedSourceIds([]); setUploads([]); setErrors({}); setFormError(null);
   }, [initialBill, attachments]);
 
   const addFiles = useCallback((fileList: FileList | File[]) => {
@@ -301,7 +301,14 @@ export function BillSubmissionForm({
   }, [addFiles]);
 
   const setAddress = (patch: Partial<BillSubmissionAddress>) => setBill((current) => ({ ...current, patient: { ...current.patient, address: { ...current.patient.address, ...patch } } }));
-  const setLine = (index: number, patch: Partial<BillSubmissionInput["serviceLines"][number]>) => setBill((current) => ({ ...current, serviceLines: ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line)) }));
+  const setLine = (index: number, patch: Partial<BillSubmissionInput["serviceLines"][number]>) => setBill((current) => ({ ...current, serviceLines: ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => {
+    if (lineIndex !== index) return line;
+    const next = { ...line, ...patch };
+    const charge = calculateBillSubmissionAllowedAmount(next, procedures);
+    if (charge != null) return { ...next, charge };
+    if (Object.hasOwn(patch, "code")) { const withoutCharge = { ...next }; delete withoutCharge.charge; return withoutCharge; }
+    return next;
+  })) }));
   const text = (value: string | null | undefined, onChange: (value: string) => void, options: { placeholder?: string; maxLength?: number; type?: string } = {}) => <input className="mbsf-input" disabled={locked} value={value ?? ""} onChange={(event) => onChange(event.target.value)} {...options} />;
   const searchPayers = (query: string) => {
     if (query.trim().length < 2) return;
@@ -310,20 +317,24 @@ export function BillSubmissionForm({
     void search(query, bill.claim.claimNumber).then(setPayerResults).catch((caught) => setFormError(caught instanceof Error ? caught.message : "Claims administrator search is unavailable.")).finally(() => setPayerLoading(false));
   };
   const searchDiagnoses = (query: string) => {
-    if (!onSearchDiagnoses) return; setDiagnosisLoading(true);
-    void onSearchDiagnoses(query).then(setDiagnosisResults).catch(() => setDiagnosisResults([])).finally(() => setDiagnosisLoading(false));
+    if (query.trim().length < 2) return;
+    const search = onSearchDiagnoses ?? referenceClient?.searchDiagnosisCodes;
+    if (!search) return; setDiagnosisLoading(true);
+    void search(query).then(setDiagnosisResults).catch(() => setDiagnosisResults([])).finally(() => setDiagnosisLoading(false));
   };
   const updatePostalCode = (postalCode: string) => {
-    setAddress({ postalCode }); setPostalStatus(null); if (!onLookupPostalCode || !/^\d{5}$/.test(postalCode)) return;
-    void onLookupPostalCode(postalCode).then((place) => { if (!place) return setPostalStatus("ZIP not found"); setAddress({ city: place.city, state: place.state.toUpperCase() }); setPostalStatus(`${place.city}, ${place.state.toUpperCase()} filled from ZIP`); }).catch(() => setPostalStatus("ZIP lookup unavailable"));
+    setAddress({ postalCode }); setPostalStatus(null); const lookup = onLookupPostalCode ?? referenceClient?.lookupPostalCode;
+    if (!lookup || !/^\d{5}$/.test(postalCode)) return;
+    setPostalStatus("Looking up ZIP…"); void lookup(postalCode).then((place) => { if (!place) return setPostalStatus("ZIP not found"); setAddress({ city: place.city, state: place.state.toUpperCase() }); setPostalStatus(`${place.city}, ${place.state.toUpperCase()} filled from ZIP`); }).catch(() => setPostalStatus("ZIP lookup unavailable"));
   };
   const changeEvaluation = (type: BillSubmissionEvaluationType) => {
     setEvaluationType(type); setBill((current) => ({ ...current, renderingProvider: { ...current.renderingProvider, isAme: type === "ame", isQme: type !== "ame", ...(type === "psych_qme" && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(current.serviceLines, type) }));
   };
-  const total = submittedLines(bill.serviceLines).reduce((sum, line) => sum + (Number.isFinite(line.charge) ? Number(line.charge) : 0), 0);
+  const lineCharge = (line: BillSubmissionInput["serviceLines"][number]) => calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
+  const total = submittedLines(bill.serviceLines).reduce((sum, line) => sum + (lineCharge(line) ?? 0), 0);
 
   async function submit(): Promise<void> {
-    const clean = { ...cloneBill(bill), serviceLines: submittedLines(bill.serviceLines) };
+    const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: submittedLines(bill.serviceLines).map((line) => { const charge = lineCharge(line); return charge == null ? line : { ...line, charge }; }) };
     const validation = validateBillSubmission(clean); setErrors(validation.fieldErrors); setFormError(null);
     if (!validation.valid) return setFormError("Complete the required fields before submitting.");
     if (selectedIds.length + uploads.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
@@ -356,7 +367,11 @@ export function BillSubmissionForm({
       <Field label="WCAB / ADJ number (optional)">{text(bill.claim.adjNumber, (adjNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, adjNumber } })))}</Field>
       <Field label="Claims administrator" required span error={errors["claim.claimsAdministrator"]}><ComboBox ariaLabel="Claims administrator" disabled={locked} loading={payerLoading} value={bill.claim.claimsAdministrator?.name ?? ""} placeholder="Search the payer directory…" options={payerResults.map((payer) => ({ id: payer.id, label: payer.name, detail: [payer.hasElectronic ? "Electronic" : "Work comp", ...(payer.states ?? [])].join(" · ") }))} onQuery={searchPayers} onSelect={(option) => setBill((c) => ({ ...c, claim: { ...c.claim, claimsAdministrator: { id: option.id, name: option.label } } }))} /></Field>
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
-      <Field label="Diagnosis codes (ICD-10)" span><div className="mbsf-chips">{(bill.diagnoses ?? []).map((code) => { const option = [...diagnosisOptions, ...diagnosisResults].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}<button type="button" aria-label={`Remove ${code}`} onClick={() => setBill((c) => ({ ...c, diagnoses: (c.diagnoses ?? []).filter((item) => item !== code) }))}>×</button></span>; })}</div><ComboBox ariaLabel="Add diagnosis code" disabled={locked} loading={diagnosisLoading} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={[...new Map([...diagnosisOptions, ...diagnosisResults].map((item) => [item.code, item])).values()].filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onQuery={searchDiagnoses} onSelect={(option) => setBill((c) => ({ ...c, diagnoses: [...new Set([...(c.diagnoses ?? []), option.id])] }))} /></Field>
+      <Field label="Diagnosis codes (ICD-10)" span>
+        <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = (bill.diagnoses ?? []).includes(option.code); return <button className="mbsf-quick-pick" data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => ({ ...current, diagnoses: selected ? (current.diagnoses ?? []).filter((code) => code !== option.code) : [...new Set([...(current.diagnoses ?? []), option.code])] }))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>
+        <div className="mbsf-chips">{(bill.diagnoses ?? []).map((code) => { const option = [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisOptions, ...diagnosisResults].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}<button type="button" aria-label={`Remove ${code}`} onClick={() => setBill((c) => ({ ...c, diagnoses: (c.diagnoses ?? []).filter((item) => item !== code) }))}>×</button></span>; })}</div>
+        <ComboBox ariaLabel="Add diagnosis code" disabled={locked} loading={diagnosisLoading} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={[...new Map([...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisOptions, ...diagnosisResults].map((item) => [item.code, item])).values()].filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onQuery={searchDiagnoses} onSelect={(option) => setBill((c) => ({ ...c, diagnoses: [...new Set([...(c.diagnoses ?? []), option.id])] }))} />
+      </Field>
     </div></fieldset>
 
     <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend><div className="mbsf-grid">
@@ -379,10 +394,10 @@ export function BillSubmissionForm({
       <p className="mbsf-help">{evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric QME — eligible ML evaluation codes default to modifier -96 (-95 for ML200)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
       <div className="mbsf-lines"><div className="mbsf-line-head"><span>Procedure code</span><span>Modifiers</span><span>Units</span><span>Allowed</span><span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
-          <div><ComboBox ariaLabel={`Procedure code ${index + 1}`} disabled={locked} value={line.code} placeholder="Code…" options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onSelect={(option) => { const selected = procedures.find((item) => item.code === option.id); const auto = evaluationModifier(evaluationType, option.id); setLine(index, { code: option.id, ...(auto ? { modifiers: [auto, ...(line.modifiers ?? []).filter((item) => !["94", "95", "96"].includes(item.replace(/^-/, "")))] } : line.modifiers ? { modifiers: line.modifiers } : {}), ...(selected?.allowedAmount != null ? { charge: selected.allowedAmount * (line.units ?? 1) } : {}) }); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
-          <div><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={modifiers.filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
-          <div><input className="mbsf-input" aria-label={`Units ${index + 1}`} type="number" min={1} value={line.units ?? 1} onChange={(event) => { const units = Number(event.target.value); const selected = procedures.find((item) => item.code === line.code); setLine(index, { units, ...(selected?.allowedAmount != null ? { charge: selected.allowedAmount * units } : {}) }); }} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
-          <div className="mbsf-money">{line.charge == null ? "—" : line.charge.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
+          <div data-label="Procedure code"><ComboBox ariaLabel={`Procedure code ${index + 1}`} disabled={locked} value={line.code} placeholder="Search or enter code…" options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const auto = evaluationModifier(evaluationType, option.id); setLine(index, { code: option.id, ...(auto ? { modifiers: [auto, ...(line.modifiers ?? []).filter((item) => !["94", "95", "96"].includes(item.replace(/^-/, "")))] } : line.modifiers ? { modifiers: line.modifiers } : {}) }); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
+          <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={modifiers.filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
+          <div data-label="Units"><input className="mbsf-input" aria-label={`Units ${index + 1}`} type="number" min={1} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
+          <div className="mbsf-money" data-label="Allowed">{lineCharge(line) == null ? "—" : lineCharge(line)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
           <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => setBill((c) => ({ ...c, serviceLines: ensureTrailingBillSubmissionLine(c.serviceLines.filter((_, itemIndex) => itemIndex !== index)) }))}>×</button>
         </div>)}
         <div className="mbsf-total"><span>Total</span><span>{total.toLocaleString(undefined, { style: "currency", currency: "USD" })}</span></div>
@@ -390,7 +405,7 @@ export function BillSubmissionForm({
     </fieldset>
 
     <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Attachments</legend><div className="mbsf-attach-list">
-      {attachments.map((attachment) => { const auto = attachment.autoAttached ?? attachment.documentType === "w9"; const selected = selectedIds.includes(attachment.id); return <div className="mbsf-attach-row" data-auto={auto} key={attachment.id}><label className="mbsf-attach-row" style={{ border: 0, padding: 0, flex: 1, justifyContent: "flex-start" }}><input type="checkbox" checked={selected} disabled={locked || auto || attachment.removable === false} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, attachment.id])] : current.filter((id) => id !== attachment.id))} /><span className="mbsf-file"><strong>{attachment.fileName}</strong><span className="mbsf-badge">{auto ? "Auto-attached" : documentLabels[attachment.documentType]}</span><span className="mbsf-help" style={{ display: "block" }}>{attachment.description || (auto ? "Included automatically with this bill." : documentLabels[attachment.documentType])}</span></span></label>{attachment.previewUrl ? <a className="mbsf-secondary" href={attachment.previewUrl} target="_blank" rel="noreferrer">View</a> : null}</div>; })}
+      {attachments.filter((attachment) => !removedSourceIds.includes(attachment.id)).map((attachment) => { const auto = attachment.autoAttached || attachment.documentType === "w9"; const selected = selectedIds.includes(attachment.id); const removable = !auto && attachment.removable !== false; return <div className="mbsf-attach-row" data-auto={auto} key={attachment.id}><label className="mbsf-attach-row" style={{ border: 0, padding: 0, flex: 1, justifyContent: "flex-start" }}>{auto ? <span aria-label="Always attached" role="img">✓</span> : <input type="checkbox" checked={selected} disabled={locked} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, attachment.id])] : current.filter((id) => id !== attachment.id))} />}<span className="mbsf-file"><strong>{attachment.fileName}</strong><span className="mbsf-badge">{auto ? "Auto-attached" : documentLabels[attachment.documentType]}</span><span className="mbsf-help" style={{ display: "block" }}>{attachment.description || (auto ? "Included automatically with every bill." : documentLabels[attachment.documentType])}</span></span></label>{attachment.previewUrl ? <a className="mbsf-secondary" href={attachment.previewUrl} target="_blank" rel="noreferrer">View</a> : null}{removable ? <button className="mbsf-icon-btn" type="button" aria-label={`Remove ${attachment.fileName}`} disabled={locked} onClick={() => { setSelectedIds((current) => current.filter((id) => id !== attachment.id)); setRemovedSourceIds((current) => [...new Set([...current, attachment.id])]); }}>×</button> : null}</div>; })}
       {uploads.map((upload, index) => <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span><select className="mbsf-select" style={{ width: 190 }} value={upload.documentType} onChange={(event) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, documentType: event.target.value as BillSubmissionDocumentType } : item))}>{BILL_SUBMISSION_DOCUMENT_TYPES.map((type) => <option value={type} key={type}>{documentLabels[type]}</option>)}</select><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}
     </div><input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>
 
