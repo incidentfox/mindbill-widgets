@@ -157,7 +157,7 @@ The component includes the interaction model, not just the markup:
 - canonical claims-administrator search through the authenticated MindBill payer directory;
 - QME, AME, and Psych QME evaluation modes with medical-legal modifier defaults;
 - searchable workers-comp procedure/modifier controls, medical-legal fee-schedule amounts, totals, valid manual CPT/HCPCS entry, and an automatically maintained empty line;
-- removable source documents, a locked auto-attached practice W-9, and click, panel-drop, or whole-page PDF upload.
+- removable source documents with new-tab previews, a locked auto-attached practice W-9, and a full-width click, panel-drop, or whole-page PDF upload area. Every visible source document is included until removed; uploaded PDFs do not require document-type tagging.
 
 Partners supply tenant-specific bootstrap data, one short-lived browser session callback, and the final server submission callback. Required fields, validation, ZIP lookup, ICD-10 and payer directories, service-line behavior, attachments, and submission UX stay inside `@mindbill/react`, so every integration receives the same billing workflow. Optional `diagnosisOptions`, `procedureOptions`, `modifierOptions`, and lookup callbacks extend or replace defaults when a partner has licensed or organization-specific data.
 
