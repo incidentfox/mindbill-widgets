@@ -138,6 +138,11 @@ export function Billing({ billId }: { billId: string }) {
 }
 ```
 
+The host contract is identical in sandbox and live environments. Sandbox
+simulation controls are never inferred from the response environment; they are
+available only to dedicated developer tooling that explicitly passes
+`sandboxControls={true}`.
+
 Use `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers status, EORs, payments, reviews, and close actions.
 
 Angular uses the same bill ID, browser session, API calls, and lifecycle rules:

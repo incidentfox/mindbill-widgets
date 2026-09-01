@@ -260,6 +260,12 @@ export function useBillLifecycle({
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   appearance?: MindBillReactAppearance;
+  /**
+   * Exposes payer-response simulation controls for an explicit sandbox
+   * playground. Sandbox responses remain indistinguishable from live
+   * lifecycle responses to ordinary host applications.
+   */
+  sandboxControls?: boolean;
   className?: string;
   style?: CSSProperties;
   loadingFallback?: ReactNode;
@@ -315,7 +321,11 @@ function sandboxScenarios(state: string): Array<{ id: SandboxSimulationScenario;
   return [];
 }
 
-export function ConnectedBillLifecycle({ appearance, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+export function shouldShowSandboxControls(environment: BillLifecycleData["environment"], enabled = false): boolean {
+  return enabled && environment === "sandbox";
+}
+
+export function ConnectedBillLifecycle({ appearance, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -368,7 +378,8 @@ export function ConnectedBillLifecycle({ appearance, className, style, loadingFa
   const viewEor = data.lifecycle.actions.find((action) => action.id === "view_eor" && action.enabled);
   const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "second_review", "post_payment", "close", "reopen"]);
   const actions = data.lifecycle.actions.filter((action) => action.enabled && supportedActions.has(action.id));
-  const simulations = data.environment === "sandbox" ? sandboxScenarios(data.lifecycle.state) : [];
+  const showSandboxControls = shouldShowSandboxControls(data.environment, sandboxControls);
+  const simulations = showSandboxControls ? sandboxScenarios(data.lifecycle.state) : [];
 
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
@@ -387,7 +398,7 @@ export function ConnectedBillLifecycle({ appearance, className, style, loadingFa
     {tab === "details" ? <div className="mb-lifecycle-tabpanel" role="tabpanel">
       {(data.eors.length || data.payments.length || ["processed", "denied", "partially_paid"].includes(data.lifecycle.state)) ? <BillExplanationOfReview remittance={data.remittance} eors={data.eors} payments={data.payments} submittedAt={data.lifecycle.submittedAt ?? null} onOpenEor={lifecycle.openEor} {...(appearance ? { appearance } : {})} /> : null}
 
-      {data.environment === "sandbox" ? <section className="mb-lifecycle-simulator" aria-label="Sandbox lifecycle simulator"><div><span>Sandbox demo controls</span><h3>Simulate the next payer response</h3><p>This changes sandbox data only. The host receives the result through the same lifecycle API and components partners use.</p></div>{simulations.length ? <div className="mb-lifecycle-simulator-actions">{simulations.map((scenario) => <button type="button" key={scenario.id} disabled={lifecycle.isMutating} onClick={() => void complete(`${scenario.label} simulated.`, () => lifecycle.simulateSandbox({ scenario: scenario.id }))}><strong>{scenario.label}</strong><span>{scenario.detail}</span></button>)}</div> : <p className="mb-lifecycle-simulator-idle">No simulated payer transition is needed at this stage. Use the bill action below to continue.</p>}</section> : null}
+      {showSandboxControls ? <section className="mb-lifecycle-simulator" aria-label="Sandbox lifecycle simulator"><div><span>Sandbox demo controls</span><h3>Simulate the next payer response</h3><p>This changes sandbox data only. The host receives the result through the same lifecycle API and components partners use.</p></div>{simulations.length ? <div className="mb-lifecycle-simulator-actions">{simulations.map((scenario) => <button type="button" key={scenario.id} disabled={lifecycle.isMutating} onClick={() => void complete(`${scenario.label} simulated.`, () => lifecycle.simulateSandbox({ scenario: scenario.id }))}><strong>{scenario.label}</strong><span>{scenario.detail}</span></button>)}</div> : <p className="mb-lifecycle-simulator-idle">No simulated payer transition is needed at this stage. Use the bill action below to continue.</p>}</section> : null}
 
       <BillReadOnlyForm data={data} onOpenAttachment={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
     </div> : <div className="mb-lifecycle-tabpanel" role="tabpanel"><BillActivityTimeline events={data.activity} {...(appearance ? { appearance } : {})} /></div>}

@@ -20,6 +20,11 @@ import { ConnectedBillLifecycle } from "@mindbill/react";
 />
 ```
 
+Sandbox and live responses use the same component contract. Simulation controls
+are hidden by default, including when the connected organization is a sandbox.
+Only a dedicated developer playground should opt in with
+`sandboxControls={true}`; production applications should omit the prop.
+
 ## Appearance
 
 Choose a complete preset, then override only the tokens your design system owns. The preset applies to review, payer search, attachments, submission, status, EOR, payment, denial, resubmission, and close states.
