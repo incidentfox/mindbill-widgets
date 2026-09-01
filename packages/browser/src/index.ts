@@ -339,6 +339,7 @@ export type BillPaymentRecord = {
   checkReceived: boolean | null;
   receivedDate: string | null;
   amount: number;
+  principalAmount: number;
   feeAmount: number | null;
   feeReason: string | null;
   source: "paper" | "835" | "portal";
@@ -348,8 +349,13 @@ export type BillPaymentRecord = {
 };
 
 export type BillRemittanceSummary = {
+  billedAmount: number;
+  expectedAmount: number;
+  payerAllowedAmount: number | null;
   payerReportedPaid: number | null;
-  totalPaid: number;
+  postedPrincipal: number;
+  postedAdditional: number;
+  totalPostedCash: number;
   balanceDue: number;
   denialReason: string | null;
 };
@@ -394,6 +400,8 @@ export type CloseBillInput = { reason: string };
 export type ReopenBillInput = { reason: string };
 export type PostBillPaymentInput = {
   amount: number;
+  penaltyAmount?: number;
+  interestAmount?: number;
   method: "check" | "eft";
   checkNumber?: string;
   depositDate: string;
@@ -925,7 +933,7 @@ export function createBillLifecycleClient({
     },
     closeBill(input) { return action({ action: "close", ...input }, "Bill could not be closed."); },
     reopenBill(input) { return action({ action: "reopen", ...input }, "Bill could not be reopened."); },
-    postPayment(input) { return action({ action: "post_payment", ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
+    postPayment(input) { return action({ action: "post_payment", penaltyAmount: 0, interestAmount: 0, ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
     resubmitBill(input = {}) { return action({ action: "resubmit", ...input }, "Bill could not be resubmitted."); },
     simulateSandbox,

@@ -8,14 +8,14 @@ npm install @mindbill/react @mindbill/node
 
 ## Connected lifecycle
 
-`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. It owns the submitted-to-closed progress rail, a read-only rendering of the exact submitted snapshot, server-owned human-readable history, packet download, EORs, payment posting, Second Bill Review, close, and reopen. The only persistent header action is **Download packet**; status-dependent actions open in a compact action sheet when MindBill makes them available.
+`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. Its only bill input is `billId`; `getSession` returns the short-lived token. The component fetches the submitted snapshot, progress, human-readable history, EOR/remittance amounts, payments, and available actions from MindBill. Do not pass lifecycle seed data or duplicate this state in the host app. The only persistent header action is **Download packet**; status-dependent actions open in a compact action sheet when MindBill makes them available.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
 
 <ConnectedBillLifecycle
   billId={billId}
-  sessionEndpoint="/api/mindbill/session"
+  getSession={getMindBillSession}
   appearance={{ preset: "qme-companion" }}
 />
 ```
