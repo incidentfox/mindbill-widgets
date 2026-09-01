@@ -122,7 +122,7 @@ organization-specific choices.
 
 ## 2. Render the submitted lifecycle
 
-`ConnectedBillLifecycle` starts after submission. It loads the immutable bill, polls status, displays EORs, and exposes only the post-submission actions valid for the current state.
+`ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, EORs, remittance, and payments directly from MindBill. Do not pass or maintain lifecycle seed data in your application.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
@@ -131,7 +131,7 @@ export function Billing({ billId }: { billId: string }) {
   return (
     <ConnectedBillLifecycle
       billId={billId}
-      sessionEndpoint="/api/mindbill/session"
+      getSession={getMindBillSession}
       appearance={{ preset: "qme-companion" }}
     />
   );

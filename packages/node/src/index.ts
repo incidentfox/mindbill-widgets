@@ -297,11 +297,20 @@ export type BillLifecycleActivity = {
 };
 export type BillLifecyclePayment = {
   id: string;
+  method: "check" | "eft";
+  checkNumber: string;
+  status: string | null;
+  depositDate: string | null;
+  checkReceived: boolean | null;
+  receivedDate: string | null;
   amount: number;
-  method: string;
-  source: string;
+  principalAmount: number;
+  feeAmount: number | null;
+  feeReason: string | null;
+  source: "paper" | "835" | "portal";
   postedAt: string;
-  [key: string]: unknown;
+  updatedAt: string | null;
+  note: string | null;
 };
 export type BillLifecycleResponse = {
   data: {
@@ -322,8 +331,13 @@ export type BillLifecycleResponse = {
     activity: BillLifecycleActivity[];
     payments: BillLifecyclePayment[];
     remittance: {
+      billedAmount: number;
+      expectedAmount: number;
+      payerAllowedAmount: number | null;
       payerReportedPaid: number | null;
-      totalPaid: number;
+      postedPrincipal: number;
+      postedAdditional: number;
+      totalPostedCash: number;
       balanceDue: number;
       denialReason: string | null;
     };

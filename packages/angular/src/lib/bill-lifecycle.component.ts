@@ -54,7 +54,7 @@ const THEMES: Record<MindBillAngularThemePreset, Required<MindBillAngularAppeara
         </section>
 
         <div class="columns">
-          <section class="card"><div class="card-title"><div><h3>Remittance</h3><p>Amounts reported by the payer and posted to this bill.</p></div></div><dl><div><dt>Payer reported</dt><dd>{{ data.remittance.payerReportedPaid == null ? '—' : (data.remittance.payerReportedPaid | currency) }}</dd></div><div><dt>Posted</dt><dd>{{ data.remittance.totalPaid | currency }}</dd></div><div><dt>Balance</dt><dd>{{ data.remittance.balanceDue | currency }}</dd></div></dl></section>
+          <section class="card"><div class="card-title"><div><h3>Remittance</h3><p>Amounts reported by the payer and posted to this bill.</p></div></div><dl><div><dt>Billed</dt><dd>{{ data.remittance.billedAmount | currency }}</dd></div><div><dt>Payer reported</dt><dd>{{ data.remittance.payerReportedPaid == null ? '—' : (data.remittance.payerReportedPaid | currency) }}</dd></div><div><dt>Principal posted</dt><dd>{{ data.remittance.postedPrincipal | currency }}</dd></div><div><dt>Penalty &amp; interest</dt><dd>{{ data.remittance.postedAdditional | currency }}</dd></div><div><dt>Total received</dt><dd>{{ data.remittance.totalPostedCash | currency }}</dd></div><div><dt>Balance</dt><dd>{{ data.remittance.balanceDue | currency }}</dd></div></dl></section>
           <section class="card"><div class="card-title"><div><h3>{{ data.delivery.payerName || 'Payer' }}</h3><p>Billing and follow-up contacts.</p></div></div><p class="muted">{{ payerContact(data) }}</p></section>
         </div>
 

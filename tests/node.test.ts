@@ -184,7 +184,11 @@ describe("@mindbill/node v2", () => {
           delivery: { route: "ebill" }, amount: null, accepted: null, stcCategory: null,
         }],
         payments: [],
-        remittance: { payerReportedPaid: null, totalPaid: 0, balanceDue: 2015, denialReason: null },
+        remittance: {
+          billedAmount: 2015, expectedAmount: 2015, payerAllowedAmount: null,
+          payerReportedPaid: null, postedPrincipal: 0, postedAdditional: 0,
+          totalPostedCash: 0, balanceDue: 2015, denialReason: null,
+        },
         delivery: { payerName: "Synthetic Payer", contacts: {} },
       },
     };
