@@ -21,6 +21,13 @@ import {
 import {
   applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_REQUIRED_FIELDS,
+  BillSubmissionActions,
+  BillSubmissionAttachmentsSection,
+  BillSubmissionClaimSection,
+  BillSubmissionHeader,
+  BillSubmissionPatientSection,
+  BillSubmissionProvidersSection,
+  BillSubmissionServiceLinesSection,
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
   parseBillSubmissionDate,
@@ -34,6 +41,13 @@ import {
   DEFAULT_BILL_SUBMISSION_MODIFIERS,
   DEFAULT_BILL_SUBMISSION_PROCEDURES,
 } from "../packages/react/src/billing-catalog";
+import {
+  billAgingBucket,
+  buildBillingReportCsv,
+  buildBillingReportRows,
+  summarizeBillingDashboard,
+  type BillingDashboardBill,
+} from "../packages/react/src/billing-dashboard";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -117,6 +131,18 @@ describe("atomic bill submission form contract", () => {
       valid: true,
       fieldErrors: {},
     });
+  });
+
+  it("exports composable sections backed by the form's shared state", () => {
+    expect([
+      BillSubmissionHeader,
+      BillSubmissionPatientSection,
+      BillSubmissionClaimSection,
+      BillSubmissionProvidersSection,
+      BillSubmissionServiceLinesSection,
+      BillSubmissionAttachmentsSection,
+      BillSubmissionActions,
+    ].every((component) => typeof component === "function")).toBe(true);
   });
 
   it("requires the claims administrator to come from the payer directory", () => {
@@ -203,6 +229,86 @@ describe("atomic bill submission form contract", () => {
       "serviceLines.0.units": "Enter at least 1 unit",
       "serviceLines.0.charge": "Enter the billed charge",
     });
+  });
+});
+
+describe("billing dashboard and reports", () => {
+  const bills: BillingDashboardBill[] = [
+    {
+      id: "bill_1",
+      billNumber: 1001,
+      patientName: "Alex Example",
+      claimNumber: "SYN-1001",
+      payerName: "Example Claims Administrator",
+      state: "submitted",
+      agingDays: 12,
+      totalCharge: 1_000,
+      totalPaid: 0,
+      balanceDue: 1_000,
+    },
+    {
+      id: "bill_2",
+      billNumber: 1002,
+      patientName: "Jordan Example",
+      payerName: "Example Claims Administrator",
+      state: "processed",
+      agingDays: 65,
+      totalCharge: 2_000,
+      totalPaid: 500,
+      balanceDue: 1_500,
+    },
+    {
+      id: "bill_3",
+      patientName: "Morgan Example",
+      payerName: "Second Synthetic Payer",
+      state: "closed",
+      agingDays: 120,
+      totalCharge: 750,
+      totalPaid: 750,
+      balanceDue: 0,
+    },
+  ];
+
+  it("calculates standard receivable aging and omits closed zero balances", () => {
+    expect(billAgingBucket(bills[0]!)).toBe("current");
+    expect(billAgingBucket(bills[1]!)).toBe("61-90");
+    expect(summarizeBillingDashboard(bills)).toMatchObject({
+      totalBilled: 3_750,
+      totalPaid: 1_250,
+      outstanding: 2_500,
+      openCount: 2,
+      bills: 3,
+      aging: [
+        { id: "current", count: 1, balance: 1_000 },
+        { id: "31-60", count: 0, balance: 0 },
+        { id: "61-90", count: 1, balance: 1_500 },
+        { id: "91+", count: 0, balance: 0 },
+      ],
+    });
+  });
+
+  it("groups reporting data and exports spreadsheet-ready CSV", () => {
+    expect(buildBillingReportRows(bills, "payer")).toEqual([
+      {
+        key: "Example Claims Administrator",
+        label: "Example Claims Administrator",
+        billCount: 2,
+        totalBilled: 3_000,
+        totalPaid: 500,
+        balanceDue: 2_500,
+      },
+      {
+        key: "Second Synthetic Payer",
+        label: "Second Synthetic Payer",
+        billCount: 1,
+        totalBilled: 750,
+        totalPaid: 750,
+        balanceDue: 0,
+      },
+    ]);
+    expect(buildBillingReportCsv(bills, "status")).toContain(
+      '"Submitted","1","1000.00","0.00","1000.00"',
+    );
   });
 });
 
