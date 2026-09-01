@@ -193,6 +193,7 @@ export type { BrowserBillSubmissionResult } from "@mindbill/browser";
 
 export {
   BillActivityTimeline,
+  BillExplanationOfReview,
   BillLifecycleActions,
   BillLifecycleProgress,
   BillPaymentLedger,
@@ -207,6 +208,7 @@ export {
 export type {
   BillActivityEvent,
   BillActivityTimelineProps,
+  BillExplanationOfReviewProps,
   BillLifecycleActionsProps,
   BillLifecycleProgressProps,
   BillLifecycleStage,
@@ -222,6 +224,10 @@ export {
   useBillLifecycle,
 } from "./connected-bill-lifecycle";
 export type {
+  BillClaimsAdministratorContact,
+  BillClaimsAdministratorDirectory,
+  BillClaimsAdministratorMailingAddress,
+  BillClaimsAdministratorPattern,
   BillEorDocument,
   BillActivityRecord,
   BillLifecycleAction,

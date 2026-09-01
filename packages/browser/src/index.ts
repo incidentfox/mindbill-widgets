@@ -363,6 +363,49 @@ export type BillRemittanceSummary = {
 export type BillLifecycleDelivery = {
   payerName: string;
   contacts: BillDeliveryOptions["contacts"];
+  /**
+   * Partner-safe directory details. `id` is an opaque MindBill directory ID;
+   * clearinghouse and routing identifiers are intentionally never exposed.
+   */
+  directory?: BillClaimsAdministratorDirectory | null;
+};
+
+export type BillClaimsAdministratorContact = {
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  fax?: string | null;
+  portalUrl?: string | null;
+  address?: string | null;
+  note?: string | null;
+};
+
+export type BillClaimsAdministratorMailingAddress = {
+  company?: string | null;
+  address: string;
+  notes?: string | null;
+  submissionTypes?: string[];
+};
+
+export type BillClaimsAdministratorPattern = {
+  length?: number | null;
+  pattern: string;
+  example?: string | null;
+  matches?: boolean | null;
+};
+
+export type BillClaimsAdministratorDirectory = {
+  id?: string;
+  type?: string | null;
+  description?: string | null;
+  website?: string | null;
+  aliases?: string[];
+  affiliatedEntities?: string[];
+  hours?: string | null;
+  billReview?: BillClaimsAdministratorContact[];
+  authorization?: BillClaimsAdministratorContact[];
+  mailingAddresses?: BillClaimsAdministratorMailingAddress[];
+  claimNumberPatterns?: BillClaimsAdministratorPattern[];
 };
 
 export type BillLifecycleData = BillReviewData & {

@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactElement } from "react";
 import type {
+  BillEorDocument,
   BillLifecycleAction,
   BillLifecycleData,
   BillLifecycleDelivery,
@@ -204,6 +205,72 @@ export function BillSnapshotSummary({ bill, patient, injury, delivery, appearanc
 
 export type BillRemittanceCardProps = SurfaceProps & { remittance: BillRemittanceSummary };
 
+export type BillExplanationOfReviewProps = SurfaceProps & {
+  remittance: BillRemittanceSummary;
+  eors: readonly BillEorDocument[];
+  payments: readonly BillPaymentRecord[];
+  submittedAt?: string | null;
+  onOpenEor?: (document: BillEorDocument) => void | Promise<void>;
+};
+
+/**
+ * A consolidated payer-response surface: financial summary, denial context,
+ * EOR documents, and posted payments in one familiar reconciliation view.
+ */
+export function BillExplanationOfReview({
+  remittance,
+  eors,
+  payments,
+  submittedAt,
+  onOpenEor,
+  appearance,
+  className,
+  style,
+}: BillExplanationOfReviewProps): ReactElement {
+  const rows = payments.length ? payments : [null];
+  return (
+    <section className={classes("mb-surface mb-eor-review", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Explanation of Review and payments">
+      <style>{lifecycleSurfaceStyles}</style>
+      <header className="mb-surface-heading"><div><strong>Explanation of Review</strong><span>Payer response and payment reconciliation.</span></div></header>
+      <dl className="mb-eor-metrics">
+        <div><dt>Amount billed</dt><dd>{currency(remittance.billedAmount)}</dd></div>
+        <div><dt>Payer allowed</dt><dd>{remittance.payerAllowedAmount === null ? "—" : currency(remittance.payerAllowedAmount)}</dd></div>
+        <div><dt>Payer reported paid</dt><dd>{remittance.payerReportedPaid === null ? "—" : currency(remittance.payerReportedPaid)}</dd></div>
+        <div className="is-balance"><dt>Balance due</dt><dd>{currency(remittance.balanceDue)}</dd></div>
+        <div><dt>Payment posted</dt><dd>{currency(remittance.postedPrincipal)}</dd></div>
+        <div><dt>Penalty &amp; interest</dt><dd>{currency(remittance.postedAdditional)}</dd></div>
+        <div><dt>Total received</dt><dd>{currency(remittance.totalPostedCash)}</dd></div>
+        <div><dt>Expected</dt><dd>{currency(remittance.expectedAmount)}</dd></div>
+      </dl>
+      {remittance.denialReason ? <div className="mb-denial"><strong>Denial reason</strong><p>{remittance.denialReason}</p></div> : null}
+      <div className="mb-eor-table-wrap">
+        <table className="mb-eor-table">
+          <thead>
+            <tr className="mb-eor-groups"><th colSpan={2}>Submission</th><th colSpan={5}>EOR payment information</th><th colSpan={2}>EOR post</th><th>EOR</th></tr>
+            <tr><th>Submission</th><th>Submission payment</th><th>Payment method</th><th>Reference</th><th>Effective date</th><th>Payment total</th><th>Deposit date</th><th>Post date</th><th>Source</th><th>Document</th></tr>
+          </thead>
+          <tbody>{rows.map((payment, index) => {
+            const eor = eors[index] ?? eors[0];
+            return <tr key={payment?.id ?? `empty-${index}`}>
+              <td data-label="Submission"><strong>Original bill</strong>{submittedAt ? <span>Sent {defaultFormatDate(submittedAt)}</span> : null}</td>
+              <td data-label="Submission payment">{remittance.payerReportedPaid === null ? "—" : currency(remittance.payerReportedPaid)}</td>
+              <td data-label="Payment method">{payment ? humanize(payment.method) : "—"}</td>
+              <td data-label="Reference">{payment?.checkNumber || "—"}</td>
+              <td data-label="Effective date">{payment ? payment.receivedDate || payment.depositDate || defaultFormatDate(payment.postedAt) : "—"}</td>
+              <td data-label="Payment total">{payment ? currency(payment.amount) : currency(0)}</td>
+              <td data-label="Deposit date">{payment?.depositDate || "Not recorded"}</td>
+              <td data-label="Post date">{payment ? defaultFormatDate(payment.postedAt) : eor ? defaultFormatDate(eor.addedAt) : "—"}</td>
+              <td data-label="Source">{payment ? payment.source.toUpperCase() : eor ? "EOR" : "—"}</td>
+              <td data-label="EOR">{eor && onOpenEor ? <button type="button" className="mb-eor-link" onClick={() => void onOpenEor(eor)}>{eor.filename}</button> : eor?.filename || "—"}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      {eors.length > rows.length ? <div className="mb-eor-documents">{eors.slice(rows.length).map((eor) => <button type="button" key={eor.id} onClick={() => void onOpenEor?.(eor)}>{eor.filename}</button>)}</div> : null}
+    </section>
+  );
+}
+
 export function BillRemittanceCard({ remittance, appearance, className, style }: BillRemittanceCardProps): ReactElement {
   return (
     <section className={classes("mb-surface mb-remittance", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Remittance summary">
@@ -296,5 +363,6 @@ const lifecycleSurfaceStyles = `
 .mb-progress-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));list-style:none;margin:0;padding:0}.mb-progress-list li{display:grid;gap:7px;position:relative;text-align:center;color:var(--mb-muted);font-size:12px}.mb-progress-list li:not(:last-child)::after{content:"";position:absolute;left:calc(50% + 14px);right:calc(-50% + 14px);top:13px;height:2px;background:var(--mb-border)}.mb-progress-list li.is-complete:not(:last-child)::after{background:var(--mb-accent)}.mb-progress-list li>span{display:grid;place-items:center;justify-self:center;position:relative;z-index:1;width:28px;height:28px;border:2px solid var(--mb-border);border-radius:50%;background:var(--mb-surface);font-weight:800}.mb-progress-list li.is-complete>span,.mb-progress-list li.is-current>span{border-color:var(--mb-accent);background:var(--mb-accent);color:var(--mb-accent-contrast)}.mb-progress-list li.is-current{color:var(--mb-text)}
 .mb-snapshot dl,.mb-remittance dl,.mb-contacts dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:0}.mb-remittance dl{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:1px;background:var(--mb-border)}.mb-snapshot dl>div,.mb-remittance dl>div,.mb-contacts dl>div{display:grid;gap:3px;padding:10px 14px;border-left:1px solid var(--mb-border)}.mb-remittance dl>div{border:0;background:var(--mb-surface)}.mb-snapshot dl>div:nth-child(3n+1),.mb-contacts dl>div:first-child{border-left:0}.mb-snapshot dt,.mb-remittance dt,.mb-contacts dt,.mb-payment-list dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-snapshot dd,.mb-remittance dd,.mb-contacts dd,.mb-payment-list dd{font-size:14px;font-weight:750;margin:0;overflow-wrap:anywhere}.mb-contacts a{color:var(--mb-accent)}.mb-denial{margin-top:16px;border-left:4px solid var(--mb-danger);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 8%,var(--mb-surface));padding:12px 14px}.mb-denial p{margin:4px 0 0}
 .mb-payment-list{display:grid}.mb-payment-list article{display:grid;grid-template-columns:minmax(120px,.35fr) 1fr;gap:14px 24px;padding:16px 0;border-top:1px solid var(--mb-border)}.mb-payment-list article:first-child{border-top:0}.mb-payment-amount{display:grid;align-content:start;gap:2px}.mb-payment-amount strong{font-size:1.2rem}.mb-payment-list article>dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0}.mb-payment-list article>dl>div{display:grid;align-content:start;gap:3px}.mb-payment-list article span{color:var(--mb-muted);font-size:12px}.mb-payment-list article p{grid-column:1/-1;margin:0;color:var(--mb-muted);font-size:13px}
+.mb-eor-review{border-top:4px solid var(--mb-accent);padding-top:17px}.mb-eor-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 18px;border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}.mb-eor-metrics>div{display:grid;gap:4px;padding:13px 15px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border)}.mb-eor-metrics>div:nth-child(-n+4){border-top:0}.mb-eor-metrics>div:nth-child(4n+1){border-left:0}.mb-eor-metrics dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-eor-metrics dd{margin:0;font-size:15px;font-weight:800}.mb-eor-metrics .is-balance{background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface))}.mb-eor-table-wrap{overflow-x:auto;border:1px solid var(--mb-border);border-radius:10px}.mb-eor-table{width:100%;min-width:1080px;border-collapse:collapse;font-size:12px}.mb-eor-table th,.mb-eor-table td{padding:10px 12px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border);text-align:left;vertical-align:top}.mb-eor-table th:first-child,.mb-eor-table td:first-child{border-left:0}.mb-eor-table thead th{background:var(--mb-soft);color:var(--mb-muted);font-weight:800}.mb-eor-table .mb-eor-groups th{border-top:0;background:color-mix(in srgb,var(--mb-accent) 13%,var(--mb-surface));color:var(--mb-text);text-align:center}.mb-eor-table td>strong,.mb-eor-table td>span{display:block}.mb-eor-table td>span{margin-top:3px;color:var(--mb-muted)}.mb-eor-link,.mb-eor-documents button{border:0;background:transparent;color:var(--mb-accent);font:inherit;font-weight:750;padding:0;text-align:left;text-decoration:underline;cursor:pointer;overflow-wrap:anywhere}.mb-eor-documents{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}
 @media(max-width:700px){.mb-surface.mb-progress{padding:16px 10px}.mb-progress-list{grid-template-columns:repeat(4,minmax(0,1fr))}.mb-progress-list li{display:grid;grid-template-columns:1fr;align-items:start;gap:6px;text-align:center;font-size:10px;min-width:0}.mb-progress-list li b{font-size:10px;white-space:nowrap}.mb-progress-list li:not(:last-child)::after{left:calc(50% + 12px);right:calc(-50% + 12px);top:11px;bottom:auto;width:auto;height:2px}.mb-progress-list li>span{grid-row:auto;width:24px;height:24px;font-size:11px}.mb-snapshot dl,.mb-remittance dl,.mb-contacts dl{grid-template-columns:1fr 1fr}.mb-snapshot dl>div,.mb-remittance dl>div,.mb-contacts dl>div{border:0;border-top:1px solid var(--mb-border);padding:10px 0}.mb-snapshot dl>div:nth-child(-n+2),.mb-remittance dl>div:nth-child(-n+2),.mb-contacts dl>div:nth-child(-n+2){border-top:0}.mb-payment-list article{grid-template-columns:1fr}.mb-payment-list article>dl{grid-template-columns:1fr 1fr}}
 `;
