@@ -1,6 +1,6 @@
 # @mindbill/angular
 
-Native Angular billing UI with built-in session renewal and lifecycle API calls.
+Native Angular billing UI with built-in session renewal, bill lifecycle API calls, dashboards, aging, bill lists, and reporting. The components are standalone and do not bundle React.
 
 ```bash
 npm install @mindbill/angular @mindbill/node
@@ -10,12 +10,20 @@ Import the standalone component and pass the ID returned by your server's atomic
 
 ```ts
 import { Component } from "@angular/core";
-import { MindBillBillLifecycleComponent } from "@mindbill/angular";
+import {
+  MindBillBillLifecycleComponent,
+  MindBillBillingDashboardComponent,
+  MindBillBillingReportComponent,
+} from "@mindbill/angular";
 
 @Component({
   selector: "app-case-billing",
   standalone: true,
-  imports: [MindBillBillLifecycleComponent],
+  imports: [
+    MindBillBillLifecycleComponent,
+    MindBillBillingDashboardComponent,
+    MindBillBillingReportComponent,
+  ],
   template: `
     <mindbill-bill-lifecycle
       [billId]="billId"
@@ -50,3 +58,30 @@ app.post("/api/mindbill/session", requireUser, async (req, res) => {
 ```
 
 Your permanent API key never reaches Angular. Available presets are `mindbill`, `qme-companion`, `orange-bright`, and `clinical-blue`; every visual token can also be overridden.
+
+## Operations components
+
+The operations surfaces consume a normalized list of bills, so they can be used together or independently:
+
+```html
+<mindbill-billing-dashboard
+  [bills]="bills"
+  [appearance]="appearance"
+  (billSelected)="openBill($event)"
+/>
+
+<mindbill-bill-aging-summary
+  [buckets]="summary.aging"
+  [appearance]="appearance"
+/>
+
+<mindbill-bill-list
+  [bills]="bills"
+  [appearance]="appearance"
+  (billSelected)="openBill($event)"
+/>
+
+<mindbill-billing-report [bills]="bills" [appearance]="appearance" />
+```
+
+`summarizeMindBillDashboard`, `buildMindBillReportRows`, and `buildMindBillReportCsv` are also exported for custom layouts and server-side reporting.
