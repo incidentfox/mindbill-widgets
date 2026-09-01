@@ -105,6 +105,7 @@ export {
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
   parseBillSubmissionDate,
+  prepareBillSubmissionDocuments,
   validateBillSubmission,
 } from "./bill-submission-form";
 export type {
@@ -177,6 +178,7 @@ export {
   createBillStatusClient,
   useBillStatus,
 } from "./connected-bill-status";
+export type { BrowserBillSubmissionResult } from "@mindbill/browser";
 
 export {
   BillActivityTimeline,

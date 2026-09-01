@@ -4,6 +4,9 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   createBillReferenceClient,
+  createBillSubmissionClient,
+  type BrowserBillSubmissionDocument,
+  type BrowserBillSubmissionResult,
   type BillLifecycleSessionProvider,
   type BillReviewPayer,
 } from "@mindbill/browser";
@@ -76,8 +79,14 @@ export type BillSubmissionFormValue = { bill: BillSubmissionInput; sourceAttachm
 export type BillSubmissionFormProps = {
   initialBill: BillSubmissionInput;
   attachments?: BillSubmissionSourceAttachment[];
-  onSubmit: (value: BillSubmissionFormValue) => void | Promise<void>;
-  /** Short-lived partner browser session. Enables the built-in canonical payer directory. */
+  /**
+   * Legacy custom submission escape hatch. Connected forms should omit this so
+   * the component owns PDF encoding and the Partner API wire contract.
+   */
+  onSubmit?: (value: BillSubmissionFormValue) => void | Promise<void>;
+  /** Called after the connected component atomically creates and submits the bill. */
+  onSubmitted?: (result: BrowserBillSubmissionResult) => void | Promise<void>;
+  /** Short-lived partner browser session. Enables reference data and direct submission. */
   getSession?: BillLifecycleSessionProvider;
   sessionEndpoint?: string;
   apiBaseUrl?: string;
@@ -122,6 +131,66 @@ const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_DOCUMENTS = 25;
 const DIAGNOSIS_PAGE_SIZE = 100;
 const EMPTY_ATTACHMENTS: BillSubmissionSourceAttachment[] = [];
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 32_768) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+  }
+  return globalThis.btoa(binary);
+}
+
+async function pdfDocument(
+  blob: Blob,
+  input: Omit<BrowserBillSubmissionDocument, "contentBase64">,
+): Promise<BrowserBillSubmissionDocument> {
+  if (blob.size > MAX_PDF_BYTES) throw new Error(`${input.filename} is larger than 25 MB.`);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (
+    bytes.length < 5
+    || bytes[0] !== 0x25
+    || bytes[1] !== 0x50
+    || bytes[2] !== 0x44
+    || bytes[3] !== 0x46
+    || bytes[4] !== 0x2d
+  ) {
+    throw new Error(`${input.filename} is not a valid PDF.`);
+  }
+  return { ...input, contentBase64: bytesToBase64(bytes) };
+}
+
+export async function prepareBillSubmissionDocuments({
+  attachments,
+  selectedIds,
+  uploads,
+  fetch: fetchOverride,
+}: {
+  attachments: BillSubmissionSourceAttachment[];
+  selectedIds: string[];
+  uploads: BillSubmissionUpload[];
+  fetch?: typeof globalThis.fetch;
+}): Promise<BrowserBillSubmissionDocument[]> {
+  const fetcher = fetchOverride ?? globalThis.fetch;
+  if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
+  const selected = selectedIds.map((id) => attachments.find((item) => item.id === id)).filter((item): item is BillSubmissionSourceAttachment => Boolean(item));
+  const sourceDocuments = await Promise.all(selected.map(async (attachment) => {
+    if (!attachment.previewUrl) throw new Error(`${attachment.fileName} cannot be submitted because its document URL is missing.`);
+    const response = await fetcher(attachment.previewUrl, { credentials: "same-origin" });
+    if (!response.ok) throw new Error(`${attachment.fileName} could not be loaded for submission.`);
+    return pdfDocument(await response.blob(), {
+      externalId: attachment.id,
+      filename: attachment.fileName,
+      documentType: attachment.documentType,
+      ...(attachment.description ? { description: attachment.description } : {}),
+    });
+  }));
+  const uploadedDocuments = await Promise.all(uploads.map(({ file, documentType, description }) => pdfDocument(file, {
+    filename: file.name,
+    documentType,
+    ...(description ? { description } : {}),
+  })));
+  return [...sourceDocuments, ...uploadedDocuments];
+}
 
 function previewUploadedPdf(file: File): void {
   const url = URL.createObjectURL(file);
@@ -325,7 +394,7 @@ export function BillSubmissionAttachmentsSection(): ReactElement { return <BillS
 export function BillSubmissionActions(): ReactElement { return <BillSubmissionSection id="actions" />; }
 
 export function BillSubmissionForm({
-  initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, getSession, sessionEndpoint, apiBaseUrl,
+  initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
   fetch: fetchOverride, onSearchClaimsAdministrators, diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, modifierOptions, appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -348,7 +417,9 @@ export function BillSubmissionForm({
   const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, procedureOptions), [procedureOptions]);
   const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
   const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialBill.renderingProvider?.isAme ? "ame" : initialBill.renderingProvider?.specialty?.toLowerCase().includes("psych") ? "psych_qme" : "qme");
-  const referenceClient = useMemo(() => getSession ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride]);
+  const connected = !onSubmit;
+  const referenceClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
+  const submissionClient = useMemo(() => connected ? createBillSubmissionClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const locked = disabled || submitting;
 
   useEffect(() => {
@@ -439,7 +510,21 @@ export function BillSubmissionForm({
       return;
     }
     if (selectedIds.length + uploads.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
-    setSubmitting(true); try { await onSubmit({ bill: clean, sourceAttachmentIds: selectedIds, uploads }); }
+    setSubmitting(true); try {
+      if (onSubmit) {
+        await onSubmit({ bill: clean, sourceAttachmentIds: selectedIds, uploads });
+      } else {
+        if (!submissionClient) throw new Error("The connected billing client is unavailable.");
+        const documents = await prepareBillSubmissionDocuments({
+          attachments,
+          selectedIds,
+          uploads,
+          ...(fetchOverride ? { fetch: fetchOverride } : {}),
+        });
+        const result = await submissionClient.submitBill({ bill: clean, documents });
+        await onSubmitted?.(result);
+      }
+    }
     catch (caught) { setFormError(caught instanceof Error ? caught.message : "Unable to submit the bill."); }
     finally { setSubmitting(false); }
   }

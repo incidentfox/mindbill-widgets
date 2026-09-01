@@ -8,7 +8,7 @@ npm install @mindbill/react @mindbill/node
 
 ## Connected lifecycle
 
-`ConnectedBillLifecycle` starts after your server atomically creates and submits an immutable bill. It owns the submitted-to-closed progress rail, a read-only rendering of the exact submitted snapshot, server-owned human-readable history, packet download, EORs, payment posting, Second Bill Review, close, and reopen. The only persistent header action is **Download packet**; status-dependent actions appear in the details view when MindBill makes them available.
+`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. It owns the submitted-to-closed progress rail, a read-only rendering of the exact submitted snapshot, server-owned human-readable history, packet download, EORs, payment posting, Second Bill Review, close, and reopen. The only persistent header action is **Download packet**; status-dependent actions appear in the details view when MindBill makes them available.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
@@ -132,7 +132,7 @@ Browser callbacks such as `onChanged` are for immediate UI, navigation, optimist
 
 `BillSubmissionForm` owns the complete pre-submission experience: the bill field schema, required-field rules and red asterisks, validation, service-line editing, source-document selection, PDF uploads, and the single Submit action. Its `bill` value is structurally identical to the server SDK's `CreateBillRequest`.
 
-The partner application only loads initial values and sends the component's immutable snapshot to its authenticated server route. Uploaded files stay in the browser until the user submits.
+The partner application only loads initial values and mints a short-lived browser session. Uploaded files stay in the browser until the user submits; the component validates and sends the immutable snapshot and PDF bytes directly to MindBill.
 
 ```tsx
 import { BillSubmissionForm } from "@mindbill/react";
@@ -142,9 +142,7 @@ import { BillSubmissionForm } from "@mindbill/react";
   attachments={bootstrap.attachments}
   getSession={() => fetch("/api/mindbill/session", { method: "POST" }).then(r => r.json())}
   appearance={{ preset: "qme-companion" }}
-  onSubmit={({ bill, sourceAttachmentIds, uploads }) =>
-    submitBill({ bill, sourceAttachmentIds, uploads })
-  }
+  onSubmitted={({ billId }) => saveLocalBillLink(billId)}
 />
 ```
 
@@ -159,11 +157,11 @@ The component includes the interaction model, not just the markup:
 - searchable workers-comp procedure/modifier controls, medical-legal fee-schedule amounts, totals, valid manual CPT/HCPCS entry, and an automatically maintained empty line;
 - removable source documents with new-tab previews, a locked auto-attached practice W-9, and a full-width click, panel-drop, or whole-page PDF upload area. Every visible source document is included until removed; uploaded PDFs do not require document-type tagging.
 
-Partners supply tenant-specific bootstrap data, one short-lived browser session callback, and the final server submission callback. Required fields, validation, ZIP lookup, ICD-10 and payer directories, service-line behavior, attachments, and submission UX stay inside `@mindbill/react`, so every integration receives the same billing workflow. Optional `diagnosisOptions`, `procedureOptions`, `modifierOptions`, and lookup callbacks extend or replace defaults when a partner has licensed or organization-specific data.
+Partners supply tenant-specific bootstrap data, one short-lived browser session callback, and optionally an `onSubmitted` callback to persist the returned `billId`. Required fields, validation, ZIP lookup, ICD-10 and payer directories, service-line behavior, PDF encoding, wire-format serialization, atomic submission, attachments, and submission UX stay inside `@mindbill/react`, so every integration receives the same billing workflow. Optional `diagnosisOptions`, `procedureOptions`, `modifierOptions`, and lookup callbacks extend or replace defaults when a partner has licensed or organization-specific data.
 
 Validation is component-owned as well. A missing routing payer is highlighted immediately; Submit highlights every invalid control with a specific message, focuses and scrolls to the first problem, and continues validating as the user corrects the form.
 
-`BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; its callback fires only when the user submits a locally valid snapshot.
+`BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; `onSubmitted` fires only after MindBill accepts a locally valid immutable snapshot. The legacy `onSubmit` escape hatch remains optional for unusual deployments, but connected integrations should omit it so the library owns the complete contract.
 
 `BillReviewForm` remains available for legacy integrations that already own a custom review model. New integrations should use `BillSubmissionForm`.
 

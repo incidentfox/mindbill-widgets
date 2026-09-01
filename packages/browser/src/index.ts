@@ -468,9 +468,41 @@ export type BrowserBillCreateInput = {
     units?: number;
     charge?: number;
     serviceDate?: string;
-    serviceDateEnd?: string;
+    serviceDateEnd?: string | null;
     diagnosisPointers?: number[];
   }>;
+};
+
+/** Canonical immutable PDF snapshot sent with a bill submission. */
+export type BrowserBillSubmissionDocument = {
+  externalId?: string;
+  filename: string;
+  description?: string;
+  documentType: BillReviewDocumentType;
+  contentBase64: string;
+};
+
+export type BrowserBillSubmissionInput = {
+  bill: BrowserBillCreateInput;
+  submission?: {
+    route?: BillSubmissionRoute;
+    destination?: SubmitBillInput["destination"];
+    attention?: string;
+    subject?: string;
+    note?: string;
+  };
+  documents?: BrowserBillSubmissionDocument[];
+};
+
+export type BrowserSubmittedBill = Record<string, unknown> & {
+  id: string;
+  externalId?: string | null;
+  state?: string;
+};
+
+export type BrowserBillSubmissionResult = {
+  billId: string;
+  bill: BrowserSubmittedBill;
 };
 
 export type BillLifecycleClientOptions = {
@@ -484,6 +516,17 @@ export type BillLifecycleClientOptions = {
 
 /** Browser-session options for pre-submission reference-data lookups. */
 export type BillReferenceClientOptions = Omit<BillLifecycleClientOptions, "billId">;
+
+/** Browser-session options for an atomic immutable bill submission. */
+export type BillSubmissionClientOptions = BillReferenceClientOptions;
+
+export type BillSubmissionClient = {
+  submitBill: (
+    input: BrowserBillSubmissionInput,
+    options?: { idempotencyKey?: string },
+  ) => Promise<BrowserBillSubmissionResult>;
+  clearSession: () => void;
+};
 
 export type BillReferenceClient = {
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
@@ -593,6 +636,92 @@ function normalizeDeliveryOptions(value: unknown): BillDeliveryOptions {
 function idempotencyKey(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return `mb-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * Browser-safe client for one atomic create-and-submit operation.
+ *
+ * The browser session is short-lived and origin-bound. The host application
+ * never needs the Partner API document schema or a long-lived API key.
+ */
+export function createBillSubmissionClient({
+  sessionEndpoint = DEFAULT_SESSION_ENDPOINT,
+  getSession,
+  apiBaseUrl = DEFAULT_API_BASE_URL,
+  fetch: fetchOverride,
+}: BillSubmissionClientOptions = {}): BillSubmissionClient {
+  const fetcher = fetchOverride ?? globalThis.fetch;
+  if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
+  let session: BillLifecycleSession | null = null;
+  let sessionRequest: Promise<BillLifecycleSession> | null = null;
+
+  const mintSession = async (signal: AbortSignal, force = false): Promise<BillLifecycleSession> => {
+    if (!force && isSessionFresh(session)) return session as BillLifecycleSession;
+    if (!force && sessionRequest) return sessionRequest;
+    const pending = getSession
+      ? getSession({ signal })
+      : fetcher(sessionEndpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+        signal,
+      }).then(async (response) => {
+        if (!response.ok) throw await responseError(response, "The billing session could not be created.");
+        return response.json();
+      });
+    const request = Promise.resolve(pending).then(normalizeSession).then((nextSession) => {
+      session = nextSession;
+      return nextSession;
+    }).finally(() => {
+      if (sessionRequest === request) sessionRequest = null;
+    });
+    sessionRequest = request;
+    return request;
+  };
+
+  const submitBill = async (
+    input: BrowserBillSubmissionInput,
+    options: { idempotencyKey?: string } = {},
+  ): Promise<BrowserBillSubmissionResult> => {
+    const controller = new AbortController();
+    const requestIdempotencyKey = options.idempotencyKey ?? idempotencyKey();
+    let browserSession = await mintSession(controller.signal);
+    const perform = (current: BillLifecycleSession) => {
+      const base = (current.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
+      return fetcher(`${base}/partner/v2/browser/bills`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${current.token}`,
+          "content-type": "application/json",
+          "idempotency-key": requestIdempotencyKey,
+        },
+        body: JSON.stringify(input),
+        signal: controller.signal,
+      });
+    };
+    let response = await perform(browserSession);
+    if (response.status === 401) {
+      session = null;
+      browserSession = await mintSession(controller.signal, true);
+      response = await perform(browserSession);
+    }
+    if (!response.ok) throw await responseError(response, "The bill could not be submitted.");
+    const body: unknown = await response.json().catch(() => null);
+    const envelope = body && typeof body === "object" && "data" in body
+      ? (body as { data?: unknown }).data
+      : body;
+    if (!envelope || typeof envelope !== "object" || typeof (envelope as { id?: unknown }).id !== "string") {
+      throw new Error("The billing service submitted the bill but returned an invalid bill ID.");
+    }
+    const bill = envelope as BrowserSubmittedBill;
+    return { billId: bill.id, bill };
+  };
+
+  return {
+    submitBill,
+    clearSession() { session = null; sessionRequest = null; },
+  };
 }
 
 /** Browser-safe, framework-neutral client for an already-submitted bill. */
