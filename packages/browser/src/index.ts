@@ -479,6 +479,8 @@ export type BrowserBillSubmissionDocument = {
   filename: string;
   description?: string;
   documentType: BillReviewDocumentType;
+  /** Opaque PWK report-type code selected by the component (for example OZ:J4). */
+  reportTypeCode?: string;
   contentBase64: string;
 };
 
