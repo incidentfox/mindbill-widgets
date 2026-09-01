@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildBillReviewSaveInput,
@@ -6,7 +6,10 @@ import {
   type BillReviewDraft,
 } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
-import { createBillLifecycleClient } from "../packages/react/src/connected-bill-lifecycle";
+import {
+  createBillLifecycleClient,
+  openPdfFromUserGesture,
+} from "../packages/react/src/connected-bill-lifecycle";
 import {
   createBillReferenceClient,
   createBillSubmissionClient,
@@ -528,6 +531,58 @@ describe("connected bill submission", () => {
 });
 
 describe("bill lifecycle surfaces", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reserves a PDF tab before awaiting the authenticated packet request", async () => {
+    const order: string[] = [];
+    const replace = vi.fn(() => order.push("replace"));
+    const close = vi.fn();
+    let resolvePacket!: (packet: Blob) => void;
+    const packet = new Promise<Blob>((resolve) => {
+      resolvePacket = resolve;
+    });
+
+    vi.stubGlobal("window", {
+      open: vi.fn(() => {
+        order.push("open");
+        return { opener: null, location: { replace }, close };
+      }),
+      setTimeout: vi.fn(),
+    });
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:synthetic-packet"),
+      revokeObjectURL: vi.fn(),
+    });
+
+    const opening = openPdfFromUserGesture(() => {
+      order.push("request");
+      return packet;
+    });
+    expect(order).toEqual(["open", "request"]);
+
+    resolvePacket(new Blob(["synthetic packet"], { type: "application/pdf" }));
+    await opening;
+
+    expect(replace).toHaveBeenCalledWith("blob:synthetic-packet");
+    expect(order).toEqual(["open", "request", "replace"]);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("closes the reserved tab when the packet request fails", async () => {
+    const close = vi.fn();
+    vi.stubGlobal("window", {
+      open: vi.fn(() => ({ opener: null, location: { replace: vi.fn() }, close })),
+      setTimeout: vi.fn(),
+    });
+
+    await expect(openPdfFromUserGesture(async () => {
+      throw new Error("Packet unavailable");
+    })).rejects.toThrow("Packet unavailable");
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("shows only enabled server-authoritative actions by default", () => {
     const actions = [
       { id: "view_eor", label: "View EOR", enabled: true },
