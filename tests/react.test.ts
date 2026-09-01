@@ -537,8 +537,12 @@ describe("bill lifecycle surfaces", () => {
 
   it("reserves a PDF tab before awaiting the authenticated packet request", async () => {
     const order: string[] = [];
-    const replace = vi.fn(() => order.push("replace"));
-    const close = vi.fn();
+    const writes: string[] = [];
+    const document = {
+      open: vi.fn(),
+      write: vi.fn((html: string) => writes.push(html)),
+      close: vi.fn(),
+    };
     let resolvePacket!: (packet: Blob) => void;
     const packet = new Promise<Blob>((resolve) => {
       resolvePacket = resolve;
@@ -547,7 +551,7 @@ describe("bill lifecycle surfaces", () => {
     vi.stubGlobal("window", {
       open: vi.fn(() => {
         order.push("open");
-        return { opener: null, location: { replace }, close };
+        return { opener: null, document };
       }),
       setTimeout: vi.fn(),
     });
@@ -565,22 +569,28 @@ describe("bill lifecycle surfaces", () => {
     resolvePacket(new Blob(["synthetic packet"], { type: "application/pdf" }));
     await opening;
 
-    expect(replace).toHaveBeenCalledWith("blob:synthetic-packet");
-    expect(order).toEqual(["open", "request", "replace"]);
-    expect(close).not.toHaveBeenCalled();
+    expect(order).toEqual(["open", "request"]);
+    expect(writes.at(-1)).toContain("blob:synthetic-packet");
+    expect(writes.at(-1)).toContain("<iframe");
+    expect(writes.at(-1)).toContain("Open PDF directly");
   });
 
-  it("closes the reserved tab when the packet request fails", async () => {
-    const close = vi.fn();
+  it("keeps the reserved tab open with a helpful error when the packet request fails", async () => {
+    const writes: string[] = [];
+    const document = {
+      open: vi.fn(),
+      write: vi.fn((html: string) => writes.push(html)),
+      close: vi.fn(),
+    };
     vi.stubGlobal("window", {
-      open: vi.fn(() => ({ opener: null, location: { replace: vi.fn() }, close })),
+      open: vi.fn(() => ({ opener: null, document })),
       setTimeout: vi.fn(),
     });
 
     await expect(openPdfFromUserGesture(async () => {
       throw new Error("Packet unavailable");
     })).rejects.toThrow("Packet unavailable");
-    expect(close).toHaveBeenCalledOnce();
+    expect(writes.at(-1)).toContain("The PDF could not be opened");
   });
 
   it("shows only enabled server-authoritative actions by default", () => {

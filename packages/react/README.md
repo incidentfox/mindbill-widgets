@@ -8,7 +8,7 @@ npm install @mindbill/react @mindbill/node
 
 ## Connected lifecycle
 
-`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. Its only bill input is `billId`; `getSession` returns the short-lived token. The component fetches the submitted snapshot, progress, human-readable history, EOR/remittance amounts, payments, and available actions from MindBill. Do not pass lifecycle seed data or duplicate this state in the host app. The only persistent header action is **Download packet**; status-dependent actions open in a compact action sheet when MindBill makes them available.
+`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. Its only bill input is `billId`; `getSession` returns the short-lived token. The component fetches the submitted snapshot, progress, human-readable history, EOR/remittance amounts, payments, and available actions from MindBill. Do not pass lifecycle seed data or duplicate this state in the host app. The only persistent header action is **Download packet**; status-dependent actions remain visible in a sticky bottom action bar when MindBill makes them available. Actions that require input open a focused form dialog.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
@@ -79,11 +79,11 @@ import { ConnectedBillStatus } from "@mindbill/react";
 
 Use `useBillStatus({ billId })` when you want to render custom status UI. It returns `data`, `error`, `isLoading`, `isRefreshing`, and `refresh`. Use `createBillStatusClient` outside React.
 
-The public lifecycle is `Submitted → Accepted → Processed → Closed`. Rejections and denials remain detailed states inside the Processed stage so the progress rail stays stable while the action sheet explains what the user can do next. Partner APIs and components do not expose draft or queued states.
+The public lifecycle is `Submitted → Accepted → Processed → Closed`. Rejections and denials remain detailed states inside the Processed stage so the progress rail stays stable while the sticky action bar explains what the user can do next. Partner APIs and components do not expose draft or queued states. Once the payer responds, the Details tab leads with one consolidated Explanation of Review reconciliation surface: billed, allowed, payer-reported payment, posted payment, penalty and interest, balance, denial reason, payment records, and the EOR document.
 
 ## Read-only bill details
 
-Use `BillReadOnlyForm` when you already loaded `BillLifecycleData` and only need the immutable detail surface. It uses the same section order and responsive layout as `BillSubmissionForm`, but renders values, calculated fees, routing details, and attachments without form controls. Its claims-administrator name is the canonical directory selection from the submitted delivery snapshot; selecting it opens the available contact and delivery details.
+Use `BillReadOnlyForm` when you already loaded `BillLifecycleData` and only need the immutable detail surface. It uses the same section order and responsive layout as `BillSubmissionForm`, but renders values, calculated fees, routing details, and attachments without form controls. Its claims-administrator name is the canonical directory selection from the submitted delivery snapshot; selecting it opens a responsive directory dialog with Main, Bill Review, Authorization, Mailing Address, and Claim Number Pattern tabs when those fields are available from the API.
 
 ```tsx
 import { BillReadOnlyForm } from "@mindbill/react";
