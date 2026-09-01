@@ -260,6 +260,12 @@ export function useBillLifecycle({
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   appearance?: MindBillReactAppearance;
+  /**
+   * Exposes payer-response simulation controls for an explicit sandbox
+   * playground. Sandbox responses remain indistinguishable from live
+   * lifecycle responses to ordinary host applications.
+   */
+  sandboxControls?: boolean;
   className?: string;
   style?: CSSProperties;
   loadingFallback?: ReactNode;
@@ -315,7 +321,11 @@ function sandboxScenarios(state: string): Array<{ id: SandboxSimulationScenario;
   return [];
 }
 
-export function ConnectedBillLifecycle({ appearance, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+export function shouldShowSandboxControls(environment: BillLifecycleData["environment"], enabled = false): boolean {
+  return enabled && environment === "sandbox";
+}
+
+export function ConnectedBillLifecycle({ appearance, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -368,7 +378,8 @@ export function ConnectedBillLifecycle({ appearance, className, style, loadingFa
   const viewEor = data.lifecycle.actions.find((action) => action.id === "view_eor" && action.enabled);
   const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "second_review", "post_payment", "close", "reopen"]);
   const actions = data.lifecycle.actions.filter((action) => action.enabled && supportedActions.has(action.id));
-  const simulations = data.environment === "sandbox" ? sandboxScenarios(data.lifecycle.state) : [];
+  const showSandboxControls = shouldShowSandboxControls(data.environment, sandboxControls);
+  const simulations = showSandboxControls ? sandboxScenarios(data.lifecycle.state) : [];
 
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>

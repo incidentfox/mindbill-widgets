@@ -9,6 +9,7 @@ import { createBillStatusClient } from "../packages/react/src/connected-bill-sta
 import {
   createBillLifecycleClient,
   openPdfFromUserGesture,
+  shouldShowSandboxControls,
 } from "../packages/react/src/connected-bill-lifecycle";
 import {
   createBillReferenceClient,
@@ -104,6 +105,18 @@ describe("partner appearance presets", () => {
       "--mb-radius": "4px",
       "--mb-control-radius": "10px",
     });
+  });
+});
+
+describe("sandbox lifecycle controls", () => {
+  it("keeps simulation controls out of ordinary sandbox integrations", () => {
+    expect(shouldShowSandboxControls("sandbox")).toBe(false);
+    expect(shouldShowSandboxControls("sandbox", false)).toBe(false);
+  });
+
+  it("shows simulation controls only for an explicit sandbox playground", () => {
+    expect(shouldShowSandboxControls("sandbox", true)).toBe(true);
+    expect(shouldShowSandboxControls("live", true)).toBe(false);
   });
 });
 
