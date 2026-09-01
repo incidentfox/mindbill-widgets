@@ -1,6 +1,7 @@
 export * from "./lib/lifecycle-store";
 export * from "./lib/bill-lifecycle.component";
 export * from "./lib/procedure-lines";
+export * from "./lib/billing-dashboard.component";
 export type {
   BillLifecycleAction,
   BillLifecycleActionId,
