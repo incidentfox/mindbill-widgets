@@ -130,6 +130,7 @@ export type {
   BillSubmissionReportTypeOption,
   BillSubmissionSectionId,
   BillSubmissionSourceAttachment,
+  BillSubmissionTaxonomyOption,
   BillSubmissionUpload,
   BillSubmissionValidation,
 } from "./bill-submission-form";
@@ -138,6 +139,7 @@ export {
   calculateBillSubmissionAllowedAmount,
   DEFAULT_BILL_SUBMISSION_MODIFIERS,
   DEFAULT_BILL_SUBMISSION_PROCEDURES,
+  DEFAULT_BILL_SUBMISSION_TAXONOMIES,
 } from "./billing-catalog";
 export type {
   BillReviewAttachment,

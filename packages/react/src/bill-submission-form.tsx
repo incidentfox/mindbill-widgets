@@ -17,6 +17,7 @@ import {
   calculateBillSubmissionAllowedAmount,
   DEFAULT_BILL_SUBMISSION_MODIFIERS,
   DEFAULT_BILL_SUBMISSION_PROCEDURES,
+  DEFAULT_BILL_SUBMISSION_TAXONOMIES,
 } from "./billing-catalog";
 
 export const BILL_SUBMISSION_DOCUMENT_TYPES = [
@@ -75,6 +76,7 @@ export type BillSubmissionAddress = { line1: string; line2?: string; city: strin
 export type BillSubmissionDiagnosisOption = { code: string; description: string };
 export type BillSubmissionProcedureOption = { code: string; description: string; allowedAmount?: number };
 export type BillSubmissionModifierOption = { code: string; description: string };
+export type BillSubmissionTaxonomyOption = { code: string; description: string };
 export type BillSubmissionPostalPlace = { city: string; state: string };
 
 export type BillSubmissionInput = {
@@ -172,6 +174,8 @@ export type BillSubmissionFormProps = {
   onLookupPostalCode?: (postalCode: string) => Promise<BillSubmissionPostalPlace | null>;
   procedureOptions?: BillSubmissionProcedureOption[];
   modifierOptions?: BillSubmissionModifierOption[];
+  /** Common NUCC provider taxonomies are bundled; supplied values extend or replace matching codes. */
+  taxonomyOptions?: BillSubmissionTaxonomyOption[];
   /** Auto hides and forces J4 for med-legal bills; treatment bills show the full report-type directory. */
   attachmentReportTypeMode?: BillSubmissionAttachmentReportTypeMode;
   attachmentReportTypes?: readonly BillSubmissionReportTypeOption[];
@@ -558,7 +562,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 export function BillSubmissionForm({
   initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
   fetch: fetchOverride, onSearchClaimsAdministrators, diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, modifierOptions, attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -581,6 +585,7 @@ export function BillSubmissionForm({
   const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false); const payerRequest = useRef(0);
   const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, procedureOptions), [procedureOptions]);
   const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
+  const taxonomies = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_TAXONOMIES, taxonomyOptions), [taxonomyOptions]);
   const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialEvaluationType(initialBill));
   const connected = !onSubmit;
   const referenceClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
@@ -788,12 +793,8 @@ export function BillSubmissionForm({
       <h4 className="mbsf-subhead">Rendering provider</h4>
       <Field path="renderingProvider.name" label="Rendering provider name" required error={errors["renderingProvider.name"]}>{text(bill.renderingProvider?.name, (name) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, name } })))}</Field>
       <Field path="renderingProvider.npi" label="Rendering provider NPI" required error={errors["renderingProvider.npi"]}>{text(bill.renderingProvider?.npi, (npi) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>
-      <Field path="renderingProvider.taxonomy" label="Rendering taxonomy code" required error={errors["renderingProvider.taxonomy"]}>{text(bill.renderingProvider?.taxonomy, (taxonomy) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, taxonomy: taxonomy.toUpperCase() } })), { maxLength: 10, placeholder: "10-character NUCC code" })}<small className="mbsf-help">Sent in CMS-1500 Box 24J with qualifier ZZ.</small></Field>
-      <Field label="Specialty (optional)">{text(bill.renderingProvider?.specialty, (specialty) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, specialty } })))}</Field>
-      <Field label="License number (optional)">{text(bill.renderingProvider?.licenseNumber, (licenseNumber) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, licenseNumber } })))}</Field>
-      <Field label="License state (optional)">{text(bill.renderingProvider?.licenseState, (licenseState) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, licenseState: licenseState.toUpperCase() } })), { maxLength: 2 })}</Field>
-      <h4 className="mbsf-subhead">Service facility (CMS-1500 Box 32)</h4>
-      <Field label="Service facility name (optional)">{text(bill.serviceLocation?.name, (name) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, name } })))}</Field>
+      <Field path="renderingProvider.taxonomy" label="Rendering taxonomy" required error={errors["renderingProvider.taxonomy"]}><ComboBox ariaLabel="Rendering taxonomy" invalid={Boolean(errors["renderingProvider.taxonomy"])} disabled={locked} preserveValueOnOpen value={bill.renderingProvider?.taxonomy ?? ""} placeholder="Search specialty name or taxonomy code…" options={taxonomies.map((item) => ({ id: item.code, label: item.description, detail: item.code }))} createOption={(query) => { const code = query.trim().toUpperCase(); return /^[A-Z0-9]{10}$/.test(code) ? { id: code, label: code, detail: "Use this taxonomy code" } : null; }} onSelect={(option) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, taxonomy: option.id } }))} /><small className="mbsf-help">Search by specialty name or 10-character taxonomy code.</small></Field>
+      <h4 className="mbsf-subhead">Service facility</h4>
       <Field path="serviceLocation.placeOfServiceCode" label="Place of service code" required error={errors["serviceLocation.placeOfServiceCode"]}>{text(bill.serviceLocation?.placeOfServiceCode, (placeOfServiceCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, placeOfServiceCode } })), { inputMode: "numeric", maxLength: 2, placeholder: "11" })}</Field>
       <Field path="serviceLocation.address.line1" label="Service address line 1" required span error={errors["serviceLocation.address.line1"]}>{text(bill.serviceLocation?.address?.line1, (line1) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1, line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
       <Field label="Service address line 2 (optional)" span>{text(bill.serviceLocation?.address?.line2, (line2) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2, city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
