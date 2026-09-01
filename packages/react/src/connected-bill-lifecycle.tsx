@@ -90,16 +90,6 @@ export type UseBillLifecycleResult = {
   simulateSandbox: BillLifecycleClient["simulateSandbox"];
 };
 
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.rel = "noopener noreferrer";
-  link.download = filename;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
 function reservePreviewWindow(): Window | null {
   const preview = window.open("about:blank", "_blank");
   if (preview) preview.opener = null;
@@ -117,6 +107,20 @@ function previewBlob(blob: Blob, preview: Window | null): void {
     link.click();
   }
   window.setTimeout(() => URL.revokeObjectURL(url), 300_000);
+}
+
+/**
+ * Opens a PDF loader from a user gesture without losing Safari's popup permission
+ * while the authenticated request is in flight.
+ */
+export async function openPdfFromUserGesture(loadPdf: () => Promise<Blob>): Promise<void> {
+  const preview = reservePreviewWindow();
+  try {
+    previewBlob(await loadPdf(), preview);
+  } catch (error) {
+    preview?.close();
+    throw error;
+  }
 }
 
 export function useBillLifecycle({
@@ -203,27 +207,21 @@ export function useBillLifecycle({
   }, []);
 
   const openAttachment = useCallback(async (attachment: BillReviewAttachment) => {
-    const preview = reservePreviewWindow();
-    try {
-      previewBlob(await client.getAttachment(attachment.id), preview);
-    } catch (error) {
-      preview?.close();
-      throw error;
-    }
+    await openPdfFromUserGesture(() => client.getAttachment(attachment.id));
   }, [client]);
   const openEor = useCallback(async (document: BillEorDocument) => {
-    const preview = reservePreviewWindow();
-    try {
-      previewBlob(await client.getEor(document.id), preview);
-    } catch (error) {
-      preview?.close();
-      throw error;
-    }
+    await openPdfFromUserGesture(() => client.getEor(document.id));
   }, [client]);
   const downloadPacket = useCallback(async () => {
-    const packet = await client.getPacket();
-    downloadBlob(packet, `mindbill-${data?.bill.billNumber ?? providedBillId}-submission-packet.pdf`);
-  }, [client, data?.bill.billNumber, providedBillId]);
+    setError(null);
+    try {
+      await openPdfFromUserGesture(() => client.getPacket());
+    } catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error("Submission packet could not be opened.");
+      if (mounted.current) setError(nextError);
+      throw nextError;
+    }
+  }, [client]);
 
   return {
     billId: providedBillId,
