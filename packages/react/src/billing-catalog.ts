@@ -2,6 +2,7 @@ import type {
   BillSubmissionDiagnosisOption,
   BillSubmissionModifierOption,
   BillSubmissionProcedureOption,
+  BillSubmissionTaxonomyOption,
 } from "./bill-submission-form";
 
 /** Public-domain and MindBill-owned metadata. CPT descriptions are intentionally limited to the curated catalog. */
@@ -75,6 +76,48 @@ export const DEFAULT_BILL_SUBMISSION_MODIFIERS: BillSubmissionModifierOption[] =
   { code: "XS", description: "Separate structure" },
   { code: "XP", description: "Separate practitioner" },
   { code: "XU", description: "Unusual non-overlapping service" },
+];
+
+/** Common NUCC provider taxonomies. Consumers can extend this catalog through taxonomyOptions. */
+export const DEFAULT_BILL_SUBMISSION_TAXONOMIES: BillSubmissionTaxonomyOption[] = [
+  { code: "103G00000X", description: "Clinical Neuropsychologist" },
+  { code: "103T00000X", description: "Psychologist" },
+  { code: "111N00000X", description: "Chiropractor" },
+  { code: "122300000X", description: "Dentist" },
+  { code: "133V00000X", description: "Dietitian, Registered" },
+  { code: "163W00000X", description: "Registered Nurse" },
+  { code: "183500000X", description: "Pharmacist" },
+  { code: "207L00000X", description: "Anesthesiology" },
+  { code: "207P00000X", description: "Emergency Medicine" },
+  { code: "207Q00000X", description: "Family Medicine" },
+  { code: "207R00000X", description: "Internal Medicine" },
+  { code: "207RC0000X", description: "Cardiovascular Disease" },
+  { code: "207RN0300X", description: "Nephrology" },
+  { code: "207RP1001X", description: "Pulmonary Disease" },
+  { code: "207RR0500X", description: "Rheumatology" },
+  { code: "207T00000X", description: "Neurological Surgery" },
+  { code: "207X00000X", description: "Orthopaedic Surgery" },
+  { code: "207XS0117X", description: "Orthopaedic Surgery of the Spine" },
+  { code: "207Y00000X", description: "Otolaryngology" },
+  { code: "208000000X", description: "Pediatrics" },
+  { code: "208100000X", description: "Physical Medicine & Rehabilitation" },
+  { code: "2083X0100X", description: "Occupational Medicine" },
+  { code: "2084N0400X", description: "Neurology" },
+  { code: "2084P0800X", description: "Psychiatry" },
+  { code: "2084P0802X", description: "Addiction Psychiatry" },
+  { code: "2084P0804X", description: "Child & Adolescent Psychiatry" },
+  { code: "2084S0012X", description: "Sleep Medicine" },
+  { code: "2085R0202X", description: "Diagnostic Radiology" },
+  { code: "208600000X", description: "Surgery" },
+  { code: "2086S0105X", description: "Surgery of the Hand" },
+  { code: "208D00000X", description: "General Practice" },
+  { code: "208M00000X", description: "Hospitalist" },
+  { code: "208VP0000X", description: "Pain Medicine" },
+  { code: "213E00000X", description: "Podiatrist" },
+  { code: "225100000X", description: "Physical Therapist" },
+  { code: "225X00000X", description: "Occupational Therapist" },
+  { code: "363A00000X", description: "Physician Assistant" },
+  { code: "363L00000X", description: "Nurse Practitioner" },
 ];
 
 export const BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS: Array<BillSubmissionDiagnosisOption & { label: string }> = [

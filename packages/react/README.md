@@ -8,7 +8,7 @@ npm install @mindbill/react @mindbill/node
 
 ## Connected lifecycle
 
-`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. It owns the submitted-to-closed progress rail, a read-only rendering of the exact submitted snapshot, server-owned human-readable history, packet download, EORs, payment posting, Second Bill Review, close, and reopen. The only persistent header action is **Download packet**; status-dependent actions appear in the details view when MindBill makes them available.
+`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. It owns the submitted-to-closed progress rail, a read-only rendering of the exact submitted snapshot, server-owned human-readable history, packet download, EORs, payment posting, Second Bill Review, close, and reopen. The only persistent header action is **Download packet**; status-dependent actions open in a compact action sheet when MindBill makes them available.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
@@ -83,7 +83,7 @@ The public lifecycle is `Submitted → Accepted → Processed → Closed`. Rejec
 
 ## Read-only bill details
 
-Use `BillReadOnlyForm` when you already loaded `BillLifecycleData` and only need the immutable detail surface. It uses the same section order and responsive layout as `BillSubmissionForm`, but renders values, calculated fees, and attachments without form controls.
+Use `BillReadOnlyForm` when you already loaded `BillLifecycleData` and only need the immutable detail surface. It uses the same section order and responsive layout as `BillSubmissionForm`, but renders values, calculated fees, routing details, and attachments without form controls. Its claims-administrator name is the canonical directory selection from the submitted delivery snapshot; selecting it opens the available contact and delivery details.
 
 ```tsx
 import { BillReadOnlyForm } from "@mindbill/react";
@@ -154,6 +154,7 @@ The component includes the interaction model, not just the markup:
 - complete, server-backed ICD-10 search with an alphabetized 100-code first page, automatic 100-code scroll paging, common-injury quick picks, and removable chips;
 - canonical claims-administrator matching through the authenticated MindBill payer directory: exact aliases select automatically, while fuzzy matches show up to five explicit suggestions with claim-number pattern evidence;
 - QME, AME, and Psych QME evaluation modes with medical-legal modifier defaults; Psych QME also seeds `Z04.6` when no more specific diagnosis was supplied, and exposes it as a Psych quick pick;
+- a searchable rendering-provider taxonomy combobox that accepts either a human-readable specialty search or an exact 10-character taxonomy code;
 - searchable workers-comp procedure/modifier controls, medical-legal fee-schedule amounts, totals, valid manual CPT/HCPCS entry, and an automatically maintained empty line;
 - removable source documents with new-tab previews, a locked auto-attached practice W-9, and a full-width click, panel-drop, or whole-page PDF upload area. Med-legal mode assigns every document to `J4 - Med-Legal Report` without showing another control; professional mode shows the complete searchable PWK01 report-type directory. Override that presentation with `attachmentReportTypeMode`, `attachmentReportTypes`, and `defaultAttachmentReportType`.
 
@@ -161,7 +162,7 @@ Partners supply tenant-specific bootstrap data, one short-lived browser session 
 
 Validation is component-owned as well. A missing routing payer is highlighted immediately; Submit highlights every invalid control with a specific message, focuses and scrolls to the first problem, and continues validating as the user corrects the form.
 
-The complete immutable snapshot requires patient identity and address; employer, injury date, service date, and a canonical claims-administrator directory selection; at least one ICD-10 diagnosis and procedure line; billing provider name, Tax ID, NPI, phone, and address; rendering provider name, NPI, and taxonomy; and service-facility address plus place-of-service code. Address line 2 and physician license metadata remain optional. For California workers-comp CMS-1500 output, `renderingProvider.taxonomy` is the 10-character provider taxonomy placed in shaded Box 24J with qualifier `ZZ`; it is not replaced by the physician license number.
+The complete immutable snapshot requires patient identity and address; employer, injury date, service date, and a canonical claims-administrator directory selection; at least one ICD-10 diagnosis and procedure line; billing provider name, Tax ID, NPI, phone, and address; rendering provider name, NPI, and taxonomy; and service address plus place-of-service code. Address line 2 remains optional. License number, license state, specialty, and service-facility display name are not requested by the standard component. For California workers-comp CMS-1500 output, `renderingProvider.taxonomy` is the 10-character provider taxonomy placed in shaded Box 24J with qualifier `ZZ`; it is not replaced by the physician license number.
 
 `BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; `onSubmitted` fires only after MindBill accepts a locally valid immutable snapshot. The legacy `onSubmit` escape hatch remains optional for unusual deployments, but connected integrations should omit it so the library owns the complete contract.
 

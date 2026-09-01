@@ -51,6 +51,7 @@ import {
   calculateBillSubmissionAllowedAmount,
   DEFAULT_BILL_SUBMISSION_MODIFIERS,
   DEFAULT_BILL_SUBMISSION_PROCEDURES,
+  DEFAULT_BILL_SUBMISSION_TAXONOMIES,
 } from "../packages/react/src/billing-catalog";
 import {
   billAgingBucket,
@@ -100,6 +101,15 @@ describe("partner appearance presets", () => {
       "--mb-radius": "4px",
       "--mb-control-radius": "10px",
     });
+  });
+});
+
+describe("billing catalogs", () => {
+  it("ships searchable human-readable taxonomy options for common rendering providers", () => {
+    expect(DEFAULT_BILL_SUBMISSION_TAXONOMIES).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "2084P0800X", description: expect.stringContaining("Psychiatry") }),
+      expect.objectContaining({ code: "207X00000X", description: expect.stringContaining("Orthopaedic") }),
+    ]));
   });
 });
 
