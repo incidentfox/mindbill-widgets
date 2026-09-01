@@ -7,7 +7,11 @@ import {
 } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
 import { createBillLifecycleClient } from "../packages/react/src/connected-bill-lifecycle";
-import { createBillReferenceClient, sanitizeBillReviewSaveInput } from "../packages/browser/src/index";
+import {
+  createBillReferenceClient,
+  createBillSubmissionClient,
+  sanitizeBillReviewSaveInput,
+} from "../packages/browser/src/index";
 import {
   mindBillAppearanceStyle,
   resolveMindBillAppearance,
@@ -31,6 +35,7 @@ import {
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
   parseBillSubmissionDate,
+  prepareBillSubmissionDocuments,
   type BillSubmissionInput,
   validateBillSubmission,
 } from "../packages/react/src/bill-submission-form";
@@ -351,6 +356,76 @@ describe("pre-submission reference data", () => {
       "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",
+    ]);
+  });
+});
+
+describe("connected bill submission", () => {
+  it("owns the canonical immutable Partner API request in the browser client", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: "short-lived-submit-token" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "bill_123", externalId: "case-item-123", state: "submitted" }));
+    const client = createBillSubmissionClient({ fetch: fetcher });
+    const input = {
+      bill: {
+        externalId: "case-item-123",
+        patient: {
+          firstName: "Synthetic",
+          lastName: "Patient",
+          dateOfBirth: "1980-01-02",
+          address: { line1: "100 Test Street", city: "Sacramento", state: "CA", postalCode: "95814" },
+        },
+        claim: {
+          claimNumber: "TEST-CLAIM-1",
+          claimsAdministrator: { id: "payer_123", name: "Synthetic Payer" },
+        },
+        service: { date: "2026-08-31" },
+        serviceLines: [{ code: "ML201", units: 1 }],
+      },
+      documents: [{
+        externalId: "document_123",
+        filename: "synthetic-report.pdf",
+        documentType: "final_report" as const,
+        contentBase64: "JVBERi0xLjQ=",
+      }],
+    };
+
+    await expect(client.submitBill(input, { idempotencyKey: "submission-123" })).resolves.toMatchObject({
+      billId: "bill_123",
+      bill: { state: "submitted" },
+    });
+
+    expect(fetcher).toHaveBeenNthCalledWith(2, "https://app.mindbill.org/partner/v2/browser/bills", expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({
+        authorization: "Bearer short-lived-submit-token",
+        "idempotency-key": "submission-123",
+      }),
+    }));
+    const request = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)) as Record<string, unknown>;
+    expect(request).toEqual(input);
+    expect(JSON.stringify(request)).not.toContain("fileName");
+    expect(JSON.stringify(request)).not.toContain("contentType");
+  });
+
+  it("encodes source and uploaded PDFs without exposing the wire schema to the host", async () => {
+    const pdf = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31])], { type: "application/pdf" });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(pdf, { status: 200 }));
+    const upload = new File([pdf], "extra.pdf", { type: "application/pdf" });
+
+    await expect(prepareBillSubmissionDocuments({
+      attachments: [{
+        id: "source_123",
+        fileName: "source.pdf",
+        documentType: "final_report",
+        previewUrl: "/source.pdf",
+      }],
+      selectedIds: ["source_123"],
+      uploads: [{ file: upload, documentType: "medical_records" }],
+      fetch: fetcher,
+    })).resolves.toEqual([
+      expect.objectContaining({ externalId: "source_123", filename: "source.pdf", documentType: "final_report" }),
+      expect.objectContaining({ filename: "extra.pdf", documentType: "medical_records" }),
     ]);
   });
 });

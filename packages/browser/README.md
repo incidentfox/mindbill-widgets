@@ -16,11 +16,11 @@ const data = await billing.getLifecycle();
 const packet = await billing.getPacket();
 ```
 
-The browser client operates only on an already-submitted bill. It loads the
-immutable snapshot, server-owned activity history, current lifecycle actions,
-EORs, and the complete submission packet. It can execute only actions authorized
-by the server, including Second Bill Review, payment posting, close, and reopen.
-Bill creation, document selection, review, and the atomic submission stay on the partner server.
+The browser client loads immutable snapshots, server-owned activity history,
+current lifecycle actions, EORs, and complete submission packets. It can execute
+only actions authorized by MindBill, including Second Bill Review, payment
+posting, close, and reopen. It also owns atomic browser submission, so the
+partner server never receives bill payloads or attachment bytes.
 The public lifecycle begins at `submitted`, then advances through `accepted`,
 `processed`, and `closed`; it never exposes draft or queued states. The same
 lifecycle client is safe to use from React, Angular, or plain JavaScript.
@@ -44,11 +44,35 @@ const place = await references.lookupPostalCode("94403");
 
 `searchDiagnosisCodes(query, limit, offset)` supports directory browsing as well as search. Pass an empty query for ICD-10 code order; `limit` is capped at 100 and `offset` advances through the directory.
 
-This client exposes reference-data operations only. It never creates or mutates
-a bill; the first persisted bill remains the submitted immutable snapshot.
+Submit a locally reviewed bill and its PDF attachments directly from the browser:
+
+```ts
+import { createBillSubmissionClient } from "@mindbill/browser";
+
+const submission = createBillSubmissionClient({
+  sessionEndpoint: "/api/mindbill/session",
+});
+
+const result = await submission.submitBill({
+  bill,
+  submission: { route: "ebill" },
+  documents: [{
+    filename: "final-report.pdf",
+    documentType: "final_report",
+    contentBase64: encodedPdf,
+  }],
+});
+
+await linkBillId(result.billId);
+```
+
+The session endpoint is the only required partner-server integration with
+MindBill. Keep the returned canonical `billId` locally for navigation and
+webhook correlation; keep `bill.externalId` as the idempotency and partner
+correlation key. The first persisted bill is still the submitted immutable
+snapshot—there is no draft mutation API.
 
 Pass `billId` for the submitted bill. An optional `resource: { billId }`
 restriction makes the session usable for only that bill.
 
-The session endpoint is the only required partner-server integration. See the
-[10-minute quickstart](https://docs.mindbill.org/quickstart).
+See the [10-minute quickstart](https://docs.mindbill.org/quickstart).
