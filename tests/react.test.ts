@@ -23,6 +23,7 @@ import {
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
 import {
+  applyBillSubmissionEvaluationDiagnoses,
   applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_REQUIRED_FIELDS,
   BillSubmissionActions,
@@ -204,6 +205,13 @@ describe("atomic bill submission form contract", () => {
     ]);
   });
 
+  it("seeds the Psych QME diagnosis without replacing a specific diagnosis", () => {
+    expect(applyBillSubmissionEvaluationDiagnoses([], "psych_qme")).toEqual(["Z04.6"]);
+    expect(applyBillSubmissionEvaluationDiagnoses(undefined, "psych_qme")).toEqual(["Z04.6"]);
+    expect(applyBillSubmissionEvaluationDiagnoses(["F43.10"], "psych_qme")).toEqual(["F43.10"]);
+    expect(applyBillSubmissionEvaluationDiagnoses([], "qme")).toEqual([]);
+  });
+
   it("ships general workers-comp code choices and calculates med-legal fees", () => {
     expect(DEFAULT_BILL_SUBMISSION_PROCEDURES.map((item) => item.code)).toEqual(
       expect.arrayContaining(["ML201", "99205", "97110", "72148", "L0650"]),
@@ -212,8 +220,9 @@ describe("atomic bill submission form contract", () => {
       expect.arrayContaining(["95", "59", "XE", "XU"]),
     );
     expect(BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((item) => item.label)).toEqual(
-      expect.arrayContaining(["Back", "Neck", "Left hand", "Right knee"]),
+      expect.arrayContaining(["Psych", "Back", "Neck", "Left hand", "Right knee"]),
     );
+    expect(BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.find((item) => item.label === "Psych")?.code).toBe("Z04.6");
     expect(calculateBillSubmissionAllowedAmount({
       code: "ML203",
       modifiers: ["93", "95"],

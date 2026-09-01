@@ -153,7 +153,7 @@ The component includes the interaction model, not just the markup:
 - ZIP-to-city/state completion through MindBill's authenticated postal directory;
 - complete, server-backed ICD-10 search with an alphabetized 100-code first page, automatic 100-code scroll paging, common-injury quick picks, and removable chips;
 - canonical claims-administrator search through the authenticated MindBill payer directory;
-- QME, AME, and Psych QME evaluation modes with medical-legal modifier defaults;
+- QME, AME, and Psych QME evaluation modes with medical-legal modifier defaults; Psych QME also seeds `Z04.6` when no more specific diagnosis was supplied, and exposes it as a Psych quick pick;
 - searchable workers-comp procedure/modifier controls, medical-legal fee-schedule amounts, totals, valid manual CPT/HCPCS entry, and an automatically maintained empty line;
 - removable source documents with new-tab previews, a locked auto-attached practice W-9, and a full-width click, panel-drop, or whole-page PDF upload area. Every visible source document is included until removed; uploaded PDFs do not require document-type tagging.
 

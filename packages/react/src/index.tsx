@@ -91,6 +91,7 @@ export { BillReadOnlyForm } from "./bill-read-only-form";
 export type { BillReadOnlyFormProps } from "./bill-read-only-form";
 
 export {
+  applyBillSubmissionEvaluationDiagnoses,
   applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_DOCUMENT_TYPES,
   BILL_SUBMISSION_REQUIRED_FIELDS,
@@ -106,6 +107,7 @@ export {
   formatBillSubmissionDate,
   parseBillSubmissionDate,
   prepareBillSubmissionDocuments,
+  PSYCH_QME_DEFAULT_DIAGNOSIS,
   validateBillSubmission,
 } from "./bill-submission-form";
 export type {
