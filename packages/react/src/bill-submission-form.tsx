@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   createBillReferenceClient,
   type BillLifecycleSessionProvider,
@@ -95,6 +95,11 @@ export type BillSubmissionFormProps = {
   submitLabel?: string;
   heading?: ReactNode;
   description?: ReactNode;
+  /**
+   * Optional composable layout. Use the exported section components as children;
+   * the parent form continues to own validation, directory lookups, uploads, and submission.
+   */
+  children?: ReactNode;
 };
 
 export const BILL_SUBMISSION_REQUIRED_FIELDS = [
@@ -293,12 +298,39 @@ function mergeDiagnosisOptions(options: BillSubmissionDiagnosisOption[]): BillSu
     .sort((left, right) => left.code.localeCompare(right.code, undefined, { numeric: true }));
 }
 
+export type BillSubmissionSectionId =
+  | "header"
+  | "patient"
+  | "claim"
+  | "providers"
+  | "serviceLines"
+  | "attachments"
+  | "actions";
+
+type BillSubmissionSections = Record<BillSubmissionSectionId, ReactNode>;
+const BillSubmissionSectionsContext = createContext<BillSubmissionSections | null>(null);
+
+function BillSubmissionSection({ id }: { id: BillSubmissionSectionId }): ReactElement {
+  const sections = useContext(BillSubmissionSectionsContext);
+  if (!sections) throw new Error("Bill submission sections must be rendered inside BillSubmissionForm.");
+  return <>{sections[id]}</>;
+}
+
+export function BillSubmissionHeader(): ReactElement { return <BillSubmissionSection id="header" />; }
+export function BillSubmissionPatientSection(): ReactElement { return <BillSubmissionSection id="patient" />; }
+export function BillSubmissionClaimSection(): ReactElement { return <BillSubmissionSection id="claim" />; }
+export function BillSubmissionProvidersSection(): ReactElement { return <BillSubmissionSection id="providers" />; }
+export function BillSubmissionServiceLinesSection(): ReactElement { return <BillSubmissionSection id="serviceLines" />; }
+export function BillSubmissionAttachmentsSection(): ReactElement { return <BillSubmissionSection id="attachments" />; }
+export function BillSubmissionActions(): ReactElement { return <BillSubmissionSection id="actions" />; }
+
 export function BillSubmissionForm({
   initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, getSession, sessionEndpoint, apiBaseUrl,
   fetch: fetchOverride, onSearchClaimsAdministrators, diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, modifierOptions, appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
   description = "Review the bill details, add attachments, and submit.",
+  children,
 }: BillSubmissionFormProps): ReactElement {
   const [bill, setBill] = useState(() => cloneBill(initialBill));
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
@@ -414,11 +446,9 @@ export function BillSubmissionForm({
 
   const claimsAdministratorError = errors["claim.claimsAdministrator"] ?? (!bill.claim.claimsAdministrator?.id ? "Required for routing — search and select a claims administrator." : undefined);
 
-  return <form ref={formRef} className={`${className} mbsf`} style={{ ...mindBillAppearanceStyle(appearance), ...style }} onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
-    <style>{css}</style>
-    <div className="mbsf-head"><div><h3 className="mbsf-title">{heading}</h3><p className="mbsf-copy">{description}</p></div><span className="mbsf-required"><RequiredMark /> Required</span></div>
+  const headerSection = <div className="mbsf-head"><div><h3 className="mbsf-title">{heading}</h3><p className="mbsf-copy">{description}</p></div><span className="mbsf-required"><RequiredMark /> Required</span></div>;
 
-    <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Patient</legend><div className="mbsf-grid">
+  const patientSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Patient</legend><div className="mbsf-grid">
       <Field path="patient.firstName" label="First name" required error={errors["patient.firstName"]}>{text(bill.patient.firstName, (firstName) => setBill((c) => ({ ...c, patient: { ...c.patient, firstName } })))}</Field>
       <Field path="patient.lastName" label="Last name" required error={errors["patient.lastName"]}>{text(bill.patient.lastName, (lastName) => setBill((c) => ({ ...c, patient: { ...c.patient, lastName } })))}</Field>
       <Field label="Middle name">{text(bill.patient.middleName, (middleName) => setBill((c) => ({ ...c, patient: { ...c.patient, middleName } })))}</Field>
@@ -428,9 +458,9 @@ export function BillSubmissionForm({
       <Field path="patient.address.postalCode" label="ZIP" required error={errors["patient.address.postalCode"]}>{text(bill.patient.address.postalCode, updatePostalCode, { maxLength: 10 })}{postalStatus ? <small className="mbsf-help">{postalStatus}</small> : null}</Field>
       <Field path="patient.address.city" label="City" required error={errors["patient.address.city"]}>{text(bill.patient.address.city, (city) => setAddress({ city }))}</Field>
       <Field path="patient.address.state" label="State" required error={errors["patient.address.state"]}>{text(bill.patient.address.state, (state) => setAddress({ state: state.toUpperCase() }), { maxLength: 2 })}</Field>
-    </div></fieldset>
+    </div></fieldset>;
 
-    <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Injury &amp; claim</legend><div className="mbsf-grid">
+  const claimSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Injury &amp; claim</legend><div className="mbsf-grid">
       <Field path="service.date" label="Date of service" required error={errors["service.date"]}><TextDateInput ariaLabel="Date of service" value={bill.service.date} disabled={locked} required onChange={(date) => setBill((c) => ({ ...c, service: { ...c.service, date } }))} /></Field>
       <Field label="Date of injury"><TextDateInput ariaLabel="Date of injury" value={bill.claim.dateOfInjury} disabled={locked} onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
       <Field label="Employer (optional)">{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
@@ -443,9 +473,9 @@ export function BillSubmissionForm({
         <div className="mbsf-chips">{(bill.diagnoses ?? []).map((code) => { const option = [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisChoices].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}<button type="button" aria-label={`Remove ${code}`} onClick={() => setBill((c) => ({ ...c, diagnoses: (c.diagnoses ?? []).filter((item) => item !== code) }))}>×</button></span>; })}</div>
         <ComboBox ariaLabel="Add diagnosis code" disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={diagnosisChoices.filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => { if (diagnosisQuery !== "") loadDiagnoses(""); }} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((c) => ({ ...c, diagnoses: [...new Set([...(c.diagnoses ?? []), option.id])] }))} />
       </Field>
-    </div></fieldset>
+    </div></fieldset>;
 
-    <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend><div className="mbsf-grid">
+  const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend><div className="mbsf-grid">
       <Field label="Billing provider">{text(bill.billingProvider?.name, (name) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, name } })))}</Field>
       <Field label="Billing tax ID">{text(bill.billingProvider?.taxId, (taxId) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, taxId } })))}</Field>
       <Field label="Billing NPI">{text(bill.billingProvider?.npi, (npi) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, npi } })))}</Field>
@@ -457,9 +487,9 @@ export function BillSubmissionForm({
       <Field label="License state">{text(bill.renderingProvider?.licenseState, (licenseState) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, licenseState: licenseState.toUpperCase() } })), { maxLength: 2 })}</Field>
       <Field label="Service location">{text(bill.serviceLocation?.name, (name) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, name } })))}</Field>
       <Field label="Place of service">{text(bill.serviceLocation?.placeOfServiceCode, (placeOfServiceCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, placeOfServiceCode } })), { maxLength: 2 })}</Field>
-    </div></fieldset>
+    </div></fieldset>;
 
-    <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Evaluation &amp; service lines</legend>
+  const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Evaluation &amp; service lines</legend>
       <p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
       <div className="mbsf-segments" role="group" aria-label="Evaluation type">{([ ["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"] ] as const).map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
       <p className="mbsf-help">{evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric QME — eligible ML evaluation codes default to modifier -96 (-95 for ML200)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
@@ -473,13 +503,37 @@ export function BillSubmissionForm({
         </div>)}
         <div className="mbsf-total"><span>Total</span><span>{total.toLocaleString(undefined, { style: "currency", currency: "USD" })}</span></div>
       </div>{errors.serviceLines ? <p className="mbsf-error" role="alert">{errors.serviceLines}</p> : null}
-    </fieldset>
+    </fieldset>;
 
-    <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Attachments</legend><div className="mbsf-attach-list">
+  const attachmentsSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Attachments</legend><div className="mbsf-attach-list">
       {attachments.filter((attachment) => !removedSourceIds.includes(attachment.id)).map((attachment) => { const auto = attachment.autoAttached || attachment.documentType === "w9"; const removable = !auto && attachment.removable !== false; return <div className="mbsf-attach-row" data-auto={auto} key={attachment.id}><div className="mbsf-attach-main">{auto ? <span aria-label="Always attached" role="img">✓</span> : null}<span className="mbsf-file"><strong>{attachment.fileName}</strong><span className="mbsf-badge">{auto ? "Auto-attached" : documentLabels[attachment.documentType]}</span><span className="mbsf-help" style={{ display: "block" }}>{attachment.description || (auto ? "Included automatically with every bill." : documentLabels[attachment.documentType])}</span></span></div><div className="mbsf-attach-actions">{attachment.previewUrl ? <a className="mbsf-secondary" href={attachment.previewUrl} target="_blank" rel="noopener noreferrer">Preview</a> : null}{removable ? <button className="mbsf-icon-btn" type="button" aria-label={`Remove ${attachment.fileName}`} disabled={locked} onClick={() => { setSelectedIds((current) => current.filter((id) => id !== attachment.id)); setRemovedSourceIds((current) => [...new Set([...current, attachment.id])]); }}>×</button> : null}</div></div>; })}
       {uploads.map((upload, index) => <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div><div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>)}
-    </div><input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>
+    </div><input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
 
-    {formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions"><button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div>
-  </form>;
+  const actionsSection = <>{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions"><button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
+  const sections: BillSubmissionSections = {
+    header: headerSection,
+    patient: patientSection,
+    claim: claimSection,
+    providers: providersSection,
+    serviceLines: serviceLinesSection,
+    attachments: attachmentsSection,
+    actions: actionsSection,
+  };
+  const defaultLayout = <>
+    <BillSubmissionHeader />
+    <BillSubmissionPatientSection />
+    <BillSubmissionClaimSection />
+    <BillSubmissionProvidersSection />
+    <BillSubmissionServiceLinesSection />
+    <BillSubmissionAttachmentsSection />
+    <BillSubmissionActions />
+  </>;
+
+  return <BillSubmissionSectionsContext.Provider value={sections}>
+    <form ref={formRef} className={`${className} mbsf`} style={{ ...mindBillAppearanceStyle(appearance), ...style }} onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
+      <style>{css}</style>
+      {children ?? defaultLayout}
+    </form>
+  </BillSubmissionSectionsContext.Provider>;
 }

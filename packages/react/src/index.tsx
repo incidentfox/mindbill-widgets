@@ -94,7 +94,14 @@ export {
   applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_DOCUMENT_TYPES,
   BILL_SUBMISSION_REQUIRED_FIELDS,
+  BillSubmissionActions,
+  BillSubmissionAttachmentsSection,
+  BillSubmissionClaimSection,
   BillSubmissionForm,
+  BillSubmissionHeader,
+  BillSubmissionPatientSection,
+  BillSubmissionProvidersSection,
+  BillSubmissionServiceLinesSection,
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
   parseBillSubmissionDate,
@@ -111,6 +118,7 @@ export type {
   BillSubmissionModifierOption,
   BillSubmissionPostalPlace,
   BillSubmissionProcedureOption,
+  BillSubmissionSectionId,
   BillSubmissionSourceAttachment,
   BillSubmissionUpload,
   BillSubmissionValidation,
@@ -138,6 +146,31 @@ export type {
   BillStatusAction,
   BillSubmissionRoute,
 } from "./native-bill-review";
+
+export {
+  BillAgingSummary,
+  BillingDashboard,
+  BillingReport,
+  BillList,
+  billAgingBucket,
+  billAgingDays,
+  buildBillingReportCsv,
+  buildBillingReportRows,
+  summarizeBillingDashboard,
+} from "./billing-dashboard";
+export type {
+  BillAgingBucket,
+  BillAgingBucketId,
+  BillAgingSummaryProps,
+  BillingComponentProps,
+  BillingDashboardBill,
+  BillingDashboardProps,
+  BillingDashboardSummary,
+  BillingReportDimension,
+  BillingReportProps,
+  BillingReportRow,
+  BillListProps,
+} from "./billing-dashboard";
 
 export {
   ConnectedBillStatus,

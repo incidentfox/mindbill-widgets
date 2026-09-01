@@ -167,6 +167,82 @@ Validation is component-owned as well. A missing routing payer is highlighted im
 
 `BillReviewForm` remains available for legacy integrations that already own a custom review model. New integrations should use `BillSubmissionForm`.
 
+### Compose individual submission sections
+
+`BillSubmissionForm` is also the form-state provider. Put its named children in your own page shell when you want the same MindBill behavior in a partner-specific layout. The sections do not duplicate required-field, directory, fee, attachment, or submission logic.
+
+```tsx
+import {
+  BillSubmissionActions,
+  BillSubmissionAttachmentsSection,
+  BillSubmissionClaimSection,
+  BillSubmissionForm,
+  BillSubmissionHeader,
+  BillSubmissionPatientSection,
+  BillSubmissionProvidersSection,
+  BillSubmissionServiceLinesSection,
+} from "@mindbill/react";
+
+<BillSubmissionForm {...submissionProps}>
+  <BillSubmissionHeader />
+  <BillSubmissionPatientSection />
+  <BillSubmissionClaimSection />
+  <BillSubmissionProvidersSection />
+  <BillSubmissionServiceLinesSection />
+  <BillSubmissionAttachmentsSection />
+  <BillSubmissionActions />
+</BillSubmissionForm>
+```
+
+Omit a section when another step in your product already supplies that information, or reorder sections to match your workflow. `BillSubmissionActions` remains the only submit control and always validates the complete immutable snapshot.
+
+## Billing dashboard, aging, bill list, and reports
+
+The dashboard components accept plain bill summaries, so they work with `@mindbill/node`'s `listBills()` response, a server-rendered loader, or a partner-owned cache. They never require an API key in the browser.
+
+```tsx
+import {
+  BillingDashboard,
+  BillingReport,
+  buildBillingReportCsv,
+  type BillingDashboardBill,
+} from "@mindbill/react";
+
+const bills: BillingDashboardBill[] = apiBills.map((bill) => ({
+  id: bill.id,
+  billNumber: bill.billNumber,
+  patientName: `${bill.patient.firstName} ${bill.patient.lastName}`,
+  claimNumber: bill.claim.claimNumber,
+  payerName: bill.claim.claimsAdministrator?.name,
+  state: bill.state,
+  // Supply agingDays from your status/lifecycle response, or submittedAt when
+  // your server-side bill summary includes it.
+  agingDays: agingByBillId[bill.id] ?? 0,
+  totalCharge: bill.amounts.charged,
+  totalPaid: bill.amounts.paid,
+  balanceDue: bill.amounts.balance,
+  href: `/billing/${bill.id}`,
+}));
+
+<BillingDashboard
+  bills={bills}
+  appearance={{ preset: "orange-bright" }}
+  onSelectBill={(bill) => router.push(`/billing/${bill.id}`)}
+/>
+
+<BillingReport bills={bills} groupBy="payer" />
+```
+
+Use the smaller pieces independently when a page already has its own shell:
+
+- `BillAgingSummary` — outstanding balance, open count, collected, total billed, and 0–30 / 31–60 / 61–90 / 91+ buckets;
+- `BillList` — responsive desktop table and mobile cards;
+- `BillingReport` — grouped totals by `status`, `payer`, or `aging`;
+- `summarizeBillingDashboard` and `buildBillingReportRows` — presentation-free aggregates;
+- `buildBillingReportCsv` — the same report rows as downloadable CSV text.
+
+Pass only synthetic data to public examples and tests. In production, load organization-scoped bills on the server and authorize each bill-detail route independently.
+
 Use `BillStatusSummary` only when your application already owns status loading and wants a presentation-only component:
 
 ```tsx

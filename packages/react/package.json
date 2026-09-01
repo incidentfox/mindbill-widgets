@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/react",
-  "version": "0.21.3",
+  "version": "0.22.0",
   "description": "Native React components and hosted workflows for MindBill billing",
   "type": "module",
   "main": "./dist/index.js",
