@@ -48,7 +48,10 @@ const bill = await mindbill.createAndSubmitBill({
     employer: "Example Manufacturing",
     dateOfInjury: "2026-06-20",
     injuryState: "CA",
-    claimsAdministrator: { name: "Example Claims Administrator" },
+    claimsAdministrator: {
+      id: "payer_demo_123",
+      name: "Example Claims Administrator",
+    },
     },
     service: { date: "2026-08-25" },
     billingProvider: {

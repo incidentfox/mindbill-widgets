@@ -161,6 +161,8 @@ Partners supply tenant-specific bootstrap data, one short-lived browser session 
 
 Validation is component-owned as well. A missing routing payer is highlighted immediately; Submit highlights every invalid control with a specific message, focuses and scrolls to the first problem, and continues validating as the user corrects the form.
 
+The complete immutable snapshot requires patient identity and address; employer, injury date, service date, and a canonical claims-administrator directory selection; at least one ICD-10 diagnosis and procedure line; billing provider name, Tax ID, NPI, phone, and address; rendering provider name, NPI, and taxonomy; and service-facility address plus place-of-service code. Address line 2 and physician license metadata remain optional. For California workers-comp CMS-1500 output, `renderingProvider.taxonomy` is the 10-character provider taxonomy placed in shaded Box 24J with qualifier `ZZ`; it is not replaced by the physician license number.
+
 `BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; `onSubmitted` fires only after MindBill accepts a locally valid immutable snapshot. The legacy `onSubmit` escape hatch remains optional for unusual deployments, but connected integrations should omit it so the library owns the complete contract.
 
 `BillReviewForm` remains available for legacy integrations that already own a custom review model. New integrations should use `BillSubmissionForm`.

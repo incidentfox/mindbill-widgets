@@ -71,7 +71,7 @@ export const BILL_SUBMISSION_REPORT_TYPES: readonly BillSubmissionReportTypeOpti
   { code: "V5", label: "Death Notification" }, { code: "XP", label: "Photographs" },
 ] as const;
 export type BillSubmissionEvaluationType = "qme" | "ame" | "psych_qme";
-export type BillSubmissionAddress = { line1: string; city: string; state: string; postalCode: string };
+export type BillSubmissionAddress = { line1: string; line2?: string; city: string; state: string; postalCode: string };
 export type BillSubmissionDiagnosisOption = { code: string; description: string };
 export type BillSubmissionProcedureOption = { code: string; description: string; allowedAmount?: number };
 export type BillSubmissionModifierOption = { code: string; description: string };
@@ -106,6 +106,30 @@ export type BillSubmissionInput = {
   }>;
 };
 
+/** A validated, submission-ready bill. The form accepts partial provider data while editing,
+ * but only emits this complete contract after every required field has passed validation. */
+export type CompleteBillSubmissionInput = Omit<
+  BillSubmissionInput,
+  "claim" | "billingProvider" | "renderingProvider" | "serviceLocation" | "diagnoses" | "serviceLines"
+> & {
+  claim: BillSubmissionInput["claim"] & {
+    employer: string;
+    dateOfInjury: string;
+    claimsAdministrator: { id: string; name: string };
+  };
+  billingProvider: {
+    name: string; taxId: string; npi: string; phone: string; address: BillSubmissionAddress;
+  };
+  renderingProvider: NonNullable<BillSubmissionInput["renderingProvider"]> & {
+    name: string; npi: string; taxonomy: string;
+  };
+  serviceLocation: NonNullable<BillSubmissionInput["serviceLocation"]> & {
+    address: BillSubmissionAddress; placeOfServiceCode: string;
+  };
+  diagnoses: string[];
+  serviceLines: BillSubmissionInput["serviceLines"];
+};
+
 export type BillSubmissionSourceAttachment = {
   id: string;
   fileName: string;
@@ -121,7 +145,7 @@ export type BillSubmissionSourceAttachment = {
 };
 export type BillSubmissionUpload = { file: File; documentType: BillSubmissionDocumentType; description?: string; reportTypeCode?: string };
 export type BillSubmissionFormValue = {
-  bill: BillSubmissionInput;
+  bill: CompleteBillSubmissionInput;
   sourceAttachmentIds: string[];
   sourceAttachmentReportTypes: Record<string, string>;
   uploads: BillSubmissionUpload[];
@@ -169,7 +193,12 @@ export type BillSubmissionFormProps = {
 export const BILL_SUBMISSION_REQUIRED_FIELDS = [
   "patient.firstName", "patient.lastName", "patient.dateOfBirth", "patient.address.line1",
   "patient.address.city", "patient.address.state", "patient.address.postalCode",
-  "claim.claimNumber", "claim.claimsAdministrator", "service.date",
+  "claim.claimNumber", "claim.employer", "claim.dateOfInjury", "claim.claimsAdministrator", "service.date",
+  "billingProvider.name", "billingProvider.taxId", "billingProvider.npi", "billingProvider.phone",
+  "billingProvider.address.line1", "billingProvider.address.city", "billingProvider.address.state", "billingProvider.address.postalCode",
+  "renderingProvider.name", "renderingProvider.npi", "renderingProvider.taxonomy",
+  "serviceLocation.placeOfServiceCode", "serviceLocation.address.line1", "serviceLocation.address.city",
+  "serviceLocation.address.state", "serviceLocation.address.postalCode",
   "diagnoses[]",
   "serviceLines[].code", "serviceLines[].units",
 ] as const;
@@ -361,8 +390,26 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("patient.address.state", bill.patient.address.state, "Enter the patient's 2-letter state code.");
   required("patient.address.postalCode", bill.patient.address.postalCode, "Enter the patient's ZIP code.");
   required("claim.claimNumber", bill.claim.claimNumber, "Enter the claim number.");
+  required("claim.employer", bill.claim.employer, "Enter the employer name.");
+  required("claim.dateOfInjury", bill.claim.dateOfInjury, "Enter the date of injury.");
   required("claim.claimsAdministrator", bill.claim.claimsAdministrator?.name, "Select a claims administrator so MindBill can route this bill.");
   required("service.date", bill.service.date, "Enter the date of service.");
+  required("billingProvider.name", bill.billingProvider?.name, "Enter the billing provider name.");
+  required("billingProvider.taxId", bill.billingProvider?.taxId, "Enter the billing provider Tax ID (EIN or SSN).");
+  required("billingProvider.npi", bill.billingProvider?.npi, "Enter the billing provider NPI.");
+  required("billingProvider.phone", bill.billingProvider?.phone, "Enter the billing provider phone number.");
+  required("billingProvider.address.line1", bill.billingProvider?.address?.line1, "Enter the billing provider street address.");
+  required("billingProvider.address.city", bill.billingProvider?.address?.city, "Enter the billing provider city.");
+  required("billingProvider.address.state", bill.billingProvider?.address?.state, "Enter the billing provider 2-letter state code.");
+  required("billingProvider.address.postalCode", bill.billingProvider?.address?.postalCode, "Enter the billing provider ZIP code.");
+  required("renderingProvider.name", bill.renderingProvider?.name, "Enter the rendering provider name.");
+  required("renderingProvider.npi", bill.renderingProvider?.npi, "Enter the rendering provider NPI.");
+  required("renderingProvider.taxonomy", bill.renderingProvider?.taxonomy, "Enter the rendering provider taxonomy code.");
+  required("serviceLocation.placeOfServiceCode", bill.serviceLocation?.placeOfServiceCode, "Enter the 2-digit place of service code.");
+  required("serviceLocation.address.line1", bill.serviceLocation?.address?.line1, "Enter the service facility street address.");
+  required("serviceLocation.address.city", bill.serviceLocation?.address?.city, "Enter the service facility city.");
+  required("serviceLocation.address.state", bill.serviceLocation?.address?.state, "Enter the service facility 2-letter state code.");
+  required("serviceLocation.address.postalCode", bill.serviceLocation?.address?.postalCode, "Enter the service facility ZIP code.");
   if (!(bill.diagnoses ?? []).some((code) => code.trim())) {
     errors.diagnoses = "Select at least one ICD-10 diagnosis code.";
   }
@@ -370,7 +417,16 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
     errors["claim.claimsAdministrator"] = "Select a claims administrator from the payer directory.";
   }
   if (bill.patient.dateOfBirth && !parseBillSubmissionDate(bill.patient.dateOfBirth)) errors["patient.dateOfBirth"] = "Use MM/DD/YYYY";
+  if (bill.claim.dateOfInjury && !parseBillSubmissionDate(bill.claim.dateOfInjury)) errors["claim.dateOfInjury"] = "Use MM/DD/YYYY";
   if (bill.patient.address.state.trim().length !== 2) errors["patient.address.state"] = "Use a 2-letter state code";
+  if (bill.billingProvider?.address?.state && bill.billingProvider.address.state.trim().length !== 2) errors["billingProvider.address.state"] = "Use a 2-letter state code.";
+  if (bill.serviceLocation?.address?.state && bill.serviceLocation.address.state.trim().length !== 2) errors["serviceLocation.address.state"] = "Use a 2-letter state code.";
+  const digits = (value?: string) => value?.replace(/\D/g, "") ?? "";
+  if (bill.billingProvider?.taxId && digits(bill.billingProvider.taxId).length !== 9) errors["billingProvider.taxId"] = "Enter a valid 9-digit EIN or SSN.";
+  if (bill.billingProvider?.npi && !/^\d{10}$/.test(digits(bill.billingProvider.npi))) errors["billingProvider.npi"] = "Enter a valid 10-digit NPI.";
+  if (bill.renderingProvider?.npi && !/^\d{10}$/.test(digits(bill.renderingProvider.npi))) errors["renderingProvider.npi"] = "Enter a valid 10-digit NPI.";
+  if (bill.renderingProvider?.taxonomy && !/^[A-Za-z0-9]{10}$/.test(bill.renderingProvider.taxonomy.trim())) errors["renderingProvider.taxonomy"] = "Enter a valid 10-character taxonomy code.";
+  if (bill.serviceLocation?.placeOfServiceCode && !/^\d{2}$/.test(bill.serviceLocation.placeOfServiceCode.trim())) errors["serviceLocation.placeOfServiceCode"] = "Enter a valid 2-digit place of service code.";
   const lines = submittedLines(bill.serviceLines);
   if (!lines.length) errors.serviceLines = "Add at least one service line";
   lines.forEach((line, index) => {
@@ -384,7 +440,7 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
 const css = `
 .mbsf{display:grid;gap:20px;color:var(--mb-text);font-family:var(--mb-font);font-size:15px}.mbsf *{box-sizing:border-box}
 .mbsf-head,.mbsf-section-head,.mbsf-attach-row,.mbsf-actions{display:flex;align-items:center;justify-content:space-between;gap:16px}.mbsf-title{margin:0;font-size:24px}.mbsf-copy,.mbsf-help{color:var(--mb-muted);margin:5px 0 0}.mbsf-required{font-size:13px;color:var(--mb-muted);white-space:nowrap}.mbsf-star,.mbsf-error{color:var(--mb-danger)}
-.mbsf-card{min-width:0;margin:0;padding:24px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}.mbsf-card[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-legend{padding:0 10px;font-size:18px;font-weight:760}.mbsf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}.mbsf-span{grid-column:1/-1}.mbsf-field{display:grid;align-content:start;gap:7px;min-width:0}.mbsf-label{font-weight:680}.mbsf-input,.mbsf-select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbsf-input:focus,.mbsf-select:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}.mbsf-field[data-invalid=true] .mbsf-input,.mbsf-field[data-invalid=true] .mbsf-select,.mbsf-invalid-control .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-field[data-invalid=true] .mbsf-input:focus,.mbsf-field[data-invalid=true] .mbsf-select:focus{outline-color:color-mix(in srgb,var(--mb-danger) 24%,transparent)}
+.mbsf-card{min-width:0;margin:0;padding:24px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}.mbsf-card[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-legend{padding:0 10px;font-size:18px;font-weight:760}.mbsf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}.mbsf-subhead{grid-column:1/-1;margin:6px 0 -2px;padding-top:14px;border-top:1px solid var(--mb-border);font-size:15px;font-weight:780;letter-spacing:.01em}.mbsf-subhead:first-child{margin-top:0;padding-top:0;border-top:0}.mbsf-span{grid-column:1/-1}.mbsf-field{display:grid;align-content:start;gap:7px;min-width:0}.mbsf-label{font-weight:680}.mbsf-input,.mbsf-select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbsf-input:focus,.mbsf-select:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}.mbsf-field[data-invalid=true] .mbsf-input,.mbsf-field[data-invalid=true] .mbsf-select,.mbsf-invalid-control .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-field[data-invalid=true] .mbsf-input:focus,.mbsf-field[data-invalid=true] .mbsf-select:focus{outline-color:color-mix(in srgb,var(--mb-danger) 24%,transparent)}
 .mbsf-combo{position:relative}.mbsf-menu{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:min(360px,46vh);overflow:auto;overscroll-behavior:contain;padding:7px;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);box-shadow:0 14px 35px rgba(17,38,49,.16)}.mbsf-option{display:grid;width:100%;gap:2px;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mbsf-option:hover,.mbsf-option:focus{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}.mbsf-option small{color:var(--mb-muted)}.mbsf-menu-status{padding:12px;text-align:center;color:var(--mb-muted);font-size:13px}
 .mbsf-payer-status{display:flex;align-items:center;gap:7px;color:#087f5b;font-size:13px;font-weight:650}.mbsf-payer-intro{margin:4px 0 0;color:var(--mb-muted)}.mbsf-payer-list{display:grid;gap:8px}.mbsf-payer-option{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface))}.mbsf-payer-option-main{display:grid;gap:5px;min-width:0}.mbsf-payer-option-main strong{overflow-wrap:anywhere}.mbsf-payer-signals{display:flex;flex-wrap:wrap;gap:6px}.mbsf-payer-signal{padding:2px 7px;border:1px solid var(--mb-border);border-radius:999px;color:var(--mb-muted);font-size:12px}.mbsf-payer-signal[data-state=match]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));color:#087f5b}.mbsf-payer-signal[data-state=warning]{border-color:color-mix(in srgb,#c56a00 55%,var(--mb-border));color:#9a5200}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
@@ -576,7 +632,7 @@ export function BillSubmissionForm({
     if (Object.hasOwn(patch, "code")) { const withoutCharge = { ...next }; delete withoutCharge.charge; return withoutCharge; }
     return next;
   })) }));
-  const text = (value: string | null | undefined, onChange: (value: string) => void, options: { placeholder?: string; maxLength?: number; type?: string } = {}) => <input className="mbsf-input" disabled={locked} value={value ?? ""} onChange={(event) => onChange(event.target.value)} {...options} />;
+  const text = (value: string | null | undefined, onChange: (value: string) => void, options: Pick<React.InputHTMLAttributes<HTMLInputElement>, "placeholder" | "maxLength" | "type" | "inputMode"> = {}) => <input className="mbsf-input" disabled={locked} value={value ?? ""} onChange={(event) => onChange(event.target.value)} {...options} />;
   const runPayerSearch = useCallback(async (query: string, autoSelect: boolean): Promise<void> => {
     const trimmed = query.trim();
     if (trimmed.length < 2) { setPayerResults([]); return; }
@@ -656,9 +712,10 @@ export function BillSubmissionForm({
       return;
     }
     if (selectedIds.length + uploads.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
+    const complete = clean as CompleteBillSubmissionInput;
     setSubmitting(true); try {
       if (onSubmit) {
-        await onSubmit({ bill: clean, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads });
+        await onSubmit({ bill: complete, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads });
       } else {
         if (!submissionClient) throw new Error("The connected billing client is unavailable.");
         const documents = await prepareBillSubmissionDocuments({
@@ -669,7 +726,7 @@ export function BillSubmissionForm({
           ...(forcedAttachmentReportType ? { defaultReportTypeCode: forcedAttachmentReportType } : {}),
           ...(fetchOverride ? { fetch: fetchOverride } : {}),
         });
-        const result = await submissionClient.submitBill({ bill: clean, documents });
+        const result = await submissionClient.submitBill({ bill: complete, documents });
         await onSubmitted?.(result);
       }
     }
@@ -698,8 +755,8 @@ export function BillSubmissionForm({
 
   const claimSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Injury &amp; claim</legend><div className="mbsf-grid">
       <Field path="service.date" label="Date of service" required error={errors["service.date"]}><TextDateInput ariaLabel="Date of service" value={bill.service.date} disabled={locked} required onChange={(date) => setBill((c) => ({ ...c, service: { ...c.service, date } }))} /></Field>
-      <Field label="Date of injury"><TextDateInput ariaLabel="Date of injury" value={bill.claim.dateOfInjury} disabled={locked} onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
-      <Field label="Employer (optional)">{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
+      <Field path="claim.dateOfInjury" label="Date of injury" required error={errors["claim.dateOfInjury"]}><TextDateInput ariaLabel="Date of injury" value={bill.claim.dateOfInjury} disabled={locked} required onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
+      <Field path="claim.employer" label="Employer name" required error={errors["claim.employer"]}>{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
       <Field path="claim.claimNumber" label="Claim number" required error={errors["claim.claimNumber"]}>{text(bill.claim.claimNumber, (claimNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, claimNumber } })))}</Field>
       <Field label="WCAB / ADJ number (optional)">{text(bill.claim.adjNumber, (adjNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, adjNumber } })))}</Field>
       <Field path="claim.claimsAdministrator" label="Claims administrator" required span error={claimsAdministratorError}>
@@ -718,24 +775,38 @@ export function BillSubmissionForm({
     </div></fieldset>;
 
   const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend><div className="mbsf-grid">
-      <Field label="Billing provider">{text(bill.billingProvider?.name, (name) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, name } })))}</Field>
-      <Field label="Billing tax ID">{text(bill.billingProvider?.taxId, (taxId) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, taxId } })))}</Field>
-      <Field label="Billing NPI">{text(bill.billingProvider?.npi, (npi) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, npi } })))}</Field>
-      <Field label="Billing phone">{text(bill.billingProvider?.phone, (phone) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, phone } })), { type: "tel" })}</Field>
-      <Field label="Rendering provider">{text(bill.renderingProvider?.name, (name) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, name } })))}</Field>
-      <Field label="Specialty">{text(bill.renderingProvider?.specialty, (specialty) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, specialty } })))}</Field>
-      <Field label="Rendering NPI">{text(bill.renderingProvider?.npi, (npi) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, npi } })))}</Field>
-      <Field label="License number">{text(bill.renderingProvider?.licenseNumber, (licenseNumber) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, licenseNumber } })))}</Field>
-      <Field label="License state">{text(bill.renderingProvider?.licenseState, (licenseState) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, licenseState: licenseState.toUpperCase() } })), { maxLength: 2 })}</Field>
-      <Field label="Service location">{text(bill.serviceLocation?.name, (name) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, name } })))}</Field>
-      <Field label="Place of service">{text(bill.serviceLocation?.placeOfServiceCode, (placeOfServiceCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, placeOfServiceCode } })), { maxLength: 2 })}</Field>
+      <h4 className="mbsf-subhead">Billing provider</h4>
+      <Field path="billingProvider.name" label="Billing provider name" required error={errors["billingProvider.name"]}>{text(bill.billingProvider?.name, (name) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, name } })))}</Field>
+      <Field path="billingProvider.taxId" label="Tax ID (EIN / SSN)" required error={errors["billingProvider.taxId"]}>{text(bill.billingProvider?.taxId, (taxId) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, taxId } })), { inputMode: "numeric" })}</Field>
+      <Field path="billingProvider.npi" label="Billing provider NPI" required error={errors["billingProvider.npi"]}>{text(bill.billingProvider?.npi, (npi) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>
+      <Field path="billingProvider.phone" label="Billing provider phone" required error={errors["billingProvider.phone"]}>{text(bill.billingProvider?.phone, (phone) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, phone } })), { type: "tel" })}</Field>
+      <Field path="billingProvider.address.line1" label="Billing address line 1" required span error={errors["billingProvider.address.line1"]}>{text(bill.billingProvider?.address?.line1, (line1) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1, line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: c.billingProvider?.address?.state ?? "", postalCode: c.billingProvider?.address?.postalCode ?? "" } } })))}</Field>
+      <Field label="Billing address line 2 (optional)" span>{text(bill.billingProvider?.address?.line2, (line2) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2, city: c.billingProvider?.address?.city ?? "", state: c.billingProvider?.address?.state ?? "", postalCode: c.billingProvider?.address?.postalCode ?? "" } } })))}</Field>
+      <Field path="billingProvider.address.city" label="Billing city" required error={errors["billingProvider.address.city"]}>{text(bill.billingProvider?.address?.city, (city) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city, state: c.billingProvider?.address?.state ?? "", postalCode: c.billingProvider?.address?.postalCode ?? "" } } })))}</Field>
+      <Field path="billingProvider.address.state" label="Billing state" required error={errors["billingProvider.address.state"]}>{text(bill.billingProvider?.address?.state, (state) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.billingProvider?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
+      <Field path="billingProvider.address.postalCode" label="Billing ZIP" required error={errors["billingProvider.address.postalCode"]}>{text(bill.billingProvider?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: c.billingProvider?.address?.state ?? "", postalCode } } })))}</Field>
+      <h4 className="mbsf-subhead">Rendering provider</h4>
+      <Field path="renderingProvider.name" label="Rendering provider name" required error={errors["renderingProvider.name"]}>{text(bill.renderingProvider?.name, (name) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, name } })))}</Field>
+      <Field path="renderingProvider.npi" label="Rendering provider NPI" required error={errors["renderingProvider.npi"]}>{text(bill.renderingProvider?.npi, (npi) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>
+      <Field path="renderingProvider.taxonomy" label="Rendering taxonomy code" required error={errors["renderingProvider.taxonomy"]}>{text(bill.renderingProvider?.taxonomy, (taxonomy) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, taxonomy: taxonomy.toUpperCase() } })), { maxLength: 10, placeholder: "10-character NUCC code" })}<small className="mbsf-help">Sent in CMS-1500 Box 24J with qualifier ZZ.</small></Field>
+      <Field label="Specialty (optional)">{text(bill.renderingProvider?.specialty, (specialty) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, specialty } })))}</Field>
+      <Field label="License number (optional)">{text(bill.renderingProvider?.licenseNumber, (licenseNumber) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, licenseNumber } })))}</Field>
+      <Field label="License state (optional)">{text(bill.renderingProvider?.licenseState, (licenseState) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, licenseState: licenseState.toUpperCase() } })), { maxLength: 2 })}</Field>
+      <h4 className="mbsf-subhead">Service facility (CMS-1500 Box 32)</h4>
+      <Field label="Service facility name (optional)">{text(bill.serviceLocation?.name, (name) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, name } })))}</Field>
+      <Field path="serviceLocation.placeOfServiceCode" label="Place of service code" required error={errors["serviceLocation.placeOfServiceCode"]}>{text(bill.serviceLocation?.placeOfServiceCode, (placeOfServiceCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, placeOfServiceCode } })), { inputMode: "numeric", maxLength: 2, placeholder: "11" })}</Field>
+      <Field path="serviceLocation.address.line1" label="Service address line 1" required span error={errors["serviceLocation.address.line1"]}>{text(bill.serviceLocation?.address?.line1, (line1) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1, line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
+      <Field label="Service address line 2 (optional)" span>{text(bill.serviceLocation?.address?.line2, (line2) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2, city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
+      <Field path="serviceLocation.address.city" label="Service city" required error={errors["serviceLocation.address.city"]}>{text(bill.serviceLocation?.address?.city, (city) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city, state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
+      <Field path="serviceLocation.address.state" label="Service state" required error={errors["serviceLocation.address.state"]}>{text(bill.serviceLocation?.address?.state, (state) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
+      <Field path="serviceLocation.address.postalCode" label="Service ZIP" required error={errors["serviceLocation.address.postalCode"]}>{text(bill.serviceLocation?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode } } })))}</Field>
     </div></fieldset>;
 
   const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Evaluation &amp; service lines</legend>
       <p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
       <div className="mbsf-segments" role="group" aria-label="Evaluation type">{([ ["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"] ] as const).map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
       <p className="mbsf-help">{evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric QME — eligible ML evaluation codes default to modifier -96 (-95 for ML200)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
-      <div className="mbsf-lines" data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code</span><span>Modifiers</span><span>Units</span><span>Allowed</span><span /> </div>
+      <div className="mbsf-lines" data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span><span>Units<RequiredMark /></span><span>Allowed</span><span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
           <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const auto = evaluationModifier(evaluationType, option.id); setLine(index, { code: option.id, ...(auto ? { modifiers: [auto, ...(line.modifiers ?? []).filter((item) => !["94", "95", "96"].includes(item.replace(/^-/, "")))] } : line.modifiers ? { modifiers: line.modifiers } : {}) }); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={modifiers.filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
