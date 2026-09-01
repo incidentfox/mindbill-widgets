@@ -25,6 +25,7 @@ import {
 import {
   applyBillSubmissionEvaluationDiagnoses,
   applyBillSubmissionEvaluationModifiers,
+  BILL_SUBMISSION_REPORT_TYPES,
   BILL_SUBMISSION_REQUIRED_FIELDS,
   BillSubmissionActions,
   BillSubmissionAttachmentsSection,
@@ -35,6 +36,9 @@ import {
   BillSubmissionServiceLinesSection,
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
+  claimsAdministratorRecommendations,
+  exactClaimsAdministratorMatch,
+  MED_LEGAL_REPORT_TYPE_CODE,
   parseBillSubmissionDate,
   prepareBillSubmissionDocuments,
   type BillSubmissionInput,
@@ -442,11 +446,22 @@ describe("connected bill submission", () => {
       }],
       selectedIds: ["source_123"],
       uploads: [{ file: upload, documentType: "medical_records" }],
+      defaultReportTypeCode: MED_LEGAL_REPORT_TYPE_CODE,
       fetch: fetcher,
     })).resolves.toEqual([
-      expect.objectContaining({ externalId: "source_123", filename: "source.pdf", documentType: "final_report" }),
-      expect.objectContaining({ filename: "extra.pdf", documentType: "medical_records" }),
+      expect.objectContaining({ externalId: "source_123", filename: "source.pdf", documentType: "final_report", reportTypeCode: "OZ:J4" }),
+      expect.objectContaining({ filename: "extra.pdf", documentType: "medical_records", reportTypeCode: "OZ:J4" }),
     ]);
+  });
+
+  it("ships the med-legal default and the complete treatment report-type catalog", () => {
+    expect(MED_LEGAL_REPORT_TYPE_CODE).toBe("OZ:J4");
+    expect(BILL_SUBMISSION_REPORT_TYPES).toEqual(expect.arrayContaining([
+      { code: "OZ:J1", label: "Doctor's First Report (DLSR 5021)" },
+      { code: "OZ:J9", label: "Itemized Statement" },
+      { code: "RR", label: "Radiology Reports" },
+      { code: "XP", label: "Photographs" },
+    ]));
   });
 });
 
@@ -972,6 +987,21 @@ describe("connected bill lifecycle", () => {
     expect(fetcher.mock.calls[1]?.[0]).toBe(
       "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Example+TPA&claimNumber=OTHER123",
     );
+  });
+
+  it("normalizes exact payer aliases and caps fuzzy confirmation choices at five", () => {
+    const results = Array.from({ length: 7 }, (_, index) => ({
+      id: `pd:route-${index}`,
+      name: index === 0 ? "Zurich Insurance N.A. [Electronic]" : `Zurich Route ${index}`,
+      recommended: index === 1,
+      confidence: index === 1 ? "high" as const : "medium" as const,
+      signals: [],
+    }));
+
+    expect(exactClaimsAdministratorMatch(results, " zurich insurance n.a. [electronic] ")?.id)
+      .toBe("pd:route-0");
+    expect(claimsAdministratorRecommendations(results)).toHaveLength(5);
+    expect(claimsAdministratorRecommendations(results)[0]?.id).toBe("pd:route-1");
   });
 
   it("reads the direct delivery-options response returned by the v2 browser endpoint", async () => {

@@ -25,6 +25,51 @@ export const BILL_SUBMISSION_DOCUMENT_TYPES = [
 ] as const;
 
 export type BillSubmissionDocumentType = (typeof BILL_SUBMISSION_DOCUMENT_TYPES)[number];
+export type BillSubmissionAttachmentReportTypeMode = "auto" | "hidden" | "visible";
+export type BillSubmissionReportTypeOption = { code: string; label: string };
+export const MED_LEGAL_REPORT_TYPE_CODE = "OZ:J4";
+export const BILL_SUBMISSION_REPORT_TYPES: readonly BillSubmissionReportTypeOption[] = [
+  { code: "OZ:J1", label: "Doctor's First Report (DLSR 5021)" },
+  { code: "OZ:J2", label: "Supplemental Medical Report (BRs)" },
+  { code: "OZ:J3", label: "Medical Permanent Impairment Report" },
+  { code: MED_LEGAL_REPORT_TYPE_CODE, label: "Med-Legal Report" },
+  { code: "OZ:J5", label: "Vocational Report" },
+  { code: "OZ:J6", label: "Work Status Report" },
+  { code: "OZ:J7", label: "Consultation Report" },
+  { code: "OZ:J8", label: "Permanent Disability Report" },
+  { code: "OZ:J9", label: "Itemized Statement" },
+  { code: "03", label: "Justifying Treatment Beyond Utilization Guidelines" },
+  { code: "04", label: "Drugs Administered" }, { code: "05", label: "Treatment Diagnosis" },
+  { code: "06", label: "Initial Assessment" }, { code: "07", label: "Plan of Treatment" },
+  { code: "08", label: "Plan of Treatment" }, { code: "09", label: "PR2 (Progress Report)" },
+  { code: "10", label: "Continued Treatment" }, { code: "11", label: "Chemical Analysis" },
+  { code: "13", label: "Certified Test Report" }, { code: "15", label: "Justification for Admission" },
+  { code: "21", label: "Recovery Plan" }, { code: "A3", label: "Allergies/Sensitivities Document" },
+  { code: "A4", label: "Autopsy Report" }, { code: "AM", label: "Ambulance Certification" },
+  { code: "AS", label: "Admission Summary" }, { code: "B2", label: "Prescription" },
+  { code: "B3", label: "Physician Order" }, { code: "B4", label: "Referral Form" },
+  { code: "BR", label: "Benchmark Testing Results" }, { code: "BS", label: "Baseline" },
+  { code: "BT", label: "Blanket Test Results" }, { code: "CB", label: "Chiropractic Justification" },
+  { code: "CK", label: "Canceled Check" }, { code: "CT", label: "Certification" },
+  { code: "D2", label: "Drug Profile Document" }, { code: "DA", label: "Dental Models" },
+  { code: "DB", label: "Durable Medical Equipment RX" }, { code: "DG", label: "Diagnostic Report" },
+  { code: "DJ", label: "Discharge Monitoring Report" }, { code: "DS", label: "Discharge Summary" },
+  { code: "EB", label: "Explanation of Benefits" }, { code: "HC", label: "Health Clinic Records (HC)" },
+  { code: "HR", label: "Health Clinic Records (HR)" }, { code: "I5", label: "Immunization Record" },
+  { code: "IR", label: "State School Immunization Records" }, { code: "LA", label: "Laboratory Results" },
+  { code: "M1", label: "Medical Record Attachment" }, { code: "MT", label: "Nursing Notes" },
+  { code: "NN", label: "Minor Deviation Request" }, { code: "OB", label: "Operative Note" },
+  { code: "OC", label: "Oxygen Content Averaging Report" }, { code: "OD", label: "Orders and Treatments Document" },
+  { code: "OE", label: "Objective Physical Examination Doc" }, { code: "OX", label: "Oxygen Therapy Certification" },
+  { code: "OZ", label: "Support Data for Bill" }, { code: "P4", label: "Pathology Report" },
+  { code: "P5", label: "Patient Medical History Document" }, { code: "PE", label: "Periodontal Charts" },
+  { code: "PN", label: "Physical Therapy Notes" }, { code: "PO", label: "Prosthetics or Orthotic Certification" },
+  { code: "PQ", label: "Paramedical Results" }, { code: "PY", label: "Physician's Report" },
+  { code: "PZ", label: "Physical Therapy Certification" }, { code: "RB", label: "Radiology Films" },
+  { code: "RR", label: "Radiology Reports" }, { code: "RT", label: "Report of tests and Analysis Report" },
+  { code: "RX", label: "Renewable Oxygen Content Averaging Report" }, { code: "SG", label: "Symptoms Document" },
+  { code: "V5", label: "Death Notification" }, { code: "XP", label: "Photographs" },
+] as const;
 export type BillSubmissionEvaluationType = "qme" | "ame" | "psych_qme";
 export type BillSubmissionAddress = { line1: string; city: string; state: string; postalCode: string };
 export type BillSubmissionDiagnosisOption = { code: string; description: string };
@@ -72,9 +117,15 @@ export type BillSubmissionSourceAttachment = {
   autoAttached?: boolean;
   removable?: boolean;
   previewUrl?: string;
+  reportTypeCode?: string;
 };
-export type BillSubmissionUpload = { file: File; documentType: BillSubmissionDocumentType; description?: string };
-export type BillSubmissionFormValue = { bill: BillSubmissionInput; sourceAttachmentIds: string[]; uploads: BillSubmissionUpload[] };
+export type BillSubmissionUpload = { file: File; documentType: BillSubmissionDocumentType; description?: string; reportTypeCode?: string };
+export type BillSubmissionFormValue = {
+  bill: BillSubmissionInput;
+  sourceAttachmentIds: string[];
+  sourceAttachmentReportTypes: Record<string, string>;
+  uploads: BillSubmissionUpload[];
+};
 
 export type BillSubmissionFormProps = {
   initialBill: BillSubmissionInput;
@@ -97,6 +148,10 @@ export type BillSubmissionFormProps = {
   onLookupPostalCode?: (postalCode: string) => Promise<BillSubmissionPostalPlace | null>;
   procedureOptions?: BillSubmissionProcedureOption[];
   modifierOptions?: BillSubmissionModifierOption[];
+  /** Auto hides and forces J4 for med-legal bills; treatment bills show the full report-type directory. */
+  attachmentReportTypeMode?: BillSubmissionAttachmentReportTypeMode;
+  attachmentReportTypes?: readonly BillSubmissionReportTypeOption[];
+  defaultAttachmentReportType?: string;
   appearance?: MindBillReactAppearance;
   className?: string;
   style?: CSSProperties;
@@ -164,11 +219,15 @@ export async function prepareBillSubmissionDocuments({
   attachments,
   selectedIds,
   uploads,
+  reportTypeCodeByAttachmentId = {},
+  defaultReportTypeCode,
   fetch: fetchOverride,
 }: {
   attachments: BillSubmissionSourceAttachment[];
   selectedIds: string[];
   uploads: BillSubmissionUpload[];
+  reportTypeCodeByAttachmentId?: Record<string, string>;
+  defaultReportTypeCode?: string;
   fetch?: typeof globalThis.fetch;
 }): Promise<BrowserBillSubmissionDocument[]> {
   const fetcher = fetchOverride ?? globalThis.fetch;
@@ -182,12 +241,14 @@ export async function prepareBillSubmissionDocuments({
       externalId: attachment.id,
       filename: attachment.fileName,
       documentType: attachment.documentType,
+      ...((reportTypeCodeByAttachmentId[attachment.id] || attachment.reportTypeCode || defaultReportTypeCode) ? { reportTypeCode: reportTypeCodeByAttachmentId[attachment.id] || attachment.reportTypeCode || defaultReportTypeCode } : {}),
       ...(attachment.description ? { description: attachment.description } : {}),
     });
   }));
-  const uploadedDocuments = await Promise.all(uploads.map(({ file, documentType, description }) => pdfDocument(file, {
+  const uploadedDocuments = await Promise.all(uploads.map(({ file, documentType, description, reportTypeCode }) => pdfDocument(file, {
     filename: file.name,
     documentType,
+    ...((reportTypeCode || defaultReportTypeCode) ? { reportTypeCode: reportTypeCode || defaultReportTypeCode } : {}),
     ...(description ? { description } : {}),
   })));
   return [...sourceDocuments, ...uploadedDocuments];
@@ -323,13 +384,14 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
 const css = `
 .mbsf{display:grid;gap:20px;color:var(--mb-text);font-family:var(--mb-font);font-size:15px}.mbsf *{box-sizing:border-box}
 .mbsf-head,.mbsf-section-head,.mbsf-attach-row,.mbsf-actions{display:flex;align-items:center;justify-content:space-between;gap:16px}.mbsf-title{margin:0;font-size:24px}.mbsf-copy,.mbsf-help{color:var(--mb-muted);margin:5px 0 0}.mbsf-required{font-size:13px;color:var(--mb-muted);white-space:nowrap}.mbsf-star,.mbsf-error{color:var(--mb-danger)}
-.mbsf-card{min-width:0;margin:0;padding:24px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}.mbsf-legend{padding:0 10px;font-size:18px;font-weight:760}.mbsf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}.mbsf-span{grid-column:1/-1}.mbsf-field{display:grid;align-content:start;gap:7px;min-width:0}.mbsf-label{font-weight:680}.mbsf-input,.mbsf-select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbsf-input:focus,.mbsf-select:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}.mbsf-field[data-invalid=true] .mbsf-input,.mbsf-field[data-invalid=true] .mbsf-select,.mbsf-invalid-control .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-field[data-invalid=true] .mbsf-input:focus,.mbsf-field[data-invalid=true] .mbsf-select:focus{outline-color:color-mix(in srgb,var(--mb-danger) 24%,transparent)}
+.mbsf-card{min-width:0;margin:0;padding:24px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}.mbsf-card[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-legend{padding:0 10px;font-size:18px;font-weight:760}.mbsf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}.mbsf-span{grid-column:1/-1}.mbsf-field{display:grid;align-content:start;gap:7px;min-width:0}.mbsf-label{font-weight:680}.mbsf-input,.mbsf-select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbsf-input:focus,.mbsf-select:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}.mbsf-field[data-invalid=true] .mbsf-input,.mbsf-field[data-invalid=true] .mbsf-select,.mbsf-invalid-control .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-field[data-invalid=true] .mbsf-input:focus,.mbsf-field[data-invalid=true] .mbsf-select:focus{outline-color:color-mix(in srgb,var(--mb-danger) 24%,transparent)}
 .mbsf-combo{position:relative}.mbsf-menu{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:min(360px,46vh);overflow:auto;overscroll-behavior:contain;padding:7px;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);box-shadow:0 14px 35px rgba(17,38,49,.16)}.mbsf-option{display:grid;width:100%;gap:2px;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mbsf-option:hover,.mbsf-option:focus{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}.mbsf-option small{color:var(--mb-muted)}.mbsf-menu-status{padding:12px;text-align:center;color:var(--mb-muted);font-size:13px}
+.mbsf-payer-status{display:flex;align-items:center;gap:7px;color:#087f5b;font-size:13px;font-weight:650}.mbsf-payer-intro{margin:4px 0 0;color:var(--mb-muted)}.mbsf-payer-list{display:grid;gap:8px}.mbsf-payer-option{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface))}.mbsf-payer-option-main{display:grid;gap:5px;min-width:0}.mbsf-payer-option-main strong{overflow-wrap:anywhere}.mbsf-payer-signals{display:flex;flex-wrap:wrap;gap:6px}.mbsf-payer-signal{padding:2px 7px;border:1px solid var(--mb-border);border-radius:999px;color:var(--mb-muted);font-size:12px}.mbsf-payer-signal[data-state=match]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));color:#087f5b}.mbsf-payer-signal[data-state=warning]{border-color:color-mix(in srgb,#c56a00 55%,var(--mb-border));color:#9a5200}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
 .mbsf-lines{margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(220px,1.5fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
-.mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
-@media(max-width:820px){.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head{display:none}.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2){grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf-submit{width:100%}}
+.mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-type{width:min(360px,32vw);flex:0 1 360px}.mbsf-attach-type .mbsf-label{display:block;margin-bottom:6px;font-size:12px}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
+@media(max-width:820px){.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head{display:none}.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2){grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-payer-option{align-items:flex-start}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start;flex-basis:calc(100% - 150px)}.mbsf-attach-type{width:100%;flex-basis:100%;order:3}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf-submit{width:100%}}
 `;
 
 function RequiredMark(): ReactElement { return <span className="mbsf-star"> *</span>; }
@@ -347,7 +409,7 @@ function TextDateInput({ value, onChange, disabled, required, ariaLabel }: { val
 }
 
 type ComboOption = { id: string; label: string; detail?: string };
-function ComboBox({ value, placeholder, options, disabled, loading, loadingMore, invalid, onOpen, onQuery, onEndReached, onSelect, createOption, ariaLabel }: { value: string; placeholder: string; options: ComboOption[]; disabled: boolean; loading?: boolean; loadingMore?: boolean; invalid?: boolean; onOpen?: () => void; onQuery?: (query: string) => void; onEndReached?: () => void; onSelect: (option: ComboOption) => void; createOption?: (query: string) => ComboOption | null; ariaLabel: string }): ReactElement {
+function ComboBox({ value, placeholder, options, disabled, loading, loadingMore, invalid, preserveValueOnOpen = false, onOpen, onQuery, onEndReached, onSelect, createOption, ariaLabel }: { value: string; placeholder: string; options: ComboOption[]; disabled: boolean; loading?: boolean; loadingMore?: boolean; invalid?: boolean; preserveValueOnOpen?: boolean; onOpen?: () => void; onQuery?: (query: string) => void; onEndReached?: () => void; onSelect: (option: ComboOption) => void; createOption?: (query: string) => ComboOption | null; ariaLabel: string }): ReactElement {
   const [open, setOpen] = useState(false); const [query, setQuery] = useState("");
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -356,7 +418,7 @@ function ComboBox({ value, placeholder, options, disabled, loading, loadingMore,
     return custom && !matches.some((option) => option.id.toUpperCase() === custom.id.toUpperCase()) ? [...matches, custom] : matches;
   }, [createOption, options, query]);
   const showMenu = open && (loading || visible.length > 0 || query.trim().length >= 2);
-  return <div className="mbsf-combo"><input className="mbsf-input" role="combobox" aria-label={ariaLabel} aria-invalid={invalid} aria-expanded={showMenu} autoComplete="off" disabled={disabled} placeholder={placeholder} value={open ? query : value} onFocus={() => { setOpen(true); setQuery(""); onOpen?.(); }} onChange={(event) => { setOpen(true); setQuery(event.target.value); onQuery?.(event.target.value); }} onBlur={() => setTimeout(() => setOpen(false), 120)} />{showMenu ? <div className="mbsf-menu" role="listbox" onScroll={(event) => { const menu = event.currentTarget; if (menu.scrollHeight - menu.scrollTop - menu.clientHeight < 120) onEndReached?.(); }}>{loading && !visible.length ? <div className="mbsf-menu-status">Loading codes…</div> : visible.length ? visible.map((option) => <button className="mbsf-option" type="button" role="option" key={option.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(option); setOpen(false); setQuery(""); }}><strong>{option.label}</strong>{option.detail ? <small>{option.detail}</small> : null}</button>) : <div className="mbsf-option">No matches</div>}{loadingMore ? <div className="mbsf-menu-status">Loading more…</div> : null}</div> : null}</div>;
+  return <div className="mbsf-combo"><input className="mbsf-input" role="combobox" aria-label={ariaLabel} aria-invalid={invalid} aria-expanded={showMenu} autoComplete="off" disabled={disabled} placeholder={placeholder} value={open ? query : value} onFocus={() => { const next = preserveValueOnOpen ? value : ""; setOpen(true); setQuery(next); onOpen?.(); if (next) onQuery?.(next); }} onChange={(event) => { setOpen(true); setQuery(event.target.value); onQuery?.(event.target.value); }} onBlur={() => setTimeout(() => setOpen(false), 120)} />{showMenu ? <div className="mbsf-menu" role="listbox" onScroll={(event) => { const menu = event.currentTarget; if (menu.scrollHeight - menu.scrollTop - menu.clientHeight < 120) onEndReached?.(); }}>{loading && !visible.length ? <div className="mbsf-menu-status">Loading…</div> : visible.length ? visible.map((option) => <button className="mbsf-option" type="button" role="option" key={option.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { onSelect(option); setOpen(false); setQuery(""); }}><strong>{option.label}</strong>{option.detail ? <small>{option.detail}</small> : null}</button>) : <div className="mbsf-option">No matches</div>}{loadingMore ? <div className="mbsf-menu-status">Loading more…</div> : null}</div> : null}</div>;
 }
 
 function focusFirstInvalid(form: HTMLFormElement): void {
@@ -395,6 +457,22 @@ function mergeDiagnosisOptions(options: BillSubmissionDiagnosisOption[]): BillSu
     .sort((left, right) => left.code.localeCompare(right.code, undefined, { numeric: true }));
 }
 
+export function normalizeClaimsAdministratorName(value: string): string {
+  return value.toUpperCase().replace(/\[[^\]]*]/g, " ").replace(/\b(?:INCORPORATED|INC|COMPANY|CO|CORPORATION|CORP|GROUP|INSURANCE|SERVICES)\b/g, " ").replace(/[^A-Z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+export function exactClaimsAdministratorMatch(results: BillReviewPayer[], suppliedName: string): BillReviewPayer | undefined {
+  const normalized = normalizeClaimsAdministratorName(suppliedName);
+  return results.find((payer) => normalizeClaimsAdministratorName(payer.name) === normalized)
+    ?? results.find((payer) => payer.confidence === "high" && payer.recommended);
+}
+
+export function claimsAdministratorRecommendations(results: BillReviewPayer[], limit = 5): BillReviewPayer[] {
+  return [...results]
+    .sort((left, right) => Number(Boolean(right.recommended)) - Number(Boolean(left.recommended)))
+    .slice(0, Math.max(0, limit));
+}
+
 export type BillSubmissionSectionId =
   | "header"
   | "patient"
@@ -424,7 +502,9 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 export function BillSubmissionForm({
   initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
   fetch: fetchOverride, onSearchClaimsAdministrators, diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, modifierOptions, appearance, className = "bill-submission-form",
+  onLookupPostalCode, procedureOptions, modifierOptions, attachmentReportTypeMode = "auto",
+  attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
+  appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
   description = "Review the bill details, add attachments, and submit.",
   children,
@@ -433,6 +513,7 @@ export function BillSubmissionForm({
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
   const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
   const [uploads, setUploads] = useState<BillSubmissionUpload[]>([]); const [errors, setErrors] = useState<Record<string, string>>({});
+  const [sourceAttachmentReportTypes, setSourceAttachmentReportTypes] = useState<Record<string, string>>(() => Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : [])));
   const [validationActive, setValidationActive] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]); const [payerLoading, setPayerLoading] = useState(false);
@@ -441,7 +522,7 @@ export function BillSubmissionForm({
   const [diagnosisQuery, setDiagnosisQuery] = useState<string | null>(null); const [diagnosisHasMore, setDiagnosisHasMore] = useState(true);
   const [postalStatus, setPostalStatus] = useState<string | null>(null); const [dragActive, setDragActive] = useState(false);
   const formRef = useRef<HTMLFormElement>(null); const fileInput = useRef<HTMLInputElement>(null);
-  const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false);
+  const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false); const payerRequest = useRef(0);
   const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, procedureOptions), [procedureOptions]);
   const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
   const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialEvaluationType(initialBill));
@@ -449,15 +530,24 @@ export function BillSubmissionForm({
   const referenceClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const submissionClient = useMemo(() => connected ? createBillSubmissionClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const locked = disabled || submitting;
+  const showAttachmentReportTypes = attachmentReportTypeMode === "visible" || (attachmentReportTypeMode === "auto" && bill.billingMode !== "med_legal");
+  const forcedAttachmentReportType = showAttachmentReportTypes ? undefined : (defaultAttachmentReportType ?? MED_LEGAL_REPORT_TYPE_CODE);
+  const reportTypeOptions = useMemo(() => attachmentReportTypes.map((item) => ({ id: item.code, label: item.code.replace(/^OZ:/, ""), detail: item.label })), [attachmentReportTypes]);
+  const missingAttachmentReportType = showAttachmentReportTypes && (
+    selectedIds.some((id) => !(sourceAttachmentReportTypes[id] || attachments.find((item) => item.id === id)?.reportTypeCode || defaultAttachmentReportType))
+    || uploads.some((upload) => !(upload.reportTypeCode || defaultAttachmentReportType))
+  );
 
   useEffect(() => {
     setBill(cloneInitialBill(initialBill)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
-    setRemovedSourceIds([]); setUploads([]); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
+    setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
   }, [initialBill, attachments]);
   useEffect(() => {
-    if (validationActive) setErrors(validateBillSubmission(bill).fieldErrors);
-  }, [bill, validationActive]);
+    if (!validationActive) return;
+    const next = validateBillSubmission(bill).fieldErrors;
+    setErrors(missingAttachmentReportType ? { ...next, attachments: "Select a report type for every attachment." } : next);
+  }, [bill, missingAttachmentReportType, validationActive]);
 
   const addFiles = useCallback((fileList: FileList | File[]) => {
     const files = Array.from(fileList); if (!files.length) return; setFormError(null);
@@ -467,8 +557,8 @@ export function BillSubmissionForm({
     const nextBytes = [...uploads.map((item) => item.file), ...files].reduce((sum, file) => sum + file.size, 0);
     if (nextBytes > MAX_UPLOAD_BYTES) return setFormError("Attachments exceed the 100 MB upload limit.");
     if (selectedIds.length + uploads.length + files.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
-    setUploads((current) => [...current, ...files.map((file) => ({ file, documentType: "other" as const }))]);
-  }, [selectedIds.length, uploads]);
+    setUploads((current) => [...current, ...files.map((file) => ({ file, documentType: "other" as const, ...(defaultAttachmentReportType ? { reportTypeCode: defaultAttachmentReportType } : {}) }))]);
+  }, [defaultAttachmentReportType, selectedIds.length, uploads]);
   useEffect(() => {
     const over = (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) { event.preventDefault(); setDragActive(true); } };
     const leave = (event: DragEvent) => { if (!event.relatedTarget) setDragActive(false); };
@@ -487,12 +577,38 @@ export function BillSubmissionForm({
     return next;
   })) }));
   const text = (value: string | null | undefined, onChange: (value: string) => void, options: { placeholder?: string; maxLength?: number; type?: string } = {}) => <input className="mbsf-input" disabled={locked} value={value ?? ""} onChange={(event) => onChange(event.target.value)} {...options} />;
+  const runPayerSearch = useCallback(async (query: string, autoSelect: boolean): Promise<void> => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) { setPayerResults([]); return; }
+    const search = onSearchClaimsAdministrators ?? referenceClient?.searchClaimsAdministrators;
+    if (!search) return;
+    const request = ++payerRequest.current;
+    setPayerLoading(true);
+    try {
+      const results = await search(trimmed, bill.claim.claimNumber);
+      if (request !== payerRequest.current) return;
+      setPayerResults(results);
+      const exact = autoSelect ? exactClaimsAdministratorMatch(results, trimmed) : undefined;
+      if (exact) setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: { id: exact.id, name: exact.name } } }));
+    } catch (caught) {
+      if (request === payerRequest.current) setFormError(caught instanceof Error ? caught.message : "Claims administrator search is unavailable.");
+    } finally {
+      if (request === payerRequest.current) setPayerLoading(false);
+    }
+  }, [bill.claim.claimNumber, onSearchClaimsAdministrators, referenceClient]);
   const searchPayers = (query: string) => {
-    if (query.trim().length < 2) return;
-    setPayerLoading(true); const search = onSearchClaimsAdministrators ?? referenceClient?.searchClaimsAdministrators;
-    if (!search) { setPayerLoading(false); return; }
-    void search(query, bill.claim.claimNumber).then(setPayerResults).catch((caught) => setFormError(caught instanceof Error ? caught.message : "Claims administrator search is unavailable.")).finally(() => setPayerLoading(false));
+    setBill((current) => {
+      const selected = current.claim.claimsAdministrator;
+      if (selected?.id && selected.name === query) return current;
+      return { ...current, claim: { ...current.claim, claimsAdministrator: { name: query } } };
+    });
+    void runPayerSearch(query, true);
   };
+  useEffect(() => {
+    const payer = bill.claim.claimsAdministrator;
+    if (!payer?.name || payer.name.trim().length < 2) return;
+    void runPayerSearch(payer.name, !payer.id);
+  }, [bill.claim.claimsAdministrator?.id, bill.claim.claimsAdministrator?.name, bill.claim.claimNumber, runPayerSearch]);
   const loadDiagnoses = (query: string, append = false) => {
     const trimmed = query.trim();
     const search = onSearchDiagnoses ?? referenceClient?.searchDiagnosisCodes;
@@ -529,10 +645,12 @@ export function BillSubmissionForm({
 
   async function submit(): Promise<void> {
     const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: submittedLines(bill.serviceLines).map((line) => { const charge = lineCharge(line); return charge == null ? line : { ...line, charge }; }) };
-    const validation = validateBillSubmission(clean); setValidationActive(true); setErrors(validation.fieldErrors); setFormError(null);
-    if (!validation.valid) {
-      const count = Object.keys(validation.fieldErrors).length;
-      const first = Object.values(validation.fieldErrors)[0];
+    const validation = validateBillSubmission(clean);
+    const fieldErrors = missingAttachmentReportType ? { ...validation.fieldErrors, attachments: "Select a report type for every attachment." } : validation.fieldErrors;
+    setValidationActive(true); setErrors(fieldErrors); setFormError(null);
+    if (Object.keys(fieldErrors).length) {
+      const count = Object.keys(fieldErrors).length;
+      const first = Object.values(fieldErrors)[0];
       setFormError(`Fix ${count} highlighted field${count === 1 ? "" : "s"} before submitting. ${first}`);
       window.requestAnimationFrame(() => { if (formRef.current) focusFirstInvalid(formRef.current); });
       return;
@@ -540,13 +658,15 @@ export function BillSubmissionForm({
     if (selectedIds.length + uploads.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
     setSubmitting(true); try {
       if (onSubmit) {
-        await onSubmit({ bill: clean, sourceAttachmentIds: selectedIds, uploads });
+        await onSubmit({ bill: clean, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads });
       } else {
         if (!submissionClient) throw new Error("The connected billing client is unavailable.");
         const documents = await prepareBillSubmissionDocuments({
           attachments,
           selectedIds,
           uploads,
+          reportTypeCodeByAttachmentId: sourceAttachmentReportTypes,
+          ...(forcedAttachmentReportType ? { defaultReportTypeCode: forcedAttachmentReportType } : {}),
           ...(fetchOverride ? { fetch: fetchOverride } : {}),
         });
         const result = await submissionClient.submitBill({ bill: clean, documents });
@@ -557,7 +677,10 @@ export function BillSubmissionForm({
     finally { setSubmitting(false); }
   }
 
-  const claimsAdministratorError = errors["claim.claimsAdministrator"] ?? (!bill.claim.claimsAdministrator?.id ? "Required for routing — search and select a claims administrator." : undefined);
+  const claimsAdministratorError = errors["claim.claimsAdministrator"];
+  const selectedPayer = payerResults.find((payer) => payer.id === bill.claim.claimsAdministrator?.id);
+  const payerRecommendations = bill.claim.claimsAdministrator?.id ? [] : claimsAdministratorRecommendations(payerResults);
+  const choosePayer = (payer: Pick<BillReviewPayer, "id" | "name">) => setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: { id: payer.id, name: payer.name } } }));
 
   const headerSection = <div className="mbsf-head"><div><h3 className="mbsf-title">{heading}</h3><p className="mbsf-copy">{description}</p></div><span className="mbsf-required"><RequiredMark /> Required</span></div>;
 
@@ -579,7 +702,13 @@ export function BillSubmissionForm({
       <Field label="Employer (optional)">{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
       <Field path="claim.claimNumber" label="Claim number" required error={errors["claim.claimNumber"]}>{text(bill.claim.claimNumber, (claimNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, claimNumber } })))}</Field>
       <Field label="WCAB / ADJ number (optional)">{text(bill.claim.adjNumber, (adjNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, adjNumber } })))}</Field>
-      <Field path="claim.claimsAdministrator" label="Claims administrator" required span error={claimsAdministratorError}><ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError)} disabled={locked} loading={payerLoading} value={bill.claim.claimsAdministrator?.name ?? ""} placeholder="Search the payer directory…" options={payerResults.map((payer) => ({ id: payer.id, label: payer.name, detail: [payer.hasElectronic ? "Electronic" : "Work comp", ...(payer.states ?? [])].join(" · ") }))} onQuery={searchPayers} onSelect={(option) => setBill((c) => ({ ...c, claim: { ...c.claim, claimsAdministrator: { id: option.id, name: option.label } } }))} /></Field>
+      <Field path="claim.claimsAdministrator" label="Claims administrator" required span error={claimsAdministratorError}>
+        <ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError)} disabled={locked} loading={payerLoading} preserveValueOnOpen value={bill.claim.claimsAdministrator?.name ?? ""} placeholder="Search the payer directory…" options={payerResults.map((payer) => ({ id: payer.id, label: payer.name, detail: [payer.hasElectronic ? "Electronic" : "Work comp", ...(payer.states ?? [])].join(" · ") }))} onQuery={searchPayers} onSelect={(option) => choosePayer({ id: option.id, name: option.label })} />
+        {selectedPayer ? <div className="mbsf-payer-status" role="status"><strong>✓ Routing match set:</strong> {selectedPayer.name}</div> : null}
+        {selectedPayer?.signals?.length ? <div className="mbsf-payer-signals">{selectedPayer.signals.map((signal, index) => <span data-state={signal.state} key={`${signal.kind}-${index}`}>{signal.state === "match" ? "✓" : "!"} {signal.label}</span>)}</div> : null}
+        {!selectedPayer && payerRecommendations.length ? <><p className="mbsf-payer-intro">Confirm the best routing match for <strong>{bill.claim.claimsAdministrator?.name}</strong>:</p><div className="mbsf-payer-list">{payerRecommendations.map((payer) => <div className="mbsf-payer-option" key={payer.id}><div className="mbsf-payer-option-main"><strong>{payer.name}</strong>{payer.signals?.length ? <div className="mbsf-payer-signals">{payer.signals.map((signal, index) => <span data-state={signal.state} key={`${signal.kind}-${index}`}>{signal.state === "match" ? "✓" : "!"} {signal.label}</span>)}</div> : <small className="mbsf-help">Directory match</small>}</div><button className="mbsf-secondary" type="button" onClick={() => choosePayer(payer)}>Use</button></div>)}</div></> : null}
+        {!selectedPayer && !payerLoading && !payerRecommendations.length && (bill.claim.claimsAdministrator?.name.trim().length ?? 0) >= 2 ? <small className="mbsf-help">No confident route selected yet. Search the directory and choose a claims administrator.</small> : null}
+      </Field>
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
       <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required span error={errors.diagnoses}>
         <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = (bill.diagnoses ?? []).includes(option.code); return <button className="mbsf-quick-pick" data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => ({ ...current, diagnoses: selected ? (current.diagnoses ?? []).filter((code) => code !== option.code) : [...new Set([...(current.diagnoses ?? []), option.code])] }))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>
@@ -618,10 +747,10 @@ export function BillSubmissionForm({
       </div>{errors.serviceLines ? <p className="mbsf-error" role="alert">{errors.serviceLines}</p> : null}
     </fieldset>;
 
-  const attachmentsSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Attachments</legend><div className="mbsf-attach-list">
-      {attachments.filter((attachment) => !removedSourceIds.includes(attachment.id)).map((attachment) => { const auto = attachment.autoAttached || attachment.documentType === "w9"; const removable = !auto && attachment.removable !== false; return <div className="mbsf-attach-row" data-auto={auto} key={attachment.id}><div className="mbsf-attach-main">{auto ? <span aria-label="Always attached" role="img">✓</span> : null}<span className="mbsf-file"><strong>{attachment.fileName}</strong><span className="mbsf-badge">{auto ? "Auto-attached" : documentLabels[attachment.documentType]}</span><span className="mbsf-help" style={{ display: "block" }}>{attachment.description || (auto ? "Included automatically with every bill." : documentLabels[attachment.documentType])}</span></span></div><div className="mbsf-attach-actions">{attachment.previewUrl ? <a className="mbsf-secondary" href={attachment.previewUrl} target="_blank" rel="noopener noreferrer">Preview</a> : null}{removable ? <button className="mbsf-icon-btn" type="button" aria-label={`Remove ${attachment.fileName}`} disabled={locked} onClick={() => { setSelectedIds((current) => current.filter((id) => id !== attachment.id)); setRemovedSourceIds((current) => [...new Set([...current, attachment.id])]); }}>×</button> : null}</div></div>; })}
-      {uploads.map((upload, index) => <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div><div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>)}
-    </div><input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
+  const attachmentsSection = <fieldset className="mbsf-card" data-field-path="attachments" data-invalid={Boolean(errors.attachments)} disabled={locked}><legend className="mbsf-legend">Attachments</legend><div className="mbsf-attach-list">
+      {attachments.filter((attachment) => !removedSourceIds.includes(attachment.id)).map((attachment) => { const auto = attachment.autoAttached || attachment.documentType === "w9"; const removable = !auto && attachment.removable !== false; const reportTypeCode = sourceAttachmentReportTypes[attachment.id] || attachment.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" data-auto={auto} key={attachment.id}><div className="mbsf-attach-main">{auto ? <span aria-label="Always attached" role="img">✓</span> : null}<span className="mbsf-file"><strong>{attachment.fileName}</strong><span className="mbsf-badge">{auto ? "Auto-attached" : documentLabels[attachment.documentType]}</span><span className="mbsf-help" style={{ display: "block" }}>{attachment.description || (auto ? "Included automatically with every bill." : documentLabels[attachment.documentType])}</span></span></div>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${attachment.fileName}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setSourceAttachmentReportTypes((current) => ({ ...current, [attachment.id]: option.id }))} /></div> : null}<div className="mbsf-attach-actions">{attachment.previewUrl ? <a className="mbsf-secondary" href={attachment.previewUrl} target="_blank" rel="noopener noreferrer">Preview</a> : null}{removable ? <button className="mbsf-icon-btn" type="button" aria-label={`Remove ${attachment.fileName}`} disabled={locked} onClick={() => { setSelectedIds((current) => current.filter((id) => id !== attachment.id)); setRemovedSourceIds((current) => [...new Set([...current, attachment.id])]); }}>×</button> : null}</div></div>; })}
+      {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
+    </div>{errors.attachments ? <p className="mbsf-error" role="alert">{errors.attachments}</p> : null}<input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
 
   const actionsSection = <>{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions"><button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
   const sections: BillSubmissionSections = {
