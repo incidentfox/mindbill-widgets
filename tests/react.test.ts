@@ -42,6 +42,7 @@ import {
   parseBillSubmissionDate,
   prepareBillSubmissionDocuments,
   type BillSubmissionInput,
+  type CompleteBillSubmissionInput,
   validateBillSubmission,
 } from "../packages/react/src/bill-submission-form";
 import type { CreateBillRequest } from "../packages/node/src/index";
@@ -103,7 +104,7 @@ describe("partner appearance presets", () => {
 });
 
 describe("atomic bill submission form contract", () => {
-  const validBill: BillSubmissionInput = {
+  const validBill = {
     externalId: "evaluation_123",
     billingMode: "med_legal",
     patient: {
@@ -119,12 +120,41 @@ describe("atomic bill submission form contract", () => {
     },
     claim: {
       claimNumber: "CLAIM-7",
+      employer: "Synthetic Foods",
+      dateOfInjury: "2026-08-01",
       claimsAdministrator: { id: "payer_7", name: "Synthetic Claims Administrator" },
     },
     service: { date: "2026-08-24" },
+    billingProvider: {
+      name: "Synthetic Medical Group",
+      taxId: "123456789",
+      npi: "1234567890",
+      phone: "9165550100",
+      address: {
+        line1: "200 Billing Avenue",
+        city: "Sacramento",
+        state: "CA",
+        postalCode: "95814",
+      },
+    },
+    renderingProvider: {
+      name: "Ada Physician",
+      npi: "1098765432",
+      taxonomy: "2084P0800X",
+    },
+    serviceLocation: {
+      name: "Sacramento Exam Office",
+      placeOfServiceCode: "11",
+      address: {
+        line1: "300 Service Street",
+        city: "Sacramento",
+        state: "CA",
+        postalCode: "95814",
+      },
+    },
     diagnoses: ["M79.641"],
     serviceLines: [{ code: "ML201", units: 1 }],
-  };
+  } satisfies CompleteBillSubmissionInput;
 
   it("uses the same browser-safe bill shape as the server SDK", () => {
     const sdkInput: CreateBillRequest = validBill;
@@ -136,7 +166,13 @@ describe("atomic bill submission form contract", () => {
   it("owns and exports required-field rules", () => {
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.dateOfBirth");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.address.state");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("claim.employer");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("claim.dateOfInjury");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("claim.claimsAdministrator");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("billingProvider.taxId");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("renderingProvider.taxonomy");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("serviceLocation.address.line1");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("serviceLocation.placeOfServiceCode");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("diagnoses[]");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("serviceLines[].code");
     expect(validateBillSubmission(validBill)).toEqual({
@@ -401,9 +437,25 @@ describe("connected bill submission", () => {
         },
         claim: {
           claimNumber: "TEST-CLAIM-1",
+          employer: "Synthetic Employer",
+          dateOfInjury: "2026-08-01",
           claimsAdministrator: { id: "payer_123", name: "Synthetic Payer" },
         },
         service: { date: "2026-08-31" },
+        billingProvider: {
+          name: "Synthetic Medical Group",
+          taxId: "123456789",
+          npi: "1234567890",
+          phone: "9165550100",
+          address: { line1: "200 Billing Avenue", city: "Sacramento", state: "CA", postalCode: "95814" },
+        },
+        renderingProvider: { name: "Ada Physician", npi: "1098765432", taxonomy: "2084P0800X" },
+        serviceLocation: {
+          name: "Sacramento Exam Office",
+          placeOfServiceCode: "11",
+          address: { line1: "300 Service Street", city: "Sacramento", state: "CA", postalCode: "95814" },
+        },
+        diagnoses: ["M79.641"],
         serviceLines: [{ code: "ML201", units: 1 }],
       },
       documents: [{

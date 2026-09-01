@@ -416,6 +416,7 @@ export type SimulateSandboxBillInput = {
 
 export type BrowserBillAddress = {
   line1: string;
+  line2?: string;
   city: string;
   state: string;
   postalCode: string;
@@ -442,27 +443,27 @@ export type BrowserBillCreateInput = {
     externalId?: string;
     claimNumber: string;
     adjNumber?: string;
-    employer?: string;
-    dateOfInjury?: string;
+    employer: string;
+    dateOfInjury: string;
     injuryState?: string;
     description?: string;
-    claimsAdministrator?: { id?: string; name: string };
+    claimsAdministrator: { id: string; name: string };
   };
-  service: { date?: string; endDate?: string | null; authorizationNumber?: string | null };
-  billingProvider?: { name?: string; taxId?: string; npi?: string; phone?: string; address?: BrowserBillAddress };
-  renderingProvider?: {
-    name?: string;
+  service: { date: string; endDate?: string | null; authorizationNumber?: string | null };
+  billingProvider: { name: string; taxId: string; npi: string; phone: string; address: BrowserBillAddress };
+  renderingProvider: {
+    name: string;
     specialty?: string;
-    npi?: string;
-    taxonomy?: string;
+    npi: string;
+    taxonomy: string;
     licenseNumber?: string;
     licenseState?: string;
     isQme?: boolean;
     isAme?: boolean;
   };
-  serviceLocation?: { name?: string; address?: BrowserBillAddress; placeOfServiceCode?: string };
-  diagnoses?: string[];
-  serviceLines?: Array<{
+  serviceLocation: { name?: string; address: BrowserBillAddress; placeOfServiceCode: string };
+  diagnoses: string[];
+  serviceLines: Array<{
     code: string;
     modifiers?: string[];
     units?: number;

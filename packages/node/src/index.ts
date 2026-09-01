@@ -24,6 +24,7 @@ export type MindBillClientOptions = {
 
 export type Address = {
   line1: string;
+  line2?: string;
   city: string;
   state: string;
   postalCode: string;
@@ -51,26 +52,26 @@ export type ClaimSnapshot = {
   externalId?: string;
   claimNumber: string;
   adjNumber?: string;
-  employer?: string;
-  dateOfInjury?: string;
+  employer: string;
+  dateOfInjury: string;
   injuryState?: string;
   description?: string;
-  claimsAdministrator?: ClaimsAdministratorReference;
+  claimsAdministrator: ClaimsAdministratorReference & { id: string };
 };
 
 export type BillingProviderSnapshot = {
-  name?: string;
-  taxId?: string;
-  npi?: string;
-  phone?: string;
-  address?: Address;
+  name: string;
+  taxId: string;
+  npi: string;
+  phone: string;
+  address: Address;
 };
 
 export type RenderingProviderSnapshot = {
-  name?: string;
+  name: string;
   specialty?: string;
-  npi?: string;
-  taxonomy?: string;
+  npi: string;
+  taxonomy: string;
   licenseNumber?: string;
   licenseState?: string;
   isQme?: boolean;
@@ -79,8 +80,8 @@ export type RenderingProviderSnapshot = {
 
 export type ServiceLocationSnapshot = {
   name?: string;
-  address?: Address;
-  placeOfServiceCode?: string;
+  address: Address;
+  placeOfServiceCode: string;
 };
 
 export type ServiceLine = {
@@ -108,10 +109,10 @@ export type CreateBillRequest = {
     endDate?: string | null;
     authorizationNumber?: string | null;
   };
-  billingProvider?: BillingProviderSnapshot;
-  renderingProvider?: RenderingProviderSnapshot;
-  serviceLocation?: ServiceLocationSnapshot;
-  diagnoses?: string[];
+  billingProvider: BillingProviderSnapshot;
+  renderingProvider: RenderingProviderSnapshot;
+  serviceLocation: ServiceLocationSnapshot;
+  diagnoses: string[];
   serviceLines: Array<Omit<ServiceLine, "id">>;
 };
 
