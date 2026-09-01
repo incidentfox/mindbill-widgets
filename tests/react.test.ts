@@ -117,6 +117,7 @@ describe("atomic bill submission form contract", () => {
       claimsAdministrator: { id: "payer_7", name: "Synthetic Claims Administrator" },
     },
     service: { date: "2026-08-24" },
+    diagnoses: ["M79.641"],
     serviceLines: [{ code: "ML201", units: 1 }],
   };
 
@@ -131,10 +132,20 @@ describe("atomic bill submission form contract", () => {
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.dateOfBirth");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.address.state");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("claim.claimsAdministrator");
+    expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("diagnoses[]");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("serviceLines[].code");
     expect(validateBillSubmission(validBill)).toEqual({
       valid: true,
       fieldErrors: {},
+    });
+  });
+
+  it("requires at least one ICD-10 diagnosis code", () => {
+    expect(validateBillSubmission({ ...validBill, diagnoses: [] })).toEqual({
+      valid: false,
+      fieldErrors: {
+        diagnoses: "Select at least one ICD-10 diagnosis code.",
+      },
     });
   });
 

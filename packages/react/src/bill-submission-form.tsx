@@ -115,6 +115,7 @@ export const BILL_SUBMISSION_REQUIRED_FIELDS = [
   "patient.firstName", "patient.lastName", "patient.dateOfBirth", "patient.address.line1",
   "patient.address.city", "patient.address.state", "patient.address.postalCode",
   "claim.claimNumber", "claim.claimsAdministrator", "service.date",
+  "diagnoses[]",
   "serviceLines[].code", "serviceLines[].units",
 ] as const;
 
@@ -277,6 +278,9 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("claim.claimNumber", bill.claim.claimNumber, "Enter the claim number.");
   required("claim.claimsAdministrator", bill.claim.claimsAdministrator?.name, "Select a claims administrator so MindBill can route this bill.");
   required("service.date", bill.service.date, "Enter the date of service.");
+  if (!(bill.diagnoses ?? []).some((code) => code.trim())) {
+    errors.diagnoses = "Select at least one ICD-10 diagnosis code.";
+  }
   if (bill.claim.claimsAdministrator?.name && !bill.claim.claimsAdministrator.id) {
     errors["claim.claimsAdministrator"] = "Select a claims administrator from the payer directory.";
   }
@@ -553,10 +557,10 @@ export function BillSubmissionForm({
       <Field label="WCAB / ADJ number (optional)">{text(bill.claim.adjNumber, (adjNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, adjNumber } })))}</Field>
       <Field path="claim.claimsAdministrator" label="Claims administrator" required span error={claimsAdministratorError}><ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError)} disabled={locked} loading={payerLoading} value={bill.claim.claimsAdministrator?.name ?? ""} placeholder="Search the payer directory…" options={payerResults.map((payer) => ({ id: payer.id, label: payer.name, detail: [payer.hasElectronic ? "Electronic" : "Work comp", ...(payer.states ?? [])].join(" · ") }))} onQuery={searchPayers} onSelect={(option) => setBill((c) => ({ ...c, claim: { ...c.claim, claimsAdministrator: { id: option.id, name: option.label } } }))} /></Field>
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
-      <Field label="Diagnosis codes (ICD-10)" span>
+      <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required span error={errors.diagnoses}>
         <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = (bill.diagnoses ?? []).includes(option.code); return <button className="mbsf-quick-pick" data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => ({ ...current, diagnoses: selected ? (current.diagnoses ?? []).filter((code) => code !== option.code) : [...new Set([...(current.diagnoses ?? []), option.code])] }))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>
         <div className="mbsf-chips">{(bill.diagnoses ?? []).map((code) => { const option = [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisChoices].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}<button type="button" aria-label={`Remove ${code}`} onClick={() => setBill((c) => ({ ...c, diagnoses: (c.diagnoses ?? []).filter((item) => item !== code) }))}>×</button></span>; })}</div>
-        <ComboBox ariaLabel="Add diagnosis code" disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={diagnosisChoices.filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => { if (diagnosisQuery !== "") loadDiagnoses(""); }} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((c) => ({ ...c, diagnoses: [...new Set([...(c.diagnoses ?? []), option.id])] }))} />
+        <ComboBox ariaLabel="Add diagnosis code" invalid={Boolean(errors.diagnoses)} disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={diagnosisChoices.filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => { if (diagnosisQuery !== "") loadDiagnoses(""); }} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((c) => ({ ...c, diagnoses: [...new Set([...(c.diagnoses ?? []), option.id])] }))} />
       </Field>
     </div></fieldset>;
 
