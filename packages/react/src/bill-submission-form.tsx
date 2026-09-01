@@ -249,6 +249,30 @@ export function applyBillSubmissionEvaluationModifiers(
   });
 }
 
+export const PSYCH_QME_DEFAULT_DIAGNOSIS = "Z04.6";
+
+/** Seed Psych QME's general examination code only when no diagnosis was supplied. */
+export function applyBillSubmissionEvaluationDiagnoses(
+  diagnoses: string[] | undefined,
+  type: BillSubmissionEvaluationType,
+): string[] {
+  const current = [...(diagnoses ?? [])];
+  return type === "psych_qme" && !current.some((code) => code.trim())
+    ? [PSYCH_QME_DEFAULT_DIAGNOSIS]
+    : current;
+}
+
+function initialEvaluationType(bill: BillSubmissionInput): BillSubmissionEvaluationType {
+  if (bill.renderingProvider?.isAme) return "ame";
+  return bill.renderingProvider?.specialty?.toLowerCase().includes("psych") ? "psych_qme" : "qme";
+}
+
+function cloneInitialBill(bill: BillSubmissionInput): BillSubmissionInput {
+  const cloned = cloneBill(bill);
+  cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
+  return cloned;
+}
+
 function submittedLines(lines: BillSubmissionInput["serviceLines"]): BillSubmissionInput["serviceLines"] {
   return lines.filter(lineHasContent).map((line) => ({ ...line, code: line.code.trim(), modifiers: [...(line.modifiers ?? [])] }));
 }
@@ -405,7 +429,7 @@ export function BillSubmissionForm({
   description = "Review the bill details, add attachments, and submit.",
   children,
 }: BillSubmissionFormProps): ReactElement {
-  const [bill, setBill] = useState(() => cloneBill(initialBill));
+  const [bill, setBill] = useState(() => cloneInitialBill(initialBill));
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
   const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
   const [uploads, setUploads] = useState<BillSubmissionUpload[]>([]); const [errors, setErrors] = useState<Record<string, string>>({});
@@ -420,14 +444,14 @@ export function BillSubmissionForm({
   const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false);
   const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, procedureOptions), [procedureOptions]);
   const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
-  const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialBill.renderingProvider?.isAme ? "ame" : initialBill.renderingProvider?.specialty?.toLowerCase().includes("psych") ? "psych_qme" : "qme");
+  const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialEvaluationType(initialBill));
   const connected = !onSubmit;
   const referenceClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const submissionClient = useMemo(() => connected ? createBillSubmissionClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const locked = disabled || submitting;
 
   useEffect(() => {
-    setBill(cloneBill(initialBill)); setSelectedIds(attachments.map((item) => item.id));
+    setBill(cloneInitialBill(initialBill)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
     setRemovedSourceIds([]); setUploads([]); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
   }, [initialBill, attachments]);
@@ -498,7 +522,7 @@ export function BillSubmissionForm({
     setPostalStatus("Looking up ZIP…"); void lookup(postalCode).then((place) => { if (!place) return setPostalStatus("ZIP not found"); setAddress({ city: place.city, state: place.state.toUpperCase() }); setPostalStatus(`${place.city}, ${place.state.toUpperCase()} filled from ZIP`); }).catch(() => setPostalStatus("ZIP lookup unavailable"));
   };
   const changeEvaluation = (type: BillSubmissionEvaluationType) => {
-    setEvaluationType(type); setBill((current) => ({ ...current, renderingProvider: { ...current.renderingProvider, isAme: type === "ame", isQme: type !== "ame", ...(type === "psych_qme" && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(current.serviceLines, type) }));
+    setEvaluationType(type); setBill((current) => ({ ...current, diagnoses: applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type), renderingProvider: { ...current.renderingProvider, isAme: type === "ame", isQme: type !== "ame", ...(type === "psych_qme" && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(current.serviceLines, type) }));
   };
   const lineCharge = (line: BillSubmissionInput["serviceLines"][number]) => calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
   const total = submittedLines(bill.serviceLines).reduce((sum, line) => sum + (lineCharge(line) ?? 0), 0);

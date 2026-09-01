@@ -78,6 +78,7 @@ export const DEFAULT_BILL_SUBMISSION_MODIFIERS: BillSubmissionModifierOption[] =
 ];
 
 export const BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS: Array<BillSubmissionDiagnosisOption & { label: string }> = [
+  { label: "Psych", code: "Z04.6", description: "General psychiatric examination requested by authority" },
   { label: "Back", code: "M54.50", description: "Low back pain, unspecified" },
   { label: "Neck", code: "M54.2", description: "Cervicalgia" },
   { label: "Left hand", code: "M79.642", description: "Pain in left hand" },
