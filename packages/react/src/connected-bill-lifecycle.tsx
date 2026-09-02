@@ -380,7 +380,7 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
     {data.lifecycle.state.toLowerCase() === "rejected" && data.rejection
-      ? <BillRejectionNotice rejection={data.rejection} {...(appearance ? { appearance } : {})} />
+      ? <BillRejectionNotice rejection={data.rejection} submittedAt={data.lifecycle.submittedAt ?? null} {...(appearance ? { appearance } : {})} />
       : <BillLifecycleProgress state={data.lifecycle.state} nativeStatus={data.lifecycle.nativeStatus} submittedAt={data.lifecycle.submittedAt ?? null} agingDays={data.lifecycle.agingDays ?? null} {...(appearance ? { appearance } : {})} />}
 
     <header className="mb-lifecycle-head">

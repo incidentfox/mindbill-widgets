@@ -1,5 +1,8 @@
 export * from "./lib/lifecycle-store";
+export * from "./lib/appearance";
+export * from "./lib/bill-rejection";
 export * from "./lib/bill-lifecycle.component";
+export * from "./lib/bill-rejection-notice.component";
 export * from "./lib/procedure-lines";
 export * from "./lib/billing-dashboard.component";
 export * from "./lib/status-aging-matrix";
@@ -18,6 +21,8 @@ export type {
   BillLifecycleSession,
   BillLifecycleSessionProvider,
   BillReviewData,
+  BillRejection,
+  BillRejectionIssue,
   BillSubmissionRoute,
   CloseBillInput,
   PostBillPaymentInput,
