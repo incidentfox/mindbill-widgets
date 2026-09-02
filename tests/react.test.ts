@@ -23,6 +23,7 @@ import {
 import {
   billActivityEventLabel,
   billLifecycleDisplayLabel,
+  billLifecycleProgressSteps,
   billLifecycleStage,
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
@@ -638,6 +639,14 @@ describe("bill lifecycle surfaces", () => {
     expect(billLifecycleStage("denied")).toBe("processed");
     expect(billLifecycleStage("paid")).toBe("processed");
     expect(billLifecycleStage("closed")).toBe("closed");
+  });
+
+  it("renders rejection as a terminal exception rail instead of a pending happy path", () => {
+    expect(billLifecycleProgressSteps("rejected")).toEqual([
+      { id: "submitted", label: "Sent", status: "complete" },
+      { id: "rejected", label: "Rejected", status: "current" },
+    ]);
+    expect(billLifecycleProgressSteps("accepted")).toHaveLength(4);
   });
 
   it("uses human labels while preserving immutable API states", () => {

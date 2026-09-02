@@ -137,6 +137,12 @@ const lifecycleStages: Array<{ id: BillLifecycleStage; label: string }> = [
   { id: "closed", label: "Closed" },
 ];
 
+export type BillLifecycleProgressStep = {
+  id: string;
+  label: string;
+  status: "complete" | "current" | "upcoming";
+};
+
 /** Maps MindBill's detailed lifecycle state into a compact progress stage. */
 export function billLifecycleStage(state: string): BillLifecycleStage {
   const value = state.toLowerCase();
@@ -145,6 +151,28 @@ export function billLifecycleStage(state: string): BillLifecycleStage {
   if (value.includes("processed") || value.includes("paid") || value.includes("denied") || value.includes("partial") || value.includes("response") || value.includes("ibr") || value.includes("lien")) return "processed";
   if (value.includes("accepted")) return "accepted";
   return "submitted";
+}
+
+/** Builds the progress rail for a lifecycle state, including terminal exception paths. */
+export function billLifecycleProgressSteps(state: string): BillLifecycleProgressStep[] {
+  if (state.toLowerCase() === "rejected") {
+    return [
+      { id: "submitted", label: "Sent", status: "complete" },
+      { id: "rejected", label: "Rejected", status: "current" },
+    ];
+  }
+
+  const current = billLifecycleStage(state);
+  const currentIndex = lifecycleStages.findIndex((stage) => stage.id === current);
+  return lifecycleStages.map((stage, index) => ({
+    ...stage,
+    status:
+      index < currentIndex
+        ? "complete"
+        : index === currentIndex
+          ? "current"
+          : "upcoming",
+  }));
 }
 
 /** Returns the end-user label for a canonical lifecycle state. */
@@ -167,17 +195,19 @@ export type BillLifecycleProgressProps = SurfaceProps & {
 };
 
 export function BillLifecycleProgress({ state, nativeStatus, submittedAt, agingDays, appearance, className, style }: BillLifecycleProgressProps): ReactElement {
-  const current = billLifecycleStage(state);
-  const currentIndex = lifecycleStages.findIndex((stage) => stage.id === current);
+  const rejected = state.toLowerCase() === "rejected";
+  const steps = billLifecycleProgressSteps(state);
   return (
-    <section className={classes("mb-surface mb-progress", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill lifecycle">
+    <section className={classes(`mb-surface mb-progress${rejected ? " is-rejected" : ""}`, className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill lifecycle">
       <style>{lifecycleSurfaceStyles}</style>
-      <header className="mb-surface-heading"><div><strong>{billLifecycleDisplayLabel(state, nativeStatus)}</strong><span>{submittedAt ? `Submitted ${defaultFormatDate(submittedAt)}` : "Submitted"}{typeof agingDays === "number" ? ` · ${agingDays} days old` : ""}</span></div></header>
-      <ol className="mb-progress-list">
-        {lifecycleStages.map((stage, index) => {
-          const status = index < currentIndex ? "complete" : index === currentIndex ? "current" : "upcoming";
-          return <li key={stage.id} className={`is-${status}`} aria-current={status === "current" ? "step" : undefined}><span aria-hidden="true">{status === "complete" ? "✓" : index + 1}</span><b>{stage.label}</b></li>;
-        })}
+      <header className="mb-surface-heading"><div><strong>{billLifecycleDisplayLabel(state, nativeStatus)}</strong><span>{rejected ? "The payer rejected this submission." : `${submittedAt ? `Submitted ${defaultFormatDate(submittedAt)}` : "Submitted"}${typeof agingDays === "number" ? ` · ${agingDays} days old` : ""}`}</span></div></header>
+      <ol className="mb-progress-list" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
+        {steps.map((step, index) => (
+          <li key={step.id} className={`is-${step.status}`} aria-current={step.status === "current" ? "step" : undefined}>
+            <span aria-hidden="true">{step.status === "complete" ? "✓" : rejected && step.status === "current" ? "!" : index + 1}</span>
+            <b>{step.label}</b>
+          </li>
+        ))}
       </ol>
     </section>
   );
@@ -361,6 +391,7 @@ const lifecycleSurfaceStyles = `
 .mb-lifecycle-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.mb-lifecycle-action{display:grid;gap:5px;max-width:260px}.mb-action-button{appearance:none;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius,8px);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:700;line-height:1.2;padding:11px 15px;cursor:pointer}.mb-action-button:hover:not(:disabled){border-color:var(--mb-accent);color:var(--mb-accent)}.mb-action-button:focus-visible{outline:3px solid color-mix(in srgb,var(--mb-accent) 28%,transparent);outline-offset:2px}.mb-action-button.is-primary{background:var(--mb-accent);border-color:var(--mb-accent);color:var(--mb-accent-contrast)}.mb-action-button:disabled{cursor:not-allowed;opacity:.55}.mb-action-reason{color:var(--mb-muted);font-size:12px;line-height:1.35}
 .mb-activity-list{list-style:none;margin:0;padding:0}.mb-activity-item{display:grid;grid-template-columns:18px minmax(0,1fr);gap:12px;position:relative;padding:0 0 22px}.mb-activity-item:last-child{padding-bottom:0}.mb-activity-item:not(:last-child)::before{background:var(--mb-border);content:"";left:8px;position:absolute;top:10px;bottom:0;width:1px}.mb-activity-marker{background:var(--mb-surface);border:3px solid var(--mb-accent);border-radius:999px;height:11px;margin-top:4px;position:relative;width:11px;z-index:1}.mb-activity-content{display:grid;gap:4px;min-width:0}.mb-activity-content strong{font-size:15px;line-height:1.35}.mb-activity-content p{color:var(--mb-text);font-size:14px;line-height:1.5;margin:0}.mb-activity-content span,.mb-activity-empty{color:var(--mb-muted);font-size:13px;line-height:1.45}.mb-activity-empty,.mb-empty{margin:0}
 .mb-progress-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));list-style:none;margin:0;padding:0}.mb-progress-list li{display:grid;gap:7px;position:relative;text-align:center;color:var(--mb-muted);font-size:12px}.mb-progress-list li:not(:last-child)::after{content:"";position:absolute;left:calc(50% + 14px);right:calc(-50% + 14px);top:13px;height:2px;background:var(--mb-border)}.mb-progress-list li.is-complete:not(:last-child)::after{background:var(--mb-accent)}.mb-progress-list li>span{display:grid;place-items:center;justify-self:center;position:relative;z-index:1;width:28px;height:28px;border:2px solid var(--mb-border);border-radius:50%;background:var(--mb-surface);font-weight:800}.mb-progress-list li.is-complete>span,.mb-progress-list li.is-current>span{border-color:var(--mb-accent);background:var(--mb-accent);color:var(--mb-accent-contrast)}.mb-progress-list li.is-current{color:var(--mb-text)}
+.mb-progress.is-rejected{border-color:color-mix(in srgb,var(--mb-danger) 48%,var(--mb-border));background:color-mix(in srgb,var(--mb-danger) 5%,var(--mb-surface));box-shadow:0 8px 24px color-mix(in srgb,var(--mb-danger) 12%,transparent)}.mb-progress.is-rejected .mb-surface-heading strong,.mb-progress.is-rejected .mb-progress-list li.is-current{color:var(--mb-danger)}.mb-progress.is-rejected .mb-progress-list li.is-complete:not(:last-child)::after{background:var(--mb-danger)}.mb-progress.is-rejected .mb-progress-list li.is-complete>span,.mb-progress.is-rejected .mb-progress-list li.is-current>span{border-color:var(--mb-danger);background:var(--mb-danger);color:#fff}
 .mb-snapshot dl,.mb-remittance dl,.mb-contacts dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:0}.mb-remittance dl{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:1px;background:var(--mb-border)}.mb-snapshot dl>div,.mb-remittance dl>div,.mb-contacts dl>div{display:grid;gap:3px;padding:10px 14px;border-left:1px solid var(--mb-border)}.mb-remittance dl>div{border:0;background:var(--mb-surface)}.mb-snapshot dl>div:nth-child(3n+1),.mb-contacts dl>div:first-child{border-left:0}.mb-snapshot dt,.mb-remittance dt,.mb-contacts dt,.mb-payment-list dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-snapshot dd,.mb-remittance dd,.mb-contacts dd,.mb-payment-list dd{font-size:14px;font-weight:750;margin:0;overflow-wrap:anywhere}.mb-contacts a{color:var(--mb-accent)}.mb-denial{margin-top:16px;border-left:4px solid var(--mb-danger);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 8%,var(--mb-surface));padding:12px 14px}.mb-denial p{margin:4px 0 0}
 .mb-payment-list{display:grid}.mb-payment-list article{display:grid;grid-template-columns:minmax(120px,.35fr) 1fr;gap:14px 24px;padding:16px 0;border-top:1px solid var(--mb-border)}.mb-payment-list article:first-child{border-top:0}.mb-payment-amount{display:grid;align-content:start;gap:2px}.mb-payment-amount strong{font-size:1.2rem}.mb-payment-list article>dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0}.mb-payment-list article>dl>div{display:grid;align-content:start;gap:3px}.mb-payment-list article span{color:var(--mb-muted);font-size:12px}.mb-payment-list article p{grid-column:1/-1;margin:0;color:var(--mb-muted);font-size:13px}
 .mb-eor-review{border-top:4px solid var(--mb-accent);padding-top:17px}.mb-eor-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 18px;border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}.mb-eor-metrics>div{display:grid;gap:4px;padding:13px 15px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border)}.mb-eor-metrics>div:nth-child(-n+4){border-top:0}.mb-eor-metrics>div:nth-child(4n+1){border-left:0}.mb-eor-metrics dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-eor-metrics dd{margin:0;font-size:15px;font-weight:800}.mb-eor-metrics .is-balance{background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface))}.mb-eor-table-wrap{overflow-x:auto;border:1px solid var(--mb-border);border-radius:10px}.mb-eor-table{width:100%;min-width:1080px;border-collapse:collapse;font-size:12px}.mb-eor-table th,.mb-eor-table td{padding:10px 12px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border);text-align:left;vertical-align:top}.mb-eor-table th:first-child,.mb-eor-table td:first-child{border-left:0}.mb-eor-table thead th{background:var(--mb-soft);color:var(--mb-muted);font-weight:800}.mb-eor-table .mb-eor-groups th{border-top:0;background:color-mix(in srgb,var(--mb-accent) 13%,var(--mb-surface));color:var(--mb-text);text-align:center}.mb-eor-table td>strong,.mb-eor-table td>span{display:block}.mb-eor-table td>span{margin-top:3px;color:var(--mb-muted)}.mb-eor-link,.mb-eor-documents button{border:0;background:transparent;color:var(--mb-accent);font:inherit;font-weight:750;padding:0;text-align:left;text-decoration:underline;cursor:pointer;overflow-wrap:anywhere}.mb-eor-documents{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}
