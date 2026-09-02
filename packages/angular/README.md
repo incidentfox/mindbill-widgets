@@ -6,13 +6,15 @@ Native Angular billing UI with built-in session renewal, bill lifecycle API call
 npm install @mindbill/angular @mindbill/node
 ```
 
-Import the standalone component and pass the ID returned by your server's atomic create-and-submit request.
+Import the standalone components. The submission component owns the review form, reference-directory lookups, validation, PDF upload, and atomic submission; the host app only provides initial case data and a short-lived browser session.
 
 ```ts
 import { Component } from "@angular/core";
 import {
   MindBillBillLifecycleComponent,
+  MindBillBillSubmissionComponent,
   MindBillBillingDashboardComponent,
+  MindBillBillingManagementButtonComponent,
   MindBillBillingReportComponent,
 } from "@mindbill/angular";
 
@@ -21,23 +23,39 @@ import {
   standalone: true,
   imports: [
     MindBillBillLifecycleComponent,
+    MindBillBillSubmissionComponent,
     MindBillBillingDashboardComponent,
+    MindBillBillingManagementButtonComponent,
     MindBillBillingReportComponent,
   ],
   template: `
+    @if (!billId) {
+      <mindbill-bill-submission
+        [initialBill]="initialBill"
+        [attachments]="attachments"
+        sessionEndpoint="/api/mindbill/session"
+        [appearance]="{ preset: 'clinical-blue' }"
+        (submitted)="billId = $event.bill.id"
+      />
+    } @else {
     <mindbill-bill-lifecycle
       [billId]="billId"
       sessionEndpoint="/api/mindbill/session"
       [appearance]="{ preset: 'clinical-blue' }"
     />
+    }
   `,
 })
 export class CaseBillingComponent {
-  billId = "bill_123";
+  billId = "";
+  initialBill = caseToMindBillInput(this.case);
+  attachments = [{ file: this.finalReport, description: "Final report" }];
 }
 ```
 
-The component loads and refreshes submitted-bill status, shows EORs, and exposes the correct payment, review, and close actions for the current state. It never creates or edits a bill.
+`MindBillBillSubmissionComponent` marks required fields, scrolls to invalid input, resolves ZIP codes, searches the MindBill claims-administrator and ICD-10 directories, calculates service-line totals, and uploads attachments. On success, render `MindBillBillLifecycleComponent` with the returned bill ID. The lifecycle component loads its own immutable bill snapshot, status, EORs, payments, history, and available actions.
+
+The default reference directories and field rules live in the component library. Hosts can provide custom procedure, modifier, and taxonomy options without reimplementing the form. For a fixture or Storybook, pass an async `submitter`; omit it in production so the component talks directly to the Partner API.
 
 Add one authenticated server endpoint. It maps the signed-in user's role to permissions and mints a short-lived token bound to your organization, that user, and the browser origin.
 
@@ -59,9 +77,22 @@ app.post("/api/mindbill/session", requireUser, async (req, res) => {
 
 Your permanent API key never reaches Angular. Available presets are `mindbill`, `qme-companion`, `orange-bright`, and `clinical-blue`; every visual token can also be overridden.
 
+## Billing management SSO
+
+Use the ready-made button wherever organization-level users should open the full MindBill workspace:
+
+```html
+<mindbill-billing-management-button
+  sessionEndpoint="/api/mindbill/management-session"
+  [appearance]="{ preset: 'clinical-blue' }"
+/>
+```
+
+The endpoint returns `{ "url": "https://app.mindbill.org/..." }` after authenticating the user and creating a short-lived management session. The component opens a blank tab synchronously, then navigates it after the request completes so Safari and other popup blockers do not discard the SSO window.
+
 ## Operations components
 
-The operations surfaces consume a normalized list of bills, so they can be used together or independently:
+The operations surfaces consume a normalized list of bills, so they can be used together or independently. The dashboard includes monthly submitted/closed metrics, clickable aging buckets, search, status filtering, and bill drill-down:
 
 ```html
 <mindbill-billing-dashboard
