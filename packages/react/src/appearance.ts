@@ -5,7 +5,8 @@ export type MindBillThemePreset =
   | "mindbill"
   | "qme-companion"
   | "orange-bright"
-  | "clinical-blue";
+  | "clinical-blue"
+  | "midnight-cyan";
 
 export type MindBillReactAppearance = MindBillAppearance & {
   /** A complete starting point. Individual tokens below always win. */
@@ -86,6 +87,23 @@ export const mindBillThemePresets = {
     successColor: "#389e0d",
     warningColor: "#d48806",
     fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+  },
+  "midnight-cyan": {
+    accentColor: "#05092e",
+    accentTextColor: "#ffffff",
+    backgroundColor: "#edf6ff",
+    surfaceColor: "#ffffff",
+    inputBackgroundColor: "#ffffff",
+    textColor: "#05092e",
+    mutedColor: "#596078",
+    borderColor: "#d9dae1",
+    borderRadius: "0px",
+    controlRadius: "999px",
+    shadow: "0 1px 2px rgba(5,9,46,.04)",
+    dangerColor: "#b42318",
+    successColor: "#167a58",
+    warningColor: "#9a6418",
+    fontFamily: "Geist, Inter, ui-sans-serif, system-ui, sans-serif",
   },
 } as const satisfies Record<MindBillThemePreset, MindBillReactAppearance>;
 

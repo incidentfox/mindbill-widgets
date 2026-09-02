@@ -73,7 +73,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("partner appearance presets", () => {
-  it("ships complete QME Companion, orange-bright, and clinical-blue presets", () => {
+  it("ships complete QME Companion, orange-bright, clinical-blue, and midnight-cyan presets", () => {
     expect(resolveMindBillAppearance({ preset: "qme-companion" })).toMatchObject({
       accentColor: "#53b5dc",
       textColor: "#1d3440",
@@ -89,6 +89,14 @@ describe("partner appearance presets", () => {
       backgroundColor: "#f5f7fa",
       textColor: "#1f2d3d",
       controlRadius: "6px",
+    });
+    expect(resolveMindBillAppearance({ preset: "midnight-cyan" })).toMatchObject({
+      accentColor: "#05092e",
+      backgroundColor: "#edf6ff",
+      textColor: "#05092e",
+      borderRadius: "0px",
+      controlRadius: "999px",
+      fontFamily: "Geist, Inter, ui-sans-serif, system-ui, sans-serif",
     });
   });
 
