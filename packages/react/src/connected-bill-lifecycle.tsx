@@ -30,6 +30,7 @@ import { mindBillAppearanceStyle } from "./appearance";
 import {
   BillActivityTimeline,
   BillExplanationOfReview,
+  BillHistoryTable,
   BillLifecycleProgress,
   BillRejectionNotice,
 } from "./bill-lifecycle-surfaces";
@@ -399,7 +400,9 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
       {showSandboxControls ? <section className="mb-lifecycle-simulator" aria-label="Sandbox lifecycle simulator"><div><span>Sandbox demo controls</span><h3>Simulate the next payer response</h3><p>This changes sandbox data only. The host receives the result through the same lifecycle API and components partners use.</p></div>{simulations.length ? <div className="mb-lifecycle-simulator-actions">{simulations.map((scenario) => <button type="button" key={scenario.id} disabled={lifecycle.isMutating} onClick={() => void complete(`${scenario.label} simulated.`, () => lifecycle.simulateSandbox({ scenario: scenario.id }))}><strong>{scenario.label}</strong><span>{scenario.detail}</span></button>)}</div> : <p className="mb-lifecycle-simulator-idle">No simulated payer transition is needed at this stage. Use the bill action below to continue.</p>}</section> : null}
 
       <BillReadOnlyForm data={data} onOpenAttachment={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
-    </div> : <div className="mb-lifecycle-tabpanel" role="tabpanel"><BillActivityTimeline events={data.activity} {...(appearance ? { appearance } : {})} /></div>}
+    </div> : <div className="mb-lifecycle-tabpanel" role="tabpanel">{data.history?.length
+      ? <BillHistoryTable entries={data.history} {...(appearance ? { appearance } : {})} />
+      : <BillActivityTimeline events={data.activity} {...(appearance ? { appearance } : {})} />}</div>}
 
     {(viewEor || actions.length) ? <aside className="mb-lifecycle-actions-sheet" aria-label="Bill actions">
       {viewEor && data.eors[0] ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => void lifecycle.openEor(data.eors[0]!).catch(() => undefined)}>{viewEor.label}</button> : null}

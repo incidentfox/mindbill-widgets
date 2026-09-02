@@ -1,8 +1,9 @@
 "use client";
 
-import type { CSSProperties, ReactElement } from "react";
+import { useState, type CSSProperties, type ReactElement } from "react";
 import type {
   BillEorDocument,
+  BillHistoryEntry,
   BillLifecycleAction,
   BillLifecycleData,
   BillLifecycleDelivery,
@@ -124,6 +125,107 @@ export function BillActivityTimeline({ events, emptyLabel = "No bill activity ye
             </li>
           ))}
         </ol>
+      )}
+    </section>
+  );
+}
+
+export type BillHistoryTableProps = SurfaceProps & {
+  entries: readonly BillHistoryEntry[];
+  emptyLabel?: string;
+  /** Formats the Date column. Defaults to MM/DD/YYYY. */
+  formatDate?: (iso: string) => string;
+  /** Resolve a clickable href for a submitted document; return null for plain text. */
+  documentHref?: (doc: { id: string; filename: string }) => string | null;
+};
+
+function historyDate(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }).format(parsed);
+}
+
+/**
+ * The daisyBill-style Bill History table: Date / Action / User / Details rows where
+ * submissions are pale-blue expandable rows (documents + compliance due dates), notes
+ * are pale-yellow, and 277 responses expand into decoded status-code sentences. The
+ * rows come pre-worded from the MindBill API (`BillLifecycleData.history`).
+ */
+export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.", appearance, className, style, formatDate = historyDate, documentHref }: BillHistoryTableProps): ReactElement {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  return (
+    <section className={classes("mb-surface mb-history", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill history">
+      <style>{lifecycleSurfaceStyles}</style>
+      <header className="mb-surface-heading"><div><strong>Bill history</strong><span>Submissions, payer responses, follow-up, and payments.</span></div></header>
+      {!entries.length ? <p className="mb-activity-empty">{emptyLabel}</p> : (
+        <div className="mb-history-table">
+          <div className="mb-history-head" aria-hidden="true"><span>Date</span><span>Action</span><span>User</span><span>Details</span></div>
+          <ul className="mb-history-rows">
+            {entries.map((entry) => {
+              const expandable = Boolean(entry.details);
+              const isOpen = expandable && Boolean(expanded[entry.id]);
+              const details = entry.details;
+              return (
+                <li key={entry.id} className={`mb-history-row is-${entry.tone}`}>
+                  <button
+                    type="button"
+                    className="mb-history-line"
+                    disabled={!expandable}
+                    aria-expanded={expandable ? isOpen : undefined}
+                    onClick={expandable ? () => setExpanded((current) => ({ ...current, [entry.id]: !current[entry.id] })) : undefined}
+                  >
+                    <span className="mb-history-date">{formatDate(entry.date)}</span>
+                    <span className="mb-history-action">{entry.action}</span>
+                    <span className="mb-history-actor">{entry.actor ?? "—"}</span>
+                    <span className="mb-history-summary">
+                      {expandable ? <i className={`mb-history-caret${isOpen ? " is-open" : ""}`} aria-hidden="true" /> : null}
+                      {entry.summary}
+                    </span>
+                  </button>
+                  {isOpen && details ? (
+                    <div className="mb-history-details">
+                      {details.rows?.length ? (
+                        <dl className="mb-history-kv">
+                          {details.rows.map((row) => (
+                            <div key={`${row.label}-${row.value}`}><dt>{row.label}</dt><dd>{row.value}</dd></div>
+                          ))}
+                        </dl>
+                      ) : null}
+                      {details.documents?.length ? (
+                        <div className="mb-history-kv"><div><dt>Documents</dt><dd>
+                          {details.documents.map((doc) => {
+                            const href = documentHref?.(doc) ?? null;
+                            return href
+                              ? <a key={doc.id} className="mb-history-doc" href={href} target="_blank" rel="noreferrer">{doc.filename}</a>
+                              : <span key={doc.id} className="mb-history-doc">{doc.filename}</span>;
+                          })}
+                        </dd></div></div>
+                      ) : null}
+                      {details.codes?.length ? (
+                        <dl className="mb-history-codes">
+                          {details.codes.map((code) => (
+                            <div key={code.code}><dt>{code.code}</dt><dd>{code.text}</dd></div>
+                          ))}
+                        </dl>
+                      ) : null}
+                      {details.complianceDueDates?.length ? (
+                        <div className="mb-history-due">
+                          <em>Compliance Due Dates</em>
+                          <dl>
+                            {details.complianceDueDates.map((due) => (
+                              <div key={`${due.date}-${due.text}`}><dt>{formatDate(due.date)}</dt><dd>{due.text}</dd></div>
+                            ))}
+                          </dl>
+                        </div>
+                      ) : null}
+                      {details.text ? <p className="mb-history-text">{details.text}</p> : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </section>
   );
@@ -453,5 +555,28 @@ const lifecycleSurfaceStyles = `
 .mb-snapshot dl,.mb-remittance dl,.mb-contacts dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:0}.mb-remittance dl{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:1px;background:var(--mb-border)}.mb-snapshot dl>div,.mb-remittance dl>div,.mb-contacts dl>div{display:grid;gap:3px;padding:10px 14px;border-left:1px solid var(--mb-border)}.mb-remittance dl>div{border:0;background:var(--mb-surface)}.mb-snapshot dl>div:nth-child(3n+1),.mb-contacts dl>div:first-child{border-left:0}.mb-snapshot dt,.mb-remittance dt,.mb-contacts dt,.mb-payment-list dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-snapshot dd,.mb-remittance dd,.mb-contacts dd,.mb-payment-list dd{font-size:14px;font-weight:750;margin:0;overflow-wrap:anywhere}.mb-contacts a{color:var(--mb-accent)}.mb-denial{margin-top:16px;border-left:4px solid var(--mb-danger);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 8%,var(--mb-surface));padding:12px 14px}.mb-denial p{margin:4px 0 0}
 .mb-payment-list{display:grid}.mb-payment-list article{display:grid;grid-template-columns:minmax(120px,.35fr) 1fr;gap:14px 24px;padding:16px 0;border-top:1px solid var(--mb-border)}.mb-payment-list article:first-child{border-top:0}.mb-payment-amount{display:grid;align-content:start;gap:2px}.mb-payment-amount strong{font-size:1.2rem}.mb-payment-list article>dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0}.mb-payment-list article>dl>div{display:grid;align-content:start;gap:3px}.mb-payment-list article span{color:var(--mb-muted);font-size:12px}.mb-payment-list article p{grid-column:1/-1;margin:0;color:var(--mb-muted);font-size:13px}
 .mb-eor-review{border-top:4px solid var(--mb-accent);padding-top:17px}.mb-eor-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 18px;border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}.mb-eor-metrics>div{display:grid;gap:4px;padding:13px 15px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border)}.mb-eor-metrics>div:nth-child(-n+4){border-top:0}.mb-eor-metrics>div:nth-child(4n+1){border-left:0}.mb-eor-metrics dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-eor-metrics dd{margin:0;font-size:15px;font-weight:800}.mb-eor-metrics .is-balance{background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface))}.mb-eor-table-wrap{overflow-x:auto;border:1px solid var(--mb-border);border-radius:10px}.mb-eor-table{width:100%;min-width:1080px;border-collapse:collapse;font-size:12px}.mb-eor-table th,.mb-eor-table td{padding:10px 12px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border);text-align:left;vertical-align:top}.mb-eor-table th:first-child,.mb-eor-table td:first-child{border-left:0}.mb-eor-table thead th{background:var(--mb-soft);color:var(--mb-muted);font-weight:800}.mb-eor-table .mb-eor-groups th{border-top:0;background:color-mix(in srgb,var(--mb-accent) 13%,var(--mb-surface));color:var(--mb-text);text-align:center}.mb-eor-table td>strong,.mb-eor-table td>span{display:block}.mb-eor-table td>span{margin-top:3px;color:var(--mb-muted)}.mb-eor-link,.mb-eor-documents button{border:0;background:transparent;color:var(--mb-accent);font:inherit;font-weight:750;padding:0;text-align:left;text-decoration:underline;cursor:pointer;overflow-wrap:anywhere}.mb-eor-documents{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}
+.mb-history-table{border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}
+.mb-history-head{display:grid;grid-template-columns:96px 160px 140px minmax(0,1fr);gap:12px;padding:8px 14px;background:var(--mb-soft);color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.mb-history-rows{list-style:none;margin:0;padding:0}.mb-history-row{border-top:1px solid var(--mb-border)}
+.mb-history-row.is-submission{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}
+.mb-history-row.is-note{background:color-mix(in srgb,#f2c344 13%,var(--mb-surface))}
+.mb-history-line{display:grid;grid-template-columns:96px 160px 140px minmax(0,1fr);gap:12px;width:100%;padding:10px 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:default}
+.mb-history-line:not(:disabled){cursor:pointer}.mb-history-line:not(:disabled):hover .mb-history-summary{text-decoration:underline}
+.mb-history-date{color:var(--mb-muted);font-size:13px}.mb-history-action{font-size:13.5px;font-weight:750}
+.mb-history-row.is-problem .mb-history-action{color:var(--mb-danger)}
+.mb-history-actor{color:var(--mb-muted);font-size:13px;overflow-wrap:anywhere}
+.mb-history-summary{display:flex;align-items:flex-start;gap:7px;min-width:0;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere}
+.mb-history-caret{flex:0 0 auto;margin-top:5px;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid var(--mb-muted);transition:transform .12s ease}
+.mb-history-caret.is-open{transform:rotate(90deg)}
+.mb-history-details{padding:4px 14px 14px 122px;font-size:13.5px;line-height:1.5}
+.mb-history-kv,.mb-history-codes,.mb-history-due dl{display:grid;gap:4px;margin:0}
+.mb-history-kv>div{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px;border-top:1px solid color-mix(in srgb,var(--mb-border) 60%,transparent);padding-top:4px}
+.mb-history-kv dt{font-weight:750}.mb-history-kv dd{margin:0;overflow-wrap:anywhere}.mb-history-kv dd a{color:var(--mb-accent)}.mb-history-doc{display:block}
+.mb-history-codes>div{display:grid;grid-template-columns:56px minmax(0,1fr);gap:12px}.mb-history-codes dt{font-weight:800}.mb-history-codes dd{margin:0}
+.mb-history-due{margin-top:8px}.mb-history-due em{display:block;color:var(--mb-muted);font-size:12.5px;margin-bottom:4px}
+.mb-history-due dl>div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;border-top:1px solid color-mix(in srgb,var(--mb-border) 60%,transparent);padding-top:4px}
+.mb-history-due dt{font-weight:750}.mb-history-due dd{margin:0}
+.mb-history-text{margin:8px 0 0;color:var(--mb-text);white-space:pre-wrap}
+@media(max-width:700px){.mb-history-head{display:none}.mb-history-line{grid-template-columns:1fr;gap:2px;padding:10px 12px}.mb-history-details{padding:4px 12px 12px}.mb-history-kv>div,.mb-history-due dl>div{grid-template-columns:1fr}}
 @media(max-width:700px){.mb-surface.mb-progress{padding:16px 10px}.mb-progress-list{grid-template-columns:repeat(4,minmax(0,1fr))}.mb-progress-list li{display:grid;grid-template-columns:1fr;align-items:start;gap:6px;text-align:center;font-size:10px;min-width:0}.mb-progress-list li b{font-size:10px;white-space:nowrap}.mb-progress-list li:not(:last-child)::after{left:calc(50% + 12px);right:calc(-50% + 12px);top:11px;bottom:auto;width:auto;height:2px}.mb-progress-list li>span{grid-row:auto;width:24px;height:24px;font-size:11px}.mb-rejection-notice{padding:18px 14px 14px}.mb-rejection-overview{grid-template-columns:1fr;gap:18px}.mb-rejection-heading strong{font-size:17px}.mb-rejection-icon{width:36px;height:36px}.mb-rejection-progress{margin:0 0 4px}.mb-rejection-issues-heading{align-items:flex-start;flex-direction:column;gap:4px}.mb-rejection-issues-heading>span{text-align:left}.mb-rejection-issues li{grid-template-columns:8px minmax(0,1fr);gap:8px 10px}.mb-rejection-code{grid-column:2;justify-self:start}.mb-snapshot dl,.mb-remittance dl,.mb-contacts dl{grid-template-columns:1fr 1fr}.mb-snapshot dl>div,.mb-remittance dl>div,.mb-contacts dl>div{border:0;border-top:1px solid var(--mb-border);padding:10px 0}.mb-snapshot dl>div:nth-child(-n+2),.mb-remittance dl>div:nth-child(-n+2),.mb-contacts dl>div:nth-child(-n+2){border-top:0}.mb-payment-list article{grid-template-columns:1fr}.mb-payment-list article>dl{grid-template-columns:1fr 1fr}}
 `;
