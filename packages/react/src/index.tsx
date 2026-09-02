@@ -185,6 +185,19 @@ export type {
 } from "./billing-dashboard";
 
 export {
+  BILL_STATUS_AGING_BUCKETS,
+  BillStatusAgingMatrix,
+  buildBillStatusAgingCsv,
+  buildBillStatusAgingMatrix,
+} from "./status-aging-matrix";
+export type {
+  BillStatusAgingCell,
+  BillStatusAgingMatrixData,
+  BillStatusAgingMatrixProps,
+  BillStatusAgingRow,
+} from "./status-aging-matrix";
+
+export {
   ConnectedBillStatus,
   createBillStatusClient,
   useBillStatus,

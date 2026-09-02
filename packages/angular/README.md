@@ -113,6 +113,14 @@ The operations surfaces consume a normalized list of bills, so they can be used 
 />
 
 <mindbill-billing-report [bills]="bills" [appearance]="appearance" />
+
+<mindbill-status-aging-matrix
+  [bills]="bills"
+  [appearance]="appearance"
+  (cellSelected)="openDrillDown($event)"
+/>
 ```
 
-`summarizeMindBillDashboard`, `buildMindBillReportRows`, and `buildMindBillReportCsv` are also exported for custom layouts and server-side reporting.
+`mindbill-status-aging-matrix` is the management view billers coming from legacy tools expect: one row per lifecycle status, one column per 0–30 / 31–60 / 61–90 / 91+ aging bucket, clickable counts with outstanding balances, and row/column totals. Every emitted cell carries `{ state, bucket, count, balance, bills }`, so a drill-down never needs a second query. Pin a custom lifecycle ordering with `[stateOrder]`; unknown states append alphabetically.
+
+`summarizeMindBillDashboard`, `buildMindBillReportRows`, `buildMindBillReportCsv`, `buildMindBillStatusAgingMatrix`, and `buildMindBillStatusAgingCsv` are also exported for custom layouts and server-side reporting.

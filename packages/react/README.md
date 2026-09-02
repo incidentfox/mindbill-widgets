@@ -241,8 +241,19 @@ Use the smaller pieces independently when a page already has its own shell:
 - `BillAgingSummary` — outstanding balance, open count, collected, total billed, and 0–30 / 31–60 / 61–90 / 91+ buckets;
 - `BillList` — responsive desktop table and mobile cards;
 - `BillingReport` — grouped totals by `status`, `payer`, or `aging`;
-- `summarizeBillingDashboard` and `buildBillingReportRows` — presentation-free aggregates;
-- `buildBillingReportCsv` — the same report rows as downloadable CSV text.
+- `BillStatusAgingMatrix` — the management view billers expect: one row per lifecycle status, one column per aging bucket, clickable counts with outstanding balances, and row/column totals;
+- `summarizeBillingDashboard`, `buildBillingReportRows`, and `buildBillStatusAgingMatrix` — presentation-free aggregates;
+- `buildBillingReportCsv` and `buildBillStatusAgingCsv` — the same rows as downloadable CSV text.
+
+```tsx
+<BillStatusAgingMatrix
+  bills={bills}
+  appearance={{ preset: "clinical-blue" }}
+  onSelectCell={(cell) => showDrillDown(cell.state, cell.bucket, cell.bills)}
+/>
+```
+
+Each cell carries the exact bills behind its count, so a drill-down never needs a second query. Pass `stateOrder` to pin your own lifecycle ordering; unknown states append alphabetically.
 
 Pass only synthetic data to public examples and tests. In production, load organization-scoped bills on the server and authorize each bill-detail route independently.
 
