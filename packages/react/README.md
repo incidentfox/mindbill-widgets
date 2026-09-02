@@ -277,3 +277,19 @@ Use `BillStatusSummary` only when your application already owns status loading a
 `MindBillBillReview` and `MindBillBillTimeline` are available when a hosted flow is a better fit. Native and hosted UI paths use the same bill ID.
 
 Never send a Partner API key or long-lived credential to React/browser code.
+
+## Organization onboarding and billing settings
+
+`OrganizationOnboarding` captures the practice identity, billing provider, locations, and W-9 once — saved straight to your MindBill organization through the browser session — so your users never visit the MindBill dashboard. `BillingSettings` is the compact edit-after-setup variant of the same surface.
+
+```tsx
+import { OrganizationOnboarding } from "@mindbill/react";
+
+<OrganizationOnboarding
+  sessionEndpoint="/api/mindbill/session"
+  appearance={{ preset: "clinical-blue" }}
+  onCompleted={() => enableBillingFeatures()}
+/>
+```
+
+The session must be minted with the optional `organization:manage` permission. Each step saves independently through idempotent upserts that never delete records created elsewhere; the review step mirrors MindBill's onboarding checklist and `onCompleted` fires when everything required is in place.

@@ -1003,3 +1003,114 @@ export function createBillReferenceClient(
     clearSession: lifecycle.clearSession,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Organization profile client (INC-1470): backs the embeddable
+// OrganizationOnboarding / BillingSettings components. Requires a browser
+// session minted with the OPTIONAL organization:manage permission; sessions
+// without it are rejected by the API and nothing else changes.
+
+export type OrganizationPracticeIdentity = {
+  name?: string; legalName?: string; taxId?: string; npi?: string;
+  phone?: string; email?: string; website?: string;
+};
+
+export type OrganizationBillingProviderInput = {
+  id?: string; externalId?: string; name: string; taxId: string; npi: string;
+  billType?: "Professional" | "Institutional"; phone?: string;
+  billingStreet?: string; billingCity?: string; billingState?: string; billingZip?: string;
+};
+
+export type OrganizationLocationInput = {
+  id?: string; externalId?: string; name: string; street: string; city: string;
+  state: string; zip: string; nickname?: string; posCode?: string;
+  isPrimary?: boolean; active?: boolean;
+};
+
+export type OrganizationChecklistItem = { id: string; label: string; complete: boolean };
+
+export type OrganizationProfileData = {
+  organizationId: string;
+  practiceIdentity: OrganizationPracticeIdentity;
+  billingProviders: Array<OrganizationBillingProviderInput & { id: string }>;
+  locations: Array<OrganizationLocationInput & { id: string }>;
+  w9: { filename: string; addDate: string; taxYear?: number } | null;
+  onboarding: { status: string | null; complete: boolean; checklist: OrganizationChecklistItem[] };
+};
+
+export type OrganizationClientOptions = {
+  sessionEndpoint?: string;
+  getSession?: BillLifecycleSessionProvider;
+  apiBaseUrl?: string;
+  fetch?: typeof globalThis.fetch;
+};
+
+export type OrganizationClient = {
+  getOrganization: () => Promise<OrganizationProfileData>;
+  saveBillingProfile: (input: {
+    practiceIdentity?: OrganizationPracticeIdentity;
+    billingProviders?: OrganizationBillingProviderInput[];
+  }) => Promise<OrganizationProfileData>;
+  saveLocations: (locations: OrganizationLocationInput[]) => Promise<OrganizationProfileData>;
+  saveW9: (input: { filename: string; contentBase64: string; taxYear?: number }) => Promise<OrganizationProfileData>;
+};
+
+export function createOrganizationClient({
+  sessionEndpoint = DEFAULT_SESSION_ENDPOINT,
+  getSession,
+  apiBaseUrl = DEFAULT_API_BASE_URL,
+  fetch: fetchOverride,
+}: OrganizationClientOptions = {}): OrganizationClient {
+  const fetcher = fetchOverride ?? globalThis.fetch;
+  if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
+  let session: BillLifecycleSession | null = null;
+
+  const mintSession = async (force = false): Promise<BillLifecycleSession> => {
+    if (!force && isSessionFresh(session)) return session as BillLifecycleSession;
+    const pending = getSession
+      ? getSession({ signal: new AbortController().signal })
+      : fetcher(sessionEndpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }).then(async (response) => {
+        if (!response.ok) throw await responseError(response, "The organization session could not be created.");
+        return response.json();
+      });
+    session = normalizeSession(await Promise.resolve(pending));
+    return session;
+  };
+
+  const request = async (path: string, init: RequestInit = {}): Promise<OrganizationProfileData> => {
+    let current = await mintSession();
+    const perform = (active: BillLifecycleSession) => {
+      const base = (active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
+      const headers = new Headers(init.headers);
+      headers.set("authorization", `Bearer ${active.token}`);
+      if (init.body) headers.set("content-type", "application/json");
+      return fetcher(`${base}${path}`, { ...init, headers });
+    };
+    let response = await perform(current);
+    if (response.status === 401) {
+      current = await mintSession(true);
+      response = await perform(current);
+    }
+    if (!response.ok) throw await responseError(response, "The organization request failed.");
+    const body = (await response.json()) as { data?: OrganizationProfileData };
+    if (!body.data || typeof body.data !== "object") {
+      throw new Error("The organization response was invalid.");
+    }
+    return body.data;
+  };
+
+  return {
+    getOrganization: () => request("/partner/v2/browser/organization"),
+    saveBillingProfile: (input) =>
+      request("/partner/v2/browser/organization/billing-profile", { method: "PUT", body: JSON.stringify(input) }),
+    saveLocations: (locations) =>
+      request("/partner/v2/browser/organization/locations", { method: "PUT", body: JSON.stringify({ locations }) }),
+    saveW9: (input) =>
+      request("/partner/v2/browser/organization/w9", { method: "PUT", body: JSON.stringify(input) }),
+  };
+}

@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/react",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "description": "Native React components and hosted workflows for MindBill billing",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,7 +24,7 @@
     "react": ">=18"
   },
   "dependencies": {
-    "@mindbill/browser": "^0.12.0",
+    "@mindbill/browser": "^0.13.0",
     "@mindbill/embed": "workspace:^"
   },
   "keywords": [
