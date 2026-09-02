@@ -8,7 +8,7 @@ npm install @mindbill/react @mindbill/node
 
 ## Connected lifecycle
 
-`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. Its only bill input is `billId`; `getSession` returns the short-lived token. The component fetches the submitted snapshot, progress, human-readable history, EOR/remittance amounts, payments, and available actions from MindBill. Do not pass lifecycle seed data or duplicate this state in the host app. The only persistent header action is **Download packet**; status-dependent actions remain visible in a sticky bottom action bar when MindBill makes them available. Actions that require input open a focused form dialog.
+`ConnectedBillLifecycle` starts after `BillSubmissionForm` atomically submits an immutable bill. Its only bill input is `billId`; `getSession` returns the short-lived token. The component fetches the submitted snapshot, progress, human-readable history, rejection details, EOR/remittance amounts, payments, and available actions from MindBill. Do not pass lifecycle seed data or duplicate this state in the host app. The only persistent header action is **Download packet**, which opens the authenticated PDF packet directly in a new browser tab; status-dependent actions remain visible in a sticky bottom action bar when MindBill makes them available. Actions that require input open a focused form dialog.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
@@ -94,6 +94,8 @@ import { BillReadOnlyForm } from "@mindbill/react";
 ```
 
 `ConnectedBillLifecycle` composes this component with the Details / Bill history switch, so most partners should not assemble these pieces themselves.
+
+`BillRejectionNotice` is also exported for custom lifecycle layouts. It renders the API-provided rejection reason, acknowledgement code, source, and receipt time as an accessible alert. The connected lifecycle includes it automatically whenever the current state is `rejected`.
 
 ## Lifecycle actions
 

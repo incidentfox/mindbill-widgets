@@ -122,7 +122,7 @@ organization-specific choices.
 
 ## 2. Render the submitted lifecycle
 
-`ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, EORs, remittance, and payments directly from MindBill. Do not pass or maintain lifecycle seed data in your application.
+`ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, rejection details, EORs, remittance, and payments directly from MindBill. Do not pass or maintain lifecycle seed data in your application. Authenticated packet previews open the PDF directly in a new tab.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";

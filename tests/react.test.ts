@@ -25,6 +25,7 @@ import {
   billLifecycleDisplayLabel,
   billLifecycleProgressSteps,
   billLifecycleStage,
+  BillRejectionNotice,
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
 import {
@@ -560,6 +561,8 @@ describe("bill lifecycle surfaces", () => {
   it("reserves a PDF tab before awaiting the authenticated packet request", async () => {
     const order: string[] = [];
     const writes: string[] = [];
+    const replace = vi.fn();
+    const close = vi.fn();
     const document = {
       open: vi.fn(),
       write: vi.fn((html: string) => writes.push(html)),
@@ -573,7 +576,7 @@ describe("bill lifecycle surfaces", () => {
     vi.stubGlobal("window", {
       open: vi.fn(() => {
         order.push("open");
-        return { opener: null, document };
+        return { opener: null, document, location: { replace }, close };
       }),
       setTimeout: vi.fn(),
     });
@@ -592,27 +595,29 @@ describe("bill lifecycle surfaces", () => {
     await opening;
 
     expect(order).toEqual(["open", "request"]);
-    expect(writes.at(-1)).toContain("blob:synthetic-packet");
-    expect(writes.at(-1)).toContain("<iframe");
-    expect(writes.at(-1)).toContain("Open PDF directly");
+    expect(writes.at(-1)).toContain("Preparing PDF preview");
+    expect(replace).toHaveBeenCalledWith("blob:synthetic-packet");
+    expect(close).not.toHaveBeenCalled();
   });
 
-  it("keeps the reserved tab open with a helpful error when the packet request fails", async () => {
+  it("closes the reserved tab when the packet request fails", async () => {
     const writes: string[] = [];
+    const close = vi.fn();
     const document = {
       open: vi.fn(),
       write: vi.fn((html: string) => writes.push(html)),
       close: vi.fn(),
     };
     vi.stubGlobal("window", {
-      open: vi.fn(() => ({ opener: null, document })),
+      open: vi.fn(() => ({ opener: null, document, location: { replace: vi.fn() }, close })),
       setTimeout: vi.fn(),
     });
 
     await expect(openPdfFromUserGesture(async () => {
       throw new Error("Packet unavailable");
     })).rejects.toThrow("Packet unavailable");
-    expect(writes.at(-1)).toContain("The PDF could not be opened");
+    expect(writes.at(-1)).toContain("Preparing PDF preview");
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("shows only enabled server-authoritative actions by default", () => {
@@ -647,6 +652,21 @@ describe("bill lifecycle surfaces", () => {
       { id: "rejected", label: "Rejected", status: "current" },
     ]);
     expect(billLifecycleProgressSteps("accepted")).toHaveLength(4);
+  });
+
+  it("renders structured rejection feedback as a reusable alert surface", () => {
+    const surface = BillRejectionNotice({
+      rejection: {
+        code: "A7:21",
+        reason: "The payer could not match the submitted claim information.",
+        source: "Clearinghouse acknowledgement",
+      },
+    });
+    const props = surface.props as Record<string, unknown>;
+
+    expect(props.role).toBe("alert");
+    expect(props["aria-label"]).toBe("Bill rejection reason");
+    expect(props.className).toContain("mb-rejection-notice");
   });
 
   it("uses human labels while preserving immutable API states", () => {
