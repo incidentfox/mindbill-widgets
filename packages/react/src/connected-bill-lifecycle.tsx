@@ -379,8 +379,9 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
 
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
-    <BillLifecycleProgress state={data.lifecycle.state} nativeStatus={data.lifecycle.nativeStatus} submittedAt={data.lifecycle.submittedAt ?? null} agingDays={data.lifecycle.agingDays ?? null} {...(appearance ? { appearance } : {})} />
-    {data.lifecycle.state.toLowerCase() === "rejected" && data.rejection ? <BillRejectionNotice rejection={data.rejection} {...(appearance ? { appearance } : {})} /> : null}
+    {data.lifecycle.state.toLowerCase() === "rejected" && data.rejection
+      ? <BillRejectionNotice rejection={data.rejection} {...(appearance ? { appearance } : {})} />
+      : <BillLifecycleProgress state={data.lifecycle.state} nativeStatus={data.lifecycle.nativeStatus} submittedAt={data.lifecycle.submittedAt ?? null} agingDays={data.lifecycle.agingDays ?? null} {...(appearance ? { appearance } : {})} />}
 
     <header className="mb-lifecycle-head">
       <div><div className="mb-lifecycle-title"><h2>Bill #{data.bill.billNumber}</h2></div><p>Claim {data.injury.claimNumber || "—"}{lifecycle.isRefreshing ? " · Refreshing…" : ""}</p></div>

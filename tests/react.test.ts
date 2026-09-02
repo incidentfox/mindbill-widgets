@@ -659,6 +659,12 @@ describe("bill lifecycle surfaces", () => {
       rejection: {
         code: "A7:21",
         reason: "The payer could not match the submitted claim information.",
+        issues: [
+          { code: "A6:187", description: "From Date of Service cannot be in the future" },
+          { code: "A6:88", description: "Thru Date of Service cannot be in the future" },
+          { code: "A7:188", description: "Service From date cannot be in the future" },
+          { code: "A7:188", description: "Service Thru date cannot be in the future" },
+        ],
         source: "Clearinghouse acknowledgement",
       },
     });
