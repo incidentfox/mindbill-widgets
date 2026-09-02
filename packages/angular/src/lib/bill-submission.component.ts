@@ -1,5 +1,5 @@
 import { CommonModule } from "@angular/common";
-import { Component, EventEmitter, HostListener, Input, OnChanges, Output, SimpleChanges } from "@angular/core";
+import { ChangeDetectorRef, Component, EventEmitter, HostListener, inject, Input, OnChanges, Output, SimpleChanges } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import {
   createBillReferenceClient,
@@ -269,6 +269,9 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   dragActive = false;
   invalidFields = new Set<string>();
   readonly quickDiagnoses = QUICK_DIAGNOSES;
+  // Zoneless-safe rendering: async work (debounced lookups, fetches, file reads)
+  // must schedule change detection explicitly for zone-less Angular hosts.
+  private readonly changeDetector = inject(ChangeDetectorRef);
   readonly customProcedureOption = mindBillCustomProcedureOption;
   readonly customTaxonomyOption = (query: string): MindBillComboOption | null => {
     const code = query.trim().toUpperCase();
@@ -345,6 +348,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       } catch {
         this.postalStatus = "ZIP lookup unavailable";
       }
+      this.changeDetector.markForCheck();
     }, 180);
   }
 
@@ -354,7 +358,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       this.payerBusy = true;
       try { this.payerResults = await this.referenceClient().searchClaimsAdministrators(this.payerQuery, this.bill.claim.claimNumber); }
       catch { this.payerResults = []; }
-      finally { this.payerBusy = false; }
+      finally { this.payerBusy = false; this.changeDetector.markForCheck(); }
     }, 180);
   }
 
@@ -377,7 +381,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
         this.diagnosisResults = reset ? results : [...this.diagnosisResults, ...results];
         this.diagnosisOffset = this.diagnosisResults.length;
       } catch { if (reset) this.diagnosisResults = []; }
-      finally { this.diagnosisBusy = false; }
+      finally { this.diagnosisBusy = false; this.changeDetector.markForCheck(); }
     }, reset ? 160 : 0);
   }
 
@@ -426,15 +430,15 @@ export class MindBillBillSubmissionComponent implements OnChanges {
 
   @HostListener("window:dragover", ["$event"])
   onWindowDragOver(event: DragEvent): void {
-    if (event.dataTransfer?.types.includes("Files")) { event.preventDefault(); this.dragActive = true; }
+    if (event.dataTransfer?.types.includes("Files")) { event.preventDefault(); this.dragActive = true; this.changeDetector.markForCheck(); }
   }
   @HostListener("window:dragleave", ["$event"])
   onWindowDragLeave(event: DragEvent): void {
-    if (!event.relatedTarget) this.dragActive = false;
+    if (!event.relatedTarget) { this.dragActive = false; this.changeDetector.markForCheck(); }
   }
   @HostListener("window:drop", ["$event"])
   onWindowDrop(event: DragEvent): void {
-    if (event.dataTransfer?.files.length) { event.preventDefault(); this.dragActive = false; void this.addFiles(event.dataTransfer.files); }
+    if (event.dataTransfer?.files.length) { event.preventDefault(); this.dragActive = false; void this.addFiles(event.dataTransfer.files); this.changeDetector.markForCheck(); }
   }
 
   private async addFiles(fileList: FileList | File[]): Promise<void> {
@@ -449,6 +453,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     const existingBytes = this.workingAttachments.reduce((sum, item) => sum + (item.contentBase64 ? item.contentBase64.length * 0.75 : 0), 0);
     if (existingBytes + files.reduce((sum, file) => sum + file.size, 0) > MAX_UPLOAD_BYTES) { this.errorMessage = "Attachments exceed the 100 MB upload limit."; return; }
     for (const file of files) this.workingAttachments.push({ filename: file.name, description: "Supporting document", documentType: "other", contentBase64: await blobToBase64(file), contentUrl: URL.createObjectURL(file) });
+    this.changeDetector.markForCheck();
   }
 
   async filesSelected(event: Event): Promise<void> {
@@ -528,6 +533,6 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       const error = value instanceof Error ? value : new Error("The bill could not be submitted.");
       this.errorMessage = error.message;
       this.submissionError.emit(error);
-    } finally { this.submitting = false; }
+    } finally { this.submitting = false; this.changeDetector.markForCheck(); }
   }
 }

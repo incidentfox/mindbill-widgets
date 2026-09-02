@@ -25,6 +25,7 @@ export type MindBillComboOption = { id: string; label: string; detail?: string }
         [placeholder]="placeholder"
         [value]="open ? query : value"
         (focus)="onFocus()"
+        (click)="onFocus()"
         (input)="onInput($event)"
         (blur)="onBlur()"
       />

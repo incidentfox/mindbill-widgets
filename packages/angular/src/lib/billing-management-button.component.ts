@@ -1,5 +1,5 @@
 import { CommonModule } from "@angular/common";
-import { Component, EventEmitter, Input, Output } from "@angular/core";
+import { ChangeDetectorRef, Component, EventEmitter, inject, Input, Output } from "@angular/core";
 import type { MindBillAngularAppearance } from "./bill-lifecycle.component";
 
 export type MindBillManagementSession = { url: string };
@@ -39,6 +39,7 @@ export class MindBillBillingManagementButtonComponent {
 
   loading = false;
   errorMessage = "";
+  private readonly changeDetector = inject(ChangeDetectorRef);
 
   get themeStyle(): Record<string, string> {
     const base = THEME[this.appearance.preset ?? "mindbill"] ?? THEME["mindbill"]!;
@@ -68,9 +69,11 @@ export class MindBillBillingManagementButtonComponent {
     } catch (error) {
       popup?.close();
       this.errorMessage = error instanceof Error ? error.message : "Billing management could not be opened.";
+      this.changeDetector.markForCheck();
       this.failed.emit(error);
     } finally {
       this.loading = false;
+      this.changeDetector.markForCheck();
     }
   }
 
