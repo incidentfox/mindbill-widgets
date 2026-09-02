@@ -126,3 +126,17 @@ The operations surfaces consume a normalized list of bills, so they can be used 
 `mindbill-status-aging-matrix` is the management view billers coming from legacy tools expect: one row per lifecycle status, one column per 0–30 / 31–60 / 61–90 / 91+ aging bucket, clickable counts with outstanding balances, and row/column totals. Every emitted cell carries `{ state, bucket, count, balance, bills }`, so a drill-down never needs a second query. Pin a custom lifecycle ordering with `[stateOrder]`; unknown states append alphabetically.
 
 `summarizeMindBillDashboard`, `buildMindBillReportRows`, `buildMindBillReportCsv`, `buildMindBillStatusAgingMatrix`, and `buildMindBillStatusAgingCsv` are also exported for custom layouts and server-side reporting.
+
+## Organization onboarding and billing settings
+
+`mindbill-organization-onboarding` captures the practice identity, billing provider, locations, and W-9 once — saved straight to your MindBill organization through the browser session. Set `variant="settings"` for the compact edit-after-setup layout.
+
+```html
+<mindbill-organization-onboarding
+  sessionEndpoint="/api/mindbill/session"
+  [appearance]="appearance"
+  (completed)="enableBillingFeatures()"
+/>
+```
+
+The session must be minted with the optional `organization:manage` permission. Each step saves independently through idempotent upserts that never delete records created elsewhere; the review step mirrors MindBill's onboarding checklist.

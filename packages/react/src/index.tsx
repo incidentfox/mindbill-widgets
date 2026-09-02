@@ -197,6 +197,9 @@ export type {
   BillStatusAgingRow,
 } from "./status-aging-matrix";
 
+export { BillingSettings, OrganizationOnboarding } from "./organization-onboarding";
+export type { OrganizationOnboardingProps } from "./organization-onboarding";
+
 export {
   ConnectedBillStatus,
   createBillStatusClient,
