@@ -330,6 +330,44 @@ export type BillActivityRecord = {
   stcCategory: string | null;
 };
 
+/** One user-facing bill history row (daisyBill-style Date / Action / User / Details).
+ *  Server-presented: the wording is authored by MindBill so every surface (MindBill
+ *  app, React, Angular, embeds) reads identically. */
+export type BillHistoryEntry = {
+  id: string;
+  /** ISO timestamp for ordering and the Date column. */
+  date: string;
+  /** Short Action label — "Original Bill", "277 Accept", "Payment", "Note", … */
+  action: string;
+  kind:
+    | "created"
+    | "submission"
+    | "ack"
+    | "eor"
+    | "payment"
+    | "review"
+    | "close"
+    | "reopen"
+    | "note"
+    | "portal"
+    | "system";
+  /** Who acted: a biller name, "MindBill", or the responding clearinghouse. */
+  actor: string | null;
+  /** The one-line Details column. */
+  summary: string;
+  /** Drives row highlighting: submissions are pale blue, notes pale yellow. */
+  tone: "submission" | "note" | "neutral" | "problem" | "success";
+  amount?: number;
+  /** Expandable content; absent → the row is not expandable. */
+  details?: {
+    rows?: Array<{ label: string; value: string }>;
+    documents?: Array<{ id: string; filename: string }>;
+    complianceDueDates?: Array<{ date: string; text: string }>;
+    codes?: Array<{ code: string; text: string }>;
+    text?: string;
+  };
+};
+
 export type BillPaymentRecord = {
   id: string;
   method: "check" | "eft";
@@ -434,6 +472,9 @@ export type BillLifecycleData = BillReviewData & {
   };
   eors: BillEorDocument[];
   activity: BillActivityRecord[];
+  /** daisyBill-style presented history rows. Optional: absent when the API
+   *  predates the presented-history rollout — fall back to `activity`. */
+  history?: BillHistoryEntry[];
   payments: BillPaymentRecord[];
   remittance: BillRemittanceSummary;
   delivery: BillLifecycleDelivery;

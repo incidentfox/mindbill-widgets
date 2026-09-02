@@ -210,6 +210,7 @@ export type { BrowserBillSubmissionResult } from "@mindbill/browser";
 export {
   BillActivityTimeline,
   BillExplanationOfReview,
+  BillHistoryTable,
   BillLifecycleActions,
   BillLifecycleProgress,
   BillRejectionNotice,
@@ -225,6 +226,7 @@ export {
 export type {
   BillActivityEvent,
   BillActivityTimelineProps,
+  BillHistoryTableProps,
   BillExplanationOfReviewProps,
   BillLifecycleActionsProps,
   BillLifecycleProgressProps,
