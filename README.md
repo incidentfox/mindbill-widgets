@@ -143,7 +143,7 @@ simulation controls are never inferred from the response environment; they are
 available only to dedicated developer tooling that explicitly passes
 `sandboxControls={true}`.
 
-Use `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers status, EORs, payments, reviews, and close actions.
+Use `preset: "midnight-cyan"` for a spacious pale-blue and midnight theme with pill-shaped controls, `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers submission, status, EORs, payments, reviews, and close actions.
 
 Angular uses the same bill ID, browser session, API calls, and lifecycle rules:
 

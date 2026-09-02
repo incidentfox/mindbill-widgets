@@ -32,16 +32,13 @@ Choose a complete preset, then override only the tokens your design system owns.
 ```tsx
 <ConnectedBillLifecycle
   billId={billId}
-  appearance={{
-    preset: "orange-bright",
-    accentColor: "#ff4f0a",
-    fontFamily: "Inter, sans-serif",
-    borderRadius: "8px",
-  }}
+  appearance={{ preset: "midnight-cyan" }}
 />
 ```
 
-Available presets are `mindbill`, `qme-companion`, `orange-bright`, and `clinical-blue`. Preset names describe visual styles rather than customer or partner brands. Supported overrides include accent, accent text, background, surface, input background, text, muted text, border, font, panel radius, control radius, shadow, danger, success, and warning colors.
+`midnight-cyan` gives every billing surface a spacious pale-blue canvas, crisp white panels, midnight actions and typography, cyan-compatible accents, and pill-shaped controls. No extra CSS is required.
+
+Available presets are `mindbill`, `qme-companion`, `orange-bright`, `clinical-blue`, and `midnight-cyan`. Preset names describe visual styles rather than customer or partner brands. Supported overrides include accent, accent text, background, surface, input background, text, muted text, border, font, panel radius, control radius, shadow, danger, success, and warning colors.
 
 Add one authenticated route to your app. It maps the signed-in user's role to billing permissions, then mints an exact-origin token for that user in your MindBill organization. The Partner API key stays on the server.
 
