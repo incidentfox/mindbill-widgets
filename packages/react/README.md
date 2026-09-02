@@ -95,7 +95,24 @@ import { BillReadOnlyForm } from "@mindbill/react";
 
 `ConnectedBillLifecycle` composes this component with the Details / Bill history switch, so most partners should not assemble these pieces themselves.
 
-`BillRejectionNotice` is also exported for custom lifecycle layouts. It renders the API-provided rejection reason, acknowledgement code, source, and receipt time as an accessible alert. The connected lifecycle includes it automatically whenever the current state is `rejected`.
+`BillRejectionNotice` is also exported for custom lifecycle layouts. It presents every API-provided rejection issue in order, keeps technical acknowledgement codes alongside the actionable descriptions, and shows when the bill was sent and rejected. The connected lifecycle includes it automatically whenever the current state is `rejected`.
+
+```tsx
+<BillRejectionNotice
+  submittedAt="2026-08-31T17:24:00.000Z"
+  rejection={{
+    reason: "Correct the submitted dates.",
+    source: "Jopari",
+    receivedAt: "2026-09-01T16:11:00.000Z",
+    issues: [
+      { code: "A6:187", description: "From Date of Service cannot be in the future" },
+      { code: "A6:88", description: "Thru Date of Service cannot be in the future" },
+    ],
+  }}
+/>
+```
+
+For older responses without `issues`, the component falls back to the singular `reason` and `code` fields. `appearance.dangerColor` can override the rejection color without changing the rest of the theme.
 
 ## Lifecycle actions
 

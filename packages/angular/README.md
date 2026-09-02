@@ -55,6 +55,32 @@ export class CaseBillingComponent {
 
 `MindBillBillSubmissionComponent` marks required fields, scrolls to invalid input, resolves ZIP codes to city and state with an inline status line, searches the MindBill claims-administrator and ICD-10 directories as you type, calculates service-line totals, and uploads attachments. Dates use a masked MM/DD/YYYY input that accepts ISO, US, or bare-digit entry, normalizes the display once a complete date is typed, and submits ISO values — identical to the React form. On success, render `MindBillBillLifecycleComponent` with the returned bill ID. The lifecycle component loads its own immutable bill snapshot, status, EORs, payments, history, and available actions.
 
+When the lifecycle is rejected, it automatically renders the full ordered list of clearinghouse issues with actionable descriptions, acknowledgement codes, and sent/rejected timestamps. For custom layouts, use the same standalone surface directly:
+
+```html
+<mindbill-bill-rejection-notice
+  [rejection]="rejection"
+  [submittedAt]="submittedAt"
+  [appearance]="{ preset: 'mindbill' }"
+/>
+```
+
+```ts
+import { MindBillBillRejectionNoticeComponent } from "@mindbill/angular";
+
+rejection = {
+  reason: "Correct the submitted dates.",
+  source: "Jopari",
+  receivedAt: "2026-09-01T16:11:00.000Z",
+  issues: [
+    { code: "A6:187", description: "From Date of Service cannot be in the future" },
+    { code: "A6:88", description: "Thru Date of Service cannot be in the future" },
+  ],
+};
+```
+
+The component falls back to the legacy singular `reason` and `code` fields when `issues` is absent. Set `appearance.dangerColor` to customize its red treatment.
+
 Procedure codes, modifiers, and rendering taxonomy all use the same styled searchable dropdown (`mindbill-combo-box`) with code + description rows, hover states, and typed custom-code entry for complete CPT/HCPCS/medical-legal codes. Service lines accept multiple modifiers rendered as removable chips. PDFs can be dropped anywhere on the screen — a full-page overlay confirms the drop target — with the same 25 MB per-file, 100 MB total, and 20-document limits as the React form.
 
 The default reference directories and field rules live in the component library. Hosts can provide custom procedure, modifier, and taxonomy options without reimplementing the form. For a fixture or Storybook, pass an async `submitter`; omit it in production so the component talks directly to the Partner API.

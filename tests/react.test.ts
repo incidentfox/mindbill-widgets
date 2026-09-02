@@ -22,6 +22,7 @@ import {
 } from "../packages/react/src/appearance";
 import {
   billActivityEventLabel,
+  billRejectionIssueSummary,
   billLifecycleDisplayLabel,
   billLifecycleProgressSteps,
   billLifecycleStage,
@@ -671,8 +672,16 @@ describe("bill lifecycle surfaces", () => {
     const props = surface.props as Record<string, unknown>;
 
     expect(props.role).toBe("alert");
-    expect(props["aria-label"]).toBe("Bill rejection reason");
+    expect(props["aria-label"]).toBe("Bill rejection reasons");
     expect(props.className).toContain("mb-rejection-notice");
+    expect(billRejectionIssueSummary({
+      reason: "Correct the submitted dates.",
+      source: "Jopari",
+    }, 4)).toBe("4 validation errors returned by Jopari.");
+    expect(billRejectionIssueSummary({
+      reason: "Correct the submitted dates.",
+      source: "Clearinghouse acknowledgement",
+    }, 4)).toBe("4 clearinghouse validation errors.");
   });
 
   it("uses human labels while preserving immutable API states", () => {
