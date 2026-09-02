@@ -2,6 +2,8 @@ export * from "./lib/lifecycle-store";
 export * from "./lib/bill-lifecycle.component";
 export * from "./lib/procedure-lines";
 export * from "./lib/billing-dashboard.component";
+export * from "./lib/bill-submission.component";
+export * from "./lib/billing-management-button.component";
 export type {
   BillLifecycleAction,
   BillLifecycleActionId,
@@ -15,4 +17,7 @@ export type {
   CloseBillInput,
   PostBillPaymentInput,
   SubmitSecondReviewInput,
+  BrowserBillCreateInput,
+  BrowserBillSubmissionInput,
+  BrowserBillSubmissionResult,
 } from "@mindbill/browser";

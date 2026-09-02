@@ -28,6 +28,8 @@ export type MindBillDashboardSummary = {
   totalPaid: number;
   outstanding: number;
   openCount: number;
+  submittedThisMonth: number;
+  closedThisMonth: number;
   bills: MindBillDashboardBill[];
   aging: MindBillAgingBucket[];
 };
@@ -73,9 +75,17 @@ export function summarizeMindBillDashboard(bills: MindBillDashboardBill[], now =
     totalPaid: bills.reduce((sum, item) => sum + item.totalPaid, 0),
     outstanding: bills.reduce((sum, item) => sum + item.balanceDue, 0),
     openCount: bills.filter((item) => !/closed|paid|written.off/i.test(item.state)).length,
+    submittedThisMonth: bills.filter((item) => sameMonth(item.submittedAt, now)).length,
+    closedThisMonth: bills.filter((item) => /closed|paid|written.off/i.test(item.state) && sameMonth(item.updatedAt ?? item.submittedAt, now)).length,
     bills,
     aging,
   };
+}
+
+function sameMonth(value: string | undefined, now: Date): boolean {
+  if (!value) return false;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date.getUTCFullYear() === now.getUTCFullYear() && date.getUTCMonth() === now.getUTCMonth();
 }
 
 export function buildMindBillReportRows(bills: MindBillDashboardBill[], dimension: MindBillReportDimension): MindBillReportRow[] {
@@ -117,11 +127,13 @@ const sharedStyles = `
 
 @Component({
   selector: "mindbill-bill-aging-summary", standalone: true, imports: [CommonModule],
-  template: `<section class="mbd aging" [ngStyle]="themeStyle" aria-label="Accounts receivable aging">@for (bucket of buckets; track bucket.id) { <article class="card"><div><strong>{{ bucket.label }}</strong><span>{{ bucket.count }} bill{{ bucket.count === 1 ? '' : 's' }}</span></div><b class="money">{{ bucket.balance | currency }}</b><i><em [style.width.%]="width(bucket.balance)"></em></i></article> }</section>`,
-  styles: [sharedStyles, `.aging{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.aging article{padding:16px}.aging article>div{display:flex;justify-content:space-between;gap:8px}.aging span{color:var(--m);font-size:12px}.aging b{display:block;font-size:20px;margin:14px 0 12px}.aging i{display:block;height:5px;border-radius:99px;background:color-mix(in srgb,var(--b) 70%,transparent);overflow:hidden}.aging em{display:block;height:100%;background:var(--a)}@media(max-width:760px){.aging{grid-template-columns:1fr 1fr}}`],
+  template: `<section class="mbd aging" [ngStyle]="themeStyle" aria-label="Accounts receivable aging">@for (bucket of buckets; track bucket.id) { <button type="button" class="card" [class.selected]="selectedBucket === bucket.id" (click)="bucketSelected.emit(bucket.id)"><div><strong>{{ bucket.label }}</strong><span>{{ bucket.count }} bill{{ bucket.count === 1 ? '' : 's' }}</span></div><b class="money">{{ bucket.balance | currency }}</b><i><em [style.width.%]="width(bucket.balance)"></em></i></button> }</section>`,
+  styles: [sharedStyles, `.aging{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.aging>button{border:1px solid var(--b);padding:16px;text-align:left;color:var(--t);cursor:pointer}.aging>button:hover,.aging>button.selected{border-color:var(--a);background:color-mix(in srgb,var(--a) 6%,var(--s))}.aging button>div{display:flex;justify-content:space-between;gap:8px}.aging span{color:var(--m);font-size:12px}.aging b{display:block;font-size:20px;margin:14px 0 12px}.aging i{display:block;height:5px;border-radius:99px;background:color-mix(in srgb,var(--b) 70%,transparent);overflow:hidden}.aging em{display:block;height:100%;background:var(--a)}@media(max-width:760px){.aging{grid-template-columns:1fr 1fr}}`],
 })
 export class MindBillBillAgingSummaryComponent extends DashboardBase {
   @Input() buckets: MindBillAgingBucket[] = [];
+  @Input() selectedBucket: MindBillAgingBucketId | "" = "";
+  @Output() bucketSelected = new EventEmitter<MindBillAgingBucketId>();
   width(balance: number): number { const max = Math.max(1, ...this.buckets.map((item) => item.balance)); return Math.max(balance ? 8 : 0, balance / max * 100); }
 }
 
@@ -139,8 +151,8 @@ export class MindBillBillListComponent extends DashboardBase {
 
 @Component({
   selector: "mindbill-billing-dashboard", standalone: true, imports: [CommonModule, FormsModule, MindBillBillAgingSummaryComponent, MindBillBillListComponent],
-  template: `<section class="mbd dashboard" [ngStyle]="themeStyle"><header><div><p>Billing operations</p><h2>{{ heading }}</h2><span class="muted">{{ description }}</span></div><button type="button" (click)="createBill.emit()">+ New bill</button></header><div class="metrics"><article class="card"><span>Total billed</span><b>{{ summary.totalBilled | currency }}</b></article><article class="card"><span>Collected</span><b>{{ summary.totalPaid | currency }}</b></article><article class="card"><span>Outstanding</span><b>{{ summary.outstanding | currency }}</b></article><article class="card"><span>Open bills</span><b>{{ summary.openCount }}</b></article></div><mindbill-bill-aging-summary [buckets]="summary.aging" [appearance]="appearance"/><div class="filters"><input [(ngModel)]="query" placeholder="Search patient, claim, or payer" aria-label="Search bills"><select [(ngModel)]="state"><option value="">All statuses</option>@for (option of states; track option) { <option [value]="option">{{ label(option) }}</option> }</select></div><mindbill-bill-list [bills]="filteredBills" [appearance]="appearance" (billSelected)="billSelected.emit($event)"/></section>`,
-  styles: [sharedStyles, `.dashboard{display:grid;gap:18px}.dashboard header{display:flex;justify-content:space-between;align-items:end;gap:20px}.dashboard h2{font-size:28px;margin:2px 0 5px}.dashboard header p{margin:0;color:var(--a);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.dashboard header button{border:0;border-radius:var(--cr);background:var(--a);color:var(--ac);padding:11px 16px;font-weight:750;cursor:pointer}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metrics article{padding:18px}.metrics span{display:block;color:var(--m);font-size:12px}.metrics b{display:block;margin-top:8px;font-size:24px}.filters{display:grid;grid-template-columns:1fr 190px;gap:10px}.filters input,.filters select{border:1px solid var(--b);border-radius:var(--cr);background:var(--s);color:var(--t);padding:11px 13px}@media(max-width:760px){.dashboard header{align-items:start}.metrics{grid-template-columns:1fr 1fr}.filters{grid-template-columns:1fr}}`],
+  template: `<section class="mbd dashboard" [ngStyle]="themeStyle"><header><div><p>Billing operations</p><h2>{{ heading }}</h2><span class="muted">{{ description }}</span></div><button type="button" (click)="createBill.emit()">+ New bill</button></header><div class="metrics"><article class="card"><span>Total billed</span><b>{{ summary.totalBilled | currency }}</b></article><article class="card"><span>Outstanding</span><b>{{ summary.outstanding | currency }}</b></article><article class="card"><span>Submitted this month</span><b>{{ summary.submittedThisMonth }}</b></article><article class="card"><span>Closed this month</span><b>{{ summary.closedThisMonth }}</b></article></div><mindbill-bill-aging-summary [buckets]="summary.aging" [selectedBucket]="agingBucket" [appearance]="appearance" (bucketSelected)="toggleAging($event)"/><div class="filters"><input [(ngModel)]="query" placeholder="Search patient, claim, or payer" aria-label="Search bills"><select [(ngModel)]="state"><option value="">All statuses</option>@for (option of states; track option) { <option [value]="option">{{ label(option) }}</option> }</select>@if (agingBucket) { <button type="button" class="clear" (click)="agingBucket=''">{{ agingLabel }} ×</button> }</div><mindbill-bill-list [bills]="filteredBills" [appearance]="appearance" (billSelected)="billSelected.emit($event)"/></section>`,
+  styles: [sharedStyles, `.dashboard{display:grid;gap:18px}.dashboard header{display:flex;justify-content:space-between;align-items:end;gap:20px}.dashboard h2{font-size:28px;margin:2px 0 5px}.dashboard header p{margin:0;color:var(--a);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.dashboard header button{border:0;border-radius:var(--cr);background:var(--a);color:var(--ac);padding:11px 16px;font-weight:750;cursor:pointer}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metrics article{padding:18px}.metrics span{display:block;color:var(--m);font-size:12px}.metrics b{display:block;margin-top:8px;font-size:24px}.filters{display:grid;grid-template-columns:1fr 190px auto;gap:10px}.filters input,.filters select,.filters .clear{border:1px solid var(--b);border-radius:var(--cr);background:var(--s);color:var(--t);padding:11px 13px}.filters .clear{color:var(--a);font-weight:700;cursor:pointer}@media(max-width:760px){.dashboard header{align-items:start}.metrics{grid-template-columns:1fr 1fr}.filters{grid-template-columns:1fr}}`],
 })
 export class MindBillBillingDashboardComponent extends DashboardBase {
   @Input() bills: MindBillDashboardBill[] = [];
@@ -148,10 +160,12 @@ export class MindBillBillingDashboardComponent extends DashboardBase {
   @Input() description = "Track every submitted bill from payer acceptance through payment.";
   @Output() billSelected = new EventEmitter<MindBillDashboardBill>();
   @Output() createBill = new EventEmitter<void>();
-  query = ""; state = "";
+  query = ""; state = ""; agingBucket: MindBillAgingBucketId | "" = "";
   get summary(): MindBillDashboardSummary { return summarizeMindBillDashboard(this.bills); }
   get states(): string[] { return [...new Set(this.bills.map((bill) => bill.state))].sort(); }
-  get filteredBills(): MindBillDashboardBill[] { const query = this.query.trim().toLowerCase(); return this.bills.filter((bill) => (!this.state || bill.state === this.state) && (!query || [bill.patientName, bill.claimNumber, bill.payerName, bill.externalId, bill.billNumber].some((value) => String(value ?? "").toLowerCase().includes(query)))); }
+  get filteredBills(): MindBillDashboardBill[] { const query = this.query.trim().toLowerCase(); return this.bills.filter((bill) => (!this.state || bill.state === this.state) && (!this.agingBucket || mindBillAgingBucket(mindBillAgingDays(bill)) === this.agingBucket) && (!query || [bill.patientName, bill.claimNumber, bill.payerName, bill.externalId, bill.billNumber].some((value) => String(value ?? "").toLowerCase().includes(query)))); }
+  get agingLabel(): string { return this.summary.aging.find((item) => item.id === this.agingBucket)?.label ?? ""; }
+  toggleAging(bucket: MindBillAgingBucketId): void { this.agingBucket = this.agingBucket === bucket ? "" : bucket; }
   label(value: string): string { return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 }
 
