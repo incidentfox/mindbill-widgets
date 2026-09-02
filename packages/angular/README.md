@@ -53,7 +53,9 @@ export class CaseBillingComponent {
 }
 ```
 
-`MindBillBillSubmissionComponent` marks required fields, scrolls to invalid input, resolves ZIP codes, searches the MindBill claims-administrator and ICD-10 directories, calculates service-line totals, and uploads attachments. On success, render `MindBillBillLifecycleComponent` with the returned bill ID. The lifecycle component loads its own immutable bill snapshot, status, EORs, payments, history, and available actions.
+`MindBillBillSubmissionComponent` marks required fields, scrolls to invalid input, resolves ZIP codes to city and state with an inline status line, searches the MindBill claims-administrator and ICD-10 directories as you type, calculates service-line totals, and uploads attachments. Dates use a masked MM/DD/YYYY input that accepts ISO, US, or bare-digit entry, normalizes the display once a complete date is typed, and submits ISO values — identical to the React form. On success, render `MindBillBillLifecycleComponent` with the returned bill ID. The lifecycle component loads its own immutable bill snapshot, status, EORs, payments, history, and available actions.
+
+Procedure codes, modifiers, and rendering taxonomy all use the same styled searchable dropdown (`mindbill-combo-box`) with code + description rows, hover states, and typed custom-code entry for complete CPT/HCPCS/medical-legal codes. Service lines accept multiple modifiers rendered as removable chips. PDFs can be dropped anywhere on the screen — a full-page overlay confirms the drop target — with the same 25 MB per-file, 100 MB total, and 20-document limits as the React form.
 
 The default reference directories and field rules live in the component library. Hosts can provide custom procedure, modifier, and taxonomy options without reimplementing the form. For a fixture or Storybook, pass an async `submitter`; omit it in production so the component talks directly to the Partner API.
 
