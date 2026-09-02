@@ -31,6 +31,7 @@ import {
   BillActivityTimeline,
   BillExplanationOfReview,
   BillLifecycleProgress,
+  BillRejectionNotice,
 } from "./bill-lifecycle-surfaces";
 import { BillReadOnlyForm } from "./bill-read-only-form";
 import type { BillReviewAttachment, BillSubmissionRoute } from "./native-bill-review";
@@ -55,6 +56,7 @@ export type {
   BrowserBillAddress,
   BillPaymentRecord,
   BillRemittanceSummary,
+  BillRejection,
   CloseBillInput,
   PostBillPaymentInput,
   ReopenBillInput,
@@ -103,15 +105,9 @@ function reservePreviewWindow(): Window | null {
   return preview;
 }
 
-function renderPreview(preview: Window, title: string, body: string): void {
-  preview.document.open();
-  preview.document.write(`<!doctype html><title>${title}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{height:100%;margin:0;background:#202124;font:14px system-ui}iframe{width:100%;height:100%;border:0}.fallback{position:fixed;right:12px;top:12px;z-index:2;border-radius:8px;background:#fff;padding:9px 12px;color:#17282d;text-decoration:none;box-shadow:0 2px 12px #0005}</style>${body}`);
-  preview.document.close();
-}
-
 function previewBlob(blob: Blob, preview: Window | null): void {
   const url = URL.createObjectURL(blob);
-  if (preview) renderPreview(preview, "PDF preview", `<a class="fallback" href="${url}" target="_self">Open PDF directly</a><iframe title="PDF preview" src="${url}"></iframe>`);
+  if (preview) preview.location.replace(url);
   else {
     const link = document.createElement("a");
     link.href = url;
@@ -131,7 +127,7 @@ export async function openPdfFromUserGesture(loadPdf: () => Promise<Blob>): Prom
   try {
     previewBlob(await loadPdf(), preview);
   } catch (error) {
-    if (preview) renderPreview(preview, "PDF unavailable", "<p style=\"margin:0;padding:32px;color:#fff\">The PDF could not be opened. Close this tab and try again.</p>");
+    preview?.close();
     throw error;
   }
 }
@@ -384,6 +380,7 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
     <BillLifecycleProgress state={data.lifecycle.state} nativeStatus={data.lifecycle.nativeStatus} submittedAt={data.lifecycle.submittedAt ?? null} agingDays={data.lifecycle.agingDays ?? null} {...(appearance ? { appearance } : {})} />
+    {data.lifecycle.state.toLowerCase() === "rejected" && data.rejection ? <BillRejectionNotice rejection={data.rejection} {...(appearance ? { appearance } : {})} /> : null}
 
     <header className="mb-lifecycle-head">
       <div><div className="mb-lifecycle-title"><h2>Bill #{data.bill.billNumber}</h2></div><p>Claim {data.injury.claimNumber || "—"}{lifecycle.isRefreshing ? " · Refreshing…" : ""}</p></div>

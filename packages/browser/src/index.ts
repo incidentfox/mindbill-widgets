@@ -408,6 +408,14 @@ export type BillClaimsAdministratorDirectory = {
   claimNumberPatterns?: BillClaimsAdministratorPattern[];
 };
 
+/** End-user-safe details explaining why the latest submission was rejected. */
+export type BillRejection = {
+  reason: string;
+  code?: string | null;
+  receivedAt?: string | null;
+  source?: string | null;
+};
+
 export type BillLifecycleData = BillReviewData & {
   environment: "sandbox" | "live";
   lifecycle: {
@@ -423,6 +431,7 @@ export type BillLifecycleData = BillReviewData & {
   payments: BillPaymentRecord[];
   remittance: BillRemittanceSummary;
   delivery: BillLifecycleDelivery;
+  rejection?: BillRejection | null;
 };
 
 export type BillLifecycleSession = {
@@ -663,6 +672,10 @@ function normalizeLifecycle(value: unknown): BillLifecycleData {
     || typeof data.delivery !== "object"
     || !data.delivery.contacts
     || typeof data.delivery.contacts !== "object"
+    || (data.rejection != null && (
+      typeof data.rejection !== "object"
+      || typeof data.rejection.reason !== "string"
+    ))
   ) {
     throw new Error("The billing service returned an invalid bill lifecycle.");
   }
