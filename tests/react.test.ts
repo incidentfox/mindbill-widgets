@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -1223,6 +1225,50 @@ describe("connected bill lifecycle", () => {
       reason: "Selected the correct payer route.",
       bill: correctedBill,
     }));
+  });
+
+  it("rejects a failed resubmit action with the server's reason so the dialog can show it", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-lifecycle-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        type: "https://developers.mindbill.org/problems/duplicate_patient",
+        title: "duplicate_patient",
+        status: 409,
+        detail: "A patient with this exact name and date of birth already exists.",
+        code: "duplicate_patient",
+      }), { status: 409, headers: { "content-type": "application/problem+json" } }));
+    const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
+
+    await expect(client.resubmitBill({
+      reason: "Corrected the patient details.",
+      bill: { patient: { firstName: "Ada" } } as never,
+    })).rejects.toThrow("A patient with this exact name and date of birth already exists.");
+  });
+
+  it("keeps the correction dialog open and surfaces the server error inline on a failed resubmit", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/connected-bill-lifecycle.tsx", import.meta.url),
+      "utf8",
+    );
+
+    // The resubmit submit handler must catch the action-POST failure (never a
+    // silent success), keep the form open, and render the message inline.
+    const handler = source.slice(
+      source.indexOf("const submitCorrection"),
+      source.indexOf("const loadDuplicateDelivery"),
+    );
+    expect(handler).toContain("setCorrectionError(\"\")");
+    expect(handler).toContain("catch (cause)");
+    expect(handler).toContain("setCorrectionError(");
+    expect(handler).toContain("return;");
+    // Success is the only path that closes the panel.
+    expect(handler.indexOf("setPanel(\"\")")).toBeGreaterThan(handler.indexOf("return;"));
+    expect(source).toContain(
+      "{correctionError ? <div className=\"mb-lifecycle-message error\" role=\"alert\">{correctionError}</div> : null}",
+    );
   });
 
   it("passes claim context through payer search and preserves recommendation reasons", async () => {
