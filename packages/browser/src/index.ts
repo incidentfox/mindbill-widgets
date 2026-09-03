@@ -350,6 +350,7 @@ export type BillHistoryEntry = {
     | "reopen"
     | "note"
     | "portal"
+    | "task"
     | "system";
   /** Who acted: a biller name, "MindBill", or the responding clearinghouse. */
   actor: string | null;
