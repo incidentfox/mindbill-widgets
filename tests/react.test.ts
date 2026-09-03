@@ -1271,6 +1271,104 @@ describe("connected bill lifecycle", () => {
     );
   });
 
+  it("submits a fresh linked bill from a closed bill (submit_new_bill body shape)", async () => {
+    const closed = {
+      ...lifecycle,
+      lifecycle: {
+        ...lifecycle.lifecycle,
+        state: "closed",
+        nativeStatus: "CLOSED",
+        actions: [
+          { id: "reopen", label: "Reopen bill", enabled: true, primary: true },
+          { id: "submit_new_bill", label: "Submit New Bill", enabled: true },
+        ],
+      },
+    };
+    const submitted = {
+      ...lifecycle,
+      lifecycle: { ...lifecycle.lifecycle, state: "submitted", nativeStatus: "SENT" },
+    };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-lifecycle-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(jsonResponse({ data: closed }))
+      .mockResolvedValueOnce(jsonResponse({ data: submitted }));
+    const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
+
+    // A closed bill advertises exactly two actions: Reopen (primary) + Submit New Bill.
+    await expect(client.getLifecycle()).resolves.toMatchObject({
+      lifecycle: {
+        state: "closed",
+        actions: [
+          { id: "reopen", primary: true },
+          { id: "submit_new_bill", label: "Submit New Bill" },
+        ],
+      },
+    });
+
+    const newBill = {
+      billingMode: "med_legal",
+      patient: { firstName: "Ada", lastName: "Example", dateOfBirth: "1980-01-02", address: { line1: "100 Main Street", city: "Sacramento", state: "CA", postalCode: "95814" } },
+      claim: { claimNumber: "CLAIM-7", employer: "Synthetic Foods", dateOfInjury: "2026-08-01", claimsAdministrator: { id: "payer_7", name: "Synthetic Claims Administrator" } },
+      service: { date: "2026-08-24" },
+      billingProvider: { name: "Synthetic Medical Group", taxId: "123456789", npi: "1234567890", phone: "9165550100", address: { line1: "200 Billing Avenue", city: "Sacramento", state: "CA", postalCode: "95814" } },
+      renderingProvider: { name: "Ada Physician", npi: "1098765432", taxonomy: "2084P0800X" },
+      serviceLocation: { placeOfServiceCode: "11", address: { line1: "300 Service Street", city: "Sacramento", state: "CA", postalCode: "95814" } },
+      diagnoses: ["M79.641"],
+      serviceLines: [{ code: "ML201", units: 1 }],
+    } satisfies CompleteBillSubmissionInput;
+    // Same payload shape as a resubmission, but a distinct action id: the server
+    // creates a FRESH original linked to the closed bill instead of a correction.
+    await expect(client.submitNewBill({ reason: "Re-billing after closure.", bill: newBill })).resolves.toMatchObject({
+      lifecycle: { state: "submitted" },
+    });
+
+    expect(fetcher.mock.calls[2]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+    );
+    expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
+      action: "submit_new_bill",
+      reason: "Re-billing after closure.",
+      bill: newBill,
+    }));
+  });
+
+  it("keeps the Submit New Bill dialog open and surfaces the server error inline on failure", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/connected-bill-lifecycle.tsx", import.meta.url),
+      "utf8",
+    );
+
+    // Same inline-error contract as the correction dialog: a failed action POST
+    // never looks like a success — the form stays open with the server's reason.
+    const handler = source.slice(
+      source.indexOf("const submitNewBillFromForm"),
+      source.indexOf("const loadDuplicateDelivery"),
+    );
+    expect(handler).toContain("setNewBillError(\"\")");
+    expect(handler).toContain("catch (cause)");
+    expect(handler).toContain("setNewBillError(");
+    expect(handler).toContain("return;");
+    expect(handler.indexOf("setPanel(\"\")")).toBeGreaterThan(handler.indexOf("return;"));
+    expect(source).toContain(
+      "{newBillError ? <div className=\"mb-lifecycle-message error\" role=\"alert\">{newBillError}</div> : null}",
+    );
+
+    // The dialog reuses BillSubmissionForm prefilled from the closed bill's
+    // snapshot with carried-forward documents, and offers an explicit Cancel
+    // button returning to the closed-bill view.
+    const dialog = source.slice(
+      source.indexOf('panel === "submit_new_bill"'),
+      source.indexOf('panel === "second_review"'),
+    );
+    expect(dialog).toContain("initialBill={correctionInitialBill}");
+    expect(dialog).toContain("attachments={correctionAttachments}");
+    expect(dialog).toContain("onSubmit={submitNewBillFromForm}");
+    expect(dialog).toContain(">Cancel</button>");
+  });
+
   it("passes claim context through payer search and preserves recommendation reasons", async () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({

@@ -90,6 +90,14 @@ as a new immutable attempt. The canonical `billId` stays the same and every
 attempt remains in the bill history; the Angular host does not need a custom
 correction form or resubmission API adapter.
 
+For a **closed** bill MindBill authorizes exactly two actions — **Reopen** and
+**Submit New Bill**. Submit New Bill opens the same
+`MindBillBillSubmissionComponent` prefilled from the closed bill's snapshot
+with its documents carried forward, plus a Cancel control returning to the
+closed-bill view. Submitting creates a fresh original bill linked to the
+closed predecessor: the closed bill stays closed and keeps its record, and the
+bill history chains both records.
+
 Procedure codes, modifiers, and rendering taxonomy all use the same styled searchable dropdown (`mindbill-combo-box`) with code + description rows, hover states, and typed custom-code entry for complete CPT/HCPCS/medical-legal codes. Service lines accept multiple modifiers rendered as removable chips. PDFs can be dropped anywhere on the screen — a full-page overlay confirms the drop target — with the same 25 MB per-file, 100 MB total, and 20-document limits as the React form.
 
 The default reference directories and field rules live in the component library. Hosts can provide custom procedure, modifier, and taxonomy options without reimplementing the form. For a fixture or Storybook, pass an async `submitter`; omit it in production so the component talks directly to the Partner API.

@@ -123,6 +123,15 @@ the next immutable attempt under the same logical `billId`; the original
 attempt and rejection remain in history. The host application does not build a
 second correction form or pass bill seed data back into the lifecycle.
 
+For a **closed** bill the server authorizes exactly two actions — **Reopen**
+and **Submit New Bill**. Submit New Bill opens the same `BillSubmissionForm`,
+prefilled from the closed bill's snapshot with its documents carried forward,
+and a Cancel button returns to the closed-bill view. Submitting creates a
+fresh original bill linked to the closed predecessor: the closed bill stays
+closed and keeps its record, and the submissions ribbon/timeline chains both
+bills. Failures surface inline in the dialog, exactly like the correction
+flow.
+
 ## Lifecycle actions
 
 MindBill returns the actions that are valid for the bill's current state. Render that server-authoritative list instead of duplicating rejection, EOR, denial, review, payment, and closure rules in your application.

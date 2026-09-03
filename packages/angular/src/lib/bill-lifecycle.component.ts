@@ -172,6 +172,28 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
             </section>
           </div>
         }
+        @if (panel === 'submit_new_bill' && correctionInitialBill) {
+          <div class="correction-backdrop" (mousedown)="closeCorrectionBackdrop($event)">
+            <section class="correction-dialog" role="dialog" aria-modal="true" aria-label="Submit New Bill">
+              <button type="button" class="dialog-close" aria-label="Close" (click)="panel=''">×</button>
+              <header><h2>Submit New Bill</h2><p>This closed bill stays closed and keeps its record. Review the carried-over snapshot and submit a fresh bill — both bills stay linked in the submissions timeline.</p><button type="button" class="header-cancel" (click)="panel=''">Cancel</button></header>
+              <label class="correction-note">Submission note (optional)<textarea [(ngModel)]="correctionReason" name="newBillReason" placeholder="Why is a new bill being submitted?"></textarea></label>
+              <mindbill-bill-submission
+                [initialBill]="correctionInitialBill"
+                [attachments]="correctionAttachments"
+                [appearance]="appearance"
+                [sessionEndpoint]="sessionEndpoint"
+                [getSession]="getSession"
+                [apiBaseUrl]="apiBaseUrl"
+                [submitter]="submitNewBillFromForm"
+                heading="New bill information"
+                description="The closed bill stays unchanged. This form submits a fresh bill linked to it."
+                submitLabel="Submit New Bill"
+                (submitted)="finishNewBill()"
+              />
+            </section>
+          </div>
+        }
       }
     </section>
   `,
@@ -188,7 +210,7 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
     .h-text{margin:8px 0 0;white-space:pre-wrap}
     @media(max-width:760px){.history-head{display:none}.history-line{grid-template-columns:1fr;gap:2px;padding:10px 12px}.history-details{padding:4px 12px 12px}.h-kv>div,.h-due dl>div{grid-template-columns:1fr}}
     .report-options{display:grid;gap:8px}.action-form label.report-option{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--b);border-radius:var(--cr);padding:10px 12px;font-weight:400;cursor:pointer}.report-option input{width:16px;min-height:16px;margin-top:3px;padding:0;border:0}.report-option strong{display:block;font-size:13.5px}.report-option small{display:block;color:var(--m);margin-top:2px;font-size:12.5px}
-    .correction-backdrop{position:fixed;inset:0;z-index:100;overflow:auto;background:#172b37b8;padding:28px}.correction-dialog{position:relative;max-width:1180px;margin:0 auto;background:var(--bg);border-radius:var(--r);box-shadow:0 24px 80px #0006;padding:26px}.correction-dialog>header{padding-right:48px;margin-bottom:18px}.correction-dialog h2{margin:0 0 6px}.correction-dialog p{margin:0;color:var(--m)}.dialog-close{position:absolute;right:20px;top:20px;width:40px;height:40px;padding:0;font-size:24px}.correction-reason{display:grid;gap:8px;margin-bottom:14px;border-left:4px solid #c43d3d;border-radius:8px;background:#fff5f5;padding:14px;color:#8f2525}.correction-reason span{display:block}.correction-reason b{margin-right:6px}.contact-hint{margin:0 0 14px!important;border:1px solid var(--b);border-radius:8px;background:var(--s);padding:12px!important;color:var(--t)!important}.correction-note{display:grid;gap:6px;margin-bottom:18px;font-weight:700}.correction-note textarea{min-height:76px}.correction-dialog mindbill-bill-submission{display:block}.correction-dialog .mb{padding:0}@media(max-width:760px){.correction-backdrop{padding:0}.correction-dialog{min-height:100%;border-radius:0;padding:18px 12px}.dialog-close{right:12px;top:12px}}
+    .correction-backdrop{position:fixed;inset:0;z-index:100;overflow:auto;background:#172b37b8;padding:28px}.correction-dialog{position:relative;max-width:1180px;margin:0 auto;background:var(--bg);border-radius:var(--r);box-shadow:0 24px 80px #0006;padding:26px}.correction-dialog>header{padding-right:48px;margin-bottom:18px}.correction-dialog h2{margin:0 0 6px}.correction-dialog p{margin:0;color:var(--m)}.dialog-close{position:absolute;right:20px;top:20px;width:40px;height:40px;padding:0;font-size:24px}.correction-reason{display:grid;gap:8px;margin-bottom:14px;border-left:4px solid #c43d3d;border-radius:8px;background:#fff5f5;padding:14px;color:#8f2525}.correction-reason span{display:block}.correction-reason b{margin-right:6px}.contact-hint{margin:0 0 14px!important;border:1px solid var(--b);border-radius:8px;background:var(--s);padding:12px!important;color:var(--t)!important}.correction-note{display:grid;gap:6px;margin-bottom:18px;font-weight:700}.correction-note textarea{min-height:76px}.correction-dialog mindbill-bill-submission{display:block}.correction-dialog .mb{padding:0}.correction-dialog .header-cancel{margin-top:10px}@media(max-width:760px){.correction-backdrop{padding:0}.correction-dialog{min-height:100%;border-radius:0;padding:18px 12px}.dialog-close{right:12px;top:12px}}
   `],
 })
 export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
@@ -247,6 +269,7 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   payerContact(data: BillLifecycleData): string { const contacts = data.delivery.contacts; return contacts.adjusterName || contacts.adjusterPhone || contacts.adjusterEmail || contacts.claimsEmail || contacts.faxNumber || contacts.mailingAddress || "No payer contact details are available."; }
   beginAction(action: string, data: BillLifecycleData): void {
     if (action === "resubmit") this.prepareCorrection(data);
+    else if (action === "submit_new_bill") this.prepareNewBill(data);
     else if (action === "post_payment") this.panel = "payment";
     else if (action === "second_review" || action === "independent_bill_review") this.panel = "review";
     else if (action === "close") this.panel = "close";
@@ -334,6 +357,18 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     return { billId: data.bill.id, bill: { id: data.bill.id, state: data.lifecycle.state } };
   };
   finishCorrection(): void { this.panel = ""; this.correctionReason = ""; this.notice = "Corrected submission sent."; }
+  // "Submit New Bill" from a CLOSED bill: same prefilled submission form as the
+  // correction flow, but the server keeps the closed bill closed and creates a
+  // fresh original linked to it (both records chain in the submissions timeline).
+  readonly submitNewBillFromForm = async (input: BrowserBillSubmissionInput): Promise<BrowserBillSubmissionResult> => {
+    const data = await this.store.submitNewBill({
+      bill: input.bill,
+      ...(input.documents?.length ? { documents: input.documents } : {}),
+      ...(this.correctionReason.trim() ? { reason: this.correctionReason.trim() } : {}),
+    });
+    return { billId: data.bill.id, bill: { id: data.bill.id, state: data.lifecycle.state } };
+  };
+  finishNewBill(): void { this.panel = ""; this.correctionReason = ""; this.notice = "New bill submitted."; }
   closeCorrectionBackdrop(event: MouseEvent): void { if (event.currentTarget === event.target) this.panel = ""; }
   private prepareCorrection(data: BillLifecycleData): void {
     this.correctionInitialBill = correctionBill(data);
@@ -348,6 +383,21 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     this.correctionAttentionFields = [...new Set(data.rejection?.issues?.flatMap((issue) => issue.fieldPaths || []) ?? [])];
     this.correctionReason = "";
     this.panel = "resubmit";
+  }
+  private prepareNewBill(data: BillLifecycleData): void {
+    this.correctionInitialBill = correctionBill(data);
+    this.correctionAttachments = data.bill.attachments.map((attachment) => ({
+      filename: attachment.filename,
+      documentType: correctionDocumentType(attachment.documentType),
+      ...(attachment.description ? { description: attachment.description } : {}),
+      ...(attachment.reportType ? { reportTypeCode: attachment.reportType } : {}),
+      loadBlob: () => this.store.getAttachment(attachment.id),
+      ...(attachment.documentType === "w9" ? { locked: true, badge: "Auto-attached" } : {}),
+    }));
+    // No rejection context on a closed bill — nothing to highlight.
+    this.correctionAttentionFields = [];
+    this.correctionReason = "";
+    this.panel = "submit_new_bill";
   }
   private openBlob(blob: Blob, filename: string): void { const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noopener"; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000); }
 }
