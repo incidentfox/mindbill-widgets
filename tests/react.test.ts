@@ -967,6 +967,8 @@ describe("bill lifecycle surfaces", () => {
     }
     expect(source).toContain("daisyBill Payer ID");
     expect(source).not.toContain("Directory ID");
+    expect(source).toContain("var(--mb-surface,#fff)");
+    expect(source).toContain("background:var(--mbcad-surface)");
   });
 });
 
