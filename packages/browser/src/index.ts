@@ -525,14 +525,54 @@ export type SubmitSecondReviewInput = {
   serviceAuthorized?: boolean;
 };
 
+export type ReportBillStatusId =
+  | "message_left"
+  | "eor_pending"
+  | "eor_sent"
+  | "bill_not_on_file"
+  | "forwarded";
+
+export type ReportBillStatusOption = {
+  id: ReportBillStatusId;
+  label: string;
+  description: string;
+};
+
+/** The five daisyBill-worded outcomes of a bill payment-status phone call. */
+export const REPORT_BILL_STATUS_OPTIONS: ReportBillStatusOption[] = [
+  {
+    id: "message_left",
+    label: "Message Left Requesting Bill Payment Status",
+    description: "Claims Administrator/Bill Review representative unavailable.",
+  },
+  {
+    id: "eor_pending",
+    label: "Explanation of Review (EOR) Pending",
+    description: "Claims Administrator/Bill Review reported the bill is still in process and an EOR has not been generated or sent.",
+  },
+  {
+    id: "eor_sent",
+    label: "Explanation of Review (EOR) Sent",
+    description: "Claims Administrator/Bill Review reported sending an EOR to the provider.",
+  },
+  {
+    id: "bill_not_on_file",
+    label: "Bill Not On File",
+    description: "Claims Administrator/Bill Review reported not receiving the bill.",
+  },
+  {
+    id: "forwarded",
+    label: "Bill Forwarded to Different Payer / Network",
+    description: "Claims Administrator/Bill Review reported forwarding the bill to a different payer.",
+  },
+];
+
 /**
- * Payload for the "report_bill_status" lifecycle action: records the outcome
- * of a phone call to the Claims Administrator / Bill Review vendor about an
- * outstanding bill. Posted through the generic lifecycle actions endpoint.
+ * Outcome of a phone call to the Claims Administrator / Bill Review vendor
+ * about an outstanding bill, recorded through the lifecycle actions endpoint.
  */
-export type ReportBillStatusActionInput = {
-  action: "report_bill_status";
-  status: string;
+export type ReportBillStatusInput = {
+  status: ReportBillStatusId;
   company?: string;
   representativeName?: string;
   representativeRole?: string;
@@ -540,6 +580,113 @@ export type ReportBillStatusActionInput = {
   callReference?: string;
   note?: string;
 };
+
+/**
+ * Payload for the "report_bill_status" lifecycle action: records the outcome
+ * of a phone call to the Claims Administrator / Bill Review vendor about an
+ * outstanding bill. Posted through the generic lifecycle actions endpoint.
+ */
+export type ReportBillStatusActionInput = ReportBillStatusInput & {
+  action: "report_bill_status";
+};
+
+/**
+ * Payload for the "send_duplicate" lifecycle action: resends the immutable
+ * submission packet, unchanged, over the selected delivery route — typically
+ * after the payer reports the bill is not on file.
+ */
+export type SendDuplicateBillInput = {
+  route: BillSubmissionRoute;
+  destination?: SubmitBillInput["destination"];
+  attention?: string;
+  subject?: string;
+  note?: string;
+  /** CC recipients for the email route (at most 10). */
+  cc?: string[];
+};
+
+export type ReportBillStatusContacts = {
+  claimsAdmin: {
+    name: string;
+    hoursOfOperation?: string;
+    phones: Array<{ label: string; value: string }>;
+  } | null;
+  billReview: { name: string; phone?: string } | null;
+};
+
+/**
+ * Partner-safe "who to call" summary for the Report Bill Status flow, derived
+ * from the lifecycle delivery block (payer contacts + optional directory).
+ */
+export function reportBillStatusContacts(
+  delivery: BillLifecycleDelivery,
+): ReportBillStatusContacts {
+  const payerName = delivery.payerName?.trim();
+  const directory = delivery.directory ?? null;
+  const phones: Array<{ label: string; value: string }> = [];
+  const adjusterPhone = delivery.contacts.adjusterPhone?.trim();
+  if (adjusterPhone) {
+    const adjusterName = delivery.contacts.adjusterName?.trim();
+    phones.push({
+      label: adjusterName ? `Adjuster (${adjusterName})` : "Adjuster",
+      value: adjusterPhone,
+    });
+  }
+  const hours = directory?.hours?.trim();
+  const claimsAdmin = payerName
+    ? {
+        name: payerName,
+        ...(hours ? { hoursOfOperation: hours } : {}),
+        phones,
+      }
+    : null;
+  const billReviewContact = (directory?.billReview ?? []).find(
+    (contact) => contact.name?.trim() || contact.phone?.trim(),
+  );
+  const billReview = billReviewContact
+    ? {
+        name: billReviewContact.name?.trim() || "Bill Review",
+        ...(billReviewContact.phone?.trim() ? { phone: billReviewContact.phone.trim() } : {}),
+      }
+    : null;
+  return { claimsAdmin, billReview };
+}
+
+/**
+ * Default Second Bill Review dispute reason for an invalid med-legal denial.
+ * Prefilled (editable) in the SBR panel.
+ */
+export const SECOND_REVIEW_REASON_TEMPLATE =
+  "This is an appeal of the invalid denial of this med-legal bill; per LC §4622 and the OMFS/MLFS, payment is due as billed.";
+
+/** Days allowed to request Second Review after service of the denial EOR. */
+export const SECOND_REVIEW_WINDOW_DAYS = 90;
+
+export type SecondReviewDeadline = {
+  /** ISO date (yyyy-mm-dd) of the latest denial/EOR document. */
+  eorDate: string;
+  /** ISO date (yyyy-mm-dd) 90 days after the EOR date. */
+  deadline: string;
+};
+
+/**
+ * The 90-day Second Review window anchored on the latest EOR date, or null
+ * when the lifecycle data provides no parseable denial/EOR date.
+ */
+export function secondReviewDeadline(
+  eors: Array<Pick<BillEorDocument, "addedAt">>,
+): SecondReviewDeadline | null {
+  const times = eors
+    .map((eor) => Date.parse(eor.addedAt))
+    .filter((time) => Number.isFinite(time));
+  if (!times.length) return null;
+  const eorTime = Math.max(...times);
+  const isoDate = (time: number): string => new Date(time).toISOString().slice(0, 10);
+  return {
+    eorDate: isoDate(eorTime),
+    deadline: isoDate(eorTime + SECOND_REVIEW_WINDOW_DAYS * 86_400_000),
+  };
+}
 /**
  * A corrected immutable snapshot submitted as the next attempt on the same bill.
  * The logical bill ID remains stable; only the submission/control-number attempt advances.
@@ -710,6 +857,8 @@ export type BillLifecycleClient = {
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
   submitSecondReview: (input: SubmitSecondReviewInput) => Promise<BillLifecycleData>;
   resubmitBill: (input: ResubmitBillInput) => Promise<BillLifecycleData>;
+  sendDuplicateBill: (input: SendDuplicateBillInput) => Promise<BillLifecycleData>;
+  reportBillStatus: (input: ReportBillStatusInput) => Promise<BillLifecycleData>;
   simulateSandbox: (input: SimulateSandboxBillInput) => Promise<BillLifecycleData>;
   clearSession: () => void;
 };
@@ -1106,6 +1255,8 @@ export function createBillLifecycleClient({
     postPayment(input) { return action({ action: "post_payment", penaltyAmount: 0, interestAmount: 0, ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
     resubmitBill(input) { return action({ action: "resubmit", ...input }, "Bill could not be resubmitted."); },
+    sendDuplicateBill(input) { return action({ action: "send_duplicate", ...input }, "Duplicate bill could not be sent."); },
+    reportBillStatus(input) { return action({ action: "report_bill_status", ...input }, "Bill status could not be reported."); },
     simulateSandbox,
   };
 }

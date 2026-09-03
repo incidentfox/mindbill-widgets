@@ -14,6 +14,7 @@ export * from "./lib/submission-controls";
 export * from "./lib/submission-format";
 export * from "./lib/billing-management-button.component";
 export * from "./lib/organization-onboarding.component";
+export { REPORT_BILL_STATUS_OPTIONS, reportBillStatusContacts } from "@mindbill/browser";
 export type {
   BillLifecycleAction,
   BillLifecycleActionId,
@@ -40,4 +41,9 @@ export type {
   BillTasksDashboardSectionInput,
   BillTasksDashboardTone,
   ReportBillStatusActionInput,
+  ReportBillStatusContacts,
+  ReportBillStatusId,
+  ReportBillStatusInput,
+  ReportBillStatusOption,
+  SendDuplicateBillInput,
 } from "@mindbill/browser";

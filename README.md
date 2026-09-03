@@ -147,6 +147,19 @@ submission attempt. The public bill ID stays stable; MindBill assigns attempt
 suffixes such as `-1`, `-2`, and `-3` to the patient control number and keeps
 all rejections, acknowledgements, EORs, and payments in one history.
 
+Follow-up actions are server-driven: when the lifecycle response enables
+`send_duplicate` or `report_bill_status`, both components surface them. Send
+duplicate reopens the delivery-method picker (routes and contacts from the
+bill's delivery options) and resends the unchanged packet; Report Bill Status
+walks the biller through the payer call — who to dial (payer contacts plus
+directory hours and Bill Review vendor), the submission receipt (submission
+and acknowledgement history rows), and the five reported-status outcomes with
+call details — and records the result on the bill history. The Second Review
+panel prefills an editable LC §4622 appeal reason and, when the lifecycle
+includes the denial EOR, shows the 90-day filing deadline. Bills with two or
+more submissions also render a submissions ribbon (Original Bill, Second
+Review, Duplicate Bill, …) at the top of the React lifecycle view.
+
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
 

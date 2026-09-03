@@ -6,7 +6,9 @@ import {
   type BillLifecycleData,
   type CloseBillInput,
   type PostBillPaymentInput,
+  type ReportBillStatusInput,
   type ResubmitBillInput,
+  type SendDuplicateBillInput,
   type SubmitSecondReviewInput,
 } from "@mindbill/browser";
 
@@ -63,6 +65,8 @@ export class MindBillLifecycleStore {
   postPayment(input: PostBillPaymentInput) { return this.mutate(() => this.requireClient().postPayment(input)); }
   resubmitBill(input: ResubmitBillInput) { return this.mutate(() => this.requireClient().resubmitBill(input)); }
   submitSecondReview(input: SubmitSecondReviewInput) { return this.mutate(() => this.requireClient().submitSecondReview(input)); }
+  sendDuplicateBill(input: SendDuplicateBillInput) { return this.mutate(() => this.requireClient().sendDuplicateBill(input)); }
+  reportBillStatus(input: ReportBillStatusInput) { return this.mutate(() => this.requireClient().reportBillStatus(input)); }
 
   private requireClient(): BillLifecycleClient {
     if (!this.client) throw new Error("Connect the lifecycle store before using it.");

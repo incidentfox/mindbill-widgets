@@ -8,59 +8,24 @@
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useEffect, useState } from "react";
+import {
+  REPORT_BILL_STATUS_OPTIONS,
+  type ReportBillStatusId,
+  type ReportBillStatusInput,
+} from "@mindbill/browser";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+
+// The five status options and their input shape are framework-neutral and live
+// in @mindbill/browser; re-exported here so existing imports keep working.
+export { REPORT_BILL_STATUS_OPTIONS } from "@mindbill/browser";
+export type { ReportBillStatusId, ReportBillStatusInput } from "@mindbill/browser";
 
 type SurfaceProps = {
   appearance?: MindBillReactAppearance;
   className?: string;
   style?: CSSProperties;
 };
-
-export type ReportBillStatusId =
-  | "message_left"
-  | "eor_pending"
-  | "eor_sent"
-  | "bill_not_on_file"
-  | "forwarded";
-
-export type ReportBillStatusInput = {
-  status: ReportBillStatusId;
-  company?: string;
-  representativeName?: string;
-  representativeRole?: string;
-  phone?: string;
-  callReference?: string;
-  note?: string;
-};
-
-export const REPORT_BILL_STATUS_OPTIONS: Array<{ id: ReportBillStatusId; label: string; description: string }> = [
-  {
-    id: "message_left",
-    label: "Message Left Requesting Bill Payment Status",
-    description: "Claims Administrator/Bill Review representative unavailable.",
-  },
-  {
-    id: "eor_pending",
-    label: "Explanation of Review (EOR) Pending",
-    description: "Claims Administrator/Bill Review reported the bill is still in process and an EOR has not been generated or sent.",
-  },
-  {
-    id: "eor_sent",
-    label: "Explanation of Review (EOR) Sent",
-    description: "Claims Administrator/Bill Review reported sending an EOR to the provider.",
-  },
-  {
-    id: "bill_not_on_file",
-    label: "Bill Not On File",
-    description: "Claims Administrator/Bill Review reported not receiving the bill.",
-  },
-  {
-    id: "forwarded",
-    label: "Bill Forwarded to Different Payer / Network",
-    description: "Claims Administrator/Bill Review reported forwarding the bill to a different payer.",
-  },
-];
 
 export type ReportBillStatusDialogProps = SurfaceProps & {
   title?: ReactNode;

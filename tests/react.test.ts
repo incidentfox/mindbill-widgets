@@ -17,7 +17,10 @@ import {
   buildBillTasksDashboard,
   createBillReferenceClient,
   createBillSubmissionClient,
+  reportBillStatusContacts,
   sanitizeBillReviewSaveInput,
+  SECOND_REVIEW_REASON_TEMPLATE,
+  secondReviewDeadline,
   type BillHistoryEntry,
   type BillTasksDashboardItem,
 } from "../packages/browser/src/index";
@@ -1345,6 +1348,47 @@ describe("connected bill lifecycle", () => {
       "billId is required",
     );
   });
+
+  it("sends a duplicate bill and reports a phoned bill status through the actions endpoint", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-lifecycle-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(jsonResponse({ data: lifecycle }))
+      .mockResolvedValueOnce(jsonResponse({ data: lifecycle }));
+    const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
+
+    await expect(client.sendDuplicateBill({
+      route: "fax",
+      destination: { faxNumber: "(555) 010-2040" },
+      attention: "Claims Intake",
+    })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
+    await expect(client.reportBillStatus({
+      status: "eor_pending",
+      representativeName: "Sam Reviewer",
+      callReference: "REF-42",
+    })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
+
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+    );
+    expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({
+      action: "send_duplicate",
+      route: "fax",
+      destination: { faxNumber: "(555) 010-2040" },
+      attention: "Claims Intake",
+    }));
+    expect(fetcher.mock.calls[2]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+    );
+    expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
+      action: "report_bill_status",
+      status: "eor_pending",
+      representativeName: "Sam Reviewer",
+      callReference: "REF-42",
+    }));
+  });
 });
 
 describe("bill tasks dashboard", () => {
@@ -1467,6 +1511,57 @@ describe("bill submissions ribbon", () => {
     expect(billSubmissionsRibbonDeliveryLabel("Emailed to claims@example.com.")).toBe("Email");
     expect(billSubmissionsRibbonDeliveryLabel("Mailed to PO Box 1234.")).toBe("Mail");
     expect(billSubmissionsRibbonDeliveryLabel("Hand delivered.")).toBe("Sent");
+  });
+});
+
+describe("report bill status contacts", () => {
+  it("derives claims-admin and bill-review call targets from the delivery block", () => {
+    expect(reportBillStatusContacts({
+      payerName: "Acme Claims Administration",
+      contacts: { adjusterName: "Dana Adjuster", adjusterPhone: "(555) 010-3050" },
+      directory: {
+        hours: "Mon–Fri 8am–5pm PT",
+        billReview: [{ name: "Acme Bill Review", phone: "(555) 010-3060" }],
+      },
+    })).toEqual({
+      claimsAdmin: {
+        name: "Acme Claims Administration",
+        hoursOfOperation: "Mon–Fri 8am–5pm PT",
+        phones: [{ label: "Adjuster (Dana Adjuster)", value: "(555) 010-3050" }],
+      },
+      billReview: { name: "Acme Bill Review", phone: "(555) 010-3060" },
+    });
+  });
+
+  it("returns nulls when the delivery block has no usable call targets", () => {
+    expect(reportBillStatusContacts({ payerName: "  ", contacts: {} }))
+      .toEqual({ claimsAdmin: null, billReview: null });
+    expect(reportBillStatusContacts({
+      payerName: "Acme Claims Administration",
+      contacts: {},
+      directory: { billReview: [{ email: "review@payer.example" }] },
+    })).toEqual({
+      claimsAdmin: { name: "Acme Claims Administration", phones: [] },
+      billReview: null,
+    });
+  });
+});
+
+describe("second review prefill and deadline", () => {
+  it("ships an editable LC §4622 appeal template", () => {
+    expect(SECOND_REVIEW_REASON_TEMPLATE).toBe(
+      "This is an appeal of the invalid denial of this med-legal bill; per LC §4622 and the OMFS/MLFS, payment is due as billed.",
+    );
+  });
+
+  it("anchors the 90-day window on the latest parseable denial/EOR date", () => {
+    expect(secondReviewDeadline([])).toBeNull();
+    expect(secondReviewDeadline([{ addedAt: "not-a-date" }])).toBeNull();
+    expect(secondReviewDeadline([
+      { addedAt: "2026-06-01T12:00:00.000Z" },
+      { addedAt: "2026-07-01T12:00:00.000Z" },
+      { addedAt: "garbage" },
+    ])).toEqual({ eorDate: "2026-07-01", deadline: "2026-09-29" });
   });
 });
 
