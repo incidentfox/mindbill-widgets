@@ -81,6 +81,36 @@ describe("Angular subpayor picker", () => {
   });
 });
 
+describe("Angular closed-bill Submit New Bill", () => {
+  it("mirrors the correction flow through MindBillBillSubmissionComponent with a Cancel path", () => {
+    const source = readFileSync(
+      new URL("../packages/angular/src/lib/bill-lifecycle.component.ts", import.meta.url),
+      "utf8",
+    );
+
+    // The action opens its own panel with the same prefilled submission form…
+    expect(source).toContain('action === "submit_new_bill"');
+    expect(source).toContain("panel === 'submit_new_bill'");
+    expect(source).toContain('[submitter]="submitNewBillFromForm"');
+    // …carries the closed bill's documents forward, and can be cancelled.
+    const dialog = source.slice(
+      source.indexOf("panel === 'submit_new_bill'"),
+      source.indexOf("`,"),
+    );
+    expect(dialog).toContain("<mindbill-bill-submission");
+    expect(dialog).toContain('[attachments]="correctionAttachments"');
+    expect(dialog).toContain(">Cancel</button>");
+
+    // The store posts the dedicated submit_new_bill lifecycle action.
+    const store = readFileSync(
+      new URL("../packages/angular/src/lib/lifecycle-store.ts", import.meta.url),
+      "utf8",
+    );
+    expect(store).toContain("submitNewBill(input: SubmitNewBillInput)");
+    expect(store).toContain(".submitNewBill(input)");
+  });
+});
+
 describe("Angular procedure lines", () => {
   it("keeps one empty row after every entered row", () => {
     expect(ensureTrailingProcedureLine([])).toEqual([

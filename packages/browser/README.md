@@ -93,6 +93,20 @@ await billing.resubmitBill({
 });
 ```
 
+A **closed** bill authorizes exactly two actions: `reopen` and
+`submit_new_bill`. "Submit New Bill" keeps the closed bill closed — its record
+and close reason are preserved and it is never superseded — and creates a
+fresh original bill linked to it, so the submissions timeline chains both
+records. It accepts the same snapshot payload shape as a resubmission:
+
+```ts
+await billing.submitNewBill({
+  reason: "Re-billing the service after the earlier bill was closed.",
+  bill: newBillSnapshot,
+  documents: newBillDocuments,
+});
+```
+
 MindBill preserves the original attempt, rejection, corrected attempt, later
 acknowledgements, EORs, and payments in one lifecycle. Each outbound attempt
 gets the next patient-control-number suffix (`-1`, `-2`, `-3`, ...), while the

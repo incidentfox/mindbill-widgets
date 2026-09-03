@@ -329,7 +329,8 @@ export type BillLifecycleActionId =
   | "close"
   | "reopen"
   | "send_duplicate"
-  | "report_bill_status";
+  | "report_bill_status"
+  | "submit_new_bill";
 
 export type BillLifecycleAction = {
   id: BillLifecycleActionId;
@@ -722,6 +723,13 @@ export type ResubmitBillInput = {
   bill: BrowserBillCreateInput;
   documents?: BrowserBillSubmissionDocument[];
 };
+/**
+ * "Submit New Bill" from a CLOSED bill: the same snapshot payload shape as a
+ * resubmission, but the server creates a FRESH original bill linked to the closed
+ * predecessor — the closed bill stays closed and keeps its record, and the
+ * submissions ribbon/timeline chains both records.
+ */
+export type SubmitNewBillInput = ResubmitBillInput;
 export type SandboxSimulationScenario = "accepted" | "rejected" | "processed" | "denied" | "partial_payment" | "paid";
 export type SimulateSandboxBillInput = {
   scenario: SandboxSimulationScenario;
@@ -888,6 +896,7 @@ export type BillLifecycleClient = {
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
   submitSecondReview: (input: SubmitSecondReviewInput) => Promise<BillLifecycleData>;
   resubmitBill: (input: ResubmitBillInput) => Promise<BillLifecycleData>;
+  submitNewBill: (input: SubmitNewBillInput) => Promise<BillLifecycleData>;
   sendDuplicateBill: (input: SendDuplicateBillInput) => Promise<BillLifecycleData>;
   reportBillStatus: (input: ReportBillStatusInput) => Promise<BillLifecycleData>;
   simulateSandbox: (input: SimulateSandboxBillInput) => Promise<BillLifecycleData>;
@@ -1303,6 +1312,7 @@ export function createBillLifecycleClient({
     postPayment(input) { return action({ action: "post_payment", penaltyAmount: 0, interestAmount: 0, ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
     resubmitBill(input) { return action({ action: "resubmit", ...input }, "Bill could not be resubmitted."); },
+    submitNewBill(input) { return action({ action: "submit_new_bill", ...input }, "The new bill could not be submitted."); },
     sendDuplicateBill(input) { return action({ action: "send_duplicate", ...input }, "Duplicate bill could not be sent."); },
     reportBillStatus(input) { return action({ action: "report_bill_status", ...input }, "Bill status could not be reported."); },
     simulateSandbox,
