@@ -256,12 +256,35 @@ export function billLifecycleStage(state: string): BillLifecycleStage {
   return "submitted";
 }
 
+export type BillLifecycleProgressStepsOptions = {
+  /**
+   * Render pre-submission bills ("draft") as a dedicated leading Draft stage
+   * ahead of the Sent→Closed rail. Off by default: hosts whose bills are always
+   * already submitted (the typical partner embed) never see a Draft stage, and
+   * without the flag a draft state keeps the legacy rendering (Sent as the
+   * current stage). Post-submission states render identically either way.
+   */
+  draftStage?: boolean;
+};
+
+/** True when the lifecycle state is a pre-submission draft. */
+export function isBillLifecycleDraft(state: string): boolean {
+  return state.toLowerCase() === "draft";
+}
+
 /** Builds the progress rail for a lifecycle state, including terminal exception paths. */
-export function billLifecycleProgressSteps(state: string): BillLifecycleProgressStep[] {
+export function billLifecycleProgressSteps(state: string, options?: BillLifecycleProgressStepsOptions): BillLifecycleProgressStep[] {
   if (state.toLowerCase() === "rejected") {
     return [
       { id: "submitted", label: "Sent", status: "complete" },
       { id: "rejected", label: "Rejected", status: "current" },
+    ];
+  }
+
+  if (options?.draftStage && isBillLifecycleDraft(state)) {
+    return [
+      { id: "draft", label: "Draft", status: "current" },
+      ...lifecycleStages.map((stage) => ({ ...stage, status: "upcoming" as const })),
     ];
   }
 
@@ -295,15 +318,18 @@ export type BillLifecycleProgressProps = SurfaceProps & {
   nativeStatus?: string;
   submittedAt?: string | null;
   agingDays?: number | null;
+  /** Opt-in leading Draft stage for pre-submission bills. See {@link BillLifecycleProgressStepsOptions}. */
+  draftStage?: boolean;
 };
 
-export function BillLifecycleProgress({ state, nativeStatus, submittedAt, agingDays, appearance, className, style }: BillLifecycleProgressProps): ReactElement {
+export function BillLifecycleProgress({ state, nativeStatus, submittedAt, agingDays, draftStage, appearance, className, style }: BillLifecycleProgressProps): ReactElement {
   const rejected = state.toLowerCase() === "rejected";
-  const steps = billLifecycleProgressSteps(state);
+  const draft = Boolean(draftStage) && isBillLifecycleDraft(state);
+  const steps = billLifecycleProgressSteps(state, { draftStage: Boolean(draftStage) });
   return (
     <section className={classes(`mb-surface mb-progress${rejected ? " is-rejected" : ""}`, className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill lifecycle">
       <style>{lifecycleSurfaceStyles}</style>
-      <header className="mb-surface-heading"><div><strong>{billLifecycleDisplayLabel(state, nativeStatus)}</strong><span>{rejected ? "The payer rejected this submission." : `${submittedAt ? `Submitted ${defaultFormatDate(submittedAt)}` : "Submitted"}${typeof agingDays === "number" ? ` · ${agingDays} days old` : ""}`}</span></div></header>
+      <header className="mb-surface-heading"><div><strong>{billLifecycleDisplayLabel(state, nativeStatus)}</strong><span>{rejected ? "The payer rejected this submission." : draft ? "Not yet sent" : `${submittedAt ? `Submitted ${defaultFormatDate(submittedAt)}` : "Submitted"}${typeof agingDays === "number" ? ` · ${agingDays} days old` : ""}`}</span></div></header>
       <ol className="mb-progress-list" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
         {steps.map((step, index) => (
           <li key={step.id} className={`is-${step.status}`} aria-current={step.status === "current" ? "step" : undefined}>

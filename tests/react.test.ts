@@ -49,6 +49,7 @@ import {
   billLifecycleProgressSteps,
   billLifecycleStage,
   BillRejectionNotice,
+  isBillLifecycleDraft,
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
 import {
@@ -856,6 +857,28 @@ describe("bill lifecycle surfaces", () => {
       { id: "rejected", label: "Rejected", status: "current" },
     ]);
     expect(billLifecycleProgressSteps("accepted")).toHaveLength(4);
+  });
+
+  it("keeps draft rendering unchanged unless the opt-in draftStage flag is set", () => {
+    // Default off: a draft state keeps the legacy 4-stage rail (partner embeds see no change).
+    const legacy = billLifecycleProgressSteps("draft");
+    expect(legacy).toHaveLength(4);
+    expect(legacy[0]).toEqual({ id: "submitted", label: "Sent", status: "current" });
+
+    // Opted in: a dedicated leading Draft stage with the whole rail still ahead.
+    expect(billLifecycleProgressSteps("draft", { draftStage: true })).toEqual([
+      { id: "draft", label: "Draft", status: "current" },
+      { id: "submitted", label: "Sent", status: "upcoming" },
+      { id: "accepted", label: "Accepted", status: "upcoming" },
+      { id: "processed", label: "Processed", status: "upcoming" },
+      { id: "closed", label: "Closed", status: "upcoming" },
+    ]);
+
+    // The flag never alters post-submission or exception states.
+    expect(billLifecycleProgressSteps("accepted", { draftStage: true })).toEqual(billLifecycleProgressSteps("accepted"));
+    expect(billLifecycleProgressSteps("rejected", { draftStage: true })).toEqual(billLifecycleProgressSteps("rejected"));
+    expect(isBillLifecycleDraft("draft")).toBe(true);
+    expect(isBillLifecycleDraft("submitted")).toBe(false);
   });
 
   it("renders structured rejection feedback as a reusable alert surface", () => {

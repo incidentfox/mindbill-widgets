@@ -264,6 +264,7 @@ export {
   billActivityEventLabel,
   billLifecycleDisplayLabel,
   billLifecycleStage,
+  isBillLifecycleDraft,
   visibleBillLifecycleActions,
 } from "./bill-lifecycle-surfaces";
 export type {
@@ -273,6 +274,7 @@ export type {
   BillExplanationOfReviewProps,
   BillLifecycleActionsProps,
   BillLifecycleProgressProps,
+  BillLifecycleProgressStepsOptions,
   BillRejectionNoticeProps,
   BillLifecycleStage,
   BillPaymentLedgerProps,
