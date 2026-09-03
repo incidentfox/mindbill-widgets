@@ -6,6 +6,7 @@ import {
   type BillLifecycleData,
   type CloseBillInput,
   type PostBillPaymentInput,
+  type ResubmitBillInput,
   type SubmitSecondReviewInput,
 } from "@mindbill/browser";
 
@@ -60,6 +61,7 @@ export class MindBillLifecycleStore {
   getEor(id: string) { return this.requireClient().getEor(id); }
   closeBill(input: CloseBillInput) { return this.mutate(() => this.requireClient().closeBill(input)); }
   postPayment(input: PostBillPaymentInput) { return this.mutate(() => this.requireClient().postPayment(input)); }
+  resubmitBill(input: ResubmitBillInput) { return this.mutate(() => this.requireClient().resubmitBill(input)); }
   submitSecondReview(input: SubmitSecondReviewInput) { return this.mutate(() => this.requireClient().submitSecondReview(input)); }
 
   private requireClient(): BillLifecycleClient {

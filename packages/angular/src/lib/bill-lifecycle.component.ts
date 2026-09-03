@@ -1,10 +1,18 @@
 import { CommonModule } from "@angular/common";
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, effect } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import type { BillLifecycleData, BillLifecycleSessionProvider } from "@mindbill/browser";
+import type {
+  BillLifecycleData,
+  BillLifecycleSessionProvider,
+  BrowserBillCreateInput,
+  BrowserBillSubmissionDocument,
+  BrowserBillSubmissionInput,
+  BrowserBillSubmissionResult,
+} from "@mindbill/browser";
 import type { MindBillAngularAppearance } from "./appearance";
 import { mindBillAngularAppearanceStyle } from "./appearance";
 import { MindBillBillRejectionNoticeComponent } from "./bill-rejection-notice.component";
+import { MindBillBillSubmissionComponent, type MindBillSubmissionAttachment } from "./bill-submission.component";
 import { MindBillLifecycleStore } from "./lifecycle-store";
 
 export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./appearance";
@@ -12,7 +20,7 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
 @Component({
   selector: "mindbill-bill-lifecycle",
   standalone: true,
-  imports: [CommonModule, FormsModule, MindBillBillRejectionNoticeComponent],
+  imports: [CommonModule, FormsModule, MindBillBillRejectionNoticeComponent, MindBillBillSubmissionComponent],
   template: `
     <section class="mb" [ngStyle]="themeStyle">
       @if (!billId) {
@@ -97,6 +105,33 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
         @if (panel === 'payment') { <form class="card action-form" (submit)="$event.preventDefault(); postPayment()"><h3>Post payment</h3><label>Amount<input required type="number" min="0.01" step="0.01" [(ngModel)]="payment.amount" name="amount"></label><label>Method<select [(ngModel)]="payment.method" name="method"><option value="check">Check</option><option value="eft">EFT</option></select></label><label>Deposit date<input required type="date" [(ngModel)]="payment.depositDate" name="depositDate"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Post payment</button></div></form> }
         @if (panel === 'review') { <form class="card action-form" (submit)="$event.preventDefault(); submitReview()"><h3>Submit Second Bill Review</h3><label>Reason<textarea required [(ngModel)]="review.reason" name="reason"></textarea></label><label>Payer claim control number<input required [(ngModel)]="review.payerClaimControlNumber" name="control"></label><label>Disputed amount<input type="number" min="0" step="0.01" [(ngModel)]="review.disputedAmount" name="disputed"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Submit review</button></div></form> }
         @if (panel === 'close') { <form class="card action-form" (submit)="$event.preventDefault(); closeBill()"><h3>Close bill</h3><label>Reason<textarea required [(ngModel)]="closeReason" name="closeReason"></textarea></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Close bill</button></div></form> }
+        @if (panel === 'resubmit' && correctionInitialBill) {
+          <div class="correction-backdrop" (mousedown)="closeCorrectionBackdrop($event)">
+            <section class="correction-dialog" role="dialog" aria-modal="true" aria-label="Correct and resubmit">
+              <button type="button" class="dialog-close" aria-label="Close" (click)="panel=''">×</button>
+              <header><h2>Correct and resubmit</h2><p>The original submission remains immutable. Review the rejected values and create the next submission attempt on this bill.</p></header>
+              @if (data.rejection; as rejection) {
+                <div class="correction-reason"><strong>{{ rejection.reason || 'Why it was rejected' }}</strong>@for (issue of rejection.issues || []; track issue.code) { <span><b>{{ issue.code }}</b> {{ issue.description }}</span> }</div>
+              }
+              @if (payerContact(data) !== 'No payer contact details are available.') { <p class="contact-hint"><strong>Questions?</strong> {{ payerContact(data) }}</p> }
+              <label class="correction-note">Correction note (optional)<textarea [(ngModel)]="correctionReason" name="correctionReason" placeholder="What changed before resubmission?"></textarea></label>
+              <mindbill-bill-submission
+                [initialBill]="correctionInitialBill"
+                [attachments]="correctionAttachments"
+                [attentionFields]="correctionAttentionFields"
+                [appearance]="appearance"
+                [sessionEndpoint]="sessionEndpoint"
+                [getSession]="getSession"
+                [apiBaseUrl]="apiBaseUrl"
+                [submitter]="resubmitFromForm"
+                heading="Corrected bill information"
+                description="Correct the highlighted values, confirm every required field, then resubmit."
+                submitLabel="Resubmit bill"
+                (submitted)="finishCorrection()"
+              />
+            </section>
+          </div>
+        }
       }
     </section>
   `,
@@ -112,6 +147,7 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
     .h-due{margin-top:8px}.h-due em{display:block;color:var(--m);font-size:12.5px;margin-bottom:4px}.h-due dl>div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;border-top:1px solid color-mix(in srgb,var(--b) 60%,transparent);padding-top:4px}
     .h-text{margin:8px 0 0;white-space:pre-wrap}
     @media(max-width:760px){.history-head{display:none}.history-line{grid-template-columns:1fr;gap:2px;padding:10px 12px}.history-details{padding:4px 12px 12px}.h-kv>div,.h-due dl>div{grid-template-columns:1fr}}
+    .correction-backdrop{position:fixed;inset:0;z-index:100;overflow:auto;background:#172b37b8;padding:28px}.correction-dialog{position:relative;max-width:1180px;margin:0 auto;background:var(--bg);border-radius:var(--r);box-shadow:0 24px 80px #0006;padding:26px}.correction-dialog>header{padding-right:48px;margin-bottom:18px}.correction-dialog h2{margin:0 0 6px}.correction-dialog p{margin:0;color:var(--m)}.dialog-close{position:absolute;right:20px;top:20px;width:40px;height:40px;padding:0;font-size:24px}.correction-reason{display:grid;gap:8px;margin-bottom:14px;border-left:4px solid #c43d3d;border-radius:8px;background:#fff5f5;padding:14px;color:#8f2525}.correction-reason span{display:block}.correction-reason b{margin-right:6px}.contact-hint{margin:0 0 14px!important;border:1px solid var(--b);border-radius:8px;background:var(--s);padding:12px!important;color:var(--t)!important}.correction-note{display:grid;gap:6px;margin-bottom:18px;font-weight:700}.correction-note textarea{min-height:76px}.correction-dialog mindbill-bill-submission{display:block}.correction-dialog .mb{padding:0}@media(max-width:760px){.correction-backdrop{padding:0}.correction-dialog{min-height:100%;border-radius:0;padding:18px 12px}.dialog-close{right:12px;top:12px}}
   `],
 })
 export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
@@ -134,6 +170,10 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   closeReason = "";
   payment = { amount: 0, method: "check" as "check" | "eft", depositDate: new Date().toISOString().slice(0, 10) };
   review = { reason: "", payerClaimControlNumber: "", disputedAmount: 0 };
+  correctionInitialBill: BrowserBillCreateInput | null = null;
+  correctionAttachments: MindBillSubmissionAttachment[] = [];
+  correctionAttentionFields: string[] = [];
+  correctionReason = "";
 
   constructor() { effect(() => { const error = this.store.error(); if (error) this.billingError.emit(error); }); }
 
@@ -157,11 +197,86 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   isHistoryOpen(id: string): boolean { return this.historyExpanded.has(id); }
   historyDate(iso: string): string { const parsed = new Date(iso); return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }); }
   payerContact(data: BillLifecycleData): string { const contacts = data.delivery.contacts; return contacts.adjusterName || contacts.adjusterPhone || contacts.adjusterEmail || contacts.claimsEmail || contacts.faxNumber || contacts.mailingAddress || "No payer contact details are available."; }
-  beginAction(action: string, data: BillLifecycleData): void { if (action === "post_payment") this.panel = "payment"; else if (action === "second_review" || action === "independent_bill_review") this.panel = "review"; else if (action === "close") this.panel = "close"; else if (action === "view_eor" && data.eors[0]) void this.openEor(data.eors[0].id, data.eors[0].filename); }
+  beginAction(action: string, data: BillLifecycleData): void {
+    if (action === "resubmit") this.prepareCorrection(data);
+    else if (action === "post_payment") this.panel = "payment";
+    else if (action === "second_review" || action === "independent_bill_review") this.panel = "review";
+    else if (action === "close") this.panel = "close";
+    else if (action === "view_eor" && data.eors[0]) void this.openEor(data.eors[0].id, data.eors[0].filename);
+  }
   async openAttachment(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getAttachment(id), filename); }
   async openEor(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getEor(id), filename); }
   async postPayment(): Promise<void> { await this.store.postPayment(this.payment); this.panel = ""; this.notice = "Payment posted."; }
   async submitReview(): Promise<void> { await this.store.submitSecondReview({ ...this.review, disputedAmount: this.review.disputedAmount > 0 ? this.review.disputedAmount : undefined, attachmentIds: this.store.data()?.bill.attachments.map((document) => document.id) ?? [], route: "ebill" }); this.panel = ""; this.notice = "Second Review submitted."; }
   async closeBill(): Promise<void> { if (!this.closeReason.trim()) return; await this.store.closeBill({ reason: this.closeReason }); this.panel = ""; this.notice = "Bill closed."; }
+  readonly resubmitFromForm = async (input: BrowserBillSubmissionInput): Promise<BrowserBillSubmissionResult> => {
+    const data = await this.store.resubmitBill({
+      bill: input.bill,
+      ...(input.documents?.length ? { documents: input.documents } : {}),
+      ...(this.correctionReason.trim() ? { reason: this.correctionReason.trim() } : {}),
+    });
+    return { billId: data.bill.id, bill: { id: data.bill.id, state: data.lifecycle.state } };
+  };
+  finishCorrection(): void { this.panel = ""; this.correctionReason = ""; this.notice = "Corrected submission sent."; }
+  closeCorrectionBackdrop(event: MouseEvent): void { if (event.currentTarget === event.target) this.panel = ""; }
+  private prepareCorrection(data: BillLifecycleData): void {
+    this.correctionInitialBill = correctionBill(data);
+    this.correctionAttachments = data.bill.attachments.map((attachment) => ({
+      filename: attachment.filename,
+      documentType: correctionDocumentType(attachment.documentType),
+      ...(attachment.description ? { description: attachment.description } : {}),
+      ...(attachment.reportType ? { reportTypeCode: attachment.reportType } : {}),
+      loadBlob: () => this.store.getAttachment(attachment.id),
+      ...(attachment.documentType === "w9" ? { locked: true, badge: "Auto-attached" } : {}),
+    }));
+    this.correctionAttentionFields = [...new Set(data.rejection?.issues?.flatMap((issue) => issue.fieldPaths || []) ?? [])];
+    this.correctionReason = "";
+    this.panel = "resubmit";
+  }
   private openBlob(blob: Blob, filename: string): void { const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noopener"; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000); }
+}
+
+const CORRECTION_DOCUMENT_TYPES = new Set(["final_report", "letter_of_attestation", "proof_of_service", "form_122", "return_to_work_voucher", "w9", "medical_records", "appeal", "other"]);
+function correctionDocumentType(value: string): BrowserBillSubmissionDocument["documentType"] { return (CORRECTION_DOCUMENT_TYPES.has(value) ? value : "other") as BrowserBillSubmissionDocument["documentType"]; }
+function correctionBill(data: BillLifecycleData): BrowserBillCreateInput {
+  const billing = data.bill.billingSnapshot?.billingProvider;
+  const rendering = data.bill.billingSnapshot?.renderingProvider;
+  const location = data.bill.billingSnapshot?.placeOfService;
+  const nameParts = data.patient.name.trim().split(/\s+/);
+  return {
+    billingMode: data.bill.billingMode,
+    patient: {
+      firstName: data.patient.firstName || nameParts[0] || "",
+      ...(data.patient.middleName ? { middleName: data.patient.middleName } : {}),
+      lastName: data.patient.lastName || nameParts.slice(1).join(" ") || "",
+      dateOfBirth: data.patient.dob || "",
+      ...(data.patient.phone ? { phone: data.patient.phone } : {}),
+      address: { line1: data.patient.address?.line1 || "", city: data.patient.address?.city || "", state: data.patient.address?.state || "", postalCode: data.patient.address?.postalCode || "" },
+    },
+    claim: {
+      claimNumber: data.injury.claimNumber || "",
+      ...(data.injury.adjNumber ? { adjNumber: data.injury.adjNumber } : {}),
+      employer: data.injury.employer || "",
+      dateOfInjury: data.injury.doi || "",
+      ...(data.injury.injuryDescription ? { description: data.injury.injuryDescription } : {}),
+      claimsAdministrator: { id: data.injury.claimsAdminId || "", name: data.injury.claimsAdminName || "" },
+    },
+    service: { date: data.bill.dos, ...(data.bill.dosEnd !== undefined ? { endDate: data.bill.dosEnd } : {}), ...(data.bill.authorizationNumber !== undefined ? { authorizationNumber: data.bill.authorizationNumber } : {}) },
+    billingProvider: {
+      name: billing?.name || "", taxId: billing?.taxId || "", npi: billing?.npi || "", phone: billing?.phone || "",
+      address: { line1: billing?.billingStreet || "", city: billing?.billingCity || "", state: billing?.billingState || "", postalCode: billing?.billingZip || "" },
+    },
+    renderingProvider: {
+      name: rendering?.name || "", npi: rendering?.npi || "", taxonomy: rendering?.taxonomy || "",
+      ...(rendering?.specialty ? { specialty: rendering.specialty } : {}), ...(rendering?.licenseNumber ? { licenseNumber: rendering.licenseNumber } : {}), ...(rendering?.licenseState ? { licenseState: rendering.licenseState } : {}),
+      ...(rendering?.isQME !== undefined ? { isQme: rendering.isQME } : {}), ...(rendering?.isAME !== undefined ? { isAme: rendering.isAME } : {}),
+    },
+    serviceLocation: {
+      ...(location?.name ? { name: location.name } : {}),
+      address: { line1: location?.street || "", city: location?.city || "", state: location?.state || "", postalCode: location?.zip || "" },
+      placeOfServiceCode: location?.posCode || "",
+    },
+    diagnoses: [...(data.injury.diagnosisCodes || [])],
+    serviceLines: data.bill.lineItems.map((line) => ({ code: line.code, modifiers: [...line.modifiers], units: line.units, charge: line.charge, ...(line.serviceDate ? { serviceDate: line.serviceDate } : {}), ...(line.serviceDateEnd !== undefined ? { serviceDateEnd: line.serviceDateEnd } : {}), ...(line.diagnosisPointers ? { diagnosisPointers: [...line.diagnosisPointers] } : {}) })),
+  };
 }

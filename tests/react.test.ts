@@ -1195,7 +1195,19 @@ describe("connected bill lifecycle", () => {
     await expect(client.simulateSandbox({ scenario: "rejected" })).resolves.toMatchObject({
       lifecycle: { state: "rejected" },
     });
-    await expect(client.resubmitBill({ reason: "Selected the correct payer route." })).resolves.toMatchObject({
+    const correctedBill = {
+      externalId: "evaluation_123",
+      billingMode: "med_legal",
+      patient: { firstName: "Ada", lastName: "Example", dateOfBirth: "1980-01-02", address: { line1: "100 Main Street", city: "Sacramento", state: "CA", postalCode: "95814" } },
+      claim: { claimNumber: "CLAIM-7", employer: "Synthetic Foods", dateOfInjury: "2026-08-01", claimsAdministrator: { id: "payer_7", name: "Synthetic Claims Administrator" } },
+      service: { date: "2026-08-24" },
+      billingProvider: { name: "Synthetic Medical Group", taxId: "123456789", npi: "1234567890", phone: "9165550100", address: { line1: "200 Billing Avenue", city: "Sacramento", state: "CA", postalCode: "95814" } },
+      renderingProvider: { name: "Ada Physician", npi: "1098765432", taxonomy: "2084P0800X" },
+      serviceLocation: { placeOfServiceCode: "11", address: { line1: "300 Service Street", city: "Sacramento", state: "CA", postalCode: "95814" } },
+      diagnoses: ["M79.641"],
+      serviceLines: [{ code: "ML201", units: 1 }],
+    } satisfies CompleteBillSubmissionInput;
+    await expect(client.resubmitBill({ reason: "Selected the correct payer route.", bill: correctedBill })).resolves.toMatchObject({
       lifecycle: { state: "submitted" },
     });
 
@@ -1206,6 +1218,7 @@ describe("connected bill lifecycle", () => {
     expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
       action: "resubmit",
       reason: "Selected the correct payer route.",
+      bill: correctedBill,
     }));
   });
 

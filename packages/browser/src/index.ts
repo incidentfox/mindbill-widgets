@@ -455,6 +455,8 @@ export type BillClaimsAdministratorDirectory = {
 export type BillRejectionIssue = {
   code?: string | null;
   description: string;
+  /** Bill-submission field paths implicated by this issue. */
+  fieldPaths?: string[];
 };
 
 export type BillRejection = {
@@ -538,7 +540,15 @@ export type ReportBillStatusActionInput = {
   callReference?: string;
   note?: string;
 };
-export type ResubmitBillInput = { reason?: string };
+/**
+ * A corrected immutable snapshot submitted as the next attempt on the same bill.
+ * The logical bill ID remains stable; only the submission/control-number attempt advances.
+ */
+export type ResubmitBillInput = {
+  reason?: string;
+  bill: BrowserBillCreateInput;
+  documents?: BrowserBillSubmissionDocument[];
+};
 export type SandboxSimulationScenario = "accepted" | "rejected" | "processed" | "denied" | "partial_payment" | "paid";
 export type SimulateSandboxBillInput = {
   scenario: SandboxSimulationScenario;
@@ -699,7 +709,7 @@ export type BillLifecycleClient = {
   reopenBill: (input: ReopenBillInput) => Promise<BillLifecycleData>;
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
   submitSecondReview: (input: SubmitSecondReviewInput) => Promise<BillLifecycleData>;
-  resubmitBill: (input?: ResubmitBillInput) => Promise<BillLifecycleData>;
+  resubmitBill: (input: ResubmitBillInput) => Promise<BillLifecycleData>;
   simulateSandbox: (input: SimulateSandboxBillInput) => Promise<BillLifecycleData>;
   clearSession: () => void;
 };
@@ -1095,7 +1105,7 @@ export function createBillLifecycleClient({
     reopenBill(input) { return action({ action: "reopen", ...input }, "Bill could not be reopened."); },
     postPayment(input) { return action({ action: "post_payment", penaltyAmount: 0, interestAmount: 0, ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
     submitSecondReview(input) { return action({ action: "second_review", ...input }, "Second Review could not be submitted."); },
-    resubmitBill(input = {}) { return action({ action: "resubmit", ...input }, "Bill could not be resubmitted."); },
+    resubmitBill(input) { return action({ action: "resubmit", ...input }, "Bill could not be resubmitted."); },
     simulateSandbox,
   };
 }

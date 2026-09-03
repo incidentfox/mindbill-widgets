@@ -19,6 +19,7 @@ import { mindBillCustomProcedureOption, parseMindBillSubmissionDate } from "./su
 export type MindBillSubmissionAttachment = Omit<BrowserBillSubmissionDocument, "contentBase64"> & {
   contentBase64?: string;
   contentUrl?: string;
+  loadBlob?: () => Promise<Blob>;
   locked?: boolean;
   badge?: string;
 };
@@ -256,6 +257,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   @Input() heading = "Bill information";
   @Input() description = "Review the bill details, add attachments, and submit.";
   @Input() submitLabel = "Submit bill";
+  @Input() attentionFields: string[] = [];
   @Input() procedureOptions: MindBillSubmissionProcedureOption[] = PROCEDURES;
   @Input() modifierOptions: MindBillSubmissionModifierOption[] = MODIFIERS;
   @Input() taxonomyOptions: MindBillSubmissionTaxonomyOption[] = TAXONOMIES;
@@ -278,6 +280,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   postalStatus = "";
   dragActive = false;
   invalidFields = new Set<string>();
+  attentionFieldSet = new Set<string>();
   readonly quickDiagnoses = QUICK_DIAGNOSES;
   // Zoneless-safe rendering: async work (debounced lookups, fetches, file reads)
   // must schedule change detection explicitly for zone-less Angular hosts.
@@ -298,6 +301,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       this.payerQuery = this.bill.claim.claimsAdministrator.name ?? "";
     }
     if (changes["attachments"]) this.workingAttachments = this.attachments.map((item) => ({ ...item }));
+    if (changes["attentionFields"]) this.attentionFieldSet = new Set(this.attentionFields);
   }
 
   get themeStyle(): Record<string, string> {
@@ -487,9 +491,16 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     input.value = "";
   }
   removeAttachment(index: number): void { const item = this.workingAttachments[index]; if (item?.contentUrl?.startsWith("blob:")) URL.revokeObjectURL(item.contentUrl); this.workingAttachments.splice(index, 1); }
-  previewAttachment(attachment: MindBillSubmissionAttachment): void { if (attachment.contentUrl) window.open(attachment.contentUrl, "_blank", "noopener,noreferrer"); else if (attachment.contentBase64) window.open(`data:application/pdf;base64,${attachment.contentBase64}`, "_blank", "noopener,noreferrer"); }
+  async previewAttachment(attachment: MindBillSubmissionAttachment): Promise<void> {
+    if (attachment.loadBlob) {
+      const url = URL.createObjectURL(await attachment.loadBlob());
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } else if (attachment.contentUrl) window.open(attachment.contentUrl, "_blank", "noopener,noreferrer");
+    else if (attachment.contentBase64) window.open(`data:application/pdf;base64,${attachment.contentBase64}`, "_blank", "noopener,noreferrer");
+  }
 
-  bad(path: string): boolean { return this.invalidFields.has(path); }
+  bad(path: string): boolean { return this.invalidFields.has(path) || this.attentionFieldSet.has(path); }
   private validate(): boolean {
     const candidates: Array<[string, unknown]> = [
       ["patient.firstName", this.bill.patient.firstName], ["patient.lastName", this.bill.patient.lastName], ["patient.dateOfBirth", parseMindBillSubmissionDate(this.bill.patient.dateOfBirth ?? "")],
@@ -515,6 +526,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     const documents: BrowserBillSubmissionDocument[] = [];
     for (const attachment of this.workingAttachments) {
       let contentBase64 = attachment.contentBase64;
+      if (!contentBase64 && attachment.loadBlob) contentBase64 = await blobToBase64(await attachment.loadBlob());
       if (!contentBase64 && attachment.contentUrl) {
         const response = await fetch(attachment.contentUrl);
         if (!response.ok) throw new Error(`Could not load ${attachment.filename}.`);
