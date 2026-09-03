@@ -137,6 +137,8 @@ export type BillHistoryTableProps = SurfaceProps & {
   formatDate?: (iso: string) => string;
   /** Resolve a clickable href for a submitted document; return null for plain text. */
   documentHref?: (doc: { id: string; filename: string }) => string | null;
+  /** Open an authenticated submitted document in a new tab when no direct href is available. */
+  onOpenDocument?: (doc: { id: string; filename: string }) => void | Promise<void>;
 };
 
 function historyDate(iso: string): string {
@@ -146,12 +148,12 @@ function historyDate(iso: string): string {
 }
 
 /**
- * The daisyBill-style Bill History table: Date / Action / User / Details rows where
+ * The Bill History table: Date / Action / User / Details rows where
  * submissions are pale-blue expandable rows (documents + compliance due dates), notes
  * are pale-yellow, and 277 responses expand into decoded status-code sentences. The
  * rows come pre-worded from the MindBill API (`BillLifecycleData.history`).
  */
-export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.", appearance, className, style, formatDate = historyDate, documentHref }: BillHistoryTableProps): ReactElement {
+export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.", appearance, className, style, formatDate = historyDate, documentHref, onOpenDocument }: BillHistoryTableProps): ReactElement {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   return (
     <section className={classes("mb-surface mb-history", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill history">
@@ -165,23 +167,23 @@ export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.",
               const expandable = Boolean(entry.details);
               const isOpen = expandable && Boolean(expanded[entry.id]);
               const details = entry.details;
+              const lineContents = <>
+                <span className="mb-history-date">{formatDate(entry.date)}</span>
+                <span className="mb-history-action">{entry.action}</span>
+                <span className="mb-history-actor">{entry.actor ?? "—"}</span>
+                <span className="mb-history-summary">
+                  {expandable ? <i className={`mb-history-caret${isOpen ? " is-open" : ""}`} aria-hidden="true" /> : null}
+                  {entry.summary}
+                </span>
+              </>;
               return (
                 <li key={entry.id} className={`mb-history-row is-${entry.tone}`}>
-                  <button
+                  {expandable ? <button
                     type="button"
-                    className="mb-history-line"
-                    disabled={!expandable}
-                    aria-expanded={expandable ? isOpen : undefined}
-                    onClick={expandable ? () => setExpanded((current) => ({ ...current, [entry.id]: !current[entry.id] })) : undefined}
-                  >
-                    <span className="mb-history-date">{formatDate(entry.date)}</span>
-                    <span className="mb-history-action">{entry.action}</span>
-                    <span className="mb-history-actor">{entry.actor ?? "—"}</span>
-                    <span className="mb-history-summary">
-                      {expandable ? <i className={`mb-history-caret${isOpen ? " is-open" : ""}`} aria-hidden="true" /> : null}
-                      {entry.summary}
-                    </span>
-                  </button>
+                    className="mb-history-line is-expandable"
+                    aria-expanded={isOpen}
+                    onClick={() => setExpanded((current) => ({ ...current, [entry.id]: !current[entry.id] }))}
+                  >{lineContents}</button> : <div className="mb-history-line">{lineContents}</div>}
                   {isOpen && details ? (
                     <div className="mb-history-details">
                       {details.rows?.length ? (
@@ -197,6 +199,8 @@ export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.",
                             const href = documentHref?.(doc) ?? null;
                             return href
                               ? <a key={doc.id} className="mb-history-doc" href={href} target="_blank" rel="noreferrer">{doc.filename}</a>
+                              : onOpenDocument
+                                ? <button key={doc.id} type="button" className="mb-history-doc" onClick={() => void onOpenDocument(doc)}>{doc.filename}</button>
                               : <span key={doc.id} className="mb-history-doc">{doc.filename}</span>;
                           })}
                         </dd></div></div>
@@ -586,8 +590,8 @@ const lifecycleSurfaceStyles = `
 .mb-history-rows{list-style:none;margin:0;padding:0}.mb-history-row{border-top:1px solid var(--mb-border)}
 .mb-history-row.is-submission{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}
 .mb-history-row.is-note{background:color-mix(in srgb,#f2c344 13%,var(--mb-surface))}
-.mb-history-line{display:grid;grid-template-columns:96px 160px 140px minmax(0,1fr);gap:12px;width:100%;padding:10px 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:default}
-.mb-history-line:not(:disabled){cursor:pointer}.mb-history-line:not(:disabled):hover .mb-history-summary{text-decoration:underline}
+.mb-history-line{display:grid;grid-template-columns:96px 160px 140px minmax(0,1fr);gap:12px;width:100%;padding:10px 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left}
+.mb-history-line.is-expandable{cursor:pointer}.mb-history-line.is-expandable:hover .mb-history-summary{text-decoration:underline}
 .mb-history-date{color:var(--mb-muted);font-size:13px}.mb-history-action{font-size:13.5px;font-weight:750}
 .mb-history-row.is-problem .mb-history-action{color:var(--mb-danger)}
 .mb-history-actor{color:var(--mb-muted);font-size:13px;overflow-wrap:anywhere}
@@ -597,7 +601,7 @@ const lifecycleSurfaceStyles = `
 .mb-history-details{padding:4px 14px 14px 122px;font-size:13.5px;line-height:1.5}
 .mb-history-kv,.mb-history-codes,.mb-history-due dl{display:grid;gap:4px;margin:0}
 .mb-history-kv>div{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px;border-top:1px solid color-mix(in srgb,var(--mb-border) 60%,transparent);padding-top:4px}
-.mb-history-kv dt{font-weight:750}.mb-history-kv dd{margin:0;overflow-wrap:anywhere}.mb-history-kv dd a{color:var(--mb-accent)}.mb-history-doc{display:block}
+.mb-history-kv dt{font-weight:750}.mb-history-kv dd{margin:0;overflow-wrap:anywhere}.mb-history-kv dd a{color:var(--mb-accent)}.mb-history-doc{display:block}.mb-history-kv button.mb-history-doc{border:0;background:transparent;color:var(--mb-accent);font:inherit;padding:0;text-align:left;text-decoration:underline;cursor:pointer}
 .mb-history-codes>div{display:grid;grid-template-columns:56px minmax(0,1fr);gap:12px}.mb-history-codes dt{font-weight:800}.mb-history-codes dd{margin:0}
 .mb-history-due{margin-top:8px}.mb-history-due em{display:block;color:var(--mb-muted);font-size:12.5px;margin-bottom:4px}
 .mb-history-due dl>div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;border-top:1px solid color-mix(in srgb,var(--mb-border) 60%,transparent);padding-top:4px}

@@ -66,6 +66,7 @@ export type {
   BillClaimsAdministratorContact,
   BillClaimsAdministratorDirectory,
   BillClaimsAdministratorMailingAddress,
+  BillClaimsAdministratorPayer,
   BillClaimsAdministratorPattern,
   BillEorDocument,
   BillActivityRecord,
@@ -111,9 +112,10 @@ export type UseBillLifecycleResult = {
   isMutating: boolean;
   refresh: () => Promise<void>;
   searchClaimsAdministrators: BillLifecycleClient["searchClaimsAdministrators"];
+  getClaimsAdministratorDirectory: BillLifecycleClient["getClaimsAdministratorDirectory"];
   getDeliveryOptions: BillLifecycleClient["getDeliveryOptions"];
   getAttachment: BillLifecycleClient["getAttachment"];
-  openAttachment: (attachment: BillReviewAttachment) => Promise<void>;
+  openAttachment: (attachment: Pick<BillReviewAttachment, "id">) => Promise<void>;
   openEor: (document: BillEorDocument) => Promise<void>;
   downloadPacket: () => Promise<void>;
   closeBill: BillLifecycleClient["closeBill"];
@@ -248,7 +250,7 @@ export function useBillLifecycle({
     }
   }, []);
 
-  const openAttachment = useCallback(async (attachment: BillReviewAttachment) => {
+  const openAttachment = useCallback(async (attachment: Pick<BillReviewAttachment, "id">) => {
     await openPdfFromUserGesture(() => client.getAttachment(attachment.id));
   }, [client]);
   const openEor = useCallback(async (document: BillEorDocument) => {
@@ -274,6 +276,7 @@ export function useBillLifecycle({
     isMutating,
     refresh,
     searchClaimsAdministrators: (query, claimNumber) => client.searchClaimsAdministrators(query, claimNumber),
+    getClaimsAdministratorDirectory: (id, injuryState) => client.getClaimsAdministratorDirectory(id, injuryState),
     getDeliveryOptions: () => client.getDeliveryOptions(),
     getAttachment: (attachmentId) => client.getAttachment(attachmentId),
     openAttachment,
@@ -293,6 +296,10 @@ export function useBillLifecycle({
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   appearance?: MindBillReactAppearance;
+  /** Human-readable name recorded for user-initiated bill actions. */
+  actorName?: string;
+  /** Optional host-system claims-administrator name shown as a selection hint. */
+  claimsAdministratorHint?: ReactNode;
   /**
    * Exposes payer-response simulation controls for an explicit sandbox
    * playground. Sandbox responses remain indistinguishable from live
@@ -398,7 +405,8 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
       address: { line1: location.street, city: location.city, state: location.state, postalCode: location.zip },
       ...(location.posCode ? { placeOfServiceCode: location.posCode } : {}),
     } } : {}),
-    diagnoses: [...(data.injury.diagnosisCodes || [])],
+    diagnoses: data.injury.diagnoses?.map((diagnosis) => diagnosis.code)
+      ?? [...(data.injury.diagnosisCodes || [])],
     serviceLines: data.bill.lineItems.map((line) => ({
       code: line.code,
       modifiers: [...line.modifiers],
@@ -449,7 +457,7 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
   return enabled && environment === "sandbox";
 }
 
-export function ConnectedBillLifecycle({ appearance, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministratorHint, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -462,6 +470,7 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
   const [review, setReview] = useState<SubmitSecondReviewInput>({ reason: "", payerClaimControlNumber: "", disputedAmount: undefined, attachmentIds: [], route: "ebill" });
   const [duplicateDelivery, setDuplicateDelivery] = useState<BillDeliveryOptions | null>(null);
   const [duplicateDeliveryError, setDuplicateDeliveryError] = useState("");
+  const actor = actorName?.trim() ? { actorName: actorName.trim() } : {};
   const lastData = useRef<BillLifecycleData | null>(null);
   const correctionInitialBill = useMemo(() => data ? correctionBill(data) : null, [data]);
   const correctionAttachments = useMemo<BillSubmissionSourceAttachment[]>(() => data ? data.bill.attachments.map((attachment) => {
@@ -535,6 +544,7 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
         bill: value.bill as BrowserBillCreateInput,
         ...(documents.length ? { documents } : {}),
         ...(reason.trim() ? { reason: reason.trim() } : {}),
+        ...actor,
       });
     } catch (cause) {
       // A failed resubmission must never look like a success: keep the dialog
@@ -566,6 +576,7 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
         bill: value.bill as BrowserBillCreateInput,
         ...(documents.length ? { documents } : {}),
         ...(reason.trim() ? { reason: reason.trim() } : {}),
+        ...actor,
       } satisfies SubmitNewBillInput);
     } catch (cause) {
       // Same contract as the correction dialog: a failed submission must never
@@ -623,7 +634,7 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
 
       <BillReadOnlyForm data={data} onOpenAttachment={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
     </div> : <div className="mb-lifecycle-tabpanel" role="tabpanel">{data.history?.length
-      ? <BillHistoryTable entries={data.history} {...(appearance ? { appearance } : {})} />
+      ? <BillHistoryTable entries={data.history} onOpenDocument={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
       : <BillActivityTimeline events={data.activity} {...(appearance ? { appearance } : {})} />}</div>}
 
     {(viewEor || actions.length) ? <aside className="mb-lifecycle-actions-sheet" aria-label="Bill actions">
@@ -644,6 +655,8 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
       attachments={correctionAttachments}
       onSubmit={submitCorrection}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
+      onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
+      claimsAdministratorHint={claimsAdministratorHint}
       attentionFields={correctionAttentionFields}
       attentionMessage={correctionAttentionFields.length ? "The rejected response points to the highlighted fields. Confirm every required value before resubmitting." : "Confirm the bill information below before resubmitting."}
       submitLabel={lifecycle.isMutating ? "Resubmitting…" : "Resubmit bill"}
@@ -662,6 +675,8 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
       attachments={correctionAttachments}
       onSubmit={submitNewBillFromForm}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
+      onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
+      claimsAdministratorHint={claimsAdministratorHint}
       attentionMessage="Confirm every value carried over from the closed bill before submitting the new bill."
       submitLabel={lifecycle.isMutating ? "Submitting…" : "Submit New Bill"}
       heading="New bill information"
@@ -674,11 +689,11 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
       {...(appearance ? { appearance } : {})}
     />{newBillError ? <div className="mb-lifecycle-message error" role="alert">{newBillError}</div> : null}</section></LifecycleDialog> : null}
 
-    {panel === "second_review" ? <LifecycleDialog title="Submit Second Review" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Submit Second Review</h3><p>Explain the dispute and include the payer control number and supporting documents.</p></div>{reviewDeadline ? <p className="mb-lifecycle-deadline-hint">Second Review must be requested within 90 days of the denial EOR (dated {usDate(reviewDeadline.eorDate)}) — file by <strong>{usDate(reviewDeadline.deadline)}</strong>.</p> : null}<div className="mb-lifecycle-fields two"><label className="full"><span>Reason</span><textarea required value={review.reason} onChange={(event) => setReview((current) => ({ ...current, reason: event.target.value }))} /></label><label><span>Payer claim control number</span><input required value={review.payerClaimControlNumber} onChange={(event) => setReview((current) => ({ ...current, payerClaimControlNumber: event.target.value }))} /></label><label><span>Disputed amount</span><input type="number" min="0.01" step="0.01" value={review.disputedAmount ?? ""} onChange={(event) => setReview((current) => ({ ...current, disputedAmount: event.target.value ? Number(event.target.value) : undefined }))} /></label><label><span>Send via</span><select value={review.route} onChange={(event) => setReview((current) => ({ ...current, route: event.target.value as BillSubmissionRoute }))}><option value="ebill">E-bill</option><option value="fax">Fax</option><option value="mail">Mail</option><option value="email">Email</option></select></label></div><fieldset className="mb-lifecycle-packet"><legend>Supporting packet</legend>{data.bill.attachments.map((attachment) => <label key={attachment.id}><input type="checkbox" checked={review.attachmentIds.includes(attachment.id)} onChange={(event) => setReview((current) => ({ ...current, attachmentIds: event.target.checked ? [...current.attachmentIds, attachment.id] : current.attachmentIds.filter((id) => id !== attachment.id) }))} /><span><strong>{attachment.filename}</strong><small>{attachment.description || attachment.documentType}</small></span><button type="button" onClick={() => void lifecycle.openAttachment(attachment).catch(() => undefined)}>View</button></label>)}</fieldset><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !review.reason.trim() || !review.payerClaimControlNumber.trim()} onClick={() => void complete("Second Review submitted.", () => lifecycle.submitSecondReview(review))}>{lifecycle.isMutating ? "Submitting…" : "Submit Second Review"}</button></div></section></LifecycleDialog> : null}
+    {panel === "second_review" ? <LifecycleDialog title="Submit Second Review" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Submit Second Review</h3><p>Explain the dispute and include the payer control number and supporting documents.</p></div>{reviewDeadline ? <p className="mb-lifecycle-deadline-hint">Second Review must be requested within 90 days of the denial EOR (dated {usDate(reviewDeadline.eorDate)}) — file by <strong>{usDate(reviewDeadline.deadline)}</strong>.</p> : null}<div className="mb-lifecycle-fields two"><label className="full"><span>Reason</span><textarea required value={review.reason} onChange={(event) => setReview((current) => ({ ...current, reason: event.target.value }))} /></label><label><span>Payer claim control number</span><input required value={review.payerClaimControlNumber} onChange={(event) => setReview((current) => ({ ...current, payerClaimControlNumber: event.target.value }))} /></label><label><span>Disputed amount</span><input type="number" min="0.01" step="0.01" value={review.disputedAmount ?? ""} onChange={(event) => setReview((current) => ({ ...current, disputedAmount: event.target.value ? Number(event.target.value) : undefined }))} /></label><label><span>Send via</span><select value={review.route} onChange={(event) => setReview((current) => ({ ...current, route: event.target.value as BillSubmissionRoute }))}><option value="ebill">E-bill</option><option value="fax">Fax</option><option value="mail">Mail</option><option value="email">Email</option></select></label></div><fieldset className="mb-lifecycle-packet"><legend>Supporting packet</legend>{data.bill.attachments.map((attachment) => <label key={attachment.id}><input type="checkbox" checked={review.attachmentIds.includes(attachment.id)} onChange={(event) => setReview((current) => ({ ...current, attachmentIds: event.target.checked ? [...current.attachmentIds, attachment.id] : current.attachmentIds.filter((id) => id !== attachment.id) }))} /><span><strong>{attachment.filename}</strong><small>{attachment.description || attachment.documentType}</small></span><button type="button" onClick={() => void lifecycle.openAttachment(attachment).catch(() => undefined)}>View</button></label>)}</fieldset><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !review.reason.trim() || !review.payerClaimControlNumber.trim()} onClick={() => void complete("Second Review submitted.", () => lifecycle.submitSecondReview({ ...review, ...actor }))}>{lifecycle.isMutating ? "Submitting…" : "Submit Second Review"}</button></div></section></LifecycleDialog> : null}
 
-    {panel === "payment" ? <LifecycleDialog title="Post payment" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Post payment</h3><p>Record a full or partial payment, plus any penalty and interest received.</p></div><div className="mb-lifecycle-fields two"><label><span>Amount applied to bill</span><input type="number" min="0.01" max={data.bill.balanceDue} step="0.01" value={payment.amount || ""} onChange={(event) => setPayment((current) => ({ ...current, amount: Number(event.target.value) }))} /></label><label><span>Penalty</span><input type="number" min="0" step="0.01" value={payment.penaltyAmount || ""} placeholder="0.00" onChange={(event) => setPayment((current) => ({ ...current, penaltyAmount: Number(event.target.value) }))} /></label><label><span>Interest</span><input type="number" min="0" step="0.01" value={payment.interestAmount || ""} placeholder="0.00" onChange={(event) => setPayment((current) => ({ ...current, interestAmount: Number(event.target.value) }))} /></label><label><span>Method</span><select value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value as "check" | "eft" }))}><option value="check">Check</option><option value="eft">EFT</option></select></label><label><span>{payment.method === "check" ? "Check number" : "EFT reference"}</span><input value={payment.checkNumber} onChange={(event) => setPayment((current) => ({ ...current, checkNumber: event.target.value }))} /></label><label><span>Deposit date</span><input required value={payment.depositDate} placeholder="MM/DD/YYYY" onChange={(event) => setPayment((current) => ({ ...current, depositDate: event.target.value }))} /></label><label className="full"><span>Note (optional)</span><input value={payment.note} onChange={(event) => setPayment((current) => ({ ...current, note: event.target.value }))} /></label></div><div className="mb-payment-total"><span>Total received</span><strong>{new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(payment.amount + (payment.penaltyAmount ?? 0) + (payment.interestAmount ?? 0))}</strong></div><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || payment.amount <= 0 || payment.amount > data.bill.balanceDue || (payment.penaltyAmount ?? 0) < 0 || (payment.interestAmount ?? 0) < 0 || !payment.depositDate} onClick={() => void complete("Payment posted.", () => lifecycle.postPayment(payment))}>{lifecycle.isMutating ? "Posting…" : "Post payment"}</button></div></section></LifecycleDialog> : null}
+    {panel === "payment" ? <LifecycleDialog title="Post payment" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Post payment</h3><p>Record a full or partial payment, plus any penalty and interest received.</p></div><div className="mb-lifecycle-fields two"><label><span>Amount applied to bill</span><input type="number" min="0.01" max={data.bill.balanceDue} step="0.01" value={payment.amount || ""} onChange={(event) => setPayment((current) => ({ ...current, amount: Number(event.target.value) }))} /></label><label><span>Penalty</span><input type="number" min="0" step="0.01" value={payment.penaltyAmount || ""} placeholder="0.00" onChange={(event) => setPayment((current) => ({ ...current, penaltyAmount: Number(event.target.value) }))} /></label><label><span>Interest</span><input type="number" min="0" step="0.01" value={payment.interestAmount || ""} placeholder="0.00" onChange={(event) => setPayment((current) => ({ ...current, interestAmount: Number(event.target.value) }))} /></label><label><span>Method</span><select value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value as "check" | "eft" }))}><option value="check">Check</option><option value="eft">EFT</option></select></label><label><span>{payment.method === "check" ? "Check number" : "EFT reference"}</span><input value={payment.checkNumber} onChange={(event) => setPayment((current) => ({ ...current, checkNumber: event.target.value }))} /></label><label><span>Deposit date</span><input required value={payment.depositDate} placeholder="MM/DD/YYYY" onChange={(event) => setPayment((current) => ({ ...current, depositDate: event.target.value }))} /></label><label className="full"><span>Note (optional)</span><input value={payment.note} onChange={(event) => setPayment((current) => ({ ...current, note: event.target.value }))} /></label></div><div className="mb-payment-total"><span>Total received</span><strong>{new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(payment.amount + (payment.penaltyAmount ?? 0) + (payment.interestAmount ?? 0))}</strong></div><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || payment.amount <= 0 || payment.amount > data.bill.balanceDue || (payment.penaltyAmount ?? 0) < 0 || (payment.interestAmount ?? 0) < 0 || !payment.depositDate} onClick={() => void complete("Payment posted.", () => lifecycle.postPayment({ ...payment, ...actor }))}>{lifecycle.isMutating ? "Posting…" : "Post payment"}</button></div></section></LifecycleDialog> : null}
 
-    {(panel === "close" || panel === "reopen") ? <LifecycleDialog title={panel === "close" ? "Close bill" : "Reopen bill"} onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>{panel === "close" ? "Close bill" : "Reopen bill"}</h3><p>{panel === "close" ? "The immutable submission and history remain available." : "Return this bill to active follow-up without changing the submitted snapshot."}</p></div><label><span>Reason</span><textarea required value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !reason.trim()} onClick={() => void complete(panel === "close" ? "Bill closed." : "Bill reopened.", () => panel === "close" ? lifecycle.closeBill({ reason } satisfies CloseBillInput) : lifecycle.reopenBill({ reason } satisfies ReopenBillInput))}>{lifecycle.isMutating ? "Saving…" : panel === "close" ? "Close bill" : "Reopen bill"}</button></div></section></LifecycleDialog> : null}
+    {(panel === "close" || panel === "reopen") ? <LifecycleDialog title={panel === "close" ? "Close bill" : "Reopen bill"} onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>{panel === "close" ? "Close bill" : "Reopen bill"}</h3><p>{panel === "close" ? "The immutable submission and history remain available." : "Return this bill to active follow-up without changing the submitted snapshot."}</p></div><label><span>Reason</span><textarea required value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !reason.trim()} onClick={() => void complete(panel === "close" ? "Bill closed." : "Bill reopened.", () => panel === "close" ? lifecycle.closeBill({ reason, ...actor } satisfies CloseBillInput) : lifecycle.reopenBill({ reason, ...actor } satisfies ReopenBillInput))}>{lifecycle.isMutating ? "Saving…" : panel === "close" ? "Close bill" : "Reopen bill"}</button></div></section></LifecycleDialog> : null}
 
     {panel === "send_duplicate" ? (duplicateDelivery
       ? <SendRouteDialog
@@ -687,18 +702,18 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
         submitting={lifecycle.isMutating}
         error={lifecycle.error?.message ?? null}
         onCancel={() => setPanel("")}
-        onConfirm={(submission) => void complete("Duplicate bill sent.", () => lifecycle.sendDuplicateBill(submission))}
+        onConfirm={(submission) => void complete("Duplicate bill sent.", () => lifecycle.sendDuplicateBill({ ...submission, ...actor }))}
       />
       : <LifecycleDialog title="Send duplicate bill" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Send duplicate bill</h3><p>{duplicateDeliveryError || "Loading delivery options…"}</p></div><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button>{duplicateDeliveryError ? <button type="button" className="mb-lifecycle-button primary" onClick={loadDuplicateDelivery}>Try again</button> : null}</div></section></LifecycleDialog>) : null}
 
     {panel === "report_status" ? <ReportBillStatusDialog
       {...(statusContacts.claimsAdmin ? { claimsAdmin: statusContacts.claimsAdmin } : {})}
       {...(statusContacts.billReview ? { billReview: statusContacts.billReview } : {})}
-      {...(receiptEntries.length ? { receipt: <BillHistoryTable entries={receiptEntries} {...(appearance ? { appearance } : {})} /> } : {})}
+      {...(receiptEntries.length ? { receipt: <BillHistoryTable entries={receiptEntries} onOpenDocument={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} /> } : {})}
       submitting={lifecycle.isMutating}
       error={lifecycle.error?.message ?? null}
       onCancel={() => setPanel("")}
-      onSave={(input) => void complete("Bill status reported.", () => lifecycle.reportBillStatus(input))}
+      onSave={(input) => void complete("Bill status reported.", () => lifecycle.reportBillStatus({ ...input, ...actor }))}
       {...(appearance ? { appearance } : {})}
     /> : null}
 

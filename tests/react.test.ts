@@ -915,6 +915,59 @@ describe("bill lifecycle surfaces", () => {
     expect(billLifecycleDisplayLabel("second_review", "appealing")).toBe("Second Review sent");
     expect(billLifecycleDisplayLabel("partially_paid")).toBe("Partially paid");
   });
+
+  it("keeps static history rows selectable and wires authenticated document previews", () => {
+    const surfaceSource = readFileSync(
+      new URL("../packages/react/src/bill-lifecycle-surfaces.tsx", import.meta.url),
+      "utf8",
+    );
+    const connectedSource = readFileSync(
+      new URL("../packages/react/src/connected-bill-lifecycle.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(surfaceSource).not.toContain("disabled={!expandable}");
+    expect(surfaceSource).toContain(': <div className="mb-history-line">{lineContents}</div>');
+    expect(surfaceSource).toContain("onClick={() => void onOpenDocument(doc)}");
+    expect(connectedSource).toContain("onOpenDocument={lifecycle.openAttachment}");
+  });
+
+  it("renders diagnosis descriptions beside their codes with a legacy code-only fallback", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/bill-read-only-form.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("injury.diagnoses?.length");
+    expect(source).toContain("diagnosis.description");
+    expect(source).toContain('map((code) => ({ code, description: "" }))');
+  });
+
+  it("requires an explicit claims-administrator choice and exposes the supplied host hint", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/bill-submission-form.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("Search the claims administrator directory…");
+    expect(source).toContain("Claims administrator in your system:");
+    expect(source).toContain("invalid={!administrator?.id}");
+    expect(source).not.toContain("Showing 5 suggestions");
+    expect(source).not.toContain("claimsAdministratorRecommendations(payerResults)");
+  });
+
+  it("renders all five claims-administrator directory tabs and payer identifiers", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/claims-administrator-directory-dialog.tsx", import.meta.url),
+      "utf8",
+    );
+
+    for (const label of ["Main", "Bill Review", "Authorization Info", "Mailing Address", "Claim Number Pattern"]) {
+      expect(source).toContain(JSON.stringify(label));
+    }
+    expect(source).toContain("daisyBill Payer ID");
+    expect(source).not.toContain("Directory ID");
+  });
 });
 
 describe("bill review mutation snapshots", () => {
@@ -1262,6 +1315,7 @@ describe("connected bill lifecycle", () => {
       disputedAmount: 2015,
       attachmentIds: ["doc_1"],
       route: "ebill",
+      actorName: "Ada Example",
     })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
 
     expect(fetcher.mock.calls[0]?.[0]).toBe("/api/mindbill/session");
@@ -1287,6 +1341,7 @@ describe("connected bill lifecycle", () => {
       disputedAmount: 2015,
       attachmentIds: ["doc_1"],
       route: "ebill",
+      actorName: "Ada Example",
     }));
   });
 
