@@ -153,6 +153,19 @@ The operations surfaces consume a normalized list of bills, so they can be used 
 
 `summarizeMindBillDashboard`, `buildMindBillReportRows`, `buildMindBillReportCsv`, `buildMindBillStatusAgingMatrix`, and `buildMindBillStatusAgingCsv` are also exported for custom layouts and server-side reporting.
 
+`mindbill-bill-tasks-dashboard` is the daisyBill-style Bill Tasks worklist: one tone-colored card per task section, rows bucketed by age in days with clickable counts, and a grand-total card. Aggregate your own work items with `buildBillTasksDashboard` from `@mindbill/browser` (types re-exported here) and pass the result as `[data]`:
+
+```html
+<mindbill-bill-tasks-dashboard
+  [data]="billTasks"
+  heading="Bill Tasks"
+  [appearance]="appearance"
+  (cellSelected)="openWorklist($event)"
+/>
+```
+
+Each emitted cell carries `{ sectionId, rowId, bucketId, refs, count }`, where `bucketId` is `null` for a row's Task Total column and `refs` are the bill references collected by the builder.
+
 ## Organization onboarding and billing settings
 
 `mindbill-organization-onboarding` captures the practice identity, billing provider, locations, and W-9 once — saved straight to your MindBill organization through the browser session. Set `variant="settings"` for the compact edit-after-setup layout.

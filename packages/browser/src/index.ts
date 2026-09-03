@@ -301,7 +301,9 @@ export type BillLifecycleActionId =
   | "view_eor"
   | "post_payment"
   | "close"
-  | "reopen";
+  | "reopen"
+  | "send_duplicate"
+  | "report_bill_status";
 
 export type BillLifecycleAction = {
   id: BillLifecycleActionId;
@@ -515,6 +517,26 @@ export type SubmitSecondReviewInput = {
   disputedAmount: number | undefined;
   attachmentIds: string[];
   route: BillSubmissionRoute;
+  /** Optional subset of disputed line items; omitted = the whole bill. */
+  lineItemIds?: string[];
+  /** SBR-1 box: whether the disputed service was authorized. */
+  serviceAuthorized?: boolean;
+};
+
+/**
+ * Payload for the "report_bill_status" lifecycle action: records the outcome
+ * of a phone call to the Claims Administrator / Bill Review vendor about an
+ * outstanding bill. Posted through the generic lifecycle actions endpoint.
+ */
+export type ReportBillStatusActionInput = {
+  action: "report_bill_status";
+  status: string;
+  company?: string;
+  representativeName?: string;
+  representativeRole?: string;
+  phone?: string;
+  callReference?: string;
+  note?: string;
 };
 export type ResubmitBillInput = { reason?: string };
 export type SandboxSimulationScenario = "accepted" | "rejected" | "processed" | "denied" | "partial_payment" | "paid";
@@ -1209,4 +1231,139 @@ export function createOrganizationClient({
     saveW9: (input) =>
       request("/partner/v2/browser/organization/w9", { method: "PUT", body: JSON.stringify(input) }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Bill Tasks dashboard (daisyBill-style worklist): a pure, framework-neutral
+// aggregation shared by the React and Angular components. Hosts flatten their
+// own work items and get back per-section rows bucketed by age in days.
+
+export type BillTasksAgingBucket = {
+  id: string;
+  label: string;
+  /** Exclusive lower bound in days. The first bucket also admits day 0. */
+  minDays: number;
+  /** Inclusive upper bound in days; null means unbounded. */
+  maxDays: number | null;
+};
+
+export const BILL_TASKS_AGING_BUCKETS: BillTasksAgingBucket[] = [
+  { id: "1-30", label: "1-30 Days Ago", minDays: 0, maxDays: 30 },
+  { id: "31-60", label: "31-60 Days Ago", minDays: 30, maxDays: 60 },
+  { id: "61-90", label: "61-90 Days Ago", minDays: 60, maxDays: 90 },
+  { id: "91-180", label: "91-180 Days Ago", minDays: 90, maxDays: 180 },
+  { id: "181+", label: "181+ Days Ago", minDays: 180, maxDays: null },
+];
+
+export type BillTasksDashboardItem = {
+  sectionId: string;
+  rowId: string;
+  rowLabel: string;
+  ageDays: number;
+  balanceDue?: number;
+  /** Opaque bill reference echoed back in click-through payloads. */
+  ref?: string;
+};
+
+export type BillTasksDashboardRow = {
+  id: string;
+  label: string;
+  /** One count per aging bucket, in bucket order. */
+  counts: number[];
+  total: number;
+  /** Collected item refs per aging bucket, in bucket order. */
+  refs: string[][];
+};
+
+export type BillTasksDashboardTone = "violet" | "red" | "blue" | "green" | "amber" | "neutral";
+
+export type BillTasksDashboardSectionInput = {
+  id: string;
+  label: string;
+  /** Shown under the section label as "by {agingBasisLabel}". */
+  agingBasisLabel: string;
+  tone: BillTasksDashboardTone;
+};
+
+export type BillTasksDashboardSection = BillTasksDashboardSectionInput & {
+  rows: BillTasksDashboardRow[];
+  /** Per-bucket totals across the section's rows. */
+  totals: number[];
+  total: number;
+  empty: boolean;
+};
+
+export type BillTasksDashboardData = {
+  sections: BillTasksDashboardSection[];
+  grandTotals: number[];
+  grandTotal: number;
+};
+
+/**
+ * Bucket index for an item age: a bucket admits `minDays < ageDays <= maxDays`
+ * (`maxDays: null` = unbounded) and the first bucket also admits day 0.
+ * Ages beyond every bucket clamp into the last bucket.
+ */
+export function billTasksAgingBucketIndex(
+  ageDays: number,
+  buckets: BillTasksAgingBucket[] = BILL_TASKS_AGING_BUCKETS,
+): number {
+  const days = Math.max(0, Math.floor(ageDays));
+  const index = buckets.findIndex((bucket, position) =>
+    (bucket.maxDays === null || days <= bucket.maxDays)
+    && (days > bucket.minDays || position === 0));
+  return index === -1 ? buckets.length - 1 : index;
+}
+
+/**
+ * Aggregates flat work items into the daisyBill-style Bill Tasks dashboard.
+ * Sections render in the given order even when empty; rows appear in
+ * first-seen item order within their section.
+ */
+export function buildBillTasksDashboard(
+  items: BillTasksDashboardItem[],
+  sections: BillTasksDashboardSectionInput[],
+  buckets: BillTasksAgingBucket[] = BILL_TASKS_AGING_BUCKETS,
+): BillTasksDashboardData {
+  const zeros = () => buckets.map(() => 0);
+  const built = sections.map((section): BillTasksDashboardSection => ({
+    ...section,
+    rows: [],
+    totals: zeros(),
+    total: 0,
+    empty: true,
+  }));
+  const sectionById = new Map(built.map((section) => [section.id, section]));
+  const rowByKey = new Map<string, BillTasksDashboardRow>();
+  const grandTotals = zeros();
+  let grandTotal = 0;
+
+  for (const item of items) {
+    const section = sectionById.get(item.sectionId);
+    if (!section) continue;
+    const key = `${item.sectionId} ${item.rowId}`;
+    let row = rowByKey.get(key);
+    if (!row) {
+      row = {
+        id: item.rowId,
+        label: item.rowLabel,
+        counts: zeros(),
+        total: 0,
+        refs: buckets.map(() => []),
+      };
+      rowByKey.set(key, row);
+      section.rows.push(row);
+      section.empty = false;
+    }
+    const bucketIndex = billTasksAgingBucketIndex(item.ageDays, buckets);
+    row.counts[bucketIndex] = (row.counts[bucketIndex] ?? 0) + 1;
+    row.total += 1;
+    if (item.ref) row.refs[bucketIndex]?.push(item.ref);
+    section.totals[bucketIndex] = (section.totals[bucketIndex] ?? 0) + 1;
+    section.total += 1;
+    grandTotals[bucketIndex] = (grandTotals[bucketIndex] ?? 0) + 1;
+    grandTotal += 1;
+  }
+
+  return { sections: built, grandTotals, grandTotal };
 }

@@ -12,10 +12,21 @@ import {
   shouldShowSandboxControls,
 } from "../packages/react/src/connected-bill-lifecycle";
 import {
+  BILL_TASKS_AGING_BUCKETS,
+  billTasksAgingBucketIndex,
+  buildBillTasksDashboard,
   createBillReferenceClient,
   createBillSubmissionClient,
   sanitizeBillReviewSaveInput,
+  type BillHistoryEntry,
+  type BillTasksDashboardItem,
 } from "../packages/browser/src/index";
+import { BillTasksDashboard } from "../packages/react/src/bill-tasks-dashboard";
+import {
+  billSubmissionsRibbonDeliveryLabel,
+  billSubmissionsRibbonFromHistory,
+} from "../packages/react/src/bill-submissions-ribbon";
+import { REPORT_BILL_STATUS_OPTIONS } from "../packages/react/src/report-bill-status-dialog";
 import {
   mindBillAppearanceStyle,
   resolveMindBillAppearance,
@@ -1320,5 +1331,146 @@ describe("connected bill lifecycle", () => {
     expect(() => createBillLifecycleClient({ billId: "", fetch: vi.fn<typeof fetch>() })).toThrow(
       "billId is required",
     );
+  });
+});
+
+describe("bill tasks dashboard", () => {
+  const sections = [
+    { id: "payment_due", label: "Payment Due", agingBasisLabel: "Bill Sent Date", tone: "violet" as const },
+    { id: "denials", label: "Denials", agingBasisLabel: "EOR Date", tone: "red" as const },
+    { id: "drafts", label: "Drafts", agingBasisLabel: "Created Date", tone: "neutral" as const },
+  ];
+  const item = (overrides: Partial<BillTasksDashboardItem>): BillTasksDashboardItem => ({
+    sectionId: "payment_due",
+    rowId: "no_response",
+    rowLabel: "No payer response",
+    ageDays: 5,
+    ...overrides,
+  });
+
+  it("buckets ages on exclusive-min/inclusive-max boundaries with day 0 in the first bucket", () => {
+    expect(billTasksAgingBucketIndex(0)).toBe(0);
+    expect(billTasksAgingBucketIndex(1)).toBe(0);
+    expect(billTasksAgingBucketIndex(30)).toBe(0);
+    expect(billTasksAgingBucketIndex(31)).toBe(1);
+    expect(billTasksAgingBucketIndex(60)).toBe(1);
+    expect(billTasksAgingBucketIndex(61)).toBe(2);
+    expect(billTasksAgingBucketIndex(90)).toBe(2);
+    expect(billTasksAgingBucketIndex(91)).toBe(3);
+    expect(billTasksAgingBucketIndex(180)).toBe(3);
+    expect(billTasksAgingBucketIndex(181)).toBe(4);
+    expect(billTasksAgingBucketIndex(4000)).toBe(4);
+    expect(BILL_TASKS_AGING_BUCKETS.map((bucket) => bucket.id)).toEqual([
+      "1-30", "31-60", "61-90", "91-180", "181+",
+    ]);
+    expect(BILL_TASKS_AGING_BUCKETS[0]?.label).toBe("1-30 Days Ago");
+    expect(BILL_TASKS_AGING_BUCKETS[4]?.maxDays).toBeNull();
+  });
+
+  it("keeps rows in first-seen order, renders empty sections, and collects refs", () => {
+    const data = buildBillTasksDashboard([
+      item({ rowId: "second_review", rowLabel: "Second Review due", ageDays: 30, ref: "bill_a" }),
+      item({ ageDays: 31, ref: "bill_b" }),
+      item({ ageDays: 200, ref: "bill_c" }),
+      item({ sectionId: "denials", rowId: "denied", rowLabel: "Denied bills", ageDays: 45, ref: "bill_d" }),
+      item({ ageDays: 33 }),
+      item({ sectionId: "unknown_section", ageDays: 1, ref: "bill_ignored" }),
+    ], sections);
+
+    expect(data.sections.map((section) => section.id)).toEqual(["payment_due", "denials", "drafts"]);
+    const paymentDue = data.sections[0]!;
+    expect(paymentDue.rows.map((row) => row.id)).toEqual(["second_review", "no_response"]);
+    expect(paymentDue.rows[0]?.counts).toEqual([1, 0, 0, 0, 0]);
+    expect(paymentDue.rows[1]?.counts).toEqual([0, 2, 0, 0, 1]);
+    expect(paymentDue.rows[1]?.total).toBe(3);
+    expect(paymentDue.rows[1]?.refs).toEqual([[], ["bill_b"], [], [], ["bill_c"]]);
+    expect(paymentDue.totals).toEqual([1, 2, 0, 0, 1]);
+    expect(paymentDue.total).toBe(4);
+    expect(paymentDue.empty).toBe(false);
+
+    const drafts = data.sections[2]!;
+    expect(drafts.empty).toBe(true);
+    expect(drafts.rows).toEqual([]);
+    expect(drafts.totals).toEqual([0, 0, 0, 0, 0]);
+
+    expect(data.grandTotals).toEqual([1, 3, 0, 0, 1]);
+    expect(data.grandTotal).toBe(5);
+  });
+
+  it("renders as a themed stateless surface", () => {
+    const data = buildBillTasksDashboard([item({ ageDays: 2, ref: "bill_a" })], sections);
+    const surface = BillTasksDashboard({ data, grandTotalLabel: "Bill Tasks Total" });
+    const props = surface.props as Record<string, unknown>;
+    expect(props.className).toContain("mbtk");
+    expect(props.style).toMatchObject({
+      "--mbtk-cols": "minmax(150px,1.6fr) repeat(5,minmax(84px,1fr)) minmax(84px,1fr)",
+    });
+  });
+});
+
+describe("bill submissions ribbon", () => {
+  const entry = (overrides: Partial<BillHistoryEntry>): BillHistoryEntry => ({
+    id: "hist_1",
+    date: "2026-08-14T17:30:00.000Z",
+    action: "Original Bill",
+    kind: "submission",
+    actor: "Casey Biller",
+    summary: "Electronically sent to Acme Insurance Co.",
+    tone: "submission",
+    ...overrides,
+  });
+
+  it("maps only submission history entries into chips", () => {
+    const items = billSubmissionsRibbonFromHistory([
+      entry({}),
+      entry({ id: "hist_2", kind: "ack", action: "277 Accept", summary: "Accepted by the clearinghouse." }),
+      entry({ id: "hist_3", action: "Second Review", summary: "Faxed to (555) 010-2040.", date: "2026-09-01T08:00:00.000Z" }),
+      entry({ id: "hist_4", kind: "note", action: "Note", tone: "note" }),
+    ]);
+
+    expect(items).toEqual([
+      {
+        id: "hist_1",
+        label: "Original Bill",
+        meta: [
+          { label: "Delivery", value: "e-Bill (837)" },
+          { label: "Sent", value: "08/14/2026" },
+        ],
+      },
+      {
+        id: "hist_3",
+        label: "Second Review",
+        meta: [
+          { label: "Delivery", value: "Fax" },
+          { label: "Sent", value: "09/01/2026" },
+        ],
+      },
+    ]);
+  });
+
+  it("extracts the delivery route word from presented summaries", () => {
+    expect(billSubmissionsRibbonDeliveryLabel("Electronically sent to Acme.")).toBe("e-Bill (837)");
+    expect(billSubmissionsRibbonDeliveryLabel("Faxed to (555) 010-2040.")).toBe("Fax");
+    expect(billSubmissionsRibbonDeliveryLabel("Emailed to claims@example.com.")).toBe("Email");
+    expect(billSubmissionsRibbonDeliveryLabel("Mailed to PO Box 1234.")).toBe("Mail");
+    expect(billSubmissionsRibbonDeliveryLabel("Hand delivered.")).toBe("Sent");
+  });
+});
+
+describe("report bill status dialog", () => {
+  it("ships the five daisy-worded status options", () => {
+    expect(REPORT_BILL_STATUS_OPTIONS.map((option) => option.label)).toEqual([
+      "Message Left Requesting Bill Payment Status",
+      "Explanation of Review (EOR) Pending",
+      "Explanation of Review (EOR) Sent",
+      "Bill Not On File",
+      "Bill Forwarded to Different Payer / Network",
+    ]);
+    expect(REPORT_BILL_STATUS_OPTIONS.map((option) => option.id)).toEqual([
+      "message_left", "eor_pending", "eor_sent", "bill_not_on_file", "forwarded",
+    ]);
+    for (const option of REPORT_BILL_STATUS_OPTIONS) {
+      expect(option.description).toContain("Claims Administrator/Bill Review");
+    }
   });
 });
