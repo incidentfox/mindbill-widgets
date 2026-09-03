@@ -14,10 +14,12 @@ export * from "./lib/submission-controls";
 export * from "./lib/submission-format";
 export * from "./lib/billing-management-button.component";
 export * from "./lib/organization-onboarding.component";
-export { REPORT_BILL_STATUS_OPTIONS, reportBillStatusContacts } from "@mindbill/browser";
+export { defaultBillReviewPayerOption, REPORT_BILL_STATUS_OPTIONS, reportBillStatusContacts } from "@mindbill/browser";
 export type {
   BillLifecycleAction,
   BillLifecycleActionId,
+  BillReviewPayer,
+  BillReviewPayerOption,
   BillLifecycleClient,
   BillLifecycleClientOptions,
   BillLifecycleData,

@@ -117,6 +117,10 @@ export type BillReviewPayer = {
     state: "match" | "warning";
     label: string;
   }>;
+  /** True when a bill for this claims administrator must name one of `payers`. */
+  payerSelectionRequired?: boolean;
+  /** Selectable payers (subpayors) under this claims administrator. */
+  payers?: Array<{ id: string; label: string; default?: boolean }>;
 };
 
 export type BillReviewFeatures = {
@@ -176,6 +180,8 @@ export type BillReviewData = {
 
 export type BillReviewSaveInput = {
   claimsAdminId: string;
+  /** The chosen payer (subpayor) when the claims administrator requires payer selection. */
+  payerId?: string;
   patientOverrides?: {
     firstName: string;
     middleName?: string;

@@ -4,9 +4,11 @@ import { FormsModule } from "@angular/forms";
 import {
   createBillReferenceClient,
   createBillSubmissionClient,
+  defaultBillReviewPayerOption,
   type BillDiagnosisCode,
   type BillLifecycleSessionProvider,
   type BillReviewPayer,
+  type BillReviewPayerOption,
   type BrowserBillCreateInput,
   type BrowserBillSubmissionDocument,
   type BrowserBillSubmissionInput,
@@ -170,6 +172,13 @@ async function blobToBase64(blob: Blob): Promise<string> {
           @if (payerResults.length) { <div class="options">@for (payer of payerResults; track payer.id) { <button type="button" (click)="selectPayer(payer)"><strong>{{ payer.name }}</strong><span>{{ payer.hasElectronic ? 'Electronic routing' : 'Paper / fax' }}@if (payer.confidence) { · {{ payer.confidence }} match }</span></button> }</div> }
           @if (bill.claim.claimsAdministrator.id) { <small class="selected">✓ Routed to {{ bill.claim.claimsAdministrator.name }}</small> }
         </div>
+        @if (payerSelectionRequired && subpayorOptions.length) {
+          <div class="wide lookup" [class.invalid]="bad('claim.claimsAdministrator.payerId')"><label>Payer <b>*</b></label>
+            <mindbill-combo-box ariaLabel="Payer" [value]="subpayorLabel" [invalid]="bad('claim.claimsAdministrator.payerId')" [preserveValueOnOpen]="true" placeholder="Select the payer for this claims administrator…" [options]="subpayorComboOptions" (selected)="selectSubpayor($event)"/>
+            @if (subpayorLabel) { <small class="selected">✓ Payer set: {{ subpayorLabel }}</small> }
+            @else { <small>This claims administrator routes bills per payer. Choose the payer that should receive this bill.</small> }
+          </div>
+        }
         <label class="wide">Injury description (optional)<input name="description" [(ngModel)]="bill.claim.description"></label>
         <div class="wide diagnosis" [class.invalid]="bad('diagnoses')"><label>Diagnosis codes (ICD-10) <b>*</b></label>
           <div class="quick">@for (item of quickDiagnoses; track item.code) { <button type="button" [class.on]="hasDiagnosis(item.code)" (click)="toggleDiagnosis(item)">{{ hasDiagnosis(item.code) ? '✓' : '+' }} {{ item.label }}</button> }</div>
@@ -271,6 +280,9 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   payerQuery = "";
   payerResults: BillReviewPayer[] = [];
   payerBusy = false;
+  /** Payer (subpayor) choices for the selected claims administrator. */
+  subpayorOptions: BillReviewPayerOption[] = [];
+  payerSelectionRequired = false;
   diagnosisQuery = "";
   diagnosisResults: BillDiagnosisCode[] = [];
   diagnosisOffset = 0;
@@ -299,6 +311,8 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       if (!this.bill.serviceLines.length) this.bill.serviceLines = [{ code: "", units: 1 }];
       this.ensureTrailingLine();
       this.payerQuery = this.bill.claim.claimsAdministrator.name ?? "";
+      this.subpayorOptions = [];
+      this.payerSelectionRequired = false;
     }
     if (changes["attachments"]) this.workingAttachments = this.attachments.map((item) => ({ ...item }));
     if (changes["attentionFields"]) this.attentionFieldSet = new Set(this.attentionFields);
@@ -377,10 +391,39 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   }
 
   selectPayer(payer: BillReviewPayer): void {
-    this.bill.claim.claimsAdministrator = { id: payer.id, name: payer.name };
+    this.payerSelectionRequired = payer.payerSelectionRequired === true;
+    this.subpayorOptions = this.payerSelectionRequired
+      ? (payer.payers ?? []).map((option) => ({ ...option }))
+      : [];
+    const preselected = defaultBillReviewPayerOption(payer);
+    this.bill.claim.claimsAdministrator = {
+      id: payer.id,
+      name: payer.name,
+      ...(preselected ? { payerId: preselected.id } : {}),
+    };
     this.payerQuery = payer.name;
     this.payerResults = [];
     this.invalidFields.delete("claim.claimsAdministrator");
+    this.invalidFields.delete("claim.claimsAdministrator.payerId");
+    this.billChange.emit(this.bill);
+  }
+
+  get subpayorComboOptions(): MindBillComboOption[] {
+    return this.subpayorOptions.map((option) => ({
+      id: option.id,
+      label: option.label,
+      ...(option.default ? { detail: "Default" } : {}),
+    }));
+  }
+
+  get subpayorLabel(): string {
+    const payerId = this.bill.claim?.claimsAdministrator?.payerId;
+    return this.subpayorOptions.find((option) => option.id === payerId)?.label ?? "";
+  }
+
+  selectSubpayor(option: MindBillComboOption): void {
+    this.bill.claim.claimsAdministrator = { ...this.bill.claim.claimsAdministrator, payerId: option.id };
+    this.invalidFields.delete("claim.claimsAdministrator.payerId");
     this.billChange.emit(this.bill);
   }
 
@@ -506,7 +549,9 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       ["patient.firstName", this.bill.patient.firstName], ["patient.lastName", this.bill.patient.lastName], ["patient.dateOfBirth", parseMindBillSubmissionDate(this.bill.patient.dateOfBirth ?? "")],
       ["patient.address.line1", this.bill.patient.address.line1], ["patient.address.city", this.bill.patient.address.city], ["patient.address.state", this.bill.patient.address.state], ["patient.address.postalCode", this.bill.patient.address.postalCode],
       ["service.date", parseMindBillSubmissionDate(this.bill.service.date ?? "")], ["claim.dateOfInjury", parseMindBillSubmissionDate(this.bill.claim.dateOfInjury ?? "")], ["claim.claimNumber", this.bill.claim.claimNumber], ["claim.employer", this.bill.claim.employer],
-      ["claim.claimsAdministrator", this.bill.claim.claimsAdministrator.id], ["diagnoses", this.bill.diagnoses.length],
+      ["claim.claimsAdministrator", this.bill.claim.claimsAdministrator.id],
+      ["claim.claimsAdministrator.payerId", !this.payerSelectionRequired || this.bill.claim.claimsAdministrator.payerId],
+      ["diagnoses", this.bill.diagnoses.length],
       ["billingProvider.name", this.bill.billingProvider.name], ["billingProvider.taxId", this.bill.billingProvider.taxId], ["billingProvider.npi", this.bill.billingProvider.npi], ["billingProvider.phone", this.bill.billingProvider.phone],
       ["billingProvider.address.line1", this.bill.billingProvider.address.line1], ["billingProvider.address.city", this.bill.billingProvider.address.city], ["billingProvider.address.state", this.bill.billingProvider.address.state], ["billingProvider.address.postalCode", this.bill.billingProvider.address.postalCode],
       ["renderingProvider.name", this.bill.renderingProvider.name], ["renderingProvider.npi", this.bill.renderingProvider.npi], ["renderingProvider.taxonomy", this.bill.renderingProvider.taxonomy],

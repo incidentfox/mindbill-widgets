@@ -5,11 +5,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   createBillReferenceClient,
   createBillSubmissionClient,
+  defaultBillReviewPayerOption,
   type BillDeliveryOptions,
   type BrowserBillSubmissionDocument,
   type BrowserBillSubmissionResult,
   type BillLifecycleSessionProvider,
   type BillReviewPayer,
+  type BillReviewPayerOption,
 } from "@mindbill/browser";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
@@ -92,7 +94,15 @@ export type BillSubmissionInput = {
   claim: {
     id?: string; externalId?: string; claimNumber: string; adjNumber?: string; employer?: string;
     dateOfInjury?: string; injuryState?: string; description?: string;
-    claimsAdministrator?: { id?: string; name: string };
+    claimsAdministrator?: {
+      id?: string;
+      name: string;
+      /** The chosen payer (subpayor) when the claims administrator requires payer selection. */
+      payerId?: string;
+      /** Directory metadata carried while editing; stripped from the submitted bill. */
+      payerSelectionRequired?: boolean;
+      payers?: BillReviewPayerOption[];
+    };
   };
   service: { date: string; endDate?: string | null; authorizationNumber?: string | null };
   billingProvider?: {
@@ -119,7 +129,7 @@ export type CompleteBillSubmissionInput = Omit<
   claim: BillSubmissionInput["claim"] & {
     employer: string;
     dateOfInjury: string;
-    claimsAdministrator: { id: string; name: string };
+    claimsAdministrator: { id: string; name: string; payerId?: string };
   };
   billingProvider: {
     name: string; taxId: string; npi: string; phone: string; address: BillSubmissionAddress;
@@ -438,6 +448,9 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   if (bill.claim.claimsAdministrator?.name && !bill.claim.claimsAdministrator.id) {
     errors["claim.claimsAdministrator"] = "Select a claims administrator from the payer directory.";
   }
+  if (bill.claim.claimsAdministrator?.payerSelectionRequired && !bill.claim.claimsAdministrator.payerId?.trim()) {
+    errors["claim.claimsAdministrator.payerId"] = "Select the payer for this claims administrator.";
+  }
   if (bill.patient.dateOfBirth && !parseBillSubmissionDate(bill.patient.dateOfBirth)) errors["patient.dateOfBirth"] = "Use MM/DD/YYYY";
   if (bill.claim.dateOfInjury && !parseBillSubmissionDate(bill.claim.dateOfInjury)) errors["claim.dateOfInjury"] = "Use MM/DD/YYYY";
   if (bill.patient.address.state.trim().length !== 2) errors["patient.address.state"] = "Use a 2-letter state code";
@@ -550,6 +563,42 @@ export function claimsAdministratorRecommendations(results: BillReviewPayer[], l
   return [...results]
     .sort((left, right) => Number(Boolean(right.recommended)) - Number(Boolean(left.recommended)))
     .slice(0, Math.max(0, limit));
+}
+
+/**
+ * Form-state claims administrator for a directory pick. When the administrator
+ * requires payer selection it carries the payer (subpayor) choices and
+ * preselects the directory default; administrators without subpayors stay a
+ * plain `{ id, name }` reference.
+ */
+export function chooseClaimsAdministrator(
+  payer: Pick<BillReviewPayer, "id" | "name" | "payerSelectionRequired" | "payers">,
+): NonNullable<BillSubmissionInput["claim"]["claimsAdministrator"]> {
+  if (!payer.payerSelectionRequired) return { id: payer.id, name: payer.name };
+  const payers = (payer.payers ?? []).map((option) => ({ ...option }));
+  const preselected = defaultBillReviewPayerOption(payer);
+  return {
+    id: payer.id,
+    name: payer.name,
+    payerSelectionRequired: true,
+    ...(payers.length ? { payers } : {}),
+    ...(preselected ? { payerId: preselected.id } : {}),
+  };
+}
+
+/**
+ * The claims administrator reference exactly as submitted to MindBill: picker
+ * metadata (payerSelectionRequired, payers) stays client-side and the chosen
+ * payerId rides on the wire only when set.
+ */
+export function submittedClaimsAdministrator(
+  administrator: NonNullable<BillSubmissionInput["claim"]["claimsAdministrator"]>,
+): { id: string; name: string; payerId?: string } {
+  return {
+    id: administrator.id ?? "",
+    name: administrator.name,
+    ...(administrator.payerId ? { payerId: administrator.payerId } : {}),
+  };
 }
 
 export type BillSubmissionSectionId =
@@ -688,7 +737,7 @@ export function BillSubmissionForm({
       if (request !== payerRequest.current) return;
       setPayerResults(results);
       const exact = autoSelect ? exactClaimsAdministratorMatch(results, trimmed) : undefined;
-      if (exact) setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: { id: exact.id, name: exact.name } } }));
+      if (exact) setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: chooseClaimsAdministrator(exact) } }));
     } catch (caught) {
       if (request === payerRequest.current) setFormError(caught instanceof Error ? caught.message : "Claims administrator search is unavailable.");
     } finally {
@@ -755,7 +804,14 @@ export function BillSubmissionForm({
       return;
     }
     if (selectedIds.length + uploads.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
-    const complete = clean as CompleteBillSubmissionInput;
+    const administrator = clean.claim.claimsAdministrator;
+    const complete = {
+      ...clean,
+      claim: {
+        ...clean.claim,
+        ...(administrator ? { claimsAdministrator: submittedClaimsAdministrator(administrator) } : {}),
+      },
+    } as CompleteBillSubmissionInput;
     if (onSubmit) {
       setSubmitting(true);
       try { await onSubmit({ bill: complete, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads }); }
@@ -818,7 +874,14 @@ export function BillSubmissionForm({
   const claimsAdministratorError = errors["claim.claimsAdministrator"];
   const selectedPayer = payerResults.find((payer) => payer.id === bill.claim.claimsAdministrator?.id);
   const payerRecommendations = bill.claim.claimsAdministrator?.id ? [] : claimsAdministratorRecommendations(payerResults);
-  const choosePayer = (payer: Pick<BillReviewPayer, "id" | "name">) => setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: { id: payer.id, name: payer.name } } }));
+  const choosePayer = (payer: Pick<BillReviewPayer, "id" | "name" | "payerSelectionRequired" | "payers">) => setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: chooseClaimsAdministrator(payer) } }));
+  const administrator = bill.claim.claimsAdministrator;
+  const subpayorOptions = administrator?.payerSelectionRequired ? administrator.payers ?? [] : [];
+  const subpayorError = errors["claim.claimsAdministrator.payerId"];
+  const selectedSubpayor = subpayorOptions.find((option) => option.id === administrator?.payerId);
+  const chooseSubpayor = (payerId: string) => setBill((current) => current.claim.claimsAdministrator
+    ? { ...current, claim: { ...current.claim, claimsAdministrator: { ...current.claim.claimsAdministrator, payerId } } }
+    : current);
 
   const headerSection = <div className="mbsf-head"><div><h3 className="mbsf-title">{heading}</h3><p className="mbsf-copy">{description}</p></div><span className="mbsf-required"><RequiredMark /> Required</span></div>;
 
@@ -842,12 +905,16 @@ export function BillSubmissionForm({
       <Field path="claim.claimNumber" label="Claim number" required error={errors["claim.claimNumber"]}>{text(bill.claim.claimNumber, (claimNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, claimNumber } })))}</Field>
       <Field label="WCAB / ADJ number (optional)">{text(bill.claim.adjNumber, (adjNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, adjNumber } })))}</Field>
       <Field path="claim.claimsAdministrator" label="Claims administrator" required span error={claimsAdministratorError}>
-        <ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError)} disabled={locked} loading={payerLoading} preserveValueOnOpen value={bill.claim.claimsAdministrator?.name ?? ""} placeholder="Search the payer directory…" options={payerResults.map((payer) => ({ id: payer.id, label: payer.name, detail: [payer.hasElectronic ? "Electronic" : "Work comp", ...(payer.states ?? [])].join(" · ") }))} onQuery={searchPayers} onSelect={(option) => choosePayer({ id: option.id, name: option.label })} />
+        <ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError)} disabled={locked} loading={payerLoading} preserveValueOnOpen value={bill.claim.claimsAdministrator?.name ?? ""} placeholder="Search the payer directory…" options={payerResults.map((payer) => ({ id: payer.id, label: payer.name, detail: [payer.hasElectronic ? "Electronic" : "Work comp", ...(payer.states ?? [])].join(" · ") }))} onQuery={searchPayers} onSelect={(option) => choosePayer(payerResults.find((payer) => payer.id === option.id) ?? { id: option.id, name: option.label })} />
         {selectedPayer ? <div className="mbsf-payer-status" role="status"><strong>✓ Routing match set:</strong> {selectedPayer.name}</div> : null}
         {selectedPayer?.signals?.length ? <div className="mbsf-payer-signals">{selectedPayer.signals.map((signal, index) => <span data-state={signal.state} key={`${signal.kind}-${index}`}>{signal.state === "match" ? "✓" : "!"} {signal.label}</span>)}</div> : null}
         {!selectedPayer && payerRecommendations.length ? <><p className="mbsf-payer-intro">Confirm the best routing match for <strong>{bill.claim.claimsAdministrator?.name}</strong>:</p><div className="mbsf-payer-list">{payerRecommendations.map((payer) => <div className="mbsf-payer-option" key={payer.id}><div className="mbsf-payer-option-main"><strong>{payer.name}</strong>{payer.signals?.length ? <div className="mbsf-payer-signals">{payer.signals.map((signal, index) => <span data-state={signal.state} key={`${signal.kind}-${index}`}>{signal.state === "match" ? "✓" : "!"} {signal.label}</span>)}</div> : <small className="mbsf-help">Directory match</small>}</div><button className="mbsf-secondary" type="button" onClick={() => choosePayer(payer)}>Use</button></div>)}</div></> : null}
         {!selectedPayer && !payerLoading && !payerRecommendations.length && (bill.claim.claimsAdministrator?.name.trim().length ?? 0) >= 2 ? <small className="mbsf-help">No confident route selected yet. Search the directory and choose a claims administrator.</small> : null}
       </Field>
+      {administrator?.payerSelectionRequired && subpayorOptions.length ? <Field path="claim.claimsAdministrator.payerId" label="Payer" required span error={subpayorError}>
+        <ComboBox ariaLabel="Payer" invalid={Boolean(subpayorError)} disabled={locked} preserveValueOnOpen value={selectedSubpayor?.label ?? ""} placeholder="Select the payer for this claims administrator…" options={subpayorOptions.map((option) => ({ id: option.id, label: option.label, ...(option.default ? { detail: "Default" } : {}) }))} onSelect={(option) => chooseSubpayor(option.id)} />
+        {selectedSubpayor ? <div className="mbsf-payer-status" role="status"><strong>✓ Payer set:</strong> {selectedSubpayor.label}</div> : <small className="mbsf-help">This claims administrator routes bills per payer. Choose the payer that should receive this bill.</small>}
+      </Field> : null}
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
       <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required span error={errors.diagnoses}>
         <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = (bill.diagnoses ?? []).includes(option.code); return <button className="mbsf-quick-pick" data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => ({ ...current, diagnoses: selected ? (current.diagnoses ?? []).filter((code) => code !== option.code) : [...new Set([...(current.diagnoses ?? []), option.code])] }))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>

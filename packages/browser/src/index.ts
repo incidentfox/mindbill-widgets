@@ -76,6 +76,14 @@ export type BillReviewAttachment = {
   contentUrl?: string;
 };
 
+/** One selectable payer (subpayor) under a claims administrator. */
+export type BillReviewPayerOption = {
+  id: string;
+  label: string;
+  /** Preselect this payer when the claims administrator is chosen. */
+  default?: boolean;
+};
+
 export type BillReviewPayer = {
   id: string;
   name: string;
@@ -88,7 +96,22 @@ export type BillReviewPayer = {
     state: "match" | "warning";
     label: string;
   }>;
+  /** True when a bill for this claims administrator must name one of `payers`. */
+  payerSelectionRequired?: boolean;
+  /** Selectable payers (subpayors) under this claims administrator. */
+  payers?: BillReviewPayerOption[];
 };
+
+/**
+ * The payer option to preselect when a claims administrator that requires
+ * payer selection is chosen, or null when nothing is marked as the default.
+ */
+export function defaultBillReviewPayerOption(
+  payer: Pick<BillReviewPayer, "payerSelectionRequired" | "payers">,
+): BillReviewPayerOption | null {
+  if (!payer.payerSelectionRequired) return null;
+  return payer.payers?.find((option) => option.default) ?? null;
+}
 
 export type BillPostalPlace = { city: string; state: string };
 export type BillDiagnosisCode = { code: string; description: string };
@@ -159,6 +182,8 @@ export type BillReviewData = {
 
 export type BillReviewSaveInput = {
   claimsAdminId: string;
+  /** The chosen payer (subpayor) when the claims administrator requires payer selection. */
+  payerId?: string;
   patientOverrides?: {
     firstName: string;
     middleName?: string;
@@ -211,6 +236,7 @@ export function sanitizeBillReviewSaveInput(
 ): BillReviewSaveInput {
   return {
     claimsAdminId: input.claimsAdminId,
+    ...(input.payerId !== undefined ? { payerId: input.payerId } : {}),
     ...(input.patientOverrides ? {
       patientOverrides: pickDefined(input.patientOverrides, [
         "firstName", "middleName", "lastName", "dob",
@@ -744,7 +770,12 @@ export type BrowserBillCreateInput = {
     dateOfInjury: string;
     injuryState?: string;
     description?: string;
-    claimsAdministrator: { id: string; name: string };
+    claimsAdministrator: {
+      id: string;
+      name: string;
+      /** The chosen payer (subpayor) when the claims administrator requires payer selection. */
+      payerId?: string;
+    };
   };
   service: { date: string; endDate?: string | null; authorizationNumber?: string | null };
   billingProvider: { name: string; taxId: string; npi: string; phone: string; address: BrowserBillAddress };
@@ -1148,6 +1179,23 @@ export function createBillLifecycleClient({
           ? { confidence: payer.confidence as NonNullable<BillReviewPayer["confidence"]> }
           : {}),
         ...(typeof payer.recommended === "boolean" ? { recommended: payer.recommended } : {}),
+        ...(typeof payer.payerSelectionRequired === "boolean"
+          ? { payerSelectionRequired: payer.payerSelectionRequired }
+          : {}),
+        ...(Array.isArray(payer.payers)
+          ? {
+              payers: payer.payers.flatMap((option): BillReviewPayerOption[] => {
+                if (!option || typeof option !== "object") return [];
+                const candidate = option as { id?: unknown; label?: unknown; default?: unknown };
+                if (typeof candidate.id !== "string" || typeof candidate.label !== "string") return [];
+                return [{
+                  id: candidate.id,
+                  label: candidate.label,
+                  ...(typeof candidate.default === "boolean" ? { default: candidate.default } : {}),
+                }];
+              }),
+            }
+          : {}),
         ...(Array.isArray(payer.signals)
           ? {
               signals: payer.signals.flatMap((signal) => {
