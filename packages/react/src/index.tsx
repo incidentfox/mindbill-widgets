@@ -104,6 +104,7 @@ export {
   BillSubmissionPatientSection,
   BillSubmissionProvidersSection,
   BillSubmissionServiceLinesSection,
+  chooseClaimsAdministrator,
   ensureTrailingBillSubmissionLine,
   exactClaimsAdministratorMatch,
   formatBillSubmissionDate,
@@ -113,6 +114,7 @@ export {
   parseBillSubmissionDate,
   prepareBillSubmissionDocuments,
   PSYCH_QME_DEFAULT_DIAGNOSIS,
+  submittedClaimsAdministrator,
   validateBillSubmission,
 } from "./bill-submission-form";
 export type {
@@ -246,7 +248,7 @@ export {
   createBillStatusClient,
   useBillStatus,
 } from "./connected-bill-status";
-export type { BrowserBillSubmissionResult } from "@mindbill/browser";
+export type { BillReviewPayerOption, BrowserBillSubmissionResult } from "@mindbill/browser";
 
 export {
   BillActivityTimeline,

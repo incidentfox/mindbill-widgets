@@ -19,6 +19,7 @@ import {
   buildBillTasksDashboard,
   createBillReferenceClient,
   createBillSubmissionClient,
+  defaultBillReviewPayerOption,
   reportBillStatusContacts,
   sanitizeBillReviewSaveInput,
   SECOND_REVIEW_REASON_TEMPLATE,
@@ -62,6 +63,7 @@ import {
   BillSubmissionPatientSection,
   BillSubmissionProvidersSection,
   BillSubmissionServiceLinesSection,
+  chooseClaimsAdministrator,
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
   claimsAdministratorRecommendations,
@@ -69,6 +71,7 @@ import {
   MED_LEGAL_REPORT_TYPE_CODE,
   parseBillSubmissionDate,
   prepareBillSubmissionDocuments,
+  submittedClaimsAdministrator,
   type BillSubmissionInput,
   type CompleteBillSubmissionInput,
   validateBillSubmission,
@@ -271,6 +274,92 @@ describe("atomic bill submission form contract", () => {
     );
   });
 
+  it("requires a payer (subpayor) only when the claims administrator demands one", () => {
+    const subpayorAdmin = {
+      id: "pd:multi-tpa",
+      name: "Synthetic Multi-Payer TPA",
+      payerSelectionRequired: true,
+      payers: [
+        { id: "pd:multi-tpa/alpha", label: "Alpha Casualty", default: true },
+        { id: "pd:multi-tpa/beta", label: "Beta Indemnity" },
+      ],
+    };
+
+    const missing = validateBillSubmission({
+      ...validBill,
+      claim: { ...validBill.claim, claimsAdministrator: subpayorAdmin },
+    });
+    expect(missing.valid).toBe(false);
+    expect(missing.fieldErrors["claim.claimsAdministrator.payerId"]).toBe(
+      "Select the payer for this claims administrator.",
+    );
+
+    const chosen = validateBillSubmission({
+      ...validBill,
+      claim: {
+        ...validBill.claim,
+        claimsAdministrator: { ...subpayorAdmin, payerId: "pd:multi-tpa/beta" },
+      },
+    });
+    expect(chosen).toEqual({ valid: true, fieldErrors: {} });
+
+    // Zero-subpayor administrators stay valid without any payerId.
+    expect(validateBillSubmission(validBill)).toEqual({ valid: true, fieldErrors: {} });
+  });
+
+  it("preselects the default payer when a subpayor administrator is chosen", () => {
+    const payer = {
+      id: "pd:multi-tpa",
+      name: "Synthetic Multi-Payer TPA",
+      payerSelectionRequired: true,
+      payers: [
+        { id: "pd:multi-tpa/alpha", label: "Alpha Casualty" },
+        { id: "pd:multi-tpa/beta", label: "Beta Indemnity", default: true },
+      ],
+    };
+
+    expect(defaultBillReviewPayerOption(payer)).toEqual({
+      id: "pd:multi-tpa/beta",
+      label: "Beta Indemnity",
+      default: true,
+    });
+    expect(defaultBillReviewPayerOption({ ...payer, payerSelectionRequired: false })).toBeNull();
+
+    expect(chooseClaimsAdministrator(payer)).toEqual({
+      id: "pd:multi-tpa",
+      name: "Synthetic Multi-Payer TPA",
+      payerSelectionRequired: true,
+      payers: payer.payers,
+      payerId: "pd:multi-tpa/beta",
+    });
+    expect(chooseClaimsAdministrator({
+      ...payer,
+      payers: [{ id: "pd:multi-tpa/alpha", label: "Alpha Casualty" }],
+    }).payerId).toBeUndefined();
+    expect(chooseClaimsAdministrator({ id: "pd:plain", name: "Plain Payer" })).toEqual({
+      id: "pd:plain",
+      name: "Plain Payer",
+    });
+  });
+
+  it("submits only the administrator reference and the chosen payerId", () => {
+    expect(submittedClaimsAdministrator({
+      id: "pd:multi-tpa",
+      name: "Synthetic Multi-Payer TPA",
+      payerSelectionRequired: true,
+      payers: [{ id: "pd:multi-tpa/alpha", label: "Alpha Casualty", default: true }],
+      payerId: "pd:multi-tpa/alpha",
+    })).toEqual({
+      id: "pd:multi-tpa",
+      name: "Synthetic Multi-Payer TPA",
+      payerId: "pd:multi-tpa/alpha",
+    });
+    expect(submittedClaimsAdministrator({ id: "pd:plain", name: "Plain Payer" })).toEqual({
+      id: "pd:plain",
+      name: "Plain Payer",
+    });
+  });
+
   it("accepts paste-friendly US dates and rejects impossible dates", () => {
     expect(parseBillSubmissionDate("01/26/1985")).toBe("1985-01-26");
     expect(parseBillSubmissionDate("01261985")).toBe("1985-01-26");
@@ -440,7 +529,17 @@ describe("pre-submission reference data", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ token: "short-lived-reference-token" }))
       .mockResolvedValueOnce(jsonResponse({
-        results: [{ id: "pd:zurich", name: "Zurich American Insurance Company", hasElectronic: true }],
+        results: [{
+          id: "pd:zurich",
+          name: "Zurich American Insurance Company",
+          hasElectronic: true,
+          payerSelectionRequired: true,
+          payers: [
+            { id: "pd:zurich/main", label: "Zurich American Insurance", default: true },
+            { id: "pd:zurich/steadfast", label: "Steadfast Insurance Company" },
+            { label: "Malformed entry without an id" },
+          ],
+        }],
       }))
       .mockResolvedValueOnce(jsonResponse({
         results: [{ code: "M25.562", description: "Pain in left knee" }],
@@ -452,7 +551,16 @@ describe("pre-submission reference data", () => {
     const client = createBillReferenceClient({ fetch: fetcher });
 
     await expect(client.searchClaimsAdministrators("Zurich", "TEST-1")).resolves.toMatchObject([
-      { id: "pd:zurich", name: "Zurich American Insurance Company", hasElectronic: true },
+      {
+        id: "pd:zurich",
+        name: "Zurich American Insurance Company",
+        hasElectronic: true,
+        payerSelectionRequired: true,
+        payers: [
+          { id: "pd:zurich/main", label: "Zurich American Insurance", default: true },
+          { id: "pd:zurich/steadfast", label: "Steadfast Insurance Company" },
+        ],
+      },
     ]);
     await expect(client.searchDiagnosisCodes("left knee")).resolves.toEqual([
       { code: "M25.562", description: "Pain in left knee" },
@@ -565,7 +673,7 @@ describe("connected bill submission", () => {
           claimNumber: "TEST-CLAIM-1",
           employer: "Synthetic Employer",
           dateOfInjury: "2026-08-01",
-          claimsAdministrator: { id: "payer_123", name: "Synthetic Payer" },
+          claimsAdministrator: { id: "payer_123", name: "Synthetic Payer", payerId: "payer_123/sub_1" },
         },
         service: { date: "2026-08-31" },
         billingProvider: {
@@ -606,6 +714,12 @@ describe("connected bill submission", () => {
     }));
     const request = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)) as Record<string, unknown>;
     expect(request).toEqual(input);
+    const requestBill = request.bill as { claim: { claimsAdministrator: Record<string, unknown> } };
+    expect(requestBill.claim.claimsAdministrator).toEqual({
+      id: "payer_123",
+      name: "Synthetic Payer",
+      payerId: "payer_123/sub_1",
+    });
     expect(JSON.stringify(request)).not.toContain("fileName");
     expect(JSON.stringify(request)).not.toContain("contentType");
   });
@@ -784,6 +898,7 @@ describe("bill review mutation snapshots", () => {
   it("removes display-only lifecycle fields before a v2 save", () => {
     const input = {
       claimsAdminId: "payer-1",
+      payerId: "payer-1/sub-2",
       dos: "2026-08-24",
       billingProvider: {
         id: "provider-1",
@@ -819,6 +934,7 @@ describe("bill review mutation snapshots", () => {
 
     expect(sanitizeBillReviewSaveInput(input)).toEqual({
       claimsAdminId: "payer-1",
+      payerId: "payer-1/sub-2",
       dos: "2026-08-24",
       billingProvider: {
         name: "Example Evaluators",

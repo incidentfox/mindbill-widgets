@@ -115,7 +115,12 @@ import { BillSubmissionForm } from "@mindbill/react";
 ```
 
 The single browser session powers MindBill's canonical claims-administrator directory,
-complete ICD-10 search, and ZIP-to-city/state lookup. The component bundles MindBill's
+complete ICD-10 search, and ZIP-to-city/state lookup. When the selected claims
+administrator requires payer selection, both forms show a second "Payer" combo
+box under the claims-administrator picker listing its subpayors, preselect the
+directory default, require a choice before submission, and send it as
+`claim.claimsAdministrator.payerId`; administrators without subpayors are
+unchanged. The component bundles MindBill's
 curated workers-comp procedure and modifier catalog, medical-legal fee rules, diagnosis
 quick picks, and locked practice W-9 behavior. Pass optional catalog props only to add
 organization-specific choices.

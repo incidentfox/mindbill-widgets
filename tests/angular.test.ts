@@ -48,6 +48,39 @@ describe("Angular rejected-bill correction", () => {
   });
 });
 
+describe("Angular subpayor picker", () => {
+  it("mirrors the React payer combo, default preselection, and payerId validation", async () => {
+    const source = readFileSync(
+      new URL("../packages/angular/src/lib/bill-submission.component.ts", import.meta.url),
+      "utf8",
+    );
+
+    // Second "Payer" combo box renders only for payer-selection-required admins.
+    expect(source).toContain("@if (payerSelectionRequired && subpayorOptions.length) {");
+    expect(source).toContain("Payer <b>*</b>");
+    expect(source).toContain('(selected)="selectSubpayor($event)"');
+    // Shared default preselection and the wire field on the create payload.
+    expect(source).toContain("defaultBillReviewPayerOption(payer)");
+    expect(source).toContain("...(preselected ? { payerId: preselected.id } : {})");
+    // payerId is required by validation only when selection is required.
+    expect(source).toContain(
+      '["claim.claimsAdministrator.payerId", !this.payerSelectionRequired || this.bill.claim.claimsAdministrator.payerId]',
+    );
+
+    const { defaultBillReviewPayerOption } = await import("../packages/browser/src/index");
+    expect(defaultBillReviewPayerOption({
+      payerSelectionRequired: true,
+      payers: [
+        { id: "pd:multi/alpha", label: "Alpha Casualty" },
+        { id: "pd:multi/beta", label: "Beta Indemnity", default: true },
+      ],
+    })).toEqual({ id: "pd:multi/beta", label: "Beta Indemnity", default: true });
+    expect(defaultBillReviewPayerOption({
+      payers: [{ id: "pd:multi/alpha", label: "Alpha Casualty", default: true }],
+    })).toBeNull();
+  });
+});
+
 describe("Angular procedure lines", () => {
   it("keeps one empty row after every entered row", () => {
     expect(ensureTrailingProcedureLine([])).toEqual([

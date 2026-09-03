@@ -44,6 +44,14 @@ const place = await references.lookupPostalCode("94403");
 
 `searchDiagnosisCodes(query, limit, offset)` supports directory browsing as well as search. Pass an empty query for ICD-10 code order; `limit` is capped at 100 and `offset` advances through the directory.
 
+Some claims administrators route bills through more than one payer. Search
+results mark them with `payerSelectionRequired: true` and list the choices in
+`payers` (`{ id, label, default? }`, with at most one entry marked `default`).
+Send the chosen entry as `bill.claim.claimsAdministrator.payerId` on the atomic
+submission (the same optional `payerId` exists on `BillReviewSaveInput`);
+administrators without subpayors are unchanged and need no `payerId`.
+`defaultBillReviewPayerOption(payer)` returns the option to preselect.
+
 Submit a locally reviewed bill and its PDF attachments directly from the browser:
 
 ```ts
