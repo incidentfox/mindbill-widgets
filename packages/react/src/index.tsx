@@ -200,6 +200,44 @@ export type {
   BillStatusAgingRow,
 } from "./status-aging-matrix";
 
+export {
+  BILL_TASKS_AGING_BUCKETS,
+  BillTasksDashboard,
+  billTasksAgingBucketIndex,
+  buildBillTasksDashboard,
+} from "./bill-tasks-dashboard";
+export type {
+  BillTasksAgingBucket,
+  BillTasksDashboardCell,
+  BillTasksDashboardData,
+  BillTasksDashboardItem,
+  BillTasksDashboardProps,
+  BillTasksDashboardRow,
+  BillTasksDashboardSection,
+  BillTasksDashboardSectionInput,
+  BillTasksDashboardTone,
+} from "./bill-tasks-dashboard";
+
+export {
+  BillSubmissionsRibbon,
+  billSubmissionsRibbonDeliveryLabel,
+  billSubmissionsRibbonFromHistory,
+} from "./bill-submissions-ribbon";
+export type {
+  BillSubmissionRibbonItem,
+  BillSubmissionsRibbonProps,
+} from "./bill-submissions-ribbon";
+
+export {
+  REPORT_BILL_STATUS_OPTIONS,
+  ReportBillStatusDialog,
+} from "./report-bill-status-dialog";
+export type {
+  ReportBillStatusDialogProps,
+  ReportBillStatusId,
+  ReportBillStatusInput,
+} from "./report-bill-status-dialog";
+
 export { BillingSettings, OrganizationOnboarding } from "./organization-onboarding";
 export type { OrganizationOnboardingProps } from "./organization-onboarding";
 

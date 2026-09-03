@@ -7,6 +7,8 @@ export * from "./lib/procedure-lines";
 export * from "./lib/billing-dashboard.component";
 export * from "./lib/status-aging-matrix";
 export * from "./lib/status-aging-matrix.component";
+export * from "./lib/bill-tasks-dashboard";
+export * from "./lib/bill-tasks-dashboard.component";
 export * from "./lib/bill-submission.component";
 export * from "./lib/submission-controls";
 export * from "./lib/submission-format";
@@ -30,4 +32,12 @@ export type {
   BrowserBillCreateInput,
   BrowserBillSubmissionInput,
   BrowserBillSubmissionResult,
+  BillTasksAgingBucket,
+  BillTasksDashboardData,
+  BillTasksDashboardItem,
+  BillTasksDashboardRow,
+  BillTasksDashboardSection,
+  BillTasksDashboardSectionInput,
+  BillTasksDashboardTone,
+  ReportBillStatusActionInput,
 } from "@mindbill/browser";

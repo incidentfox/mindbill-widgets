@@ -297,6 +297,29 @@ Use `BillStatusSummary` only when your application already owns status loading a
 
 Never send a Partner API key or long-lived credential to React/browser code.
 
+## Bill tasks worklist, submissions ribbon, and payer status calls
+
+`BillTasksDashboard` is the daisyBill-style Bill Tasks worklist: one tone-colored card per task section, rows bucketed by age (1-30 / 31-60 / 61-90 / 91-180 / 181+ days), clickable counts that carry the bill refs behind them, and a grand-total card. It is purely props-driven — aggregate your own work items with `buildBillTasksDashboard` (re-exported from `@mindbill/browser`):
+
+```tsx
+import { BillTasksDashboard, buildBillTasksDashboard } from "@mindbill/react";
+
+const data = buildBillTasksDashboard(workItems, [
+  { id: "payment_due", label: "Payment Due", agingBasisLabel: "Bill Sent Date", tone: "violet" },
+  { id: "denials", label: "Denials", agingBasisLabel: "EOR Date", tone: "red" },
+]);
+
+<BillTasksDashboard
+  data={data}
+  heading="Bill Tasks"
+  onSelectCell={(cell) => openWorklist(cell.sectionId, cell.rowId, cell.bucketId, cell.refs)}
+/>
+```
+
+`BillSubmissionsRibbon` renders a horizontal row of submission chips (Original Bill, Second Review, Duplicate Bill, …) with an optional deadline badge and up to three label/value meta pairs; `billSubmissionsRibbonFromHistory` maps the presented history's submission rows into chips.
+
+`ReportBillStatusDialog` records the outcome of a payment-status phone call to the Claims Administrator / Bill Review vendor: payer contacts, the host-rendered submission receipt (for example a `BillHistoryTable`), and the five standard reported statuses (`REPORT_BILL_STATUS_OPTIONS`). The host posts the resulting `ReportBillStatusInput` through its own lifecycle action call.
+
 ## Organization onboarding and billing settings
 
 `OrganizationOnboarding` captures the practice identity, billing provider, locations, and W-9 once — saved straight to your MindBill organization through the browser session — so your users never visit the MindBill dashboard. `BillingSettings` is the compact edit-after-setup variant of the same surface.

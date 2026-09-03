@@ -75,4 +75,21 @@ snapshot—there is no draft mutation API.
 Pass `billId` for the submitted bill. An optional `resource: { billId }`
 restriction makes the session usable for only that bill.
 
+The package also ships a pure, presentation-free aggregation shared by the
+React and Angular Bill Tasks dashboards:
+
+```ts
+import { buildBillTasksDashboard } from "@mindbill/browser";
+
+const data = buildBillTasksDashboard(workItems, [
+  { id: "payment_due", label: "Payment Due", agingBasisLabel: "Bill Sent Date", tone: "violet" },
+  { id: "denials", label: "Denials", agingBasisLabel: "EOR Date", tone: "red" },
+]);
+```
+
+`buildBillTasksDashboard` buckets flat work items by age in days
+(1-30 / 31-60 / 61-90 / 91-180 / 181+, or custom buckets) into ordered
+sections and first-seen-ordered rows with per-cell counts, click-through bill
+refs, and section/grand totals. Sections render even when empty.
+
 See the [10-minute quickstart](https://docs.mindbill.org/quickstart).

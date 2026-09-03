@@ -58,3 +58,33 @@ describe("Angular procedure lines", () => {
     ])).toHaveLength(2);
   });
 });
+
+describe("Angular bill tasks dashboard", () => {
+  it("shares the browser builder and produces typed click-through cells", async () => {
+    const { mindBillBillTasksCell, mindBillBillTasksTone } = await import("../packages/angular/src/lib/bill-tasks-dashboard");
+    const { BILL_TASKS_AGING_BUCKETS, buildBillTasksDashboard } = await import("../packages/browser/src/index");
+
+    const data = buildBillTasksDashboard(
+      [{ sectionId: "payment_due", rowId: "no_response", rowLabel: "No payer response", ageDays: 45, ref: "bill_a" }],
+      [{ id: "payment_due", label: "Payment Due", agingBasisLabel: "Bill Sent Date", tone: "violet" }],
+    );
+    const section = data.sections[0]!;
+    const row = section.rows[0]!;
+
+    expect(mindBillBillTasksTone(section.tone)).toBe("#7c53c3");
+    expect(mindBillBillTasksCell(section, row, 1, BILL_TASKS_AGING_BUCKETS)).toEqual({
+      sectionId: "payment_due",
+      rowId: "no_response",
+      bucketId: "31-60",
+      refs: ["bill_a"],
+      count: 1,
+    });
+    expect(mindBillBillTasksCell(section, row, null, BILL_TASKS_AGING_BUCKETS)).toEqual({
+      sectionId: "payment_due",
+      rowId: "no_response",
+      bucketId: null,
+      refs: ["bill_a"],
+      count: 1,
+    });
+  });
+});
