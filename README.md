@@ -121,12 +121,15 @@ quick picks, and locked practice W-9 behavior. Pass optional catalog props only 
 organization-specific choices.
 
 When the biller submits, the form shows a delivery-method dialog by default: the
-verified e-bill route with its payer ID, plus email, fax, and physical-mail
-alternatives with the payer contacts on file and per-send recipient overrides
-(alternative email/fax, subject, ATTENTION line, mailing address). The options come
-from `getDeliveryPreview` on the browser reference client, which resolves MindBill's
-routing waterfall for the selected claims administrator before the bill exists; the
-chosen route rides on the atomic submission as `submission.route`/`destination`.
+verified e-bill route with its payer ID (shown only when the payer has an e-route),
+then fax and email with the payer contacts on file, then physical mail — channels
+with nothing on file drop to the end. Every manual channel takes per-send overrides:
+alternative email/fax recipients, email subject, Cc list, and message, the fax
+ATTENTION line (numbers format as you type), and the mailing address. The options
+come from `getDeliveryPreview` on the browser reference client, which resolves
+MindBill's routing waterfall for the selected claims administrator before the bill
+exists; the chosen route rides on the atomic submission as
+`submission.route`/`destination` (plus `subject`/`note`/`cc` for email).
 Pass `deliveryRoutePicker="off"` to skip the dialog and submit on MindBill's
 recommended route, or render the exported `SendRouteDialog` yourself for a custom
 flow. When the preview is unavailable, the form submits directly — behavior on

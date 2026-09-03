@@ -23,6 +23,7 @@ import {
 import {
   extractSendRouteEmail,
   formatSendRouteFax,
+  formatSendRouteFaxInput,
 } from "../packages/react/src/send-route-dialog";
 import {
   billActivityEventLabel,
@@ -516,6 +517,16 @@ describe("send-route dialog helpers", () => {
     expect(formatSendRouteFax("1-800-555-0199")).toBe("(800) 555-0199");
     expect(formatSendRouteFax("+442071234567")).toBe("+442071234567");
     expect(formatSendRouteFax(null)).toBe("");
+  });
+
+  it("live-formats the fax input as digits are typed or pasted", () => {
+    expect(formatSendRouteFaxInput("223")).toBe("(223");
+    expect(formatSendRouteFaxInput("2233331")).toBe("(223) 333-1");
+    expect(formatSendRouteFaxInput("2233331232")).toBe("(223) 333-1232");
+    expect(formatSendRouteFaxInput("(949) 757-0076")).toBe("(949) 757-0076");
+    expect(formatSendRouteFaxInput("1-949-757-0076")).toBe("(949) 757-0076");
+    expect(formatSendRouteFaxInput("+442071234567")).toBe("+442071234567");
+    expect(formatSendRouteFaxInput("")).toBe("");
   });
 });
 

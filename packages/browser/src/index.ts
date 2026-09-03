@@ -291,6 +291,8 @@ export type SubmitBillInput = {
   attention?: string;
   subject?: string;
   note?: string;
+  /** CC recipients for the email route (at most 10). */
+  cc?: string[];
 };
 export type BillLifecycleActionId =
   | "resubmit"
@@ -601,6 +603,7 @@ export type BrowserBillSubmissionInput = {
     attention?: string;
     subject?: string;
     note?: string;
+    cc?: string[];
   };
   documents?: BrowserBillSubmissionDocument[];
 };

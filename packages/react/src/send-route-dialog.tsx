@@ -28,7 +28,27 @@ export function formatSendRouteFax(raw: string | null | undefined): string {
   return raw.trim();
 }
 
-export type SendRouteSubmission = Pick<SubmitBillInput, "route" | "destination" | "attention" | "subject">;
+/**
+ * Live format-as-you-type for the fax input: digits render progressively as
+ * "(213) 555-0199" whether typed bare or pasted pre-formatted. A leading "+"
+ * (international) or an overflowing value is left as typed.
+ */
+export function formatSendRouteFaxInput(raw: string): string {
+  const trimmed = raw.trimStart();
+  if (trimmed.startsWith("+")) return raw;
+  const all = trimmed.replace(/\D/g, "");
+  const digits = all.length === 11 && all.startsWith("1") ? all.slice(1) : all;
+  if (digits.length > 10 || (all.length === 11 && !all.startsWith("1")) || all.length > 11) return raw;
+  if (digits.length === 0) return "";
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+export type SendRouteSubmission = Pick<
+  SubmitBillInput,
+  "route" | "destination" | "attention" | "subject" | "note" | "cc"
+>;
 
 export type SendRouteDialogProps = {
   /** Dialog heading, e.g. "Send bill". */
@@ -194,6 +214,8 @@ export function SendRouteDialog({
   const [faxMode, setFaxMode] = useState<"onfile" | "alt">(onFileFax ? "onfile" : "alt");
   const [emailTo, setEmailTo] = useState("");
   const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [ccInput, setCcInput] = useState("");
   const [faxTo, setFaxTo] = useState("");
   const [attention, setAttention] = useState("");
   const [mailTo, setMailTo] = useState(onFileMail);
@@ -218,12 +240,14 @@ export function SendRouteDialog({
   const effectiveFax = faxMode === "onfile" && onFileFax ? onFileFax : faxTo;
   const faxDigits = effectiveFax.replace(/\D/g, "");
   const emailValid = EMAIL_RE.test(effectiveEmail);
+  const ccList = ccInput.split(/[,;]/).map((entry) => entry.trim()).filter(Boolean);
+  const ccValid = ccList.every((entry) => EMAIL_RE.test(entry));
   const faxValid = faxDigits.length >= 10;
   const mailValid = mailTo.trim().length > 2;
   const confirmDisabled =
     submitting
     || disabled
-    || (route === "email" && !emailValid)
+    || (route === "email" && (!emailValid || !ccValid))
     || (route === "fax" && !faxValid)
     || (route === "mail" && !mailValid);
 
@@ -233,6 +257,8 @@ export function SendRouteDialog({
         route,
         destination: { email: effectiveEmail },
         ...(subject.trim() ? { subject: subject.trim() } : {}),
+        ...(message.trim() ? { note: message.trim() } : {}),
+        ...(ccList.length ? { cc: ccList } : {}),
       };
     }
     if (route === "fax") {
@@ -246,7 +272,8 @@ export function SendRouteDialog({
       return { route, destination: { mailingAddress: mailTo.trim() } };
     }
     return { route };
-  }, [route, effectiveEmail, subject, effectiveFax, attention, mailTo]);
+    // ccList derives from ccInput.
+  }, [route, effectiveEmail, subject, message, ccInput, effectiveFax, attention, mailTo]);
 
   return (
     <div className="mbrd-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onCancel(); }}>
@@ -261,109 +288,141 @@ export function SendRouteDialog({
         </div>
 
         <div className="mbrd-cards" role="radiogroup" aria-label="Delivery method">
-          {ebillOption ? (
-            <RouteCard
-              selected={route === "ebill"}
-              title={ebillOption.printAndMail ? ebillOption.label : `e-Bill to ${ebillOption.payerName || delivery.payerName}`}
-              detail={[
-                ebillOption.detail || null,
-                !ebillOption.printAndMail && ebillOption.label.startsWith("e-bill ")
-                  ? ebillOption.label.slice("e-bill ".length)
-                  : null,
-              ].filter(Boolean).join(" · ")}
-              badges={<>
-                {!ebillOption.fallback ? <span className="mbrd-badge" data-tone="verified">Verified Route</span> : null}
-                {recommendedRoute === "ebill" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
-              </>}
-              onSelect={() => setRoute("ebill")}
-            />
-          ) : null}
-
-          <RouteCard
-            selected={route === "email"}
-            title="Email Bill"
-            detail={onFileEmail ?? "No claims email on file — enter a recipient."}
-            badges={recommendedRoute === "email" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
-            onSelect={() => setRoute("email")}
-          >
-            <div role="radiogroup" aria-label="Email recipient" style={{ display: "grid", gap: 8 }}>
-              <RecipientChoice
-                selected={emailMode === "onfile"}
-                disabled={!onFileEmail}
-                title={onFileEmail ?? "Claims email on file"}
-                detail={onFileEmail ? "Claims contact on file" : "No claims email exists on file for this payer."}
-                onSelect={() => setEmailMode("onfile")}
+          {(() => {
+            const ebillCard = ebillOption ? (
+              <RouteCard
+                key="ebill"
+                selected={route === "ebill"}
+                title={ebillOption.printAndMail ? ebillOption.label : `e-Bill to ${ebillOption.payerName || delivery.payerName}`}
+                detail={[
+                  ebillOption.detail || null,
+                  !ebillOption.printAndMail && ebillOption.label.startsWith("e-bill ")
+                    ? ebillOption.label.slice("e-bill ".length)
+                    : null,
+                ].filter(Boolean).join(" · ")}
+                badges={<>
+                  {!ebillOption.fallback ? <span className="mbrd-badge" data-tone="verified">Verified Route</span> : null}
+                  {recommendedRoute === "ebill" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
+                </>}
+                onSelect={() => setRoute("ebill")}
               />
-              <RecipientChoice
-                selected={emailMode === "alt"}
-                title="Alternative email recipient"
-                onSelect={() => setEmailMode("alt")}
+            ) : null;
+
+            const emailCard = (
+              <RouteCard
+                key="email"
+                selected={route === "email"}
+                title="Email Bill"
+                detail={onFileEmail ?? "No claims email on file — enter a recipient."}
+                badges={recommendedRoute === "email" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
+                onSelect={() => setRoute("email")}
+              >
+                <div role="radiogroup" aria-label="Email recipient" style={{ display: "grid", gap: 8 }}>
+                  <RecipientChoice
+                    selected={emailMode === "onfile"}
+                    disabled={!onFileEmail}
+                    title={onFileEmail ?? "Claims email on file"}
+                    detail={onFileEmail ? "Claims contact on file" : "No claims email exists on file for this payer."}
+                    onSelect={() => setEmailMode("onfile")}
+                  />
+                  <RecipientChoice
+                    selected={emailMode === "alt"}
+                    title="Alternative email recipient"
+                    onSelect={() => setEmailMode("alt")}
+                  >
+                    <label className="mbrd-field">
+                      <span className="mbrd-label">Alternative email address <span className="mbrd-star">*</span></span>
+                      <input className="mbrd-input" type="email" value={emailTo} placeholder="user@mail.com" onChange={(event) => setEmailTo(event.target.value)} />
+                      {emailTo.trim() && !EMAIL_RE.test(emailTo.trim()) ? <span className="mbrd-error">Enter a valid email address.</span> : null}
+                    </label>
+                  </RecipientChoice>
+                </div>
+                <label className="mbrd-field">
+                  <span className="mbrd-label">Cc — optional</span>
+                  <input className="mbrd-input" value={ccInput} placeholder="adjuster@payer.com, supervisor@payer.com" onChange={(event) => setCcInput(event.target.value)} />
+                  {!ccValid ? <span className="mbrd-error">Each Cc entry must be a valid email address (separate with commas).</span> : null}
+                </label>
+                <label className="mbrd-field">
+                  <span className="mbrd-label">Email subject — optional</span>
+                  <input className="mbrd-input" value={subject} maxLength={255} onChange={(event) => setSubject(event.target.value)} />
+                </label>
+                <label className="mbrd-field">
+                  <span className="mbrd-label">Message — optional</span>
+                  <textarea className="mbrd-textarea" value={message} maxLength={5000} placeholder="Added at the top of the email body, above the bill summary." onChange={(event) => setMessage(event.target.value)} />
+                </label>
+              </RouteCard>
+            );
+
+            const faxCard = (
+              <RouteCard
+                key="fax"
+                selected={route === "fax"}
+                title="Fax Bill"
+                detail={onFileFax ? `${onFileFaxDisplay} — payer fax on file` : "No fax on file — enter a number."}
+                badges={recommendedRoute === "fax" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
+                onSelect={() => setRoute("fax")}
+              >
+                <div role="radiogroup" aria-label="Fax recipient" style={{ display: "grid", gap: 8 }}>
+                  <RecipientChoice
+                    selected={faxMode === "onfile"}
+                    disabled={!onFileFax}
+                    title={onFileFax ? onFileFaxDisplay : "Payer fax on file"}
+                    detail={onFileFax ? "Payer fax on file" : "No fax number exists on file for this payer."}
+                    onSelect={() => setFaxMode("onfile")}
+                  />
+                  <RecipientChoice
+                    selected={faxMode === "alt"}
+                    title="Alternative fax recipient"
+                    onSelect={() => setFaxMode("alt")}
+                  >
+                    <label className="mbrd-field">
+                      <span className="mbrd-label">Alternative fax number <span className="mbrd-star">*</span></span>
+                      <input className="mbrd-input" inputMode="tel" value={faxTo} placeholder="(000) 000-0000" onChange={(event) => setFaxTo(formatSendRouteFaxInput(event.target.value))} />
+                      {faxTo.trim() && faxTo.replace(/\D/g, "").length < 10 ? <span className="mbrd-error">Enter a valid fax number (10 digits).</span> : null}
+                    </label>
+                  </RecipientChoice>
+                </div>
+                <label className="mbrd-field">
+                  <span className="mbrd-label">Attention — optional</span>
+                  <input className="mbrd-input" value={attention} maxLength={120} placeholder="Recipient name" onChange={(event) => setAttention(event.target.value)} />
+                  <span className="mbrd-help">Printed as ATTENTION on the fax cover sheet.</span>
+                </label>
+              </RouteCard>
+            );
+
+            const mailCard = (
+              <RouteCard
+                key="mail"
+                selected={route === "mail"}
+                title="Mail Bill"
+                detail={onFileMail ? onFileMail.replace(/\n/g, ", ") : "Physical mail — enter the payer's mailing address."}
+                badges={recommendedRoute === "mail" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
+                onSelect={() => setRoute("mail")}
               >
                 <label className="mbrd-field">
-                  <span className="mbrd-label">Alternative email address <span className="mbrd-star">*</span></span>
-                  <input className="mbrd-input" type="email" value={emailTo} placeholder="user@mail.com" onChange={(event) => setEmailTo(event.target.value)} />
-                  {emailTo.trim() && !EMAIL_RE.test(emailTo.trim()) ? <span className="mbrd-error">Enter a valid email address.</span> : null}
+                  <span className="mbrd-label">Mailing address <span className="mbrd-star">*</span></span>
+                  <textarea className="mbrd-textarea" value={mailTo} placeholder={"Payer Claims Dept\nPO Box 1234\nCity, ST 00000"} onChange={(event) => setMailTo(event.target.value)} />
+                  {!mailValid ? <span className="mbrd-error">Enter a mailing address.</span> : null}
+                  <span className="mbrd-help">
+                    {mailOption?.printAndMail
+                      ? mailOption.detail
+                      : "Sent as physical mail — printed and mailed to this address."}
+                  </span>
                 </label>
-              </RecipientChoice>
-            </div>
-            <label className="mbrd-field">
-              <span className="mbrd-label">Email subject — optional</span>
-              <input className="mbrd-input" value={subject} maxLength={255} onChange={(event) => setSubject(event.target.value)} />
-            </label>
-          </RouteCard>
+              </RouteCard>
+            );
 
-          <RouteCard
-            selected={route === "fax"}
-            title="Fax Bill"
-            detail={onFileFax ? `${onFileFaxDisplay} — payer fax on file` : "No fax on file — enter a number."}
-            badges={recommendedRoute === "fax" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
-            onSelect={() => setRoute("fax")}
-          >
-            <div role="radiogroup" aria-label="Fax recipient" style={{ display: "grid", gap: 8 }}>
-              <RecipientChoice
-                selected={faxMode === "onfile"}
-                disabled={!onFileFax}
-                title={onFileFax ? onFileFaxDisplay : "Payer fax on file"}
-                detail={onFileFax ? "Payer fax on file" : "No fax number exists on file for this payer."}
-                onSelect={() => setFaxMode("onfile")}
-              />
-              <RecipientChoice
-                selected={faxMode === "alt"}
-                title="Alternative fax recipient"
-                onSelect={() => setFaxMode("alt")}
-              >
-                <label className="mbrd-field">
-                  <span className="mbrd-label">Alternative fax number <span className="mbrd-star">*</span></span>
-                  <input className="mbrd-input" inputMode="tel" value={faxTo} placeholder="(000) 000-0000" onChange={(event) => setFaxTo(event.target.value)} />
-                  {faxTo.trim() && faxTo.replace(/\D/g, "").length < 10 ? <span className="mbrd-error">Enter a valid fax number (10 digits).</span> : null}
-                </label>
-              </RecipientChoice>
-            </div>
-            <label className="mbrd-field">
-              <span className="mbrd-label">Attention — optional</span>
-              <input className="mbrd-input" value={attention} maxLength={120} placeholder="Recipient name" onChange={(event) => setAttention(event.target.value)} />
-              <span className="mbrd-help">Printed as ATTENTION on the fax cover sheet.</span>
-            </label>
-          </RouteCard>
-
-          <RouteCard
-            selected={route === "mail"}
-            title="Mail Bill"
-            detail={onFileMail ? onFileMail.replace(/\n/g, ", ") : "Physical mail — enter the payer's mailing address."}
-            badges={recommendedRoute === "mail" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
-            onSelect={() => setRoute("mail")}
-          >
-            <label className="mbrd-field">
-              <span className="mbrd-label">Mailing address <span className="mbrd-star">*</span></span>
-              <textarea className="mbrd-textarea" value={mailTo} placeholder={"Payer Claims Dept\nPO Box 1234\nCity, ST 00000"} onChange={(event) => setMailTo(event.target.value)} />
-              {!mailValid ? <span className="mbrd-error">Enter a mailing address.</span> : null}
-              <span className="mbrd-help">
-                {mailOption?.printAndMail
-                  ? mailOption.detail
-                  : "Sent as physical mail — printed and mailed to this address."}
-              </span>
-            </label>
-          </RouteCard>
+            // Preference order: ebill (only when the payer has an e-route) → fax
+            // and email WITH a contact on file → mail (always) → the rest last.
+            const cards: ReactNode[] = [];
+            if (ebillCard) cards.push(ebillCard);
+            if (onFileFax) cards.push(faxCard);
+            if (onFileEmail) cards.push(emailCard);
+            cards.push(mailCard);
+            if (!onFileFax) cards.push(faxCard);
+            if (!onFileEmail) cards.push(emailCard);
+            return cards;
+          })()}
         </div>
 
         {error ? <div className="mbrd-alert" role="alert">{error}</div> : null}
