@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   createBillReferenceClient,
   createBillSubmissionClient,
+  type BillDeliveryOptions,
   type BrowserBillSubmissionDocument,
   type BrowserBillSubmissionResult,
   type BillLifecycleSessionProvider,
@@ -12,6 +13,7 @@ import {
 } from "@mindbill/browser";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import {
   BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
   calculateBillSubmissionAllowedAmount,
@@ -176,6 +178,12 @@ export type BillSubmissionFormProps = {
   modifierOptions?: BillSubmissionModifierOption[];
   /** Common NUCC provider taxonomies are bundled; supplied values extend or replace matching codes. */
   taxonomyOptions?: BillSubmissionTaxonomyOption[];
+  /**
+   * The daisyBill-style delivery-method dialog shown when the biller submits.
+   * "auto" (default) shows it in connected mode whenever the delivery preview
+   * is available; "off" submits directly on MindBill's recommended route.
+   */
+  deliveryRoutePicker?: "auto" | "off";
   /** Auto hides and forces J4 for med-legal bills; treatment bills show the full report-type directory. */
   attachmentReportTypeMode?: BillSubmissionAttachmentReportTypeMode;
   attachmentReportTypes?: readonly BillSubmissionReportTypeOption[];
@@ -562,7 +570,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 export function BillSubmissionForm({
   initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
   fetch: fetchOverride, onSearchClaimsAdministrators, diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -576,6 +584,9 @@ export function BillSubmissionForm({
   const [sourceAttachmentReportTypes, setSourceAttachmentReportTypes] = useState<Record<string, string>>(() => Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : [])));
   const [validationActive, setValidationActive] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
+  // The daisyBill-style delivery-method dialog staged with the validated bill.
+  const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; complete: CompleteBillSubmissionInput } | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]); const [payerLoading, setPayerLoading] = useState(false);
   const [diagnosisResults, setDiagnosisResults] = useState<BillSubmissionDiagnosisOption[]>([]);
   const [diagnosisLoading, setDiagnosisLoading] = useState(false); const [diagnosisLoadingMore, setDiagnosisLoadingMore] = useState(false);
@@ -718,24 +729,62 @@ export function BillSubmissionForm({
     }
     if (selectedIds.length + uploads.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
     const complete = clean as CompleteBillSubmissionInput;
-    setSubmitting(true); try {
-      if (onSubmit) {
-        await onSubmit({ bill: complete, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads });
-      } else {
-        if (!submissionClient) throw new Error("The connected billing client is unavailable.");
-        const documents = await prepareBillSubmissionDocuments({
-          attachments,
-          selectedIds,
-          uploads,
-          reportTypeCodeByAttachmentId: sourceAttachmentReportTypes,
-          ...(forcedAttachmentReportType ? { defaultReportTypeCode: forcedAttachmentReportType } : {}),
-          ...(fetchOverride ? { fetch: fetchOverride } : {}),
+    if (onSubmit) {
+      setSubmitting(true);
+      try { await onSubmit({ bill: complete, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads }); }
+      catch (caught) { setFormError(caught instanceof Error ? caught.message : "Unable to submit the bill."); }
+      finally { setSubmitting(false); }
+      return;
+    }
+    // Connected mode: show the delivery-method dialog (e-bill / email / fax /
+    // mail with recipient overrides) before dispatch. Falls back to direct
+    // submission on MindBill's recommended route when the preview is
+    // unavailable (older API deployments, missing payers:read permission).
+    if (deliveryRoutePicker !== "off" && referenceClient) {
+      setSubmitting(true);
+      try {
+        const delivery = await referenceClient.getDeliveryPreview({
+          claimsAdministratorId: complete.claim.claimsAdministrator.id,
+          ...(complete.claim.injuryState ? { injuryState: complete.claim.injuryState } : {}),
         });
-        const result = await submissionClient.submitBill({ bill: complete, documents });
-        await onSubmitted?.(result);
+        setSubmitting(false);
+        setRouteError(null);
+        setRouteDialog({ delivery, complete });
+        return;
+      } catch {
+        setSubmitting(false);
       }
     }
-    catch (caught) { setFormError(caught instanceof Error ? caught.message : "Unable to submit the bill."); }
+    await performConnectedSubmit(complete, undefined);
+  }
+
+  async function performConnectedSubmit(
+    complete: CompleteBillSubmissionInput,
+    submission: SendRouteSubmission | undefined,
+  ): Promise<void> {
+    setSubmitting(true);
+    try {
+      if (!submissionClient) throw new Error("The connected billing client is unavailable.");
+      const documents = await prepareBillSubmissionDocuments({
+        attachments,
+        selectedIds,
+        uploads,
+        reportTypeCodeByAttachmentId: sourceAttachmentReportTypes,
+        ...(forcedAttachmentReportType ? { defaultReportTypeCode: forcedAttachmentReportType } : {}),
+        ...(fetchOverride ? { fetch: fetchOverride } : {}),
+      });
+      const result = await submissionClient.submitBill({
+        bill: complete,
+        ...(submission ? { submission } : {}),
+        documents,
+      });
+      setRouteDialog(null);
+      setRouteError(null);
+      await onSubmitted?.(result);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Unable to submit the bill.";
+      if (submission) setRouteError(message); else setFormError(message);
+    }
     finally { setSubmitting(false); }
   }
 
@@ -850,6 +899,16 @@ export function BillSubmissionForm({
     <form ref={formRef} className={`${className} mbsf`} style={{ ...mindBillAppearanceStyle(appearance), ...style }} onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
       <style>{css}</style>
       {children ?? defaultLayout}
+      {routeDialog ? (
+        <SendRouteDialog
+          title="Send bill"
+          delivery={routeDialog.delivery}
+          submitting={submitting}
+          error={routeError}
+          onCancel={() => { if (!submitting) { setRouteDialog(null); setRouteError(null); } }}
+          onConfirm={(submission) => { void performConnectedSubmit(routeDialog.complete, submission); }}
+        />
+      ) : null}
     </form>
   </BillSubmissionSectionsContext.Provider>;
 }

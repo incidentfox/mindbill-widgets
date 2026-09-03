@@ -638,10 +638,23 @@ export type BillSubmissionClient = {
   clearSession: () => void;
 };
 
+/** Input for the pre-submission delivery preview keyed on a payer-directory id. */
+export type BillDeliveryPreviewInput = {
+  claimsAdministratorId: string;
+  /** Two-letter state; defaults to CA server-side. */
+  injuryState?: string;
+};
+
 export type BillReferenceClient = {
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
+  /**
+   * Delivery-route preview (recommended route + selectable options + payer
+   * contacts) for a claims administrator BEFORE the bill exists — powers the
+   * send-route picker shown at submit time.
+   */
+  getDeliveryPreview: (input: BillDeliveryPreviewInput) => Promise<BillDeliveryOptions>;
   clearSession: () => void;
 };
 
@@ -652,6 +665,7 @@ export type BillLifecycleClient = {
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
+  getDeliveryPreview: (input: BillDeliveryPreviewInput) => Promise<BillDeliveryOptions>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
   getPacket: () => Promise<Blob>;
@@ -1028,6 +1042,14 @@ export function createBillLifecycleClient({
       const body = await response.json() as { data?: unknown };
       return normalizeDeliveryOptions(body.data ?? body);
     },
+    async getDeliveryPreview(input) {
+      const params = new URLSearchParams({ claimsAdministratorId: input.claimsAdministratorId.trim() });
+      if (input.injuryState?.trim()) params.set("injuryState", input.injuryState.trim());
+      const response = await request(`/partner/v2/browser/delivery-preview?${params.toString()}`);
+      if (!response.ok) throw await responseError(response, "Delivery routes could not be loaded.");
+      const body = await response.json() as { data?: unknown };
+      return normalizeDeliveryOptions(body.data ?? body);
+    },
     async getAttachment(attachmentId) {
       const response = await request(billPath(`/documents/${encodeURIComponent(attachmentId)}`));
       if (!response.ok) throw await responseError(response, "Document could not be opened.");
@@ -1069,6 +1091,7 @@ export function createBillReferenceClient(
     searchClaimsAdministrators: lifecycle.searchClaimsAdministrators,
     searchDiagnosisCodes: lifecycle.searchDiagnosisCodes,
     lookupPostalCode: lifecycle.lookupPostalCode,
+    getDeliveryPreview: lifecycle.getDeliveryPreview,
     clearSession: lifecycle.clearSession,
   };
 }
