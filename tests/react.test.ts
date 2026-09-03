@@ -21,6 +21,10 @@ import {
   resolveMindBillAppearance,
 } from "../packages/react/src/appearance";
 import {
+  extractSendRouteEmail,
+  formatSendRouteFax,
+} from "../packages/react/src/send-route-dialog";
+import {
   billActivityEventLabel,
   billRejectionIssueSummary,
   billLifecycleDisplayLabel,
@@ -454,6 +458,64 @@ describe("pre-submission reference data", () => {
       "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",
     ]);
+  });
+
+  it("previews delivery routes for a claims administrator before the bill exists", async () => {
+    const preview = {
+      payerName: "Zurich American Insurance Company",
+      recommended: {
+        route: "ebill", label: "e-bill via Clearinghouse", detail: "Payer ID Z1234",
+        fallback: false, confidence: "server", payerName: "Zurich American Insurance Company",
+      },
+      options: [
+        {
+          route: "ebill", label: "e-bill via Clearinghouse", detail: "Payer ID Z1234",
+          fallback: false, confidence: "server", payerName: "Zurich American Insurance Company",
+        },
+        {
+          route: "mail", label: "manual mail to PO Box 100, Anytown, CA 90000", detail: "Manual override route.",
+          fallback: true, confidence: "server", payerName: "Zurich American Insurance Company",
+          target: "PO Box 100, Anytown, CA 90000",
+        },
+      ],
+      contacts: { faxNumber: null, claimsEmail: "claims@example.com", mailingAddress: "PO Box 100, Anytown, CA 90000" },
+    };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: "short-lived-reference-token" }))
+      .mockResolvedValueOnce(jsonResponse(preview));
+    const client = createBillReferenceClient({ fetch: fetcher });
+
+    await expect(client.getDeliveryPreview({ claimsAdministratorId: "pd:zurich", injuryState: "CA" }))
+      .resolves.toMatchObject({ payerName: "Zurich American Insurance Company", recommended: { route: "ebill" } });
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/delivery-preview?claimsAdministratorId=pd%3Azurich&injuryState=CA",
+    );
+  });
+
+  it("rejects an invalid delivery preview payload", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: "short-lived-reference-token" }))
+      .mockResolvedValueOnce(jsonResponse({ nope: true }));
+    const client = createBillReferenceClient({ fetch: fetcher });
+    await expect(client.getDeliveryPreview({ claimsAdministratorId: "pd:zurich" }))
+      .rejects.toThrow("invalid delivery options");
+  });
+});
+
+describe("send-route dialog helpers", () => {
+  it("extracts a sendable email from scraped payer contact strings", () => {
+    expect(extractSendRouteEmail("Claim Inquiries: claims@example.com [mailto:claims@example.com]"))
+      .toBe("claims@example.com");
+    expect(extractSendRouteEmail("claims@example.com")).toBe("claims@example.com");
+    expect(extractSendRouteEmail("call the adjuster")).toBeNull();
+    expect(extractSendRouteEmail(null)).toBeNull();
+  });
+
+  it("formats US fax numbers for display without inventing digits", () => {
+    expect(formatSendRouteFax("2135550199")).toBe("(213) 555-0199");
+    expect(formatSendRouteFax("1-800-555-0199")).toBe("(800) 555-0199");
+    expect(formatSendRouteFax("+442071234567")).toBe("+442071234567");
+    expect(formatSendRouteFax(null)).toBe("");
   });
 });
 

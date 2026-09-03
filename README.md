@@ -120,6 +120,18 @@ curated workers-comp procedure and modifier catalog, medical-legal fee rules, di
 quick picks, and locked practice W-9 behavior. Pass optional catalog props only to add
 organization-specific choices.
 
+When the biller submits, the form shows a delivery-method dialog by default: the
+verified e-bill route with its payer ID, plus email, fax, and physical-mail
+alternatives with the payer contacts on file and per-send recipient overrides
+(alternative email/fax, subject, ATTENTION line, mailing address). The options come
+from `getDeliveryPreview` on the browser reference client, which resolves MindBill's
+routing waterfall for the selected claims administrator before the bill exists; the
+chosen route rides on the atomic submission as `submission.route`/`destination`.
+Pass `deliveryRoutePicker="off"` to skip the dialog and submit on MindBill's
+recommended route, or render the exported `SendRouteDialog` yourself for a custom
+flow. When the preview is unavailable, the form submits directly — behavior on
+older deployments is unchanged.
+
 ## 2. Render the submitted lifecycle
 
 `ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, rejection details, EORs, remittance, and payments directly from MindBill. React and Angular both show rejected bills as an action-required surface with the full ordered issue list and acknowledgement codes; both also export that rejection notice for custom layouts. Do not pass or maintain lifecycle seed data in your application. Authenticated packet previews open the PDF directly in a new tab.

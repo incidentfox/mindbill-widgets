@@ -134,6 +134,9 @@ export type {
   BillSubmissionUpload,
   BillSubmissionValidation,
 } from "./bill-submission-form";
+export { extractSendRouteEmail, formatSendRouteFax, SendRouteDialog } from "./send-route-dialog";
+export type { SendRouteDialogProps, SendRouteSubmission } from "./send-route-dialog";
+
 export {
   BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
   calculateBillSubmissionAllowedAmount,
