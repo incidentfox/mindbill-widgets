@@ -82,6 +82,11 @@ export type BillReviewPayerOption = {
   label: string;
   /** Preselect this payer when the claims administrator is chosen. */
   default?: boolean;
+  active?: boolean;
+  aliases?: string[];
+  hint?: string | null;
+  affiliatedEntities?: string[];
+  route?: string | null;
 };
 
 export type BillReviewPayer = {
@@ -100,6 +105,10 @@ export type BillReviewPayer = {
   payerSelectionRequired?: boolean;
   /** Selectable payers (subpayors) under this claims administrator. */
   payers?: BillReviewPayerOption[];
+  aliases?: string[];
+  affiliatedEntities?: string[];
+  claimNumberHint?: string | null;
+  route?: string | null;
 };
 
 /**
@@ -175,6 +184,9 @@ export type BillReviewData = {
     claimsAdminId?: string;
     claimsAdminName?: string;
     injuryDescription?: string;
+    /** Diagnosis codes enriched with their human-readable ICD-10 descriptions. */
+    diagnoses?: BillDiagnosisCode[];
+    /** @deprecated Prefer diagnoses so users can understand each code. */
     diagnosisCodes?: string[];
     claimPatternStatus?: BillReviewClaimPatternStatus;
   };
@@ -307,7 +319,12 @@ export type BillDeliveryOptions = {
     adjusterEmail?: string | null;
   };
 };
-export type SubmitBillInput = {
+export type BillActorInput = {
+  /** Human-readable name shown for user-initiated audit history. */
+  actorName?: string;
+};
+
+export type SubmitBillInput = BillActorInput & {
   route: BillSubmissionRoute;
   destination?: {
     faxNumber?: string;
@@ -361,7 +378,7 @@ export type BillActivityRecord = {
   stcCategory: string | null;
 };
 
-/** One user-facing bill history row (daisyBill-style Date / Action / User / Details).
+/** One user-facing bill history row (Date / Action / User / Details).
  *  Server-presented: the wording is authored by MindBill so every surface (MindBill
  *  app, React, Angular, embeds) reads identically. */
 export type BillHistoryEntry = {
@@ -383,7 +400,7 @@ export type BillHistoryEntry = {
     | "portal"
     | "task"
     | "system";
-  /** Who acted: a biller name, "MindBill", or the responding clearinghouse. */
+  /** Who acted: a biller name, MindBill automation, or the responding clearinghouse. */
   actor: string | null;
   /** The one-line Details column. */
   summary: string;
@@ -435,7 +452,7 @@ export type BillLifecycleDelivery = {
   contacts: BillDeliveryOptions["contacts"];
   /**
    * Partner-safe directory details. `id` is an opaque MindBill directory ID;
-   * clearinghouse and routing identifiers are intentionally never exposed.
+   * Values are safe, partner-facing directory details; internal database identifiers are opaque.
    */
   directory?: BillClaimsAdministratorDirectory | null;
 };
@@ -455,6 +472,7 @@ export type BillClaimsAdministratorMailingAddress = {
   address: string;
   notes?: string | null;
   submissionTypes?: string[];
+  billTreatmentTypes?: string[];
 };
 
 export type BillClaimsAdministratorPattern = {
@@ -464,14 +482,32 @@ export type BillClaimsAdministratorPattern = {
   matches?: boolean | null;
 };
 
+export type BillClaimsAdministratorPayer = {
+  name: string;
+  daisyBillPayerId?: string | null;
+  route?: string | null;
+  aliases?: string[];
+  hint?: string | null;
+  affiliatedEntities?: string[];
+};
+
 export type BillClaimsAdministratorDirectory = {
   id?: string;
+  name?: string;
   type?: string | null;
   description?: string | null;
   website?: string | null;
   aliases?: string[];
   affiliatedEntities?: string[];
   hours?: string | null;
+  claimNumberHint?: string | null;
+  billProcessingWorkflow?: string | null;
+  billProcessingWorkflowNotes?: string | null;
+  telephoneNumbers?: string[];
+  emailAddresses?: string[];
+  webPortals?: string[];
+  payers?: BillClaimsAdministratorPayer[];
+  authorizationNotice?: string | null;
   billReview?: BillClaimsAdministratorContact[];
   authorization?: BillClaimsAdministratorContact[];
   mailingAddresses?: BillClaimsAdministratorMailingAddress[];
@@ -529,9 +565,9 @@ export type BillLifecycleSessionProvider = (
   request: BillLifecycleSessionRequest,
 ) => Promise<BillLifecycleSession>;
 
-export type CloseBillInput = { reason: string };
-export type ReopenBillInput = { reason: string };
-export type PostBillPaymentInput = {
+export type CloseBillInput = BillActorInput & { reason: string };
+export type ReopenBillInput = BillActorInput & { reason: string };
+export type PostBillPaymentInput = BillActorInput & {
   amount: number;
   penaltyAmount?: number;
   interestAmount?: number;
@@ -540,7 +576,7 @@ export type PostBillPaymentInput = {
   depositDate: string;
   note?: string;
 };
-export type SubmitSecondReviewInput = {
+export type SubmitSecondReviewInput = BillActorInput & {
   reason: string;
   payerClaimControlNumber: string;
   disputedAmount: number | undefined;
@@ -598,7 +634,7 @@ export const REPORT_BILL_STATUS_OPTIONS: ReportBillStatusOption[] = [
  * Outcome of a phone call to the Claims Administrator / Bill Review vendor
  * about an outstanding bill, recorded through the lifecycle actions endpoint.
  */
-export type ReportBillStatusInput = {
+export type ReportBillStatusInput = BillActorInput & {
   status: ReportBillStatusId;
   company?: string;
   representativeName?: string;
@@ -622,7 +658,7 @@ export type ReportBillStatusActionInput = ReportBillStatusInput & {
  * submission packet, unchanged, over the selected delivery route — typically
  * after the payer reports the bill is not on file.
  */
-export type SendDuplicateBillInput = {
+export type SendDuplicateBillInput = BillActorInput & {
   route: BillSubmissionRoute;
   destination?: SubmitBillInput["destination"];
   attention?: string;
@@ -718,7 +754,7 @@ export function secondReviewDeadline(
  * A corrected immutable snapshot submitted as the next attempt on the same bill.
  * The logical bill ID remains stable; only the submission/control-number attempt advances.
  */
-export type ResubmitBillInput = {
+export type ResubmitBillInput = BillActorInput & {
   reason?: string;
   bill: BrowserBillCreateInput;
   documents?: BrowserBillSubmissionDocument[];
@@ -813,7 +849,7 @@ export type BrowserBillSubmissionDocument = {
   contentBase64: string;
 };
 
-export type BrowserBillSubmissionInput = {
+export type BrowserBillSubmissionInput = BillActorInput & {
   bill: BrowserBillCreateInput;
   submission?: {
     route?: BillSubmissionRoute;
@@ -869,6 +905,7 @@ export type BillDeliveryPreviewInput = {
 
 export type BillReferenceClient = {
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   /**
@@ -884,6 +921,7 @@ export type BillLifecycleClient = {
   getBillId: () => string;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
@@ -1186,16 +1224,26 @@ export function createBillLifecycleClient({
           ? {
               payers: payer.payers.flatMap((option): BillReviewPayerOption[] => {
                 if (!option || typeof option !== "object") return [];
-                const candidate = option as { id?: unknown; label?: unknown; default?: unknown };
-                if (typeof candidate.id !== "string" || typeof candidate.label !== "string") return [];
+                const candidate = option as Record<string, unknown>;
+                const id = typeof candidate.id === "string" ? candidate.id : typeof candidate.key === "string" ? candidate.key : null;
+                if (!id || typeof candidate.label !== "string") return [];
                 return [{
-                  id: candidate.id,
+                  id,
                   label: candidate.label,
                   ...(typeof candidate.default === "boolean" ? { default: candidate.default } : {}),
+                  ...(typeof candidate.active === "boolean" ? { active: candidate.active } : {}),
+                  ...(Array.isArray(candidate.aliases) ? { aliases: candidate.aliases.filter((item): item is string => typeof item === "string") } : {}),
+                  ...(typeof candidate.hint === "string" ? { hint: candidate.hint } : {}),
+                  ...(Array.isArray(candidate.affiliatedEntities) ? { affiliatedEntities: candidate.affiliatedEntities.filter((item): item is string => typeof item === "string") } : {}),
+                  ...(typeof candidate.route === "string" ? { route: candidate.route } : {}),
                 }];
               }),
             }
           : {}),
+        ...(Array.isArray(payer.aliases) ? { aliases: payer.aliases.filter((item): item is string => typeof item === "string") } : {}),
+        ...(Array.isArray(payer.affiliatedEntities) ? { affiliatedEntities: payer.affiliatedEntities.filter((item): item is string => typeof item === "string") } : {}),
+        ...(typeof payer.claimNumberHint === "string" ? { claimNumberHint: payer.claimNumberHint } : {}),
+        ...(typeof payer.route === "string" ? { route: payer.route } : {}),
         ...(Array.isArray(payer.signals)
           ? {
               signals: payer.signals.flatMap((signal) => {
@@ -1216,6 +1264,16 @@ export function createBillLifecycleClient({
           : {}),
       }];
     });
+  };
+
+  const getClaimsAdministratorDirectory = async (id: string, injuryState?: string): Promise<BillClaimsAdministratorDirectory> => {
+    const params = new URLSearchParams();
+    if (injuryState?.trim()) params.set("injuryState", injuryState.trim());
+    const response = await request(`/partner/v2/browser/claims-administrators/${encodeURIComponent(id)}${params.size ? `?${params}` : ""}`);
+    if (!response.ok) throw await responseError(response, "Claims administrator details are unavailable.");
+    const body = await response.json() as { data?: unknown };
+    if (!body.data || typeof body.data !== "object") throw new Error("Claims administrator details returned an invalid response.");
+    return body.data as BillClaimsAdministratorDirectory;
   };
 
   const searchDiagnosisCodes = async (query: string, limit = 30, offset = 0): Promise<BillDiagnosisCode[]> => {
@@ -1276,6 +1334,7 @@ export function createBillLifecycleClient({
     clearSession() { session = null; sessionRequest = null; },
     getLifecycle: loadLifecycle,
     searchClaimsAdministrators,
+    getClaimsAdministratorDirectory,
     searchDiagnosisCodes,
     lookupPostalCode,
     async getDeliveryOptions() {
@@ -1334,6 +1393,7 @@ export function createBillReferenceClient(
   });
   return {
     searchClaimsAdministrators: lifecycle.searchClaimsAdministrators,
+    getClaimsAdministratorDirectory: lifecycle.getClaimsAdministratorDirectory,
     searchDiagnosisCodes: lifecycle.searchDiagnosisCodes,
     lookupPostalCode: lifecycle.lookupPostalCode,
     getDeliveryPreview: lifecycle.getDeliveryPreview,
@@ -1560,7 +1620,7 @@ export function buildBillTasksDashboard(
   for (const item of items) {
     const section = sectionById.get(item.sectionId);
     if (!section) continue;
-    const key = `${item.sectionId} ${item.rowId}`;
+    const key = `${item.sectionId}\u0000${item.rowId}`;
     let row = rowByKey.get(key);
     if (!row) {
       row = {

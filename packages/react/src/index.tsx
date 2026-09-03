@@ -292,10 +292,13 @@ export {
   secondReviewDeadline,
   useBillLifecycle,
 } from "./connected-bill-lifecycle";
+export { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
+export type { ClaimsAdministratorDirectoryDialogProps } from "./claims-administrator-directory-dialog";
 export type {
   BillClaimsAdministratorContact,
   BillClaimsAdministratorDirectory,
   BillClaimsAdministratorMailingAddress,
+  BillClaimsAdministratorPayer,
   BillClaimsAdministratorPattern,
   BillEorDocument,
   BillActivityRecord,
