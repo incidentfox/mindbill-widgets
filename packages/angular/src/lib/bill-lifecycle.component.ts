@@ -1,13 +1,19 @@
 import { CommonModule } from "@angular/common";
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, effect } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import type {
-  BillLifecycleData,
-  BillLifecycleSessionProvider,
-  BrowserBillCreateInput,
-  BrowserBillSubmissionDocument,
-  BrowserBillSubmissionInput,
-  BrowserBillSubmissionResult,
+import {
+  REPORT_BILL_STATUS_OPTIONS,
+  reportBillStatusContacts,
+  type BillDeliveryOption,
+  type BillDeliveryOptions,
+  type BillLifecycleData,
+  type BillLifecycleSessionProvider,
+  type BillSubmissionRoute,
+  type BrowserBillCreateInput,
+  type BrowserBillSubmissionDocument,
+  type BrowserBillSubmissionInput,
+  type BrowserBillSubmissionResult,
+  type ReportBillStatusId,
 } from "@mindbill/browser";
 import type { MindBillAngularAppearance } from "./appearance";
 import { mindBillAngularAppearanceStyle } from "./appearance";
@@ -105,6 +111,40 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
         @if (panel === 'payment') { <form class="card action-form" (submit)="$event.preventDefault(); postPayment()"><h3>Post payment</h3><label>Amount<input required type="number" min="0.01" step="0.01" [(ngModel)]="payment.amount" name="amount"></label><label>Method<select [(ngModel)]="payment.method" name="method"><option value="check">Check</option><option value="eft">EFT</option></select></label><label>Deposit date<input required type="date" [(ngModel)]="payment.depositDate" name="depositDate"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Post payment</button></div></form> }
         @if (panel === 'review') { <form class="card action-form" (submit)="$event.preventDefault(); submitReview()"><h3>Submit Second Bill Review</h3><label>Reason<textarea required [(ngModel)]="review.reason" name="reason"></textarea></label><label>Payer claim control number<input required [(ngModel)]="review.payerClaimControlNumber" name="control"></label><label>Disputed amount<input type="number" min="0" step="0.01" [(ngModel)]="review.disputedAmount" name="disputed"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Submit review</button></div></form> }
         @if (panel === 'close') { <form class="card action-form" (submit)="$event.preventDefault(); closeBill()"><h3>Close bill</h3><label>Reason<textarea required [(ngModel)]="closeReason" name="closeReason"></textarea></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Close bill</button></div></form> }
+        @if (panel === 'duplicate') {
+          <form class="card action-form" (submit)="$event.preventDefault(); sendDuplicate()">
+            <h3>Send duplicate bill</h3>
+            @if (!duplicateDelivery) {
+              <p class="muted">{{ duplicateDeliveryError || 'Loading delivery options…' }}</p>
+              <div><button type="button" (click)="panel=''">Cancel</button>@if (duplicateDeliveryError) { <button class="primary" type="button" (click)="loadDuplicateDelivery()">Try again</button> }</div>
+            } @else {
+              <p class="muted">Resend the unchanged submission packet to {{ duplicateDelivery.payerName }}.</p>
+              <label>Delivery method<select [(ngModel)]="duplicate.route" name="duplicateRoute">@for (option of duplicateRoutes(); track option.route) { <option [ngValue]="option.route">{{ option.label }}</option> }</select></label>
+              @if (duplicate.route === 'fax') { <label>Fax number<input required [(ngModel)]="duplicate.faxNumber" name="duplicateFax" placeholder="(000) 000-0000"></label> }
+              @if (duplicate.route === 'email') { <label>Email<input required type="email" [(ngModel)]="duplicate.email" name="duplicateEmail" placeholder="claims@payer.example"></label> }
+              @if (duplicate.route === 'mail') { <label>Mailing address<textarea required [(ngModel)]="duplicate.mailingAddress" name="duplicateMail"></textarea></label> }
+              <div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit" [disabled]="store.mutating() || !duplicateReady()">Send duplicate</button></div>
+            }
+          </form>
+        }
+        @if (panel === 'report_status') {
+          <form class="card action-form" (submit)="$event.preventDefault(); reportStatus()">
+            <h3>Report Bill Status</h3>
+            <p class="muted">{{ reportContactSummary }}</p>
+            <div class="report-options" role="radiogroup" aria-label="Reported bill payment status">
+              @for (option of reportStatusOptions; track option.id) {
+                <label class="report-option"><input type="radio" [value]="option.id" [(ngModel)]="report.status" name="reportStatus"><span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span></label>
+              }
+            </div>
+            <label>Company<input [(ngModel)]="report.company" name="reportCompany"></label>
+            <label>Name<input [(ngModel)]="report.representativeName" name="reportRepresentativeName"></label>
+            <label>Role<input [(ngModel)]="report.representativeRole" name="reportRepresentativeRole"></label>
+            <label>Phone Number<input [(ngModel)]="report.phone" name="reportPhone"></label>
+            <label>Call Reference Number<input [(ngModel)]="report.callReference" name="reportCallReference"></label>
+            <label>Message Note<textarea [(ngModel)]="report.note" name="reportNote"></textarea></label>
+            <div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit" [disabled]="!report.status || store.mutating()">Save</button></div>
+          </form>
+        }
         @if (panel === 'resubmit' && correctionInitialBill) {
           <div class="correction-backdrop" (mousedown)="closeCorrectionBackdrop($event)">
             <section class="correction-dialog" role="dialog" aria-modal="true" aria-label="Correct and resubmit">
@@ -147,6 +187,7 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
     .h-due{margin-top:8px}.h-due em{display:block;color:var(--m);font-size:12.5px;margin-bottom:4px}.h-due dl>div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;border-top:1px solid color-mix(in srgb,var(--b) 60%,transparent);padding-top:4px}
     .h-text{margin:8px 0 0;white-space:pre-wrap}
     @media(max-width:760px){.history-head{display:none}.history-line{grid-template-columns:1fr;gap:2px;padding:10px 12px}.history-details{padding:4px 12px 12px}.h-kv>div,.h-due dl>div{grid-template-columns:1fr}}
+    .report-options{display:grid;gap:8px}.action-form label.report-option{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--b);border-radius:var(--cr);padding:10px 12px;font-weight:400;cursor:pointer}.report-option input{width:16px;min-height:16px;margin-top:3px;padding:0;border:0}.report-option strong{display:block;font-size:13.5px}.report-option small{display:block;color:var(--m);margin-top:2px;font-size:12.5px}
     .correction-backdrop{position:fixed;inset:0;z-index:100;overflow:auto;background:#172b37b8;padding:28px}.correction-dialog{position:relative;max-width:1180px;margin:0 auto;background:var(--bg);border-radius:var(--r);box-shadow:0 24px 80px #0006;padding:26px}.correction-dialog>header{padding-right:48px;margin-bottom:18px}.correction-dialog h2{margin:0 0 6px}.correction-dialog p{margin:0;color:var(--m)}.dialog-close{position:absolute;right:20px;top:20px;width:40px;height:40px;padding:0;font-size:24px}.correction-reason{display:grid;gap:8px;margin-bottom:14px;border-left:4px solid #c43d3d;border-radius:8px;background:#fff5f5;padding:14px;color:#8f2525}.correction-reason span{display:block}.correction-reason b{margin-right:6px}.contact-hint{margin:0 0 14px!important;border:1px solid var(--b);border-radius:8px;background:var(--s);padding:12px!important;color:var(--t)!important}.correction-note{display:grid;gap:6px;margin-bottom:18px;font-weight:700}.correction-note textarea{min-height:76px}.correction-dialog mindbill-bill-submission{display:block}.correction-dialog .mb{padding:0}@media(max-width:760px){.correction-backdrop{padding:0}.correction-dialog{min-height:100%;border-radius:0;padding:18px 12px}.dialog-close{right:12px;top:12px}}
   `],
 })
@@ -170,6 +211,13 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   closeReason = "";
   payment = { amount: 0, method: "check" as "check" | "eft", depositDate: new Date().toISOString().slice(0, 10) };
   review = { reason: "", payerClaimControlNumber: "", disputedAmount: 0 };
+  readonly reportStatusOptions = REPORT_BILL_STATUS_OPTIONS;
+  duplicateDelivery: BillDeliveryOptions | null = null;
+  duplicateDeliveryError = "";
+  duplicate = { route: "ebill" as BillSubmissionRoute, faxNumber: "", email: "", mailingAddress: "" };
+  report: { status: ReportBillStatusId | null; company: string; representativeName: string; representativeRole: string; phone: string; callReference: string; note: string } =
+    { status: null, company: "", representativeName: "", representativeRole: "", phone: "", callReference: "", note: "" };
+  reportContactSummary = "";
   correctionInitialBill: BrowserBillCreateInput | null = null;
   correctionAttachments: MindBillSubmissionAttachment[] = [];
   correctionAttentionFields: string[] = [];
@@ -202,7 +250,75 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     else if (action === "post_payment") this.panel = "payment";
     else if (action === "second_review" || action === "independent_bill_review") this.panel = "review";
     else if (action === "close") this.panel = "close";
+    else if (action === "send_duplicate") this.beginSendDuplicate();
+    else if (action === "report_bill_status") this.beginReportStatus(data);
     else if (action === "view_eor" && data.eors[0]) void this.openEor(data.eors[0].id, data.eors[0].filename);
+  }
+  beginSendDuplicate(): void { this.panel = "duplicate"; this.loadDuplicateDelivery(); }
+  loadDuplicateDelivery(): void {
+    this.duplicateDeliveryError = "";
+    if (this.duplicateDelivery) return;
+    this.store.getDeliveryOptions().then((delivery) => {
+      this.duplicateDelivery = delivery;
+      this.duplicate.route = delivery.recommended.route;
+      this.duplicate.faxNumber = delivery.contacts.faxNumber || "";
+      this.duplicate.email = delivery.contacts.claimsEmail || "";
+      this.duplicate.mailingAddress = delivery.contacts.mailingAddress || "";
+    }).catch((cause: unknown) => {
+      this.duplicateDeliveryError = cause instanceof Error ? cause.message : "Delivery options could not be loaded.";
+    });
+  }
+  duplicateRoutes(): BillDeliveryOption[] {
+    const seen = new Set<BillSubmissionRoute>();
+    return (this.duplicateDelivery?.options ?? []).filter((option) => {
+      if (seen.has(option.route)) return false;
+      seen.add(option.route);
+      return true;
+    });
+  }
+  duplicateReady(): boolean {
+    if (this.duplicate.route === "fax") return this.duplicate.faxNumber.replace(/\D/g, "").length >= 10;
+    if (this.duplicate.route === "email") return this.duplicate.email.includes("@");
+    if (this.duplicate.route === "mail") return this.duplicate.mailingAddress.trim().length > 2;
+    return true;
+  }
+  async sendDuplicate(): Promise<void> {
+    if (!this.duplicateDelivery || !this.duplicateReady()) return;
+    const route = this.duplicate.route;
+    const destination = route === "fax" ? { faxNumber: this.duplicate.faxNumber.trim() }
+      : route === "email" ? { email: this.duplicate.email.trim() }
+      : route === "mail" ? { mailingAddress: this.duplicate.mailingAddress.trim() }
+      : null;
+    await this.store.sendDuplicateBill({ route, ...(destination ? { destination } : {}) });
+    this.panel = ""; this.notice = "Duplicate bill sent.";
+  }
+  beginReportStatus(data: BillLifecycleData): void {
+    const contacts = reportBillStatusContacts(data.delivery);
+    const parts: string[] = [];
+    if (contacts.claimsAdmin) {
+      const phones = contacts.claimsAdmin.phones.map((phone) => `${phone.label} ${phone.value}`).join(", ");
+      parts.push(`${contacts.claimsAdmin.name}${phones ? ` (${phones})` : ""}${contacts.claimsAdmin.hoursOfOperation ? ` · Hours: ${contacts.claimsAdmin.hoursOfOperation}` : ""}`);
+    }
+    if (contacts.billReview) parts.push(`Bill Review: ${contacts.billReview.name}${contacts.billReview.phone ? ` ${contacts.billReview.phone}` : ""}`);
+    this.reportContactSummary = parts.length
+      ? `Call ${parts.join(" · ")} to request the payment status of this bill, then record the status reported and who provided it.`
+      : "Call the Claims Administrator or Bill Review vendor for this bill, then record the status reported and who provided it.";
+    this.report = { status: null, company: "", representativeName: "", representativeRole: "", phone: "", callReference: "", note: "" };
+    this.panel = "report_status";
+  }
+  async reportStatus(): Promise<void> {
+    const status = this.report.status;
+    if (!status) return;
+    await this.store.reportBillStatus({
+      status,
+      ...(this.report.company.trim() ? { company: this.report.company.trim() } : {}),
+      ...(this.report.representativeName.trim() ? { representativeName: this.report.representativeName.trim() } : {}),
+      ...(this.report.representativeRole.trim() ? { representativeRole: this.report.representativeRole.trim() } : {}),
+      ...(this.report.phone.trim() ? { phone: this.report.phone.trim() } : {}),
+      ...(this.report.callReference.trim() ? { callReference: this.report.callReference.trim() } : {}),
+      ...(this.report.note.trim() ? { note: this.report.note.trim() } : {}),
+    });
+    this.panel = ""; this.notice = "Bill status reported.";
   }
   async openAttachment(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getAttachment(id), filename); }
   async openEor(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getEor(id), filename); }

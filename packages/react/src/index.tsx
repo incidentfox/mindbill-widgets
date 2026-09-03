@@ -282,6 +282,10 @@ export type {
 export {
   ConnectedBillLifecycle,
   createBillLifecycleClient,
+  reportBillStatusContacts,
+  SECOND_REVIEW_REASON_TEMPLATE,
+  SECOND_REVIEW_WINDOW_DAYS,
+  secondReviewDeadline,
   useBillLifecycle,
 } from "./connected-bill-lifecycle";
 export type {
@@ -307,6 +311,9 @@ export type {
   ConnectedBillLifecycleProps,
   PostBillPaymentInput,
   ReopenBillInput,
+  ReportBillStatusContacts,
+  SecondReviewDeadline,
+  SendDuplicateBillInput,
   SubmitSecondReviewInput,
   UseBillLifecycleOptions,
   UseBillLifecycleResult,
