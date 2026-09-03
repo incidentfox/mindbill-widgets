@@ -145,6 +145,8 @@ export type BillSubmissionSourceAttachment = {
   autoAttached?: boolean;
   removable?: boolean;
   previewUrl?: string;
+  /** Authenticated source loader used when the document is not available at a public URL. */
+  loadBlob?: () => Promise<Blob>;
   reportTypeCode?: string;
 };
 export type BillSubmissionUpload = { file: File; documentType: BillSubmissionDocumentType; description?: string; reportTypeCode?: string };
@@ -195,6 +197,9 @@ export type BillSubmissionFormProps = {
   submitLabel?: string;
   heading?: ReactNode;
   description?: ReactNode;
+  /** Rejected-field paths to visually call out while the user corrects the next submission. */
+  attentionFields?: string[];
+  attentionMessage?: ReactNode;
   /**
    * Optional composable layout. Use the exported section components as children;
    * the parent form continues to own validation, directory lookups, uploads, and submission.
@@ -272,13 +277,18 @@ export async function prepareBillSubmissionDocuments({
   fetch?: typeof globalThis.fetch;
 }): Promise<BrowserBillSubmissionDocument[]> {
   const fetcher = fetchOverride ?? globalThis.fetch;
-  if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   const selected = selectedIds.map((id) => attachments.find((item) => item.id === id)).filter((item): item is BillSubmissionSourceAttachment => Boolean(item));
   const sourceDocuments = await Promise.all(selected.map(async (attachment) => {
-    if (!attachment.previewUrl) throw new Error(`${attachment.fileName} cannot be submitted because its document URL is missing.`);
-    const response = await fetcher(attachment.previewUrl, { credentials: "same-origin" });
-    if (!response.ok) throw new Error(`${attachment.fileName} could not be loaded for submission.`);
-    return pdfDocument(await response.blob(), {
+    let blob: Blob;
+    if (attachment.loadBlob) blob = await attachment.loadBlob();
+    else {
+      if (!attachment.previewUrl) throw new Error(`${attachment.fileName} cannot be submitted because its document URL is missing.`);
+      if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
+      const response = await fetcher(attachment.previewUrl, { credentials: "same-origin" });
+      if (!response.ok) throw new Error(`${attachment.fileName} could not be loaded for submission.`);
+      blob = await response.blob();
+    }
+    return pdfDocument(blob, {
       externalId: attachment.id,
       filename: attachment.fileName,
       documentType: attachment.documentType,
@@ -451,6 +461,7 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
 
 const css = `
 .mbsf{display:grid;gap:20px;color:var(--mb-text);font-family:var(--mb-font);font-size:15px}.mbsf *{box-sizing:border-box}
+.mbsf-attention{padding:14px 16px;border-left:4px solid var(--mb-danger);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 8%,var(--mb-surface));color:var(--mb-text)}.mbsf [data-attention=true] .mbsf-input,.mbsf [data-attention=true] .mbsf-select,.mbsf [data-attention=true].mbsf-lines{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf [data-attention=true]>.mbsf-label{color:var(--mb-danger)}
 .mbsf-head,.mbsf-section-head,.mbsf-attach-row,.mbsf-actions{display:flex;align-items:center;justify-content:space-between;gap:16px}.mbsf-title{margin:0;font-size:24px}.mbsf-copy,.mbsf-help{color:var(--mb-muted);margin:5px 0 0}.mbsf-required{font-size:13px;color:var(--mb-muted);white-space:nowrap}.mbsf-star,.mbsf-error{color:var(--mb-danger)}
 .mbsf-card{min-width:0;margin:0;padding:24px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}.mbsf-card[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-legend{padding:0 10px;font-size:18px;font-weight:760}.mbsf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}.mbsf-subhead{grid-column:1/-1;margin:6px 0 -2px;padding-top:14px;border-top:1px solid var(--mb-border);font-size:15px;font-weight:780;letter-spacing:.01em}.mbsf-subhead:first-child{margin-top:0;padding-top:0;border-top:0}.mbsf-span{grid-column:1/-1}.mbsf-field{display:grid;align-content:start;gap:7px;min-width:0}.mbsf-label{font-weight:680}.mbsf-input,.mbsf-select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbsf-input:focus,.mbsf-select:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}.mbsf-field[data-invalid=true] .mbsf-input,.mbsf-field[data-invalid=true] .mbsf-select,.mbsf-invalid-control .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-field[data-invalid=true] .mbsf-input:focus,.mbsf-field[data-invalid=true] .mbsf-select:focus{outline-color:color-mix(in srgb,var(--mb-danger) 24%,transparent)}
 .mbsf-combo{position:relative}.mbsf-menu{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:min(360px,46vh);overflow:auto;overscroll-behavior:contain;padding:7px;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);box-shadow:0 14px 35px rgba(17,38,49,.16)}.mbsf-option{display:grid;width:100%;gap:2px;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mbsf-option:hover,.mbsf-option:focus{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}.mbsf-option small{color:var(--mb-muted)}.mbsf-menu-status{padding:12px;text-align:center;color:var(--mb-muted);font-size:13px}
@@ -575,6 +586,7 @@ export function BillSubmissionForm({
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
   description = "Review the bill details, add attachments, and submit.",
+  attentionFields = [], attentionMessage,
   children,
 }: BillSubmissionFormProps): ReactElement {
   const [bill, setBill] = useState(() => cloneInitialBill(initialBill));
@@ -620,6 +632,21 @@ export function BillSubmissionForm({
     const next = validateBillSubmission(bill).fieldErrors;
     setErrors(missingAttachmentReportType ? { ...next, attachments: "Select a report type for every attachment." } : next);
   }, [bill, missingAttachmentReportType, validationActive]);
+  useEffect(() => {
+    const root = formRef.current;
+    if (!root) return;
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>("[data-field-path]"));
+    nodes.forEach((node) => node.removeAttribute("data-attention"));
+    for (const requested of attentionFields) {
+      const normalized = requested.replace(/\[\]/g, "");
+      for (const node of nodes) {
+        const actual = node.dataset.fieldPath ?? "";
+        if (actual === requested || actual === normalized || actual.startsWith(`${normalized}.`) || normalized.startsWith(`${actual}.`)) {
+          node.dataset.attention = "true";
+        }
+      }
+    }
+  }, [attentionFields]);
 
   const addFiles = useCallback((fileList: FileList | File[]) => {
     const files = Array.from(fileList); if (!files.length) return; setFormError(null);
@@ -898,6 +925,7 @@ export function BillSubmissionForm({
   return <BillSubmissionSectionsContext.Provider value={sections}>
     <form ref={formRef} className={`${className} mbsf`} style={{ ...mindBillAppearanceStyle(appearance), ...style }} onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
       <style>{css}</style>
+      {attentionMessage ? <div className="mbsf-attention" role="status">{attentionMessage}</div> : null}
       {children ?? defaultLayout}
       {routeDialog ? (
         <SendRouteDialog

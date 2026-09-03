@@ -114,6 +114,15 @@ import { BillReadOnlyForm } from "@mindbill/react";
 
 For older responses without `issues`, the component falls back to the singular `reason` and `code` fields. `appearance.dangerColor` can override the rejection color without changing the rest of the theme.
 
+For the server-authorized **Correct and resubmit** action,
+`ConnectedBillLifecycle` opens `BillSubmissionForm` with the complete submitted
+snapshot and authenticated copies of its documents. API-provided rejection
+`fieldPaths` call attention to likely problem controls, and payer contact
+guidance remains visible while the user corrects the bill. Submitting creates
+the next immutable attempt under the same logical `billId`; the original
+attempt and rejection remain in history. The host application does not build a
+second correction form or pass bill seed data back into the lifecycle.
+
 ## Lifecycle actions
 
 MindBill returns the actions that are valid for the bill's current state. Render that server-authoritative list instead of duplicating rejection, EOR, denial, review, payment, and closure rules in your application.

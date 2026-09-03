@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/angular",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Native Angular components for bill submission, lifecycle, dashboards, aging, lists, and reporting",
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
     "rxjs": ">=7.8 <9"
   },
   "dependencies": {
-    "@mindbill/browser": "^0.17.0",
+    "@mindbill/browser": "^0.18.0",
     "tslib": "^2.8.1"
   },
   "keywords": [

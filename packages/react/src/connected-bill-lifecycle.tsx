@@ -14,6 +14,7 @@ import {
   DEFAULT_API_BASE_URL,
   DEFAULT_SESSION_ENDPOINT,
   createBillLifecycleClient,
+  type BrowserBillCreateInput,
   type BillEorDocument,
   type BillLifecycleAction,
   type BillLifecycleClient,
@@ -35,6 +36,15 @@ import {
   BillRejectionNotice,
 } from "./bill-lifecycle-surfaces";
 import { BillReadOnlyForm } from "./bill-read-only-form";
+import {
+  BILL_SUBMISSION_DOCUMENT_TYPES,
+  BillSubmissionForm,
+  prepareBillSubmissionDocuments,
+  type BillSubmissionDocumentType,
+  type BillSubmissionFormValue,
+  type BillSubmissionInput,
+  type BillSubmissionSourceAttachment,
+} from "./bill-submission-form";
 import type { BillReviewAttachment, BillSubmissionRoute } from "./native-bill-review";
 
 export { createBillLifecycleClient } from "@mindbill/browser";
@@ -84,6 +94,7 @@ export type UseBillLifecycleResult = {
   refresh: () => Promise<void>;
   searchClaimsAdministrators: BillLifecycleClient["searchClaimsAdministrators"];
   getDeliveryOptions: BillLifecycleClient["getDeliveryOptions"];
+  getAttachment: BillLifecycleClient["getAttachment"];
   openAttachment: (attachment: BillReviewAttachment) => Promise<void>;
   openEor: (document: BillEorDocument) => Promise<void>;
   downloadPacket: () => Promise<void>;
@@ -243,6 +254,7 @@ export function useBillLifecycle({
     refresh,
     searchClaimsAdministrators: (query, claimNumber) => client.searchClaimsAdministrators(query, claimNumber),
     getDeliveryOptions: () => client.getDeliveryOptions(),
+    getAttachment: (attachmentId) => client.getAttachment(attachmentId),
     openAttachment,
     openEor,
     downloadPacket,
@@ -273,7 +285,7 @@ export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
 type Panel = "" | "resubmit" | "second_review" | "payment" | "close" | "reopen";
 type Tab = "details" | "history";
 
-function LifecycleDialog({ children, title, onClose }: { children: ReactNode; title: string; onClose: () => void }): ReactElement {
+function LifecycleDialog({ children, title, wide = false, onClose }: { children: ReactNode; title: string; wide?: boolean; onClose: () => void }): ReactElement {
   const dialog = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -286,10 +298,93 @@ function LifecycleDialog({ children, title, onClose }: { children: ReactNode; ti
     };
   }, [onClose]);
   return <div className="mb-lifecycle-dialog-backdrop" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
-    <div ref={dialog} className="mb-lifecycle-dialog" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
+    <div ref={dialog} className={["mb-lifecycle-dialog", wide ? "wide" : ""].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
       <button type="button" className="mb-lifecycle-dialog-close" aria-label="Close" onClick={onClose}>×</button>{children}
     </div>
   </div>;
+}
+
+function correctionDocumentType(value: string): BillSubmissionDocumentType {
+  return (BILL_SUBMISSION_DOCUMENT_TYPES as readonly string[]).includes(value)
+    ? value as BillSubmissionDocumentType
+    : "other";
+}
+
+function correctionBill(data: BillLifecycleData): BillSubmissionInput {
+  const billing = data.bill.billingSnapshot?.billingProvider;
+  const rendering = data.bill.billingSnapshot?.renderingProvider;
+  const location = data.bill.billingSnapshot?.placeOfService;
+  const nameParts = data.patient.name.trim().split(/\s+/);
+  const firstName = data.patient.firstName || nameParts[0] || "";
+  const lastName = data.patient.lastName || nameParts.slice(1).join(" ") || "";
+  return {
+    billingMode: data.bill.billingMode,
+    patient: {
+      firstName,
+      ...(data.patient.middleName ? { middleName: data.patient.middleName } : {}),
+      lastName,
+      dateOfBirth: data.patient.dob || "",
+      ...(data.patient.phone ? { phone: data.patient.phone } : {}),
+      address: {
+        line1: data.patient.address?.line1 || "",
+        city: data.patient.address?.city || "",
+        state: data.patient.address?.state || "",
+        postalCode: data.patient.address?.postalCode || "",
+      },
+    },
+    claim: {
+      claimNumber: data.injury.claimNumber || "",
+      ...(data.injury.adjNumber ? { adjNumber: data.injury.adjNumber } : {}),
+      employer: data.injury.employer || "",
+      dateOfInjury: data.injury.doi || "",
+      ...(data.injury.injuryDescription ? { description: data.injury.injuryDescription } : {}),
+      ...(data.injury.claimsAdminId && data.injury.claimsAdminName ? {
+        claimsAdministrator: { id: data.injury.claimsAdminId, name: data.injury.claimsAdminName },
+      } : {}),
+    },
+    service: {
+      date: data.bill.dos,
+      ...(data.bill.dosEnd !== undefined ? { endDate: data.bill.dosEnd } : {}),
+      ...(data.bill.authorizationNumber !== undefined ? { authorizationNumber: data.bill.authorizationNumber } : {}),
+    },
+    ...(billing ? { billingProvider: {
+      name: billing.name,
+      taxId: billing.taxId,
+      npi: billing.npi,
+      ...(billing.phone ? { phone: billing.phone } : {}),
+      address: {
+        line1: billing.billingStreet || "",
+        city: billing.billingCity || "",
+        state: billing.billingState || "",
+        postalCode: billing.billingZip || "",
+      },
+    } } : {}),
+    ...(rendering ? { renderingProvider: {
+      name: rendering.name,
+      npi: rendering.npi,
+      ...(rendering.taxonomy ? { taxonomy: rendering.taxonomy } : {}),
+      ...(rendering.specialty ? { specialty: rendering.specialty } : {}),
+      ...(rendering.licenseNumber ? { licenseNumber: rendering.licenseNumber } : {}),
+      ...(rendering.licenseState ? { licenseState: rendering.licenseState } : {}),
+      ...(rendering.isQME !== undefined ? { isQme: rendering.isQME } : {}),
+      ...(rendering.isAME !== undefined ? { isAme: rendering.isAME } : {}),
+    } } : {}),
+    ...(location ? { serviceLocation: {
+      ...(location.name ? { name: location.name } : {}),
+      address: { line1: location.street, city: location.city, state: location.state, postalCode: location.zip },
+      ...(location.posCode ? { placeOfServiceCode: location.posCode } : {}),
+    } } : {}),
+    diagnoses: [...(data.injury.diagnosisCodes || [])],
+    serviceLines: data.bill.lineItems.map((line) => ({
+      code: line.code,
+      modifiers: [...line.modifiers],
+      units: line.units,
+      charge: line.charge,
+      ...(line.serviceDate ? { serviceDate: line.serviceDate } : {}),
+      ...(line.serviceDateEnd !== undefined ? { serviceDateEnd: line.serviceDateEnd } : {}),
+      ...(line.diagnosisPointers ? { diagnosisPointers: [...line.diagnosisPointers] } : {}),
+    })),
+  };
 }
 
 function today(): string {
@@ -332,6 +427,23 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
   const [payment, setPayment] = useState<PostBillPaymentInput>({ amount: 0, penaltyAmount: 0, interestAmount: 0, method: "check", checkNumber: "", depositDate: today(), note: "" });
   const [review, setReview] = useState<SubmitSecondReviewInput>({ reason: "", payerClaimControlNumber: "", disputedAmount: undefined, attachmentIds: [], route: "ebill" });
   const lastData = useRef<BillLifecycleData | null>(null);
+  const correctionInitialBill = useMemo(() => data ? correctionBill(data) : null, [data]);
+  const correctionAttachments = useMemo<BillSubmissionSourceAttachment[]>(() => data ? data.bill.attachments.map((attachment) => {
+    const documentType = correctionDocumentType(attachment.documentType);
+    const isW9 = documentType === "w9";
+    return {
+      id: attachment.id,
+      fileName: attachment.filename,
+      documentType,
+      ...(attachment.description ? { description: attachment.description } : {}),
+      ...(attachment.reportType ? { reportTypeCode: attachment.reportType } : {}),
+      loadBlob: () => lifecycle.getAttachment(attachment.id),
+      ...(isW9 ? { autoAttached: true, removable: false } : { removable: true }),
+    };
+  }) : [], [data, lifecycle]);
+  const correctionAttentionFields = useMemo(() => data?.rejection?.issues
+    ?.flatMap((issue) => issue.fieldPaths || [])
+    .filter((path, index, fields) => fields.indexOf(path) === index) || [], [data]);
 
   useEffect(() => {
     if (!data || data === lastData.current) return;
@@ -371,6 +483,24 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
     } catch {
       // useBillLifecycle keeps the server error visible.
     }
+  };
+  const submitCorrection = async (value: BillSubmissionFormValue) => {
+    setNotice("");
+    const documents = await prepareBillSubmissionDocuments({
+      attachments: correctionAttachments,
+      selectedIds: value.sourceAttachmentIds,
+      reportTypeCodeByAttachmentId: value.sourceAttachmentReportTypes,
+      uploads: value.uploads,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+    });
+    await lifecycle.resubmitBill({
+      bill: value.bill as BrowserBillCreateInput,
+      ...(documents.length ? { documents } : {}),
+      ...(reason.trim() ? { reason: reason.trim() } : {}),
+    });
+    setPanel("");
+    setReason("");
+    setNotice("Corrected submission sent.");
   };
   const viewEor = data.lifecycle.actions.find((action) => action.id === "view_eor" && action.enabled);
   const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "second_review", "post_payment", "close", "reopen"]);
@@ -412,7 +542,23 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
       }}>{action.label}</button>)}
     </aside> : null}
 
-    {panel === "resubmit" ? <LifecycleDialog title="Correct and resubmit" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Correct and resubmit</h3><p>The original submission remains immutable. This records a new submission attempt after the routing issue is corrected.</p></div><label><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void complete("Bill resubmitted.", () => lifecycle.resubmitBill({ reason }))}>{lifecycle.isMutating ? "Resubmitting…" : "Resubmit bill"}</button></div></section></LifecycleDialog> : null}
+    {panel === "resubmit" && correctionInitialBill ? <LifecycleDialog title="Correct and resubmit" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Correct and resubmit</h3><p>Review the rejected snapshot, correct the highlighted information, and submit a new immutable attempt under this bill.</p></div><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button></header>{data.rejection ? <div className="mb-lifecycle-correction-reason"><strong>{data.rejection.reason}</strong>{data.rejection.issues?.map((issue, index) => <span key={`${issue.code || "issue"}-${index}`}>{issue.code ? `${issue.code}: ` : ""}{issue.description}</span>)}</div> : null}{data.delivery.contacts.adjusterPhone || data.delivery.contacts.claimsEmail ? <aside className="mb-lifecycle-correction-contact"><strong>Need to verify the rejected information?</strong><span>Contact {data.delivery.payerName}{data.delivery.contacts.adjusterPhone ? ` at ${data.delivery.contacts.adjusterPhone}` : ""}{data.delivery.contacts.claimsEmail ? ` · ${data.delivery.contacts.claimsEmail}` : ""}.</span></aside> : null}<label className="mb-lifecycle-correction-note"><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
+      initialBill={correctionInitialBill}
+      attachments={correctionAttachments}
+      onSubmit={submitCorrection}
+      onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
+      attentionFields={correctionAttentionFields}
+      attentionMessage={correctionAttentionFields.length ? "The rejected response points to the highlighted fields. Confirm every required value before resubmitting." : "Confirm the bill information below before resubmitting."}
+      submitLabel={lifecycle.isMutating ? "Resubmitting…" : "Resubmit bill"}
+      heading="Corrected bill information"
+      description="The original submission stays unchanged. This form creates the next submission attempt."
+      disabled={lifecycle.isMutating}
+      {...(options.getSession ? { getSession: options.getSession } : {})}
+      {...(options.sessionEndpoint ? { sessionEndpoint: options.sessionEndpoint } : {})}
+      {...(options.apiBaseUrl ? { apiBaseUrl: options.apiBaseUrl } : {})}
+      {...(options.fetch ? { fetch: options.fetch } : {})}
+      {...(appearance ? { appearance } : {})}
+    /></section></LifecycleDialog> : null}
 
     {panel === "second_review" ? <LifecycleDialog title="Submit Second Review" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Submit Second Review</h3><p>Explain the dispute and include the payer control number and supporting documents.</p></div><div className="mb-lifecycle-fields two"><label className="full"><span>Reason</span><textarea required value={review.reason} onChange={(event) => setReview((current) => ({ ...current, reason: event.target.value }))} /></label><label><span>Payer claim control number</span><input required value={review.payerClaimControlNumber} onChange={(event) => setReview((current) => ({ ...current, payerClaimControlNumber: event.target.value }))} /></label><label><span>Disputed amount</span><input type="number" min="0.01" step="0.01" value={review.disputedAmount ?? ""} onChange={(event) => setReview((current) => ({ ...current, disputedAmount: event.target.value ? Number(event.target.value) : undefined }))} /></label><label><span>Send via</span><select value={review.route} onChange={(event) => setReview((current) => ({ ...current, route: event.target.value as BillSubmissionRoute }))}><option value="ebill">E-bill</option><option value="fax">Fax</option><option value="mail">Mail</option><option value="email">Email</option></select></label></div><fieldset className="mb-lifecycle-packet"><legend>Supporting packet</legend>{data.bill.attachments.map((attachment) => <label key={attachment.id}><input type="checkbox" checked={review.attachmentIds.includes(attachment.id)} onChange={(event) => setReview((current) => ({ ...current, attachmentIds: event.target.checked ? [...current.attachmentIds, attachment.id] : current.attachmentIds.filter((id) => id !== attachment.id) }))} /><span><strong>{attachment.filename}</strong><small>{attachment.description || attachment.documentType}</small></span><button type="button" onClick={() => void lifecycle.openAttachment(attachment).catch(() => undefined)}>View</button></label>)}</fieldset><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !review.reason.trim() || !review.payerClaimControlNumber.trim()} onClick={() => void complete("Second Review submitted.", () => lifecycle.submitSecondReview(review))}>{lifecycle.isMutating ? "Submitting…" : "Submit Second Review"}</button></div></section></LifecycleDialog> : null}
 
@@ -428,6 +574,7 @@ export function ConnectedBillLifecycle({ appearance, sandboxControls = false, cl
 const CONNECTED_LIFECYCLE_STYLES = `
 .mb-lifecycle-simulator{display:grid;gap:14px;padding:18px;border:1px solid #b8dadd;border-radius:var(--mb-radius,14px);background:#f2fbfb}.mb-lifecycle-simulator>div:first-child>span{color:var(--mb-accent);font-size:.72rem;font-weight:850;letter-spacing:.09em;text-transform:uppercase}.mb-lifecycle-simulator h3{margin:3px 0 0;font-size:1.05rem}.mb-lifecycle-simulator p{margin:4px 0 0;color:var(--mb-muted)}.mb-lifecycle-simulator-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.mb-lifecycle-simulator-actions button{min-height:76px;border:1px solid #a9cccf;border-radius:10px;background:var(--mb-surface);color:var(--mb-text);cursor:pointer;padding:12px 14px;text-align:left;font:inherit}.mb-lifecycle-simulator-actions button:hover{border-color:var(--mb-accent);box-shadow:0 3px 14px rgba(23,108,112,.1)}.mb-lifecycle-simulator-actions button:disabled{cursor:not-allowed;opacity:.55}.mb-lifecycle-simulator-actions button strong,.mb-lifecycle-simulator-actions button span{display:block}.mb-lifecycle-simulator-actions button span{margin-top:3px;color:var(--mb-muted);font-size:.83rem}.mb-lifecycle-simulator-idle{padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.72)}
 .mb-connected-lifecycle{--mb-accent:#176c70;--mb-text:#17282d;--mb-muted:#607176;--mb-border:#d7e0df;--mb-soft:#f4f7f6;--mb-surface:#fff;display:grid;gap:18px;color:var(--mb-text);font:14px/1.45 var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}.mb-connected-lifecycle *{box-sizing:border-box}.mb-lifecycle-head{display:flex;align-items:center;justify-content:space-between;gap:20px}.mb-lifecycle-title{display:flex;align-items:center;flex-wrap:wrap;gap:10px}.mb-lifecycle-title h2{margin:0;font-size:1.7rem}.mb-lifecycle-head p{margin:3px 0 0;color:var(--mb-muted)}.mb-lifecycle-tabs{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);padding:6px}.mb-lifecycle-tabs button{min-height:46px;border:0;border-radius:8px;background:transparent;color:var(--mb-muted);font:inherit;font-size:1rem;font-weight:750;cursor:pointer}.mb-lifecycle-tabs button[aria-selected=true]{background:var(--mb-accent);color:white}.mb-lifecycle-tabpanel{display:grid;gap:18px}.mb-lifecycle-button{min-height:40px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius,8px);background:var(--mb-input,#fff);color:var(--mb-text);cursor:pointer;font:inherit;font-weight:750;padding:9px 14px}.mb-lifecycle-button.primary{border-color:var(--mb-accent);background:var(--mb-accent);color:var(--mb-accent-contrast,#fff)}.mb-lifecycle-button:disabled{cursor:not-allowed;opacity:.5}.mb-lifecycle-actions-sheet{position:sticky;bottom:12px;z-index:24;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px;padding:10px;border:1px solid var(--mb-border);border-radius:12px;background:color-mix(in srgb,var(--mb-surface) 94%,transparent);box-shadow:0 10px 34px rgba(18,35,43,.16);backdrop-filter:blur(12px)}.mb-lifecycle-card,.mb-lifecycle-panel{padding:20px;border:1px solid var(--mb-border);border-radius:var(--mb-radius,14px);background:var(--mb-surface)}.mb-lifecycle-card header{display:flex;align-items:center;justify-content:space-between;gap:20px}.mb-lifecycle-card h3,.mb-lifecycle-panel h3{margin:0;font-size:1.08rem}.mb-lifecycle-card p,.mb-lifecycle-panel p{margin:3px 0 0;color:var(--mb-muted)}.mb-lifecycle-card header>span{display:grid;place-items:center;min-width:28px;height:28px;border-radius:999px;background:var(--mb-soft);font-weight:750}.mb-lifecycle-documents{list-style:none;margin:14px 0 0;padding:0}.mb-lifecycle-documents li{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--mb-border)}.mb-lifecycle-documents li>div{display:grid;gap:3px;min-width:0}.mb-lifecycle-documents li span{color:var(--mb-muted);font-size:.85rem}.mb-lifecycle-dialog-backdrop{position:fixed;z-index:2147483000;inset:0;display:grid;place-items:center;padding:20px;background:rgba(18,35,43,.56);backdrop-filter:blur(3px)}.mb-lifecycle-dialog{position:relative;width:min(760px,100%);max-height:calc(100vh - 40px);overflow:auto;outline:0}.mb-lifecycle-dialog-close{position:absolute;z-index:1;top:12px;right:12px;width:34px;height:34px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-text);cursor:pointer;font:22px/1 inherit}.mb-lifecycle-panel{display:grid;gap:17px;padding-top:24px;box-shadow:0 24px 70px rgba(18,35,43,.22)}.mb-lifecycle-panel label{display:grid;gap:6px;font-size:.85rem;font-weight:750}.mb-lifecycle-panel label small{color:var(--mb-muted);font-weight:500}.mb-lifecycle-panel input,.mb-lifecycle-panel select,.mb-lifecycle-panel textarea{width:100%;min-height:44px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius,8px);background:var(--mb-input,#fff);color:var(--mb-text);font:inherit;padding:10px 12px}.mb-lifecycle-panel textarea{min-height:100px;resize:vertical}.mb-lifecycle-fields{display:grid;gap:13px}.mb-lifecycle-fields.two{grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-fields .full{grid-column:1/-1}.mb-lifecycle-panel-actions{display:flex;justify-content:flex-end;gap:8px}.mb-lifecycle-packet{display:grid;gap:0;margin:0;padding:0;border:0}.mb-lifecycle-packet legend{margin-bottom:7px;font-size:.85rem;font-weight:800}.mb-lifecycle-packet>label{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--mb-border)}.mb-lifecycle-packet>label>input{width:16px;min-height:16px}.mb-lifecycle-packet>label>span{display:grid}.mb-lifecycle-packet button{border:0;background:transparent;color:var(--mb-accent);cursor:pointer;font:inherit}.mb-lifecycle-message,.mb-lifecycle-error,.mb-lifecycle-loading{padding:12px 14px;border-radius:9px}.mb-lifecycle-message.success{background:#edf9f2;color:#217449}.mb-lifecycle-message.error,.mb-lifecycle-error{background:#fff0ef;color:#9d3029}.mb-lifecycle-error{display:flex;align-items:center;gap:12px}.mb-lifecycle-error span{flex:1}.mb-lifecycle-error button{border:1px solid currentColor;border-radius:7px;background:transparent;color:inherit;padding:7px 10px}
+.mb-lifecycle-dialog.wide{width:min(1280px,100%)}.mb-lifecycle-correction{display:grid;gap:16px;padding:22px;border-radius:var(--mb-radius,14px);background:var(--mb-surface);box-shadow:0 24px 70px rgba(18,35,43,.22)}.mb-lifecycle-correction>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-right:42px}.mb-lifecycle-correction h3{margin:0;font-size:1.2rem}.mb-lifecycle-correction header p{margin:4px 0 0;color:var(--mb-muted)}.mb-lifecycle-correction-reason,.mb-lifecycle-correction-contact{display:grid;gap:4px;padding:13px 15px;border-radius:10px}.mb-lifecycle-correction-reason{border-left:4px solid #c5443f;background:#fff2f1;color:#812d29}.mb-lifecycle-correction-contact{border:1px solid color-mix(in srgb,var(--mb-accent) 35%,var(--mb-border));background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface))}.mb-lifecycle-correction-note{display:grid;gap:6px;font-size:.85rem;font-weight:750}.mb-lifecycle-correction-note textarea{min-height:76px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius,8px);background:var(--mb-input,#fff);color:var(--mb-text);font:inherit;padding:10px 12px;resize:vertical}
 .mb-payment-total{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:9px;background:var(--mb-soft)}.mb-payment-total strong{font-size:1.12rem}
-@media(max-width:700px){.mb-lifecycle-head,.mb-lifecycle-card header{align-items:stretch;flex-direction:column}.mb-lifecycle-head>.mb-lifecycle-button{width:100%}.mb-lifecycle-actions-sheet{bottom:calc(var(--mb-host-bottom-offset,72px) + env(safe-area-inset-bottom) + 8px);grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-actions-sheet .mb-lifecycle-button:last-child:nth-child(odd){grid-column:1/-1}.mb-lifecycle-fields.two{grid-template-columns:1fr}.mb-lifecycle-fields .full{grid-column:auto}.mb-lifecycle-dialog-backdrop{align-items:end;padding:0}.mb-lifecycle-dialog{max-height:92vh}.mb-lifecycle-dialog .mb-lifecycle-panel{border-radius:18px 18px 0 0}.mb-lifecycle-tabs button{font-size:.9rem}.mb-lifecycle-title h2{font-size:1.4rem}}
+@media(max-width:700px){.mb-lifecycle-head,.mb-lifecycle-card header{align-items:stretch;flex-direction:column}.mb-lifecycle-head>.mb-lifecycle-button{width:100%}.mb-lifecycle-actions-sheet{bottom:calc(var(--mb-host-bottom-offset,72px) + env(safe-area-inset-bottom) + 8px);grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-actions-sheet .mb-lifecycle-button:last-child:nth-child(odd){grid-column:1/-1}.mb-lifecycle-fields.two{grid-template-columns:1fr}.mb-lifecycle-fields .full{grid-column:auto}.mb-lifecycle-dialog-backdrop{align-items:end;padding:0}.mb-lifecycle-dialog{max-height:96vh}.mb-lifecycle-dialog .mb-lifecycle-panel,.mb-lifecycle-correction{border-radius:18px 18px 0 0}.mb-lifecycle-correction{padding:18px 12px}.mb-lifecycle-correction>header{align-items:stretch;flex-direction:column;padding-right:42px}.mb-lifecycle-tabs button{font-size:.9rem}.mb-lifecycle-title h2{font-size:1.4rem}}
 `;

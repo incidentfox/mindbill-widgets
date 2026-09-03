@@ -72,6 +72,26 @@ webhook correlation; keep `bill.externalId` as the idempotency and partner
 correlation key. The first persisted bill is still the submitted immutable
 snapshot—there is no draft mutation API.
 
+If a submission is rejected, keep that same canonical `billId`. A correction
+creates another immutable submission attempt under the logical bill; it does
+not create a new partner-visible bill. Send the complete corrected snapshot
+and the documents that should accompany the new attempt:
+
+```ts
+await billing.resubmitBill({
+  reason: "Corrected the rejected service date.",
+  bill: correctedBill,
+  documents: correctedDocuments,
+});
+```
+
+MindBill preserves the original attempt, rejection, corrected attempt, later
+acknowledgements, EORs, and payments in one lifecycle. Each outbound attempt
+gets the next patient-control-number suffix (`-1`, `-2`, `-3`, ...), while the
+public `billId` remains stable. Rejection issues can include `fieldPaths`; use
+them to call attention to implicated controls without treating the
+clearinghouse response as a replacement for normal validation.
+
 Pass `billId` for the submitted bill. An optional `resource: { billId }`
 restriction makes the session usable for only that bill.
 

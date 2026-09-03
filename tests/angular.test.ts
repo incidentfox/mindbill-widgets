@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { mindBillAngularAppearanceStyle } from "../packages/angular/src/lib/appearance";
@@ -28,6 +29,22 @@ describe("Angular bill rejection notice", () => {
     expect(issues.some((issue) => Boolean(issue.code))).toBe(true);
     expect(mindBillAngularAppearanceStyle({ preset: "mindbill" })["--danger"]).toBe("#b63d35");
     expect(billRejectionIssueSummary(rejection, 1)).toBe("1 validation error returned by Jopari.");
+  });
+});
+
+describe("Angular rejected-bill correction", () => {
+  it("reuses the complete submission form and sends a corrected immutable attempt", () => {
+    const source = readFileSync(
+      new URL("../packages/angular/src/lib/bill-lifecycle.component.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("<mindbill-bill-submission");
+    expect(source).toContain('[attentionFields]="correctionAttentionFields"');
+    expect(source).toContain('[submitter]="resubmitFromForm"');
+    expect(source).toContain("bill: input.bill");
+    expect(source).toContain("documents: input.documents");
+    expect(source).toContain("loadBlob: () => this.store.getAttachment(attachment.id)");
   });
 });
 

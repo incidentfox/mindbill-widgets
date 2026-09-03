@@ -139,6 +139,14 @@ older deployments is unchanged.
 
 `ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, rejection details, EORs, remittance, and payments directly from MindBill. React and Angular both show rejected bills as an action-required surface with the full ordered issue list and acknowledgement codes; both also export that rejection notice for custom layouts. Do not pass or maintain lifecycle seed data in your application. Authenticated packet previews open the PDF directly in a new tab.
 
+A rejection does not end the logical bill or require the partner to create a
+replacement bill. React and Angular reopen their complete submission form with
+the submitted snapshot and documents, call attention to fields implicated by
+the acknowledgement, and send the corrected data as the next immutable
+submission attempt. The public bill ID stays stable; MindBill assigns attempt
+suffixes such as `-1`, `-2`, and `-3` to the patient control number and keeps
+all rejections, acknowledgements, EORs, and payments in one history.
+
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";
 
