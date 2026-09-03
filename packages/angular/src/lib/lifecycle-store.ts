@@ -9,6 +9,7 @@ import {
   type ReportBillStatusInput,
   type ResubmitBillInput,
   type SendDuplicateBillInput,
+  type SubmitNewBillInput,
   type SubmitSecondReviewInput,
 } from "@mindbill/browser";
 
@@ -64,6 +65,7 @@ export class MindBillLifecycleStore {
   closeBill(input: CloseBillInput) { return this.mutate(() => this.requireClient().closeBill(input)); }
   postPayment(input: PostBillPaymentInput) { return this.mutate(() => this.requireClient().postPayment(input)); }
   resubmitBill(input: ResubmitBillInput) { return this.mutate(() => this.requireClient().resubmitBill(input)); }
+  submitNewBill(input: SubmitNewBillInput) { return this.mutate(() => this.requireClient().submitNewBill(input)); }
   submitSecondReview(input: SubmitSecondReviewInput) { return this.mutate(() => this.requireClient().submitSecondReview(input)); }
   sendDuplicateBill(input: SendDuplicateBillInput) { return this.mutate(() => this.requireClient().sendDuplicateBill(input)); }
   reportBillStatus(input: ReportBillStatusInput) { return this.mutate(() => this.requireClient().reportBillStatus(input)); }
