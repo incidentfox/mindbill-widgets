@@ -1680,8 +1680,8 @@ describe("connected bill lifecycle", () => {
     );
 
     // The dialog reuses BillSubmissionForm prefilled from the closed bill's
-    // snapshot with carried-forward documents, and offers an explicit Cancel
-    // button returning to the closed-bill view.
+    // snapshot with carried-forward documents. The dialog has one close control
+    // (the accessible X), rather than a second full-width Cancel action.
     const dialog = source.slice(
       source.indexOf('panel === "submit_new_bill"'),
       source.indexOf('panel === "second_review"'),
@@ -1689,7 +1689,33 @@ describe("connected bill lifecycle", () => {
     expect(dialog).toContain("initialBill={correctionInitialBill}");
     expect(dialog).toContain("attachments={correctionAttachments}");
     expect(dialog).toContain("onSubmit={submitNewBillFromForm}");
-    expect(dialog).toContain(">Cancel</button>");
+    expect(dialog).not.toContain(">Cancel</button>");
+    expect(source).toContain('className="mb-lifecycle-dialog-close" aria-label="Close"');
+  });
+
+  it("keeps correction dialogs mobile-safe and presents complete payer contact methods", () => {
+    const lifecycleSource = readFileSync(
+      new URL("../packages/react/src/connected-bill-lifecycle.tsx", import.meta.url),
+      "utf8",
+    );
+    const readOnlySource = readFileSync(
+      new URL("../packages/react/src/bill-read-only-form.tsx", import.meta.url),
+      "utf8",
+    );
+    const submissionSource = readFileSync(
+      new URL("../packages/react/src/bill-submission-form.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(readOnlySource).toContain('aria-label="Claims administrator information section"');
+    expect(lifecycleSource).toContain("CorrectionVerificationContact");
+    expect(lifecycleSource).toContain('label: "Phone"');
+    expect(lifecycleSource).toContain('label: "Email"');
+    expect(lifecycleSource).toContain('label: "Fax"');
+    expect(lifecycleSource).toContain('label: "Portal"');
+    expect(lifecycleSource).toContain('label: "Mail"');
+    expect(lifecycleSource).toContain("Live clearinghouse submission");
+    expect(submissionSource).toContain(".mbsf.mbsf-lifecycle-correction .mbsf-actions{position:static");
   });
 
   it("passes claim context through payer search and preserves recommendation reasons", async () => {
