@@ -1,6 +1,6 @@
 "use client";
 
-// daisyBill-style submissions ribbon: a horizontal scrollable row of chips —
+// Submissions ribbon: a horizontal scrollable row of chips —
 // one per bill submission (Original Bill, Second Review, Duplicate Bill, …) —
 // each with an optional deadline badge and up to three small label/value meta
 // pairs (delivery route, sent date, acknowledgement). Purely presentational;

@@ -317,7 +317,7 @@ Never send a Partner API key or long-lived credential to React/browser code.
 
 ## Bill tasks worklist, submissions ribbon, and payer status calls
 
-`BillTasksDashboard` is the daisyBill-style Bill Tasks worklist: one tone-colored card per task section, rows bucketed by age (1-30 / 31-60 / 61-90 / 91-180 / 181+ days), clickable counts that carry the bill refs behind them, and a grand-total card. It is purely props-driven — aggregate your own work items with `buildBillTasksDashboard` (re-exported from `@mindbill/browser`):
+`BillTasksDashboard` is a Bill Tasks worklist: one tone-colored card per task section, rows bucketed by age (1-30 / 31-60 / 61-90 / 91-180 / 181+ days), clickable counts that carry the bill refs behind them, and a grand-total card. It is purely props-driven — aggregate your own work items with `buildBillTasksDashboard` (re-exported from `@mindbill/browser`):
 
 ```tsx
 import { BillTasksDashboard, buildBillTasksDashboard } from "@mindbill/react";

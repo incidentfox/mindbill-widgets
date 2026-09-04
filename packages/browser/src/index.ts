@@ -484,7 +484,6 @@ export type BillClaimsAdministratorPattern = {
 
 export type BillClaimsAdministratorPayer = {
   name: string;
-  daisyBillPayerId?: string | null;
   route?: string | null;
   aliases?: string[];
   hint?: string | null;
@@ -542,7 +541,7 @@ export type BillLifecycleData = BillReviewData & {
   };
   eors: BillEorDocument[];
   activity: BillActivityRecord[];
-  /** daisyBill-style presented history rows. Optional: absent when the API
+  /** Presented history rows. Optional: absent when the API
    *  predates the presented-history rollout — fall back to `activity`. */
   history?: BillHistoryEntry[];
   payments: BillPaymentRecord[];
@@ -601,7 +600,7 @@ export type ReportBillStatusOption = {
   description: string;
 };
 
-/** The five daisyBill-worded outcomes of a bill payment-status phone call. */
+/** The five supported outcomes of a bill payment-status phone call. */
 export const REPORT_BILL_STATUS_OPTIONS: ReportBillStatusOption[] = [
   {
     id: "message_left",
@@ -1513,7 +1512,7 @@ export function createOrganizationClient({
 }
 
 // ---------------------------------------------------------------------------
-// Bill Tasks dashboard (daisyBill-style worklist): a pure, framework-neutral
+// Bill Tasks dashboard: a pure, framework-neutral
 // aggregation shared by the React and Angular components. Hosts flatten their
 // own work items and get back per-section rows bucketed by age in days.
 
@@ -1595,7 +1594,7 @@ export function billTasksAgingBucketIndex(
 }
 
 /**
- * Aggregates flat work items into the daisyBill-style Bill Tasks dashboard.
+ * Aggregates flat work items into the Bill Tasks dashboard.
  * Sections render in the given order even when empty; rows appear in
  * first-seen item order within their section.
  */

@@ -70,7 +70,7 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
 
         <section class="card"><div class="card-title"><div><h3>Bill history</h3><p>Submissions, payer responses, follow-up, and payments.</p></div><span>{{ data.history?.length ?? data.activity.length }}</span></div>
           @if (data.history?.length) {
-            <!-- daisyBill-style Date/Action/User/Details table: submissions are pale-blue
+            <!-- Date/Action/User/Details table: submissions are pale-blue
                  expandable rows (documents + compliance due dates), notes pale-yellow,
                  277 responses expand into decoded status-code sentences. Rows arrive
                  pre-worded from the MindBill API (BillLifecycleData.history). -->

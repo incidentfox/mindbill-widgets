@@ -196,7 +196,7 @@ export type BillSubmissionFormProps = {
   /** Common NUCC provider taxonomies are bundled; supplied values extend or replace matching codes. */
   taxonomyOptions?: BillSubmissionTaxonomyOption[];
   /**
-   * The daisyBill-style delivery-method dialog shown when the biller submits.
+   * The delivery-method dialog shown when the biller submits.
    * "auto" (default) shows it in connected mode whenever the delivery preview
    * is available; "off" submits directly on MindBill's recommended route.
    */
@@ -651,7 +651,7 @@ export function BillSubmissionForm({
   const [sourceAttachmentReportTypes, setSourceAttachmentReportTypes] = useState<Record<string, string>>(() => Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : [])));
   const [validationActive, setValidationActive] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
-  // The daisyBill-style delivery-method dialog staged with the validated bill.
+  // The delivery-method dialog staged with the validated bill.
   const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; complete: CompleteBillSubmissionInput } | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]); const [payerLoading, setPayerLoading] = useState(false);

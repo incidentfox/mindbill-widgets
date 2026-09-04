@@ -43,7 +43,7 @@ function Main({ directory }: { directory: BillClaimsAdministratorDirectory }): R
       ["Also known as", list(directory.aliases)], ["Affiliated entities", list(directory.affiliatedEntities)],
       ["Hours of operation", directory.hours ?? "—"], ["Telephone numbers", list(directory.telephoneNumbers, "phone")],
       ["Email addresses", list(directory.emailAddresses, "email")], ["Web portals", list(directory.webPortals, "url")],
-      ["Payers", directory.payers?.length ? <ul className="mbcad-list">{directory.payers.map((payer, index) => <li key={`${payer.name}-${index}`}><strong>{payer.name}</strong>{payer.daisyBillPayerId ? ` · daisyBill Payer ID ${payer.daisyBillPayerId}` : ""}{payer.route ? ` · ${payer.route}` : ""}{payer.hint ? <small>{payer.hint}</small> : null}</li>)}</ul> : "—"],
+      ["Payers", directory.payers?.length ? <ul className="mbcad-list">{directory.payers.map((payer, index) => <li key={`${payer.name}-${index}`}><strong>{payer.name}</strong>{payer.route ? ` · ${payer.route}` : ""}{payer.hint ? <small>{payer.hint}</small> : null}</li>)}</ul> : "—"],
       ["Bill processing workflow", directory.billProcessingWorkflow ?? "—"],
       ["Bill processing workflow notes", directory.billProcessingWorkflowNotes ?? "—"],
       ["Claim number hint", directory.claimNumberHint ?? "—"],

@@ -1,6 +1,6 @@
 "use client";
 
-// daisyBill-style "Bill Tasks" dashboard: one rounded, tone-colored card per
+// "Bill Tasks" dashboard: one rounded, tone-colored card per
 // task section (Payment Due, No Response, Denied, …), rows bucketed by age in
 // days with colored bucket header pills, per-cell click-through counts, and a
 // closing grand-total card. Purely props-driven: hosts aggregate their own

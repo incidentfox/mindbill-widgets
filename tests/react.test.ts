@@ -956,7 +956,7 @@ describe("bill lifecycle surfaces", () => {
     expect(source).not.toContain("claimsAdministratorRecommendations(payerResults)");
   });
 
-  it("renders all five claims-administrator directory tabs and payer identifiers", () => {
+  it("renders all five claims-administrator directory tabs and partner-safe payer routes", () => {
     const source = readFileSync(
       new URL("../packages/react/src/claims-administrator-directory-dialog.tsx", import.meta.url),
       "utf8",
@@ -965,8 +965,8 @@ describe("bill lifecycle surfaces", () => {
     for (const label of ["Main", "Bill Review", "Authorization Info", "Mailing Address", "Claim Number Pattern"]) {
       expect(source).toContain(JSON.stringify(label));
     }
-    expect(source).toContain("daisyBill Payer ID");
     expect(source).not.toContain("Directory ID");
+    expect(source).toContain("payer.route");
     expect(source).toContain("var(--mb-surface,#fff)");
     expect(source).toContain("background:var(--mbcad-surface)");
   });
