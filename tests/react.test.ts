@@ -65,6 +65,7 @@ import {
   BillSubmissionProvidersSection,
   BillSubmissionServiceLinesSection,
   chooseClaimsAdministrator,
+  claimNumberPatternMatches,
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
   claimsAdministratorRecommendations,
@@ -340,6 +341,10 @@ describe("atomic bill submission form contract", () => {
       payerSelectionRequired: true,
       payers: payer.payers,
     });
+    expect(chooseClaimsAdministrator(payer, "pd:multi-tpa/alpha").payerId)
+      .toBe("pd:multi-tpa/alpha");
+    expect(chooseClaimsAdministrator(payer, "pd:multi-tpa/unknown").payerId)
+      .toBeUndefined();
     expect(chooseClaimsAdministrator({
       ...payer,
       payers: [{ id: "pd:multi-tpa/alpha", label: "Alpha Casualty" }],
@@ -348,6 +353,19 @@ describe("atomic bill submission form contract", () => {
       id: "pd:plain",
       name: "Plain Payer",
     });
+  });
+
+  it("checks claim numbers against a directory example without inventing unsupported rules", () => {
+    const pattern = {
+      length: 7,
+      pattern: "The letters 'WC', five numbers",
+      example: "WC99999",
+      matches: null,
+    };
+    expect(claimNumberPatternMatches(pattern, "WC57539")).toBe(true);
+    expect(claimNumberPatternMatches(pattern, "WC5753")).toBe(false);
+    expect(claimNumberPatternMatches({ pattern: "See payer instructions", matches: null }, "ABC"))
+      .toBeNull();
   });
 
   it("submits only the administrator reference and the chosen payerId", () => {
@@ -593,7 +611,7 @@ describe("pre-submission reference data", () => {
     ]);
   });
 
-  it("browses paginated administrators and preserves Sedgwick routing metadata", async () => {
+  it("browses paginated administrators and preserves suggestions, patterns, and routing metadata", async () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ token: "short-lived-reference-token" }))
       .mockResolvedValueOnce(jsonResponse({
@@ -604,6 +622,12 @@ describe("pre-submission reference data", () => {
           name: "Sedgwick Claims Management Services, Inc.",
           aliases: ["York Risk Services Group"],
           affiliatedEntities: ["State Farm"],
+          claimNumberPatterns: [{
+            length: 7,
+            pattern: "The letters 'WC', five numbers",
+            example: "WC99999",
+            matches: true,
+          }],
           payerSelectionRequired: true,
           payers: [{
             id: "pd:sedgwick/county-la-unit-c",
@@ -620,10 +644,25 @@ describe("pre-submission reference data", () => {
             preferredClearinghouse: "carisk",
           }],
         }],
+        suggestions: [{
+          id: "pd:sedgwick",
+          name: "Sedgwick Claims Management Services, Inc.",
+          deterministic: true,
+          reason: "Exact report-name mapping and employer routing evidence.",
+          selectedPayerId: "pd:sedgwick/county-la-unit-c",
+          payerSelectionRequired: true,
+          payers: [{ id: "pd:sedgwick/county-la-unit-c", label: "County of Los Angeles (CA) Unit C" }],
+        }],
       }));
     const client = createBillReferenceClient({ fetch: fetcher });
 
-    await expect(client.listClaimsAdministrators({ limit: 50, offset: 50 })).resolves.toEqual({
+    await expect(client.listClaimsAdministrators({
+      limit: 50,
+      offset: 50,
+      claimNumber: "WC57539",
+      sourceClaimsAdministratorName: "Sedgwick",
+      employerName: "Synthetic Employer",
+    })).resolves.toMatchObject({
       total: 941,
       nextOffset: 100,
       results: [{
@@ -631,6 +670,12 @@ describe("pre-submission reference data", () => {
         name: "Sedgwick Claims Management Services, Inc.",
         aliases: ["York Risk Services Group"],
         affiliatedEntities: ["State Farm"],
+        claimNumberPatterns: [{
+          length: 7,
+          pattern: "The letters 'WC', five numbers",
+          example: "WC99999",
+          matches: true,
+        }],
         payerSelectionRequired: true,
         payers: [{
           id: "pd:sedgwick/county-la-unit-c",
@@ -647,9 +692,14 @@ describe("pre-submission reference data", () => {
           preferredClearinghouse: "carisk",
         }],
       }],
+      suggestions: [{
+        id: "pd:sedgwick",
+        deterministic: true,
+        selectedPayerId: "pd:sedgwick/county-la-unit-c",
+      }],
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?limit=50&offset=50",
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?claimNumber=WC57539&sourceClaimsAdministratorName=Sedgwick&employerName=Synthetic+Employer&limit=50&offset=50",
     );
   });
 
@@ -1010,7 +1060,7 @@ describe("bill lifecycle surfaces", () => {
     expect(source).toContain('map((code) => ({ code, description: "" }))');
   });
 
-  it("requires an explicit claims-administrator choice and exposes the supplied host hint", () => {
+  it("requires an explicit claims-administrator choice and exposes source evidence and suggestions", () => {
     const source = readFileSync(
       new URL("../packages/react/src/bill-submission-form.tsx", import.meta.url),
       "utf8",
@@ -1019,7 +1069,9 @@ describe("bill lifecycle surfaces", () => {
     expect(source).toContain("Browse or search claims administrators…");
     expect(source).toContain("filterOptions={false}");
     expect(source).toContain("onEndReached={() => loadPayers");
-    expect(source).toContain("Claims administrator in your system:");
+    expect(source).toContain("claimsAdministratorSources");
+    expect(source).toContain("Suggested:");
+    expect(source).toContain("Matches a known claim number pattern");
     expect(source).toContain("invalid={!administrator?.id}");
     expect(source).not.toContain("Showing 5 suggestions");
     expect(source).not.toContain("claimsAdministratorRecommendations(payerResults)");

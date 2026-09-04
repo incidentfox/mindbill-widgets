@@ -6,6 +6,7 @@ import {
   createBillReferenceClient,
   createBillSubmissionClient,
   type BillDeliveryOptions,
+  type BillClaimsAdministratorSource,
   type BillClaimsAdministratorDirectory,
   type BrowserBillSubmissionDocument,
   type BrowserBillSubmissionResult,
@@ -14,6 +15,7 @@ import {
   type BillReviewPayerListInput,
   type BillReviewPayerOption,
   type BillReviewPayerPage,
+  type BillReviewPayerSuggestion,
 } from "@mindbill/browser";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
@@ -191,7 +193,9 @@ export type BillSubmissionFormProps = {
   /** @deprecated Prefer onListClaimsAdministrators for browse and pagination support. */
   onSearchClaimsAdministrators?: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   onGetClaimsAdministratorDirectory?: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
-  /** Free-text name from the host system, shown as a hint while choosing the canonical directory entry. */
+  /** Host-system evidence shown without preselecting a canonical directory entry. EAMS evidence takes precedence. */
+  claimsAdministratorSources?: readonly BillClaimsAdministratorSource[];
+  /** @deprecated Prefer claimsAdministratorSources so the source label and optional URL remain explicit. */
   claimsAdministratorHint?: ReactNode;
   diagnosisOptions?: BillSubmissionDiagnosisOption[];
   onSearchDiagnoses?: (query: string, limit?: number, offset?: number) => Promise<BillSubmissionDiagnosisOption[]>;
@@ -490,6 +494,7 @@ const css = `
 .mbsf-card{min-width:0;margin:0;padding:24px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}.mbsf-card[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-legend{padding:0 10px;font-size:18px;font-weight:760}.mbsf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}.mbsf-subhead{grid-column:1/-1;margin:6px 0 -2px;padding-top:14px;border-top:1px solid var(--mb-border);font-size:15px;font-weight:780;letter-spacing:.01em}.mbsf-subhead:first-child{margin-top:0;padding-top:0;border-top:0}.mbsf-span{grid-column:1/-1}.mbsf-field{display:grid;align-content:start;gap:7px;min-width:0}.mbsf-label{font-weight:680}.mbsf-input,.mbsf-select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbsf-input:focus,.mbsf-select:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}.mbsf-field[data-invalid=true] .mbsf-input,.mbsf-field[data-invalid=true] .mbsf-select,.mbsf-invalid-control .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-field[data-invalid=true] .mbsf-input:focus,.mbsf-field[data-invalid=true] .mbsf-select:focus{outline-color:color-mix(in srgb,var(--mb-danger) 24%,transparent)}
 .mbsf-combo{position:relative}.mbsf-menu{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:min(420px,52vh);overflow:auto;overscroll-behavior:contain;padding:7px;border:1px solid var(--mb-border);border-radius:12px;background:var(--mb-surface);box-shadow:0 14px 35px rgba(17,38,49,.16)}.mbsf-option{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;width:100%;padding:11px 12px;border:0;border-radius:8px;background:transparent;color:var(--mb-text);font:inherit;text-align:left;cursor:pointer}.mbsf-option+.mbsf-option{border-top:1px solid color-mix(in srgb,var(--mb-border) 65%,transparent)}.mbsf-option:hover,.mbsf-option:focus{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface));outline:0}.mbsf-option-main{display:grid;gap:5px;min-width:0}.mbsf-option small{color:var(--mb-muted);overflow-wrap:anywhere;line-height:1.35}.mbsf-option-route{align-self:start;margin-top:2px;color:var(--mb-accent);font-size:13px;font-weight:750;white-space:nowrap}.mbsf-option-badges{display:flex;flex-wrap:wrap;gap:5px}.mbsf-option-badge{padding:2px 7px;border:1px solid var(--mb-border);border-radius:999px;color:var(--mb-muted);font-size:11px;line-height:1.35}.mbsf-option-affiliates{display:block}.mbsf-option-affiliates strong{color:var(--mb-text);font-size:12px}.mbsf-menu-status{padding:12px;text-align:center;color:var(--mb-muted);font-size:13px}.mbsf-directory-link{justify-self:start;border:0;padding:0;background:transparent;color:var(--mb-accent);font:inherit;font-weight:700;text-align:left;text-decoration:underline;cursor:pointer}
 .mbsf-payer-status{display:flex;align-items:center;gap:7px;color:#087f5b;font-size:13px;font-weight:650}.mbsf-payer-intro{margin:4px 0 0;color:var(--mb-muted)}.mbsf-payer-list{display:grid;gap:8px}.mbsf-payer-option{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface))}.mbsf-payer-option-main{display:grid;gap:5px;min-width:0}.mbsf-payer-option-main strong{overflow-wrap:anywhere}.mbsf-payer-signals{display:flex;flex-wrap:wrap;gap:6px}.mbsf-payer-signal{padding:2px 7px;border:1px solid var(--mb-border);border-radius:999px;color:var(--mb-muted);font-size:12px}.mbsf-payer-signal[data-state=match]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));color:#087f5b}.mbsf-payer-signal[data-state=warning]{border-color:color-mix(in srgb,#c56a00 55%,var(--mb-border));color:#9a5200}
+.mbsf-source-evidence{display:grid;gap:4px;color:var(--mb-muted);font-size:13px}.mbsf-source-evidence a{color:var(--mb-accent);font-weight:700}.mbsf-source-evidence q{color:var(--mb-text)}.mbsf-suggestions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--mb-muted);font-size:13px}.mbsf-suggestion{padding:5px 10px;border:1px solid color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));color:var(--mb-accent);font:inherit;font-weight:700;cursor:pointer}.mbsf-suggestion:hover,.mbsf-suggestion:focus{outline:2px solid color-mix(in srgb,var(--mb-accent) 25%,transparent)}.mbsf-claim-patterns{display:grid;gap:4px;margin-top:2px;font-size:13px}.mbsf-claim-patterns[data-state=match]{color:#087f5b}.mbsf-claim-patterns[data-state=warning]{color:#9a5200}.mbsf-claim-pattern-list{color:var(--mb-muted)}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
 .mbsf-lines{margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(112px,.7fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
@@ -576,6 +581,20 @@ export function claimsAdministratorRecommendations(results: BillReviewPayer[], l
     .slice(0, Math.max(0, limit));
 }
 
+export function claimNumberPatternMatches(
+  pattern: NonNullable<BillReviewPayer["claimNumberPatterns"]>[number],
+  claimNumber: string,
+): boolean | null {
+  const example = pattern.example?.trim();
+  if (example && /9{2,}/.test(example)) {
+    const expression = [...example].map((character) => character === "9"
+      ? "\\d"
+      : character.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("");
+    return new RegExp(`^${expression}$`, "i").test(claimNumber.trim());
+  }
+  return pattern.matches ?? null;
+}
+
 /**
  * Form-state claims administrator for a directory pick. When the administrator
  * requires payer selection it carries the payer (routing payer) choices and
@@ -584,14 +603,19 @@ export function claimsAdministratorRecommendations(results: BillReviewPayer[], l
  */
 export function chooseClaimsAdministrator(
   payer: Pick<BillReviewPayer, "id" | "name" | "payerSelectionRequired" | "payers">,
+  selectedPayerId?: string,
 ): NonNullable<BillSubmissionInput["claim"]["claimsAdministrator"]> {
   if (!payer.payerSelectionRequired) return { id: payer.id, name: payer.name };
   const payers = (payer.payers ?? []).map((option) => ({ ...option }));
+  const resolvedPayerId = selectedPayerId && payers.some((option) => option.id === selectedPayerId)
+    ? selectedPayerId
+    : undefined;
   return {
     id: payer.id,
     name: payer.name,
     payerSelectionRequired: true,
     ...(payers.length ? { payers } : {}),
+    ...(resolvedPayerId ? { payerId: resolvedPayerId } : {}),
   };
 }
 
@@ -638,7 +662,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 
 export function BillSubmissionForm({
   initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
-  fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorHint,
+  fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
@@ -659,6 +683,8 @@ export function BillSubmissionForm({
   const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; complete: CompleteBillSubmissionInput } | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]); const [payerLoading, setPayerLoading] = useState(false);
+  const [payerSuggestions, setPayerSuggestions] = useState<BillReviewPayerSuggestion[]>([]);
+  const [selectedPayerMetadata, setSelectedPayerMetadata] = useState<BillReviewPayer | null>(null);
   const [payerLoadingMore, setPayerLoadingMore] = useState(false); const [payerQuery, setPayerQuery] = useState<string | null>(null); const [payerHasMore, setPayerHasMore] = useState(true);
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [directory, setDirectory] = useState<BillClaimsAdministratorDirectory | null>(null);
@@ -671,6 +697,10 @@ export function BillSubmissionForm({
   const formRef = useRef<HTMLFormElement>(null); const fileInput = useRef<HTMLInputElement>(null);
   const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false); const payerRequest = useRef(0); const payerAppendPending = useRef(false);
   const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, procedureOptions), [procedureOptions]);
+  const orderedClaimsAdministratorSources = useMemo(() => [...(claimsAdministratorSources ?? [])]
+    .filter((source) => source.name.trim())
+    .sort((left, right) => Number(right.source.toLowerCase() === "eams") - Number(left.source.toLowerCase() === "eams")), [claimsAdministratorSources]);
+  const sourceClaimsAdministratorName = orderedClaimsAdministratorSources[0]?.name.trim() ?? "";
   const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
   const taxonomies = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_TAXONOMIES, taxonomyOptions), [taxonomyOptions]);
   const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialEvaluationType(initialBill));
@@ -690,8 +720,8 @@ export function BillSubmissionForm({
     setBill(cloneInitialBill(initialBill)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
     setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
-    setPayerResults([]); setPayerQuery(null); setPayerHasMore(true); payerRequest.current += 1; payerAppendPending.current = false;
-  }, [initialBill, attachments]);
+    setPayerResults([]); setPayerSuggestions([]); setSelectedPayerMetadata(null); setPayerQuery(null); setPayerHasMore(true); payerRequest.current += 1; payerAppendPending.current = false;
+  }, [initialBill, attachments, sourceClaimsAdministratorName]);
   useEffect(() => {
     if (!validationActive) return;
     const next = validateBillSubmission(bill).fieldErrors;
@@ -753,7 +783,7 @@ export function BillSubmissionForm({
     if (continuing) { payerAppendPending.current = true; setPayerLoadingMore(true); }
     else { setPayerLoading(true); setPayerLoadingMore(false); setPayerQuery(trimmed); setPayerHasMore(true); }
     const page: Promise<BillReviewPayerPage> = list
-      ? list({ query: trimmed, claimNumber: bill.claim.claimNumber, limit: PAYER_PAGE_SIZE, offset })
+      ? list({ query: trimmed, claimNumber: bill.claim.claimNumber, ...(sourceClaimsAdministratorName ? { sourceClaimsAdministratorName } : {}), ...(bill.claim.employer ? { employerName: bill.claim.employer } : {}), limit: PAYER_PAGE_SIZE, offset })
       : legacySearch!(trimmed, bill.claim.claimNumber).then((results): BillReviewPayerPage => ({ results, total: results.length }));
     void page.then((result) => {
       if (request !== payerRequest.current) return;
@@ -761,6 +791,7 @@ export function BillSubmissionForm({
         const combined = continuing ? [...current, ...result.results] : result.results;
         return [...new Map(combined.map((payer) => [payer.id, payer])).values()];
       });
+      if (!continuing) setPayerSuggestions(result.suggestions ?? []);
       setPayerHasMore(result.nextOffset != null ? result.nextOffset > offset : offset + result.results.length < result.total);
     }).catch((caught: unknown) => {
       if (request === payerRequest.current) setFormError(caught instanceof Error ? caught.message : "Claims administrator search is unavailable.");
@@ -768,8 +799,9 @@ export function BillSubmissionForm({
       if (request !== payerRequest.current) return;
       payerAppendPending.current = false; setPayerLoading(false); setPayerLoadingMore(false);
     });
-  }, [bill.claim.claimNumber, onListClaimsAdministrators, onSearchClaimsAdministrators, payerHasMore, payerQuery, payerResults.length, referenceClient]);
+  }, [bill.claim.claimNumber, bill.claim.employer, onListClaimsAdministrators, onSearchClaimsAdministrators, payerHasMore, payerQuery, payerResults.length, referenceClient, sourceClaimsAdministratorName]);
   const searchPayers = (query: string) => {
+    setSelectedPayerMetadata(null);
     setBill((current) => {
       const selected = current.claim.claimsAdministrator;
       if (selected?.id && selected.name === query) return current;
@@ -892,8 +924,19 @@ export function BillSubmissionForm({
   }
 
   const claimsAdministratorError = errors["claim.claimsAdministrator"];
-  const choosePayer = (payer: Pick<BillReviewPayer, "id" | "name" | "payerSelectionRequired" | "payers">) => setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: chooseClaimsAdministrator(payer) } }));
+  const choosePayer = (payer: BillReviewPayer, selectedPayerId?: string) => {
+    setSelectedPayerMetadata(payer);
+    setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: chooseClaimsAdministrator(payer, selectedPayerId) } }));
+  };
   const administrator = bill.claim.claimsAdministrator;
+  const displayedPayerMetadata = selectedPayerMetadata?.id === administrator?.id ? selectedPayerMetadata : null;
+  const displayedClaimPatterns = (displayedPayerMetadata?.claimNumberPatterns ?? []).map((pattern) => ({
+    ...pattern,
+    matches: claimNumberPatternMatches(pattern, bill.claim.claimNumber),
+  }));
+  const evaluatedClaimPatterns = displayedClaimPatterns.filter((pattern) => pattern.matches != null);
+  const claimNumberMatches = evaluatedClaimPatterns.some((pattern) => pattern.matches);
+  const claimNumberPatternState = evaluatedClaimPatterns.length ? (claimNumberMatches ? "match" : "warning") : null;
   const subpayorOptions = administrator?.payerSelectionRequired ? administrator.payers ?? [] : [];
   const subpayorError = errors["claim.claimsAdministrator.payerId"];
   const selectedSubpayor = subpayorOptions.find((option) => option.id === administrator?.payerId);
@@ -933,16 +976,23 @@ export function BillSubmissionForm({
       <Field label="Treatment authorization # (optional)">{text(bill.service.authorizationNumber, (authorizationNumber) => setBill((c) => ({ ...c, service: { ...c.service, authorizationNumber } })), { placeholder: "Utilization-review authorization number" })}<small className="mbsf-help">Rides on the bill as CMS-1500 Box 23 / 837 REF*G1.</small></Field>
       <Field path="claim.dateOfInjury" label="Date of injury" required error={errors["claim.dateOfInjury"]}><TextDateInput ariaLabel="Date of injury" value={bill.claim.dateOfInjury} disabled={locked} required onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
       <Field path="claim.employer" label="Employer name" required error={errors["claim.employer"]}>{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
-      <Field path="claim.claimNumber" label="Claim number" required error={errors["claim.claimNumber"]}>{text(bill.claim.claimNumber, (claimNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, claimNumber } })))}</Field>
+      <Field path="claim.claimNumber" label="Claim number" required error={errors["claim.claimNumber"]}>{text(bill.claim.claimNumber, (claimNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, claimNumber } })))}
+        {displayedClaimPatterns.length ? <div className="mbsf-claim-patterns" data-state={claimNumberPatternState ?? undefined} role="status">
+          {claimNumberPatternState === "match" ? <strong>✓ Matches a known claim number pattern</strong> : claimNumberPatternState === "warning" ? <strong>⚠ Does not match the known claim number patterns</strong> : <strong>Known claim number patterns</strong>}
+          <span className="mbsf-claim-pattern-list">{displayedClaimPatterns.map((pattern) => `${pattern.pattern}${pattern.example ? ` (example: ${pattern.example})` : ""}`).join(" · ")}</span>
+        </div> : null}
+      </Field>
       <Field label="WCAB / ADJ number (optional)">{text(bill.claim.adjNumber, (adjNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, adjNumber } })))}</Field>
       <Field path="claim.claimsAdministrator" label="Claims administrator" required span error={claimsAdministratorError} invalid={!administrator?.id}>
-        <ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError) || !administrator?.id} disabled={locked} loading={payerLoading} loadingMore={payerLoadingMore} filterOptions={false} value={administrator?.name ?? ""} placeholder="Browse or search claims administrators…" options={payerResults.map((payer) => ({ id: payer.id, label: payer.name, detail: [payer.aliases?.length ? `Also known as ${payer.aliases.join(", ")}` : "", payer.claimNumberHint ?? ""].filter(Boolean).join(" · ") || "Claims administrator", ...(payer.affiliatedEntities?.length ? { affiliatedEntities: payer.affiliatedEntities } : {}), ...(payer.route ? { trailing: payer.route } : {}) }))} onOpen={() => { if (payerQuery !== "") loadPayers(""); }} onQuery={searchPayers} onEndReached={() => loadPayers(payerQuery ?? "", true)} onSelect={(option) => choosePayer(payerResults.find((payer) => payer.id === option.id) ?? { id: option.id, name: option.label })} />
+        <ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError) || !administrator?.id} disabled={locked} loading={payerLoading} loadingMore={payerLoadingMore} filterOptions={false} value={administrator?.name ?? ""} placeholder="Browse or search claims administrators…" options={payerResults.map((payer) => { const patternDetail = payer.claimNumberPatterns?.map((pattern) => `${pattern.pattern}${pattern.example ? ` (example: ${pattern.example})` : ""}`).join(" · ") ?? payer.claimNumberHint ?? ""; return { id: payer.id, label: payer.name, detail: [payer.aliases?.length ? `Also known as ${payer.aliases.join(", ")}` : "", patternDetail].filter(Boolean).join(" · ") || "Claims administrator", ...(payer.affiliatedEntities?.length ? { affiliatedEntities: payer.affiliatedEntities } : {}), ...(payer.route ? { trailing: payer.route } : {}) }; })} onOpen={() => { if (payerQuery !== "") loadPayers(""); }} onQuery={searchPayers} onEndReached={() => loadPayers(payerQuery ?? "", true)} onSelect={(option) => choosePayer(payerResults.find((payer) => payer.id === option.id) ?? { id: option.id, name: option.label })} />
+        {orderedClaimsAdministratorSources.length ? <div className="mbsf-source-evidence">{orderedClaimsAdministratorSources.map((source, index) => <span key={`${source.source}-${source.name}-${index}`}>{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a> : <strong>{source.label}</strong>}: <q>{source.name}</q></span>)}</div> : null}
         {claimsAdministratorHint ? <small className="mbsf-help">Claims administrator in your system: {claimsAdministratorHint}</small> : null}
+        {payerSuggestions.length ? <div className="mbsf-suggestions"><strong>Suggested:</strong>{payerSuggestions.slice(0, 5).map((suggestion) => { const suggestedSubpayor = suggestion.payers?.find((option) => option.id === suggestion.selectedPayerId); return <button className="mbsf-suggestion" type="button" key={`${suggestion.id}-${suggestion.selectedPayerId ?? "admin"}`} title={suggestion.reason} onClick={() => choosePayer(suggestion, suggestion.selectedPayerId)}>{suggestion.name}{suggestedSubpayor ? ` · ${suggestedSubpayor.label}` : ""}</button>; })}</div> : null}
         {administrator?.id ? <button className="mbsf-directory-link" type="button" onClick={() => { void openAdministratorDirectory(); }}>View contacts and routing details for {administrator.name}</button> : <small className="mbsf-help">Search the directory and choose a claims administrator.</small>}
       </Field>
-      {administrator?.payerSelectionRequired ? <Field path="claim.claimsAdministrator.payerId" label="Routing payer" required span error={subpayorError}>
-        {subpayorOptions.length ? <ComboBox ariaLabel="Routing payer" invalid={Boolean(subpayorError)} disabled={locked} value={selectedSubpayor?.label ?? ""} placeholder="Select the payer named on the claim or report…" options={subpayorOptions.map((option) => { const identifiers = Object.entries(option.clearinghousePayerIds ?? {}).map(([name, id]) => `${name.replace(/_/g, " ")} ${id}`); const detail = [option.aliases?.length ? `Also known as ${option.aliases.join(", ")}` : "", option.hint ?? ""].filter(Boolean).join(" · "); const badges = [option.optionType ? `Type: ${option.optionType}` : "", option.deliveryType ? `Delivery: ${option.deliveryType}` : "", option.clearinghouse && option.payerId ? `${option.clearinghouse} ${option.payerId}` : "", ...identifiers, option.preferredClearinghouse ? `Preferred: ${option.preferredClearinghouse}` : "", option.default ? "Directory default" : ""].filter(Boolean); return { id: option.id, label: option.label, ...(detail ? { detail } : {}), ...(badges.length ? { badges } : {}), ...(option.affiliatedEntities?.length ? { affiliatedEntities: option.affiliatedEntities } : {}), ...(option.route ? { trailing: option.route } : {}) }; })} onSelect={(option) => chooseSubpayor(option.id)} /> : <div className="mbsf-error" role="alert">No routing payers are available for {administrator.name}. Electronic submission remains blocked; contact support to correct the payer directory.</div>}
-        {selectedSubpayor ? <div className="mbsf-payer-status" role="status"><strong>✓ Routing payer set:</strong> {selectedSubpayor.label}{selectedSubpayor.route ? ` · ${selectedSubpayor.route}` : ""}</div> : <small className="mbsf-help">{administrator.name} administers multiple payers. Choose the payer named on the claim or report so MindBill can route the bill correctly.</small>}
+      {administrator?.payerSelectionRequired ? <Field path="claim.claimsAdministrator.payerId" label="Payer" required span error={subpayorError}>
+        {subpayorOptions.length ? <ComboBox ariaLabel="Payer" invalid={Boolean(subpayorError)} disabled={locked} value={selectedSubpayor?.label ?? ""} placeholder="Select the payer named on the claim or report…" options={subpayorOptions.map((option) => { const identifiers = Object.entries(option.clearinghousePayerIds ?? {}).map(([name, id]) => `${name.replace(/_/g, " ")} ${id}`); const detail = [option.aliases?.length ? `Also known as ${option.aliases.join(", ")}` : "", option.hint ?? ""].filter(Boolean).join(" · "); const badges = [option.optionType ? `Type: ${option.optionType}` : "", option.deliveryType ? `Delivery: ${option.deliveryType}` : "", option.clearinghouse && option.payerId ? `${option.clearinghouse} ${option.payerId}` : "", ...identifiers, option.preferredClearinghouse ? `Preferred: ${option.preferredClearinghouse}` : "", option.default ? "Directory default" : ""].filter(Boolean); return { id: option.id, label: option.label, ...(detail ? { detail } : {}), ...(badges.length ? { badges } : {}), ...(option.affiliatedEntities?.length ? { affiliatedEntities: option.affiliatedEntities } : {}), ...(option.route ? { trailing: option.route } : {}) }; })} onSelect={(option) => chooseSubpayor(option.id)} /> : <div className="mbsf-error" role="alert">No routing payers are available for {administrator.name}. Electronic submission remains blocked; contact support to correct the payer directory.</div>}
+        {selectedSubpayor ? <div className="mbsf-payer-status" role="status"><strong>✓ Payer set:</strong> {selectedSubpayor.label}{selectedSubpayor.route ? ` · ${selectedSubpayor.route}` : ""}</div> : <small className="mbsf-help">{administrator.name} administers multiple payers. Choose the payer named on the claim or report so MindBill can route the bill correctly.</small>}
       </Field> : null}
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
       <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required span error={errors.diagnoses}>

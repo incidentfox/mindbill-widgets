@@ -117,8 +117,19 @@ import { BillSubmissionForm } from "@mindbill/react";
 The single browser session powers MindBill's canonical claims-administrator directory,
 complete ICD-10 search, and ZIP-to-city/state lookup. Opening the administrator picker
 shows an alphabetized first page immediately and loads later pages on scroll; searching
-works from the first character. When the selected claims administrator requires payer
-selection, both forms show a second "Routing payer" combo box listing every subpayor,
+works from the first character. Pass `claimsAdministratorSources` to preserve the names
+already visible in the host system (for example `{ source: "report", label: "Report",
+name: "Zurich" }`). The form keeps the required canonical field empty and highlighted
+until the biller confirms it, shows the source wording, and offers up to five clickable
+directory suggestions. Exact proven mappings collapse to one suggestion; when historical
+employer evidence also resolves a unique subpayor, that click fills both selections.
+Future sources such as EAMS can include a `url` and take precedence over report wording.
+
+Administrator options show aliases and every claim-number pattern/example on file. After
+selection, the claim-number field reports a known match or warning and repeats the actual
+directory rule; rules that cannot be evaluated safely remain informational. When the
+selected claims administrator requires payer selection, both forms show a second "Payer"
+combo box listing every subpayor,
 its aliases, affiliated entities, claim-number hint, delivery route, clearinghouse, and
 payer identifiers. The biller must make an explicit choice before submission, sent as
 `claim.claimsAdministrator.payerId`; administrators without subpayors are

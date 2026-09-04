@@ -19,6 +19,7 @@ import {
   secondReviewDeadline,
   type BrowserBillCreateInput,
   type BillDeliveryOptions,
+  type BillClaimsAdministratorSource,
   type BillEorDocument,
   type BillLifecycleAction,
   type BillLifecycleClient,
@@ -300,6 +301,8 @@ export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   actorName?: string;
   /** Optional host-system claims-administrator name shown as a selection hint. */
   claimsAdministratorHint?: ReactNode;
+  /** Host-system evidence shown without preselecting a canonical directory entry. */
+  claimsAdministratorSources?: readonly BillClaimsAdministratorSource[];
   /**
    * Exposes payer-response simulation controls for an explicit sandbox
    * playground. Sandbox responses remain indistinguishable from live
@@ -457,7 +460,7 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
   return enabled && environment === "sandbox";
 }
 
-export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministratorHint, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministratorHint, claimsAdministratorSources, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -657,6 +660,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
       onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
       claimsAdministratorHint={claimsAdministratorHint}
+      {...(claimsAdministratorSources ? { claimsAdministratorSources } : {})}
       attentionFields={correctionAttentionFields}
       attentionMessage={correctionAttentionFields.length ? "The rejected response points to the highlighted fields. Confirm every required value before resubmitting." : "Confirm the bill information below before resubmitting."}
       submitLabel={lifecycle.isMutating ? "Resubmitting…" : "Resubmit bill"}
@@ -677,6 +681,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
       onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
       claimsAdministratorHint={claimsAdministratorHint}
+      {...(claimsAdministratorSources ? { claimsAdministratorSources } : {})}
       attentionMessage="Confirm every value carried over from the closed bill before submitting the new bill."
       submitLabel={lifecycle.isMutating ? "Submitting…" : "Submit New Bill"}
       heading="New bill information"
