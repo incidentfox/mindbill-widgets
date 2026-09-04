@@ -120,8 +120,11 @@ snapshot and authenticated copies of its documents. API-provided rejection
 `fieldPaths` call attention to likely problem controls, and payer contact
 guidance remains visible while the user corrects the bill. Submitting creates
 the next immutable attempt under the same logical `billId`; the original
-attempt and rejection remain in history. The host application does not build a
-second correction form or pass bill seed data back into the lifecycle.
+attempt and rejection remain in history. Submit first opens a required delivery
+confirmation for the corrected administrator and selected subpayor, where the
+biller can verify or switch among e-bill, fax, email, and mail. Nothing is sent
+until that second confirmation is submitted. The host application does not
+build a second correction form or pass bill seed data back into the lifecycle.
 
 For a **closed** bill the server authorizes exactly two actions — **Reopen**
 and **Submit New Bill**. Submit New Bill opens the same `BillSubmissionForm`,
@@ -335,7 +338,13 @@ const data = buildBillTasksDashboard(workItems, [
 />
 ```
 
-`BillSubmissionsRibbon` renders a horizontal row of submission chips (Original Bill, Second Review, Duplicate Bill, …) with an optional deadline badge and up to three label/value meta pairs; `billSubmissionsRibbonFromHistory` maps the presented history's submission rows into chips.
+`BillSubmissionsRibbon` renders a horizontal row of selectable submission chips
+(Original Bill, Second Review, Duplicate Bill, …). Each chip summarizes its
+attempt's latest acknowledgement or payment state — for example `277 Reject`
+or `Payment in 30 working days` — plus delivery, sent date, and the relevant
+reject/effective date. `billSubmissionsRibbonFromHistory` derives those chips
+from one unified history across every attempt. In `ConnectedBillLifecycle`, a
+chip click opens that shared history and highlights the selected submission.
 
 `ReportBillStatusDialog` records the outcome of a payment-status phone call to the Claims Administrator / Bill Review vendor: payer contacts, the host-rendered submission receipt (for example a `BillHistoryTable`), and the five standard reported statuses (`REPORT_BILL_STATUS_OPTIONS`). The host posts the resulting `ReportBillStatusInput` through its own lifecycle action call.
 

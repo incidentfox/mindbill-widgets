@@ -102,8 +102,16 @@ await billing.resubmitBill({
   reason: "Corrected the rejected service date.",
   bill: correctedBill,
   documents: correctedDocuments,
+  submission: { route: "fax", destination: "+14155550123" },
 });
 ```
+
+Pass `submission` after previewing the corrected claims administrator's routes
+to make the resubmission channel explicit. Omitting it preserves the legacy
+server-selected e-bill behavior. `getDeliveryPreview` accepts both
+`claimsAdministratorId` and the selected subpayor `payerId`, so a correction
+can be verified against a newly selected administrator or payer before it is
+sent.
 
 A **closed** bill authorizes exactly two actions: `reopen` and
 `submit_new_bill`. "Submit New Bill" keeps the closed bill closed — its record
@@ -116,6 +124,7 @@ await billing.submitNewBill({
   reason: "Re-billing the service after the earlier bill was closed.",
   bill: newBillSnapshot,
   documents: newBillDocuments,
+  submission: { route: "ebill" },
 });
 ```
 
