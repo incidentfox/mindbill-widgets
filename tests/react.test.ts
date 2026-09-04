@@ -34,6 +34,7 @@ import {
   billSubmissionsRibbonFromHistory,
 } from "../packages/react/src/bill-submissions-ribbon";
 import { REPORT_BILL_STATUS_OPTIONS } from "../packages/react/src/report-bill-status-dialog";
+import { SECOND_REVIEW_REASON_TEMPLATES } from "../packages/react/src/second-review-form";
 import {
   mindBillAppearanceStyle,
   resolveMindBillAppearance,
@@ -104,7 +105,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("partner appearance presets", () => {
-  it("ships complete QME Companion, orange-bright, clinical-blue, and midnight-cyan presets", () => {
+  it("ships complete partner appearance presets", () => {
     expect(resolveMindBillAppearance({ preset: "qme-companion" })).toMatchObject({
       accentColor: "#53b5dc",
       textColor: "#1d3440",
@@ -128,6 +129,12 @@ describe("partner appearance presets", () => {
       borderRadius: "0px",
       controlRadius: "999px",
       fontFamily: "Geist, Inter, ui-sans-serif, system-ui, sans-serif",
+    });
+    expect(resolveMindBillAppearance({ preset: "calm-clinical" })).toMatchObject({
+      accentColor: "#52b4d7",
+      backgroundColor: "#f2f8fb",
+      textColor: "#20323c",
+      borderRadius: "12px",
     });
   });
 
@@ -1529,12 +1536,15 @@ describe("connected bill lifecycle", () => {
       },
     });
     await expect(client.submitSecondReview({
-      reason: "The report supports the billed service.",
-      payerClaimControlNumber: "TEST-PCN-7",
       disputedAmount: 2015,
       attachmentIds: ["doc_1"],
       route: "ebill",
       actorName: "Ada Example",
+      lineItems: [{
+        lineItemId: "line_1",
+        reason: "The report supports the billed service.",
+        serviceAuthorized: true,
+      }],
     })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
 
     expect(fetcher.mock.calls[0]?.[0]).toBe("/api/mindbill/session");
@@ -1555,13 +1565,27 @@ describe("connected bill lifecycle", () => {
     expect(actionHeaders.get("idempotency-key")).toBeTruthy();
     expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
       action: "second_review",
-      reason: "The report supports the billed service.",
-      payerClaimControlNumber: "TEST-PCN-7",
       disputedAmount: 2015,
       attachmentIds: ["doc_1"],
       route: "ebill",
       actorName: "Ada Example",
+      lineItems: [{
+        lineItemId: "line_1",
+        reason: "The report supports the billed service.",
+        serviceAuthorized: true,
+      }],
     }));
+  });
+
+  it("ships concise Second Review reason templates for line-by-line disputes", () => {
+    expect(SECOND_REVIEW_REASON_TEMPLATES).toHaveLength(8);
+    expect(SECOND_REVIEW_REASON_TEMPLATES.map((template) => template.label)).toEqual(
+      expect.arrayContaining([
+        "Med-legal report denied",
+        "Supporting documentation was provided",
+        "Correct units or modifiers",
+      ]),
+    );
   });
 
   it("downloads the immutable submission packet and reopens a closed bill", async () => {
@@ -1951,9 +1975,12 @@ describe("connected bill lifecycle", () => {
     const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
 
     await expect(client.sendDuplicateBill({
-      route: "fax",
-      destination: { faxNumber: "(555) 010-2040" },
-      attention: "Claims Intake",
+      bill: { externalId: "duplicate_789" } as never,
+      submission: {
+        route: "fax",
+        destination: { faxNumber: "(555) 010-2040" },
+        attention: "Claims Intake",
+      },
     })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
     await expect(client.reportBillStatus({
       status: "eor_pending",
@@ -1966,9 +1993,12 @@ describe("connected bill lifecycle", () => {
     );
     expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({
       action: "send_duplicate",
-      route: "fax",
-      destination: { faxNumber: "(555) 010-2040" },
-      attention: "Claims Intake",
+      bill: { externalId: "duplicate_789" },
+      submission: {
+        route: "fax",
+        destination: { faxNumber: "(555) 010-2040" },
+        attention: "Claims Intake",
+      },
     }));
     expect(fetcher.mock.calls[2]?.[0]).toBe(
       "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",

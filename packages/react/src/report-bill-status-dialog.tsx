@@ -10,6 +10,8 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
   REPORT_BILL_STATUS_OPTIONS,
+  type BillClaimsAdministratorContact,
+  type BillClaimsAdministratorDirectory,
   type ReportBillStatusId,
   type ReportBillStatusInput,
 } from "@mindbill/browser";
@@ -35,6 +37,8 @@ export type ReportBillStatusDialogProps = SurfaceProps & {
     phones?: Array<{ label: string; value: string }>;
   };
   billReview?: { name: string; phone?: string };
+  /** Complete partner-safe payer directory details shown before the biller calls. */
+  directory?: BillClaimsAdministratorDirectory;
   /** Host renders its submission receipt, e.g. a BillHistoryTable. */
   receipt?: ReactNode;
   submitting?: boolean;
@@ -59,6 +63,20 @@ const css = `
 .mbbs-contact dl>div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px}
 .mbbs-contact dt{color:var(--mb-muted);font-size:12.5px}
 .mbbs-contact dd{margin:0;font-weight:700;overflow-wrap:anywhere}
+.mbbs-contact a,.mbbs-directory a{color:var(--mb-accent);text-decoration-thickness:1px;text-underline-offset:2px}
+.mbbs-directory{display:grid;gap:10px}
+.mbbs-directory-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.mbbs-directory-card{min-width:0;padding:12px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface))}
+.mbbs-directory-card.wide{grid-column:1/-1}
+.mbbs-directory-card h5{margin:0 0 8px;color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+.mbbs-directory-card dl{display:grid;gap:7px;margin:0}
+.mbbs-directory-card dl>div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px}
+.mbbs-directory-card dt{color:var(--mb-muted);font-size:12px}
+.mbbs-directory-card dd{min-width:0;margin:0;font-weight:650;overflow-wrap:anywhere}
+.mbbs-directory-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.mbbs-directory-list li{display:grid;gap:2px;padding-top:8px;border-top:1px solid var(--mb-border)}
+.mbbs-directory-list li:first-child{padding-top:0;border-top:0}
+.mbbs-directory-list small{color:var(--mb-muted);line-height:1.4}
 .mbbs-receipt{border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);padding:10px}
 .mbbs-report{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px}
 .mbbs-options{display:grid;gap:8px;align-content:start}
@@ -78,13 +96,59 @@ const css = `
 .mbbs-cancel{min-height:42px;padding:9px 16px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}
 .mbbs-save{min-height:42px;min-width:130px;padding:9px 18px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:760;cursor:pointer}
 .mbbs-save:disabled,.mbbs-cancel:disabled{opacity:.6;cursor:not-allowed}
-@media(max-width:700px){.mbbs-contacts,.mbbs-report{grid-template-columns:1fr}}
+@media(max-width:700px){.mbbs-contacts,.mbbs-directory-grid,.mbbs-report{grid-template-columns:1fr}.mbbs-directory-card.wide{grid-column:auto}.mbbs-directory-card dl>div{grid-template-columns:1fr;gap:2px}}
 `;
+
+function externalHref(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+function contactLine(contact: BillClaimsAdministratorContact, key: number): ReactElement {
+  return <li key={key}>
+    <strong>{contact.name || "Contact"}</strong>
+    <span>
+      {contact.phone ? <><a href={`tel:${contact.phone}`}>{contact.phone}</a>{" "}</> : null}
+      {contact.email ? <><a href={`mailto:${contact.email}`}>{contact.email}</a>{" "}</> : null}
+      {contact.portalUrl ? <><a href={externalHref(contact.portalUrl)} target="_blank" rel="noreferrer">Open portal</a>{" "}</> : null}
+      {contact.fax ? <>Fax {contact.fax}{" "}</> : null}
+      {contact.address || null}
+    </span>
+    {contact.note ? <small>{contact.note}</small> : null}
+  </li>;
+}
+
+function DirectoryDetails({ directory }: { directory: BillClaimsAdministratorDirectory }): ReactElement {
+  const aliases = directory.aliases?.filter(Boolean).join(", ");
+  const affiliates = directory.affiliatedEntities?.filter(Boolean).join(", ");
+  return <div className="mbbs-directory-grid">
+    <section className="mbbs-directory-card wide"><h5>Claims administrator</h5><dl>
+      {directory.name ? <div><dt>Name</dt><dd>{directory.name}</dd></div> : null}
+      {directory.type ? <div><dt>Type</dt><dd>{directory.type}</dd></div> : null}
+      {directory.description ? <div><dt>Description</dt><dd>{directory.description}</dd></div> : null}
+      {directory.website ? <div><dt>Website</dt><dd><a href={externalHref(directory.website)} target="_blank" rel="noreferrer">{directory.website}</a></dd></div> : null}
+      {directory.hours ? <div><dt>Hours</dt><dd>{directory.hours}</dd></div> : null}
+      {directory.telephoneNumbers?.length ? <div><dt>Phone</dt><dd>{directory.telephoneNumbers.map((value, index) => <span key={value}>{index ? ", " : ""}<a href={`tel:${value}`}>{value}</a></span>)}</dd></div> : null}
+      {directory.emailAddresses?.length ? <div><dt>Email</dt><dd>{directory.emailAddresses.map((value, index) => <span key={value}>{index ? ", " : ""}<a href={`mailto:${value}`}>{value}</a></span>)}</dd></div> : null}
+      {directory.webPortals?.length ? <div><dt>Portals</dt><dd>{directory.webPortals.map((value, index) => <span key={value}>{index ? ", " : ""}<a href={externalHref(value)} target="_blank" rel="noreferrer">Open portal {index + 1}</a></span>)}</dd></div> : null}
+      {aliases ? <div><dt>Also known as</dt><dd>{aliases}</dd></div> : null}
+      {affiliates ? <div><dt>Affiliates</dt><dd>{affiliates}</dd></div> : null}
+      {directory.claimNumberHint ? <div><dt>Claim number</dt><dd>{directory.claimNumberHint}</dd></div> : null}
+      {directory.billProcessingWorkflow ? <div><dt>Workflow</dt><dd>{directory.billProcessingWorkflow}</dd></div> : null}
+      {directory.billProcessingWorkflowNotes ? <div><dt>Workflow notes</dt><dd>{directory.billProcessingWorkflowNotes}</dd></div> : null}
+    </dl></section>
+    {directory.billReview?.length ? <section className="mbbs-directory-card"><h5>Bill review</h5><ul className="mbbs-directory-list">{directory.billReview.map(contactLine)}</ul></section> : null}
+    {directory.authorization?.length || directory.authorizationNotice ? <section className="mbbs-directory-card"><h5>Authorization</h5>{directory.authorizationNotice ? <p className="mbbs-copy">{directory.authorizationNotice}</p> : null}<ul className="mbbs-directory-list">{(directory.authorization ?? []).map(contactLine)}</ul></section> : null}
+    {directory.mailingAddresses?.length ? <section className="mbbs-directory-card"><h5>Mailing addresses</h5><ul className="mbbs-directory-list">{directory.mailingAddresses.map((entry, index) => <li key={index}><strong>{entry.company || "Mailing address"}</strong><span>{entry.address}</span>{entry.notes ? <small>{entry.notes}</small> : null}{entry.submissionTypes?.length ? <small>Submission types: {entry.submissionTypes.join(", ")}</small> : null}</li>)}</ul></section> : null}
+    {directory.claimNumberPatterns?.length ? <section className="mbbs-directory-card"><h5>Claim number patterns</h5><ul className="mbbs-directory-list">{directory.claimNumberPatterns.map((entry, index) => <li key={index}><strong>{entry.pattern}</strong><span>{entry.length ? `Length ${entry.length}` : ""}{entry.example ? `${entry.length ? " · " : ""}Example ${entry.example}` : ""}</span></li>)}</ul></section> : null}
+    {directory.payers?.length ? <section className="mbbs-directory-card wide"><h5>Electronic billing routes</h5><ul className="mbbs-directory-list">{directory.payers.map((payer, index) => <li key={`${payer.name}-${payer.payerId ?? index}`}><strong>{payer.name}</strong><span>{[payer.deliveryType || payer.route, payer.clearinghouse, payer.payerId ? `Payer ID ${payer.payerId}` : null].filter(Boolean).join(" · ")}</span>{payer.hint ? <small>{payer.hint}</small> : null}</li>)}</ul></section> : null}
+  </div>;
+}
 
 export function ReportBillStatusDialog({
   title = "Report Bill Status",
   claimsAdmin,
   billReview,
+  directory,
   receipt,
   submitting = false,
   error = null,
@@ -154,11 +218,11 @@ export function ReportBillStatusDialog({
           <button className="mbbs-close" type="button" aria-label="Close" disabled={submitting} onClick={onCancel}>×</button>
         </div>
 
-        {claimsAdmin || billReview ? (
+        {directory || claimsAdmin || billReview ? (
           <div className="mbbs-section">
             <h4>1. Call Claims Administrator or Bill Review</h4>
             <p className="mbbs-copy">Contact the payer to request the payment status of this bill.</p>
-            <div className="mbbs-contacts">
+            {directory ? <DirectoryDetails directory={directory} /> : <div className="mbbs-contacts">
               {claimsAdmin ? (
                 <div className="mbbs-contact">
                   <h5>Claims Admin</h5>
@@ -180,7 +244,7 @@ export function ReportBillStatusDialog({
                   </dl>
                 </div>
               ) : null}
-            </div>
+            </div>}
           </div>
         ) : null}
 

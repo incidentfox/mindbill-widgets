@@ -4,6 +4,7 @@ import type { MindBillAppearance } from "@mindbill/embed";
 export type MindBillThemePreset =
   | "mindbill"
   | "qme-companion"
+  | "calm-clinical"
   | "orange-bright"
   | "clinical-blue"
   | "midnight-cyan";
@@ -49,6 +50,23 @@ export const mindBillThemePresets = {
     borderRadius: "12px",
     controlRadius: "8px",
     shadow: "0 1px 2px rgba(29,52,64,.05)",
+    dangerColor: "#b83f3a",
+    successColor: "#21835d",
+    warningColor: "#9a6418",
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+  },
+  "calm-clinical": {
+    accentColor: "#52b4d7",
+    accentTextColor: "#173542",
+    backgroundColor: "#f2f8fb",
+    surfaceColor: "#ffffff",
+    inputBackgroundColor: "#ffffff",
+    textColor: "#20323c",
+    mutedColor: "#687b84",
+    borderColor: "#d8e4e9",
+    borderRadius: "12px",
+    controlRadius: "8px",
+    shadow: "0 1px 2px rgba(32,50,60,.05)",
     dangerColor: "#b83f3a",
     successColor: "#21835d",
     warningColor: "#9a6418",

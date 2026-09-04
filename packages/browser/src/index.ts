@@ -645,15 +645,33 @@ export type PostBillPaymentInput = BillActorInput & {
   depositDate: string;
   note?: string;
 };
-export type SubmitSecondReviewInput = BillActorInput & {
+export type SecondReviewLineInput = {
+  lineItemId: string;
   reason: string;
-  payerClaimControlNumber: string;
-  disputedAmount: number | undefined;
+  /** SBR-1 box for this service line. Omitted leaves the box blank. */
+  serviceAuthorized?: boolean;
+};
+
+export type SubmitSecondReviewInput = BillActorInput & {
+  /** @deprecated Prefer `lineItems[].reason`; retained for older hosts. */
+  reason?: string;
+  /** @deprecated MindBill derives this from the payer response on the server. */
+  payerClaimControlNumber?: string;
+  disputedAmount?: number;
   attachmentIds: string[];
   route: BillSubmissionRoute;
-  /** Optional subset of disputed line items; omitted = the whole bill. */
+  /** New PDFs to include with the Second Review. */
+  documents?: BrowserBillSubmissionDocument[];
+  destination?: SubmitBillInput["destination"];
+  attention?: string;
+  subject?: string;
+  note?: string;
+  cc?: string[];
+  /** Line-by-line SBR-1 selections, reasons, and authorization answers. */
+  lineItems?: SecondReviewLineInput[];
+  /** @deprecated Prefer `lineItems`; omitted = the whole bill. */
   lineItemIds?: string[];
-  /** SBR-1 box: whether the disputed service was authorized. */
+  /** @deprecated Prefer `lineItems[].serviceAuthorized`. */
   serviceAuthorized?: boolean;
 };
 
@@ -723,19 +741,12 @@ export type ReportBillStatusActionInput = ReportBillStatusInput & {
 };
 
 /**
- * Payload for the "send_duplicate" lifecycle action: resends the immutable
- * submission packet, unchanged, over the selected delivery route — typically
- * after the payer reports the bill is not on file.
+ * Payload for the "send_duplicate" lifecycle action. A duplicate is a fresh,
+ * editable bill snapshot linked to the submitted original. The original stays
+ * immutable; the biller must review the snapshot and explicitly confirm its
+ * delivery route before this action is posted.
  */
-export type SendDuplicateBillInput = BillActorInput & {
-  route: BillSubmissionRoute;
-  destination?: SubmitBillInput["destination"];
-  attention?: string;
-  subject?: string;
-  note?: string;
-  /** CC recipients for the email route (at most 10). */
-  cc?: string[];
-};
+export type SendDuplicateBillInput = ResubmitBillInput;
 
 export type ReportBillStatusContacts = {
   claimsAdmin: {
