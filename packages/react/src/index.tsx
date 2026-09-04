@@ -341,3 +341,30 @@ export type {
   UseBillStatusOptions,
   UseBillStatusResult,
 } from "./connected-bill-status";
+
+export {
+  ConnectedBillingWorkspace,
+  ConnectedBillSearch,
+  ConnectedBillTasksDashboard,
+  ConnectedProductivityReport,
+  ConnectedServiceLineItemsReport,
+} from "./connected-billing-workspace";
+export type {
+  ConnectedBillingWorkspaceProps,
+  ConnectedBillSearchProps,
+  ConnectedBillTasksDashboardProps,
+} from "./connected-billing-workspace";
+export { createBillingOperationsClient } from "./billing-operations-client";
+export type {
+  BillingOperationsClient,
+  BillingOperationsClientOptions,
+  BillRegistryAge,
+  BillRegistryItem,
+  BillRegistryQuery,
+  BillRegistryResult,
+  BillRegistrySort,
+  BillRegistryStatus,
+  BillTasksResult,
+  ProductivityReport,
+  ServiceLineItemsReport,
+} from "./billing-operations-client";
