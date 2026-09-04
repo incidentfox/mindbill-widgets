@@ -80,13 +80,23 @@ export type BillReviewAttachment = {
 export type BillReviewPayerOption = {
   id: string;
   label: string;
-  /** Preselect this payer when the claims administrator is chosen. */
+  /** Directory-provided default marker. Interactive forms still require an explicit choice. */
   default?: boolean;
   active?: boolean;
   aliases?: string[];
   hint?: string | null;
   affiliatedEntities?: string[];
   route?: string | null;
+  optionType?: string | null;
+  deliveryType?: string | null;
+  clearinghouse?: string | null;
+  payerId?: string | null;
+  /** Original directory route when live delivery uses a replacement clearinghouse. */
+  sourceClearinghouse?: string | null;
+  /** Original directory payer ID when live delivery uses a replacement route. */
+  sourcePayerId?: string | null;
+  clearinghousePayerIds?: Record<string, string>;
+  preferredClearinghouse?: string | null;
 };
 
 export type BillReviewPayer = {
@@ -108,12 +118,29 @@ export type BillReviewPayer = {
   aliases?: string[];
   affiliatedEntities?: string[];
   claimNumberHint?: string | null;
+  claimNumberPatterns?: BillClaimsAdministratorPattern[];
   route?: string | null;
 };
 
+/** A directory suggestion derived from host-provided evidence. Suggestions are never auto-applied. */
+export type BillReviewPayerSuggestion = BillReviewPayer & {
+  deterministic: boolean;
+  reason: string;
+  /** A uniquely proven routing payer under a multi-payer claims administrator. */
+  selectedPayerId?: string;
+};
+
+/** Host-system evidence shown alongside claims-administrator suggestions. */
+export type BillClaimsAdministratorSource = {
+  source: "eams" | "report" | string;
+  label: string;
+  name: string;
+  url?: string;
+};
+
 /**
- * The payer option to preselect when a claims administrator that requires
- * payer selection is chosen, or null when nothing is marked as the default.
+ * The directory-marked default payer option, or null when none is marked.
+ * Interactive forms should still require an explicit routing-payer choice.
  */
 export function defaultBillReviewPayerOption(
   payer: Pick<BillReviewPayer, "payerSelectionRequired" | "payers">,
@@ -476,7 +503,7 @@ export type BillClaimsAdministratorMailingAddress = {
 };
 
 export type BillClaimsAdministratorPattern = {
-  length?: number | null;
+  length?: number | string | null;
   pattern: string;
   example?: string | null;
   matches?: boolean | null;
@@ -488,6 +515,31 @@ export type BillClaimsAdministratorPayer = {
   aliases?: string[];
   hint?: string | null;
   affiliatedEntities?: string[];
+  optionType?: string | null;
+  deliveryType?: string | null;
+  clearinghouse?: string | null;
+  payerId?: string | null;
+  sourceClearinghouse?: string | null;
+  sourcePayerId?: string | null;
+  clearinghousePayerIds?: Record<string, string>;
+  preferredClearinghouse?: string | null;
+};
+
+export type BillReviewPayerPage = {
+  results: BillReviewPayer[];
+  suggestions?: BillReviewPayerSuggestion[];
+  total: number;
+  nextOffset?: number;
+  recommendedId?: string;
+};
+
+export type BillReviewPayerListInput = {
+  query?: string;
+  claimNumber?: string;
+  sourceClaimsAdministratorName?: string;
+  employerName?: string;
+  limit?: number;
+  offset?: number;
 };
 
 export type BillClaimsAdministratorDirectory = {
@@ -903,6 +955,7 @@ export type BillDeliveryPreviewInput = {
 };
 
 export type BillReferenceClient = {
+  listClaimsAdministrators: (input?: BillReviewPayerListInput) => Promise<BillReviewPayerPage>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
@@ -919,6 +972,7 @@ export type BillReferenceClient = {
 export type BillLifecycleClient = {
   getBillId: () => string;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
+  listClaimsAdministrators: (input?: BillReviewPayerListInput) => Promise<BillReviewPayerPage>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
@@ -1193,77 +1247,106 @@ export function createBillLifecycleClient({
     return normalizeLifecycle(body.data);
   };
 
-  const searchClaimsAdministrators = async (query: string, claimNumber?: string): Promise<BillReviewPayer[]> => {
+  const listClaimsAdministrators = async (input: BillReviewPayerListInput = {}): Promise<BillReviewPayerPage> => {
     const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
-    if (claimNumber?.trim()) params.set("claimNumber", claimNumber.trim());
+    if (input.query?.trim()) params.set("q", input.query.trim());
+    if (input.claimNumber?.trim()) params.set("claimNumber", input.claimNumber.trim());
+    if (input.sourceClaimsAdministratorName?.trim()) params.set("sourceClaimsAdministratorName", input.sourceClaimsAdministratorName.trim());
+    if (input.employerName?.trim()) params.set("employerName", input.employerName.trim());
+    const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 50)));
+    const offset = Math.max(0, Math.floor(input.offset ?? 0));
+    params.set("limit", String(limit));
+    if (offset) params.set("offset", String(offset));
     const response = await request(`/partner/v2/browser/claims-administrators?${params.toString()}`);
     if (!response.ok) throw await responseError(response, "Claims administrator search is unavailable.");
-    const body = await response.json() as { results?: unknown };
+    const body = await response.json() as { results?: unknown; suggestions?: unknown; total?: unknown; nextOffset?: unknown; recommendedId?: unknown };
     if (!Array.isArray(body.results)) throw new Error("Claims administrator search returned an invalid response.");
-    return body.results.flatMap((value): BillReviewPayer[] => {
-      if (!value || typeof value !== "object") return [];
-      const payer = value as Partial<BillReviewPayer>;
-      if (typeof payer.id !== "string" || typeof payer.name !== "string") return [];
-      return [{
+    const normalizePayer = (value: unknown): BillReviewPayer | null => {
+      if (!value || typeof value !== "object") return null;
+      const payer = value as Record<string, unknown>;
+      if (typeof payer.id !== "string" || typeof payer.name !== "string") return null;
+      const payers = Array.isArray(payer.payers) ? payer.payers.flatMap((option): BillReviewPayerOption[] => {
+        if (!option || typeof option !== "object") return [];
+        const candidate = option as Record<string, unknown>;
+        const id = typeof candidate.id === "string" ? candidate.id : typeof candidate.key === "string" ? candidate.key : null;
+        if (!id || typeof candidate.label !== "string") return [];
+        return [{
+          id,
+          label: candidate.label,
+          ...(typeof candidate.default === "boolean" ? { default: candidate.default } : {}),
+          ...(typeof candidate.active === "boolean" ? { active: candidate.active } : {}),
+          ...(Array.isArray(candidate.aliases) ? { aliases: candidate.aliases.filter((item): item is string => typeof item === "string") } : {}),
+          ...(typeof candidate.hint === "string" ? { hint: candidate.hint } : {}),
+          ...(Array.isArray(candidate.affiliatedEntities) ? { affiliatedEntities: candidate.affiliatedEntities.filter((item): item is string => typeof item === "string") } : {}),
+          ...(typeof candidate.route === "string" ? { route: candidate.route } : {}),
+          ...(typeof candidate.optionType === "string" ? { optionType: candidate.optionType } : {}),
+          ...(typeof candidate.deliveryType === "string" ? { deliveryType: candidate.deliveryType } : {}),
+          ...(typeof candidate.clearinghouse === "string" ? { clearinghouse: candidate.clearinghouse } : {}),
+          ...(typeof candidate.payerId === "string" ? { payerId: candidate.payerId } : {}),
+          ...(typeof candidate.sourceClearinghouse === "string" ? { sourceClearinghouse: candidate.sourceClearinghouse } : {}),
+          ...(typeof candidate.sourcePayerId === "string" ? { sourcePayerId: candidate.sourcePayerId } : {}),
+          ...(candidate.clearinghousePayerIds && typeof candidate.clearinghousePayerIds === "object" && !Array.isArray(candidate.clearinghousePayerIds)
+            ? { clearinghousePayerIds: Object.fromEntries(Object.entries(candidate.clearinghousePayerIds).filter((entry): entry is [string, string] => typeof entry[1] === "string")) }
+            : {}),
+          ...(typeof candidate.preferredClearinghouse === "string" ? { preferredClearinghouse: candidate.preferredClearinghouse } : {}),
+        }];
+      }) : undefined;
+      const claimNumberPatterns = Array.isArray(payer.claimNumberPatterns) ? payer.claimNumberPatterns.flatMap((value): BillClaimsAdministratorPattern[] => {
+        if (!value || typeof value !== "object") return [];
+        const pattern = value as Record<string, unknown>;
+        if (typeof pattern.pattern !== "string") return [];
+        return [{
+          pattern: pattern.pattern,
+          ...(typeof pattern.length === "string" || typeof pattern.length === "number" ? { length: pattern.length } : {}),
+          ...(typeof pattern.example === "string" ? { example: pattern.example } : {}),
+          ...(typeof pattern.matches === "boolean" || pattern.matches === null ? { matches: pattern.matches as boolean | null } : {}),
+        }];
+      }) : undefined;
+      return {
         id: payer.id,
         name: payer.name,
         ...(typeof payer.hasElectronic === "boolean" ? { hasElectronic: payer.hasElectronic } : {}),
-        ...(Array.isArray(payer.states)
-          ? { states: payer.states.filter((state): state is string => typeof state === "string") }
-          : {}),
-        ...(["high", "medium", "directory"].includes(payer.confidence ?? "")
-          ? { confidence: payer.confidence as NonNullable<BillReviewPayer["confidence"]> }
-          : {}),
+        ...(Array.isArray(payer.states) ? { states: payer.states.filter((state): state is string => typeof state === "string") } : {}),
+        ...(["high", "medium", "directory"].includes(String(payer.confidence)) ? { confidence: payer.confidence as NonNullable<BillReviewPayer["confidence"]> } : {}),
         ...(typeof payer.recommended === "boolean" ? { recommended: payer.recommended } : {}),
-        ...(typeof payer.payerSelectionRequired === "boolean"
-          ? { payerSelectionRequired: payer.payerSelectionRequired }
-          : {}),
-        ...(Array.isArray(payer.payers)
-          ? {
-              payers: payer.payers.flatMap((option): BillReviewPayerOption[] => {
-                if (!option || typeof option !== "object") return [];
-                const candidate = option as Record<string, unknown>;
-                const id = typeof candidate.id === "string" ? candidate.id : typeof candidate.key === "string" ? candidate.key : null;
-                if (!id || typeof candidate.label !== "string") return [];
-                return [{
-                  id,
-                  label: candidate.label,
-                  ...(typeof candidate.default === "boolean" ? { default: candidate.default } : {}),
-                  ...(typeof candidate.active === "boolean" ? { active: candidate.active } : {}),
-                  ...(Array.isArray(candidate.aliases) ? { aliases: candidate.aliases.filter((item): item is string => typeof item === "string") } : {}),
-                  ...(typeof candidate.hint === "string" ? { hint: candidate.hint } : {}),
-                  ...(Array.isArray(candidate.affiliatedEntities) ? { affiliatedEntities: candidate.affiliatedEntities.filter((item): item is string => typeof item === "string") } : {}),
-                  ...(typeof candidate.route === "string" ? { route: candidate.route } : {}),
-                }];
-              }),
-            }
-          : {}),
+        ...(typeof payer.payerSelectionRequired === "boolean" ? { payerSelectionRequired: payer.payerSelectionRequired } : {}),
+        ...(payers ? { payers } : {}),
         ...(Array.isArray(payer.aliases) ? { aliases: payer.aliases.filter((item): item is string => typeof item === "string") } : {}),
         ...(Array.isArray(payer.affiliatedEntities) ? { affiliatedEntities: payer.affiliatedEntities.filter((item): item is string => typeof item === "string") } : {}),
         ...(typeof payer.claimNumberHint === "string" ? { claimNumberHint: payer.claimNumberHint } : {}),
+        ...(claimNumberPatterns ? { claimNumberPatterns } : {}),
         ...(typeof payer.route === "string" ? { route: payer.route } : {}),
-        ...(Array.isArray(payer.signals)
-          ? {
-              signals: payer.signals.flatMap((signal) => {
-                if (!signal || typeof signal !== "object") return [];
-                const candidate = signal as { kind?: unknown; state?: unknown; label?: unknown };
-                if (
-                  !["name", "claim_number"].includes(String(candidate.kind))
-                  || !["match", "warning"].includes(String(candidate.state))
-                  || typeof candidate.label !== "string"
-                ) return [];
-                return [{
-                  kind: candidate.kind as "name" | "claim_number",
-                  state: candidate.state as "match" | "warning",
-                  label: candidate.label,
-                }];
-              }),
-            }
-          : {}),
-      }];
+        ...(Array.isArray(payer.signals) ? { signals: payer.signals.flatMap((signal) => {
+          if (!signal || typeof signal !== "object") return [];
+          const candidate = signal as Record<string, unknown>;
+          if (!["name", "claim_number"].includes(String(candidate.kind)) || !["match", "warning"].includes(String(candidate.state)) || typeof candidate.label !== "string") return [];
+          return [{ kind: candidate.kind as "name" | "claim_number", state: candidate.state as "match" | "warning", label: candidate.label }];
+        }) } : {}),
+      };
+    };
+    const results = body.results.flatMap((value): BillReviewPayer[] => {
+      const payer = normalizePayer(value);
+      return payer ? [payer] : [];
     });
+    const suggestions = Array.isArray(body.suggestions) ? body.suggestions.flatMap((value): BillReviewPayerSuggestion[] => {
+      const payer = normalizePayer(value);
+      if (!payer || !value || typeof value !== "object") return [];
+      const suggestion = value as Record<string, unknown>;
+      if (typeof suggestion.deterministic !== "boolean" || typeof suggestion.reason !== "string") return [];
+      return [{ ...payer, deterministic: suggestion.deterministic, reason: suggestion.reason, ...(typeof suggestion.selectedPayerId === "string" ? { selectedPayerId: suggestion.selectedPayerId } : {}) }];
+    }) : [];
+    const total = typeof body.total === "number" && Number.isFinite(body.total) ? Math.max(results.length, Math.floor(body.total)) : offset + results.length;
+    return {
+      results,
+      ...(suggestions.length ? { suggestions } : {}),
+      total,
+      ...(typeof body.nextOffset === "number" && Number.isFinite(body.nextOffset) ? { nextOffset: Math.floor(body.nextOffset) } : {}),
+      ...(typeof body.recommendedId === "string" ? { recommendedId: body.recommendedId } : {}),
+    };
   };
+
+  const searchClaimsAdministrators = async (query: string, claimNumber?: string): Promise<BillReviewPayer[]> =>
+    (await listClaimsAdministrators({ query, ...(claimNumber ? { claimNumber } : {}) })).results;
 
   const getClaimsAdministratorDirectory = async (id: string, injuryState?: string): Promise<BillClaimsAdministratorDirectory> => {
     const params = new URLSearchParams();
@@ -1332,6 +1415,7 @@ export function createBillLifecycleClient({
     getBillId() { return currentBillId; },
     clearSession() { session = null; sessionRequest = null; },
     getLifecycle: loadLifecycle,
+    listClaimsAdministrators,
     searchClaimsAdministrators,
     getClaimsAdministratorDirectory,
     searchDiagnosisCodes,
@@ -1391,6 +1475,7 @@ export function createBillReferenceClient(
     billId: "pre-submission-reference-data",
   });
   return {
+    listClaimsAdministrators: lifecycle.listClaimsAdministrators,
     searchClaimsAdministrators: lifecycle.searchClaimsAdministrators,
     getClaimsAdministratorDirectory: lifecycle.getClaimsAdministratorDirectory,
     searchDiagnosisCodes: lifecycle.searchDiagnosisCodes,

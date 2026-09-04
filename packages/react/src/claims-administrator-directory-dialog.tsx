@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type {
   BillClaimsAdministratorContact,
   BillClaimsAdministratorDirectory,
+  BillClaimsAdministratorPayer,
 } from "@mindbill/browser";
 
 export type ClaimsAdministratorDirectoryDialogProps = {
@@ -22,7 +23,7 @@ const css = `
 .mbcad-dialog{--mbcad-accent:var(--mb-accent,#176c70);--mbcad-border:var(--mb-border,#d7e0df);--mbcad-surface:var(--mb-surface,#fff);--mbcad-text:var(--mb-text,#17282d);--mbcad-muted:var(--mb-muted,#607176);display:grid;grid-template-rows:auto auto minmax(0,1fr);width:min(1180px,100%);max-height:min(860px,92vh);overflow:hidden;border:1px solid var(--mbcad-border);border-radius:14px;background:var(--mbcad-surface);color:var(--mbcad-text);box-shadow:0 28px 80px rgba(14,31,43,.28);font-family:var(--mb-font,Inter,ui-sans-serif,system-ui,sans-serif)}
 .mbcad-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 22px;border-bottom:1px solid var(--mbcad-border)}.mbcad-head h2{margin:0;font-size:24px;line-height:1.2}.mbcad-close{width:40px;height:40px;border:0;border-radius:9px;background:color-mix(in srgb,var(--mbcad-muted) 9%,var(--mbcad-surface));color:var(--mbcad-accent);font:inherit;font-size:28px;line-height:1;cursor:pointer}
 .mbcad-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin:18px 22px 0;border-radius:10px;background:color-mix(in srgb,var(--mbcad-muted) 8%,var(--mbcad-surface));overflow:hidden}.mbcad-tab{min-height:64px;padding:10px;border:0;border-right:1px solid var(--mbcad-border);border-top:4px solid transparent;background:transparent;color:var(--mbcad-muted);font:inherit;font-weight:750;cursor:pointer}.mbcad-tab:last-child{border-right:0}.mbcad-tab[aria-selected=true]{border-top-color:var(--mbcad-accent);background:var(--mbcad-surface);color:var(--mbcad-text)}
-.mbcad-body{overflow:auto;padding:24px 22px 28px}.mbcad-grid{display:grid;gap:0;border:1px solid var(--mbcad-border);border-radius:10px;overflow:hidden}.mbcad-row{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(0,2fr);gap:18px;padding:11px 14px;border-bottom:1px solid var(--mbcad-border)}.mbcad-row:last-child{border-bottom:0}.mbcad-row strong{font-weight:750}.mbcad-list{display:grid;gap:5px;margin:0;padding:0;list-style:none}.mbcad-list a,.mbcad-table a{color:var(--mbcad-accent);overflow-wrap:anywhere}.mbcad-table{width:100%;border-collapse:collapse;border:1px solid var(--mbcad-border);border-radius:10px;overflow:hidden}.mbcad-table th,.mbcad-table td{padding:13px 14px;border-bottom:1px solid var(--mbcad-border);text-align:left;vertical-align:top}.mbcad-table th{background:color-mix(in srgb,var(--mbcad-muted) 7%,var(--mbcad-surface));font-size:13px}.mbcad-empty{padding:36px;text-align:center;color:var(--mbcad-muted)}.mbcad-notice{padding:14px 16px;border:1px solid color-mix(in srgb,var(--mbcad-accent) 70%,var(--mbcad-border));border-radius:9px;background:color-mix(in srgb,var(--mbcad-accent) 5%,var(--mbcad-surface));font-weight:650}
+.mbcad-body{overflow:auto;padding:24px 22px 28px}.mbcad-grid{display:grid;gap:0;border:1px solid var(--mbcad-border);border-radius:10px;overflow:hidden}.mbcad-row{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(0,2fr);gap:18px;padding:11px 14px;border-bottom:1px solid var(--mbcad-border)}.mbcad-row:last-child{border-bottom:0}.mbcad-row strong{font-weight:750}.mbcad-list{display:grid;gap:5px;margin:0;padding:0;list-style:none}.mbcad-list a,.mbcad-table a{color:var(--mbcad-accent);overflow-wrap:anywhere}.mbcad-payers{display:grid;gap:9px;margin:0;padding:0;list-style:none}.mbcad-payer{display:grid;gap:7px;padding:12px;border:1px solid var(--mbcad-border);border-radius:9px;background:color-mix(in srgb,var(--mbcad-muted) 3%,var(--mbcad-surface))}.mbcad-payer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mbcad-payer-route{color:var(--mbcad-accent);font-size:13px;font-weight:750;white-space:nowrap}.mbcad-payer-meta{display:flex;flex-wrap:wrap;gap:6px}.mbcad-payer-meta span{padding:3px 7px;border:1px solid var(--mbcad-border);border-radius:999px;color:var(--mbcad-muted);font-size:12px}.mbcad-payer-note{margin:0;color:var(--mbcad-muted);font-size:13px}.mbcad-table{width:100%;border-collapse:collapse;border:1px solid var(--mbcad-border);border-radius:10px;overflow:hidden}.mbcad-table th,.mbcad-table td{padding:13px 14px;border-bottom:1px solid var(--mbcad-border);text-align:left;vertical-align:top}.mbcad-table th{background:color-mix(in srgb,var(--mbcad-muted) 7%,var(--mbcad-surface));font-size:13px}.mbcad-empty{padding:36px;text-align:center;color:var(--mbcad-muted)}.mbcad-notice{padding:14px 16px;border:1px solid color-mix(in srgb,var(--mbcad-accent) 70%,var(--mbcad-border));border-radius:9px;background:color-mix(in srgb,var(--mbcad-accent) 5%,var(--mbcad-surface));font-weight:650}
 @media(max-width:760px){.mbcad-backdrop{padding:8px}.mbcad-dialog{max-height:96vh}.mbcad-head{padding:14px}.mbcad-head h2{font-size:19px}.mbcad-tabs{display:flex;overflow-x:auto;margin:10px 12px 0}.mbcad-tab{min-width:145px}.mbcad-body{padding:14px 12px 18px}.mbcad-row{grid-template-columns:1fr;gap:5px}.mbcad-table{display:block;overflow-x:auto}}
 `;
 
@@ -35,6 +36,25 @@ function list(values: string[] | undefined, kind?: "phone" | "email" | "url"): R
   return values?.length ? <ul className="mbcad-list">{values.map((value, index) => <li key={`${value}-${index}`}>{kind ? outbound(value, kind) : value}</li>)}</ul> : "—";
 }
 
+function payerDetails(payer: BillClaimsAdministratorPayer, index: number): ReactElement {
+  const identifiers = Object.entries(payer.clearinghousePayerIds ?? {}).map(([name, id]) => `${name.replace(/_/g, " ")}: ${id}`);
+  const metadata = [
+    payer.optionType ? `Type: ${payer.optionType}` : null,
+    payer.deliveryType ? `Delivery: ${payer.deliveryType}` : null,
+    payer.clearinghouse && payer.payerId ? `${payer.clearinghouse}: ${payer.payerId}` : null,
+    payer.sourceClearinghouse && payer.sourcePayerId ? `Catalog route: ${payer.sourceClearinghouse} ${payer.sourcePayerId}` : null,
+    ...identifiers,
+    payer.preferredClearinghouse ? `Preferred: ${payer.preferredClearinghouse}` : null,
+  ].filter((value): value is string => Boolean(value));
+  return <li className="mbcad-payer" key={`${payer.name}-${index}`}>
+    <div className="mbcad-payer-head"><strong>{payer.name}</strong>{payer.route ? <span className="mbcad-payer-route">{payer.route}</span> : null}</div>
+    {payer.aliases?.length ? <p className="mbcad-payer-note">Also known as {payer.aliases.join(", ")}</p> : null}
+    {payer.hint ? <p className="mbcad-payer-note">{payer.hint}</p> : null}
+    {payer.affiliatedEntities?.length ? <p className="mbcad-payer-note">Affiliated with {payer.affiliatedEntities.join(", ")}</p> : null}
+    {metadata.length ? <div className="mbcad-payer-meta">{metadata.map((item) => <span key={item}>{item}</span>)}</div> : null}
+  </li>;
+}
+
 function Main({ directory }: { directory: BillClaimsAdministratorDirectory }): ReactElement {
   return <div className="mbcad-grid">
     {([
@@ -43,7 +63,7 @@ function Main({ directory }: { directory: BillClaimsAdministratorDirectory }): R
       ["Also known as", list(directory.aliases)], ["Affiliated entities", list(directory.affiliatedEntities)],
       ["Hours of operation", directory.hours ?? "—"], ["Telephone numbers", list(directory.telephoneNumbers, "phone")],
       ["Email addresses", list(directory.emailAddresses, "email")], ["Web portals", list(directory.webPortals, "url")],
-      ["Payers", directory.payers?.length ? <ul className="mbcad-list">{directory.payers.map((payer, index) => <li key={`${payer.name}-${index}`}><strong>{payer.name}</strong>{payer.route ? ` · ${payer.route}` : ""}{payer.hint ? <small>{payer.hint}</small> : null}</li>)}</ul> : "—"],
+      ["Payers", directory.payers?.length ? <ul className="mbcad-payers">{directory.payers.map(payerDetails)}</ul> : "—"],
       ["Bill processing workflow", directory.billProcessingWorkflow ?? "—"],
       ["Bill processing workflow notes", directory.billProcessingWorkflowNotes ?? "—"],
       ["Claim number hint", directory.claimNumberHint ?? "—"],

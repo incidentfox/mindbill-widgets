@@ -248,7 +248,12 @@ export {
   createBillStatusClient,
   useBillStatus,
 } from "./connected-bill-status";
-export type { BillReviewPayerOption, BrowserBillSubmissionResult } from "@mindbill/browser";
+export type {
+  BillClaimsAdministratorSource,
+  BillReviewPayerOption,
+  BillReviewPayerSuggestion,
+  BrowserBillSubmissionResult,
+} from "@mindbill/browser";
 
 export {
   BillActivityTimeline,

@@ -65,6 +65,7 @@ import {
   BillSubmissionProvidersSection,
   BillSubmissionServiceLinesSection,
   chooseClaimsAdministrator,
+  claimNumberPatternMatches,
   ensureTrailingBillSubmissionLine,
   formatBillSubmissionDate,
   claimsAdministratorRecommendations,
@@ -316,7 +317,7 @@ describe("atomic bill submission form contract", () => {
     expect(validateBillSubmission(validBill)).toEqual({ valid: true, fieldErrors: {} });
   });
 
-  it("preselects the default payer when a subpayor administrator is chosen", () => {
+  it("requires an explicit payer even when the directory marks a default", () => {
     const payer = {
       id: "pd:multi-tpa",
       name: "Synthetic Multi-Payer TPA",
@@ -339,8 +340,11 @@ describe("atomic bill submission form contract", () => {
       name: "Synthetic Multi-Payer TPA",
       payerSelectionRequired: true,
       payers: payer.payers,
-      payerId: "pd:multi-tpa/beta",
     });
+    expect(chooseClaimsAdministrator(payer, "pd:multi-tpa/alpha").payerId)
+      .toBe("pd:multi-tpa/alpha");
+    expect(chooseClaimsAdministrator(payer, "pd:multi-tpa/unknown").payerId)
+      .toBeUndefined();
     expect(chooseClaimsAdministrator({
       ...payer,
       payers: [{ id: "pd:multi-tpa/alpha", label: "Alpha Casualty" }],
@@ -349,6 +353,19 @@ describe("atomic bill submission form contract", () => {
       id: "pd:plain",
       name: "Plain Payer",
     });
+  });
+
+  it("checks claim numbers against a directory example without inventing unsupported rules", () => {
+    const pattern = {
+      length: 7,
+      pattern: "The letters 'WC', five numbers",
+      example: "WC99999",
+      matches: null,
+    };
+    expect(claimNumberPatternMatches(pattern, "WC57539")).toBe(true);
+    expect(claimNumberPatternMatches(pattern, "WC5753")).toBe(false);
+    expect(claimNumberPatternMatches({ pattern: "See payer instructions", matches: null }, "ABC"))
+      .toBeNull();
   });
 
   it("submits only the administrator reference and the chosen payerId", () => {
@@ -581,7 +598,7 @@ describe("pre-submission reference data", () => {
 
     expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
       "/api/mindbill/session",
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Zurich&claimNumber=TEST-1",
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Zurich&claimNumber=TEST-1&limit=50",
       "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=left+knee&limit=30",
       "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=&limit=100&offset=100",
       "https://app.mindbill.org/partner/v2/browser/postal-codes?postalCode=94403",
@@ -592,6 +609,102 @@ describe("pre-submission reference data", () => {
       "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",
     ]);
+  });
+
+  it("browses paginated administrators and preserves suggestions, patterns, and routing metadata", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: "short-lived-reference-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        total: 941,
+        nextOffset: 100,
+        results: [{
+          id: "pd:sedgwick",
+          name: "Sedgwick Claims Management Services, Inc.",
+          aliases: ["York Risk Services Group"],
+          affiliatedEntities: ["State Farm"],
+          claimNumberPatterns: [{
+            length: 7,
+            pattern: "The letters 'WC', five numbers",
+            example: "WC99999",
+            matches: true,
+          }],
+          payerSelectionRequired: true,
+          payers: [{
+            id: "pd:sedgwick/county-la-unit-c",
+            label: "County of Los Angeles (CA) Unit C",
+            aliases: ["CoLA"],
+            hint: "Claim numbers beginning with 3000 or C.",
+            affiliatedEntities: ["County of Los Angeles"],
+            optionType: "carrier",
+            deliveryType: "electronic",
+            route: "Data Dimensions CRVL1",
+            clearinghouse: "Data Dimensions",
+            payerId: "CRVL1",
+            sourceClearinghouse: "CorVel",
+            sourcePayerId: "E4708",
+            clearinghousePayerIds: { datadimensions: "CRVL1" },
+            preferredClearinghouse: "data_dimensions",
+          }],
+        }],
+        suggestions: [{
+          id: "pd:sedgwick",
+          name: "Sedgwick Claims Management Services, Inc.",
+          deterministic: true,
+          reason: "Exact report-name mapping and employer routing evidence.",
+          selectedPayerId: "pd:sedgwick/county-la-unit-c",
+          payerSelectionRequired: true,
+          payers: [{ id: "pd:sedgwick/county-la-unit-c", label: "County of Los Angeles (CA) Unit C" }],
+        }],
+      }));
+    const client = createBillReferenceClient({ fetch: fetcher });
+
+    await expect(client.listClaimsAdministrators({
+      limit: 50,
+      offset: 50,
+      claimNumber: "WC57539",
+      sourceClaimsAdministratorName: "Sedgwick",
+      employerName: "Synthetic Employer",
+    })).resolves.toMatchObject({
+      total: 941,
+      nextOffset: 100,
+      results: [{
+        id: "pd:sedgwick",
+        name: "Sedgwick Claims Management Services, Inc.",
+        aliases: ["York Risk Services Group"],
+        affiliatedEntities: ["State Farm"],
+        claimNumberPatterns: [{
+          length: 7,
+          pattern: "The letters 'WC', five numbers",
+          example: "WC99999",
+          matches: true,
+        }],
+        payerSelectionRequired: true,
+        payers: [{
+          id: "pd:sedgwick/county-la-unit-c",
+          label: "County of Los Angeles (CA) Unit C",
+          aliases: ["CoLA"],
+          hint: "Claim numbers beginning with 3000 or C.",
+          affiliatedEntities: ["County of Los Angeles"],
+          optionType: "carrier",
+          deliveryType: "electronic",
+          route: "Data Dimensions CRVL1",
+          clearinghouse: "Data Dimensions",
+          payerId: "CRVL1",
+          sourceClearinghouse: "CorVel",
+          sourcePayerId: "E4708",
+          clearinghousePayerIds: { datadimensions: "CRVL1" },
+          preferredClearinghouse: "data_dimensions",
+        }],
+      }],
+      suggestions: [{
+        id: "pd:sedgwick",
+        deterministic: true,
+        selectedPayerId: "pd:sedgwick/county-la-unit-c",
+      }],
+    });
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?claimNumber=WC57539&sourceClaimsAdministratorName=Sedgwick&employerName=Synthetic+Employer&limit=50&offset=50",
+    );
   });
 
   it("previews delivery routes for a claims administrator before the bill exists", async () => {
@@ -951,14 +1064,18 @@ describe("bill lifecycle surfaces", () => {
     expect(source).toContain('map((code) => ({ code, description: "" }))');
   });
 
-  it("requires an explicit claims-administrator choice and exposes the supplied host hint", () => {
+  it("requires an explicit claims-administrator choice and exposes source evidence and suggestions", () => {
     const source = readFileSync(
       new URL("../packages/react/src/bill-submission-form.tsx", import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain("Search the claims administrator directory…");
-    expect(source).toContain("Claims administrator in your system:");
+    expect(source).toContain("Browse or search claims administrators…");
+    expect(source).toContain("filterOptions={false}");
+    expect(source).toContain("onEndReached={() => loadPayers");
+    expect(source).toContain("claimsAdministratorSources");
+    expect(source).toContain("Suggested:");
+    expect(source).toContain("Matches a known claim number pattern");
     expect(source).toContain("invalid={!administrator?.id}");
     expect(source).not.toContain("Showing 5 suggestions");
     expect(source).not.toContain("claimsAdministratorRecommendations(payerResults)");
@@ -973,6 +1090,8 @@ describe("bill lifecycle surfaces", () => {
     for (const label of ["Main", "Bill Review", "Authorization Info", "Mailing Address", "Claim Number Pattern"]) {
       expect(source).toContain(JSON.stringify(label));
     }
+    expect(source).toContain("payer.clearinghouse");
+    expect(source).toContain("payer.payerId");
     expect(source).not.toContain("Directory ID");
     expect(source).toContain("payer.route");
     expect(source).toContain("var(--mb-surface,#fff)");
@@ -1630,7 +1749,7 @@ describe("connected bill lifecycle", () => {
       ],
     }]);
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Example+TPA&claimNumber=OTHER123",
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Example+TPA&claimNumber=OTHER123&limit=50",
     );
   });
 
