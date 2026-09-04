@@ -1,6 +1,6 @@
 "use client";
 
-// daisyBill-style delivery-method picker shown when a bill is submitted: one
+// Delivery-method picker shown when a bill is submitted: one
 // card per route (e-bill / email / fax / mail), the selected card expands
 // inline with its destination sub-form, and the primary button names the
 // channel. Rendered by BillSubmissionForm by default in connected mode; also

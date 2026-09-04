@@ -1,6 +1,6 @@
 "use client";
 
-// daisyBill-style "Report Bill Status" dialog: call the Claims Administrator /
+// "Report Bill Status" dialog: call the Claims Administrator /
 // Bill Review vendor (contacts in section 1), verify the submission receipt
 // the host renders in section 2, then record the reported payment status plus
 // the call details in section 3. Presentational: the host posts the resulting

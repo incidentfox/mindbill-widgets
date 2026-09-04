@@ -24,7 +24,7 @@
     "react": ">=18"
   },
   "dependencies": {
-    "@mindbill/browser": "^0.22.0",
+    "@mindbill/browser": "^0.22.1",
     "@mindbill/embed": "workspace:^"
   },
   "keywords": [

@@ -170,7 +170,7 @@ The operations surfaces consume a normalized list of bills, so they can be used 
 
 `summarizeMindBillDashboard`, `buildMindBillReportRows`, `buildMindBillReportCsv`, `buildMindBillStatusAgingMatrix`, and `buildMindBillStatusAgingCsv` are also exported for custom layouts and server-side reporting.
 
-`mindbill-bill-tasks-dashboard` is the daisyBill-style Bill Tasks worklist: one tone-colored card per task section, rows bucketed by age in days with clickable counts, and a grand-total card. Aggregate your own work items with `buildBillTasksDashboard` from `@mindbill/browser` (types re-exported here) and pass the result as `[data]`:
+`mindbill-bill-tasks-dashboard` is a Bill Tasks worklist: one tone-colored card per task section, rows bucketed by age in days with clickable counts, and a grand-total card. Aggregate your own work items with `buildBillTasksDashboard` from `@mindbill/browser` (types re-exported here) and pass the result as `[data]`:
 
 ```html
 <mindbill-bill-tasks-dashboard

@@ -15,7 +15,7 @@ import {
   type MindBillBillTasksCell,
 } from "./bill-tasks-dashboard";
 
-// daisyBill-style "Bill Tasks" dashboard: one rounded, tone-colored card per
+// "Bill Tasks" dashboard: one rounded, tone-colored card per
 // task section, rows bucketed by age in days with colored bucket header pills,
 // per-cell click-through counts, and a closing grand-total card. The pure
 // aggregation lives in @mindbill/browser (buildBillTasksDashboard) so React
