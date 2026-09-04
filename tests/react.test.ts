@@ -225,6 +225,14 @@ describe("atomic bill submission form contract", () => {
     expect(componentInput).toBe(validBill);
   });
 
+  it("lets hosts make auto-attached documents removable", () => {
+    const source = readFileSync("packages/react/src/bill-submission-form.tsx", "utf8");
+
+    expect(source).toContain("const removable = attachment.removable ?? !auto");
+    expect(source).toContain('aria-label="Auto-attached"');
+    expect(source).toContain("aria-label={`Remove ${attachment.fileName}`}");
+  });
+
   it("owns and exports required-field rules", () => {
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.dateOfBirth");
     expect(BILL_SUBMISSION_REQUIRED_FIELDS).toContain("patient.address.state");
