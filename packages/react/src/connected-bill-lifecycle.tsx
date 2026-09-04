@@ -321,16 +321,18 @@ type Tab = "details" | "history";
 
 function LifecycleDialog({ children, title, wide = false, onClose }: { children: ReactNode; title: string; wide?: boolean; onClose: () => void }): ReactElement {
   const dialog = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     dialog.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onCloseRef.current();
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       previous?.focus();
     };
-  }, [onClose]);
+  }, []);
   return <div className="mb-lifecycle-dialog-backdrop" onMouseDown={(event) => event.currentTarget === event.target && onClose()}>
     <div ref={dialog} className={["mb-lifecycle-dialog", wide ? "wide" : ""].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
       <button type="button" className="mb-lifecycle-dialog-close" aria-label="Close" onClick={onClose}>×</button>{children}

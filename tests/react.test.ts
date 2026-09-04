@@ -1402,6 +1402,22 @@ describe("connected bill status", () => {
 });
 
 describe("connected bill lifecycle", () => {
+  it("does not refocus the dialog when a controlled field rerenders it", () => {
+    const source = readFileSync(
+      "packages/react/src/connected-bill-lifecycle.tsx",
+      "utf8",
+    );
+    const dialogSource = source.slice(
+      source.indexOf("function LifecycleDialog"),
+      source.indexOf("function correctionDocumentType"),
+    );
+
+    expect(dialogSource).toContain("const onCloseRef = useRef(onClose);");
+    expect(dialogSource).toContain("onCloseRef.current = onClose;");
+    expect(dialogSource).toContain("}, []);");
+    expect(dialogSource).not.toContain("}, [onClose]);");
+  });
+
   const lifecycle = {
     environment: "sandbox",
     bill: {
