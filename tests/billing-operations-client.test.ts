@@ -52,4 +52,31 @@ describe("billing operations client", () => {
 
     expect(mintCount).toBe(2);
   });
+
+  it("retries session minting when a Strict Mode effect aborts the pending request", async () => {
+    let mintCount = 0;
+    const getSession = vi.fn(({ signal }: { signal: AbortSignal }) => {
+      mintCount += 1;
+      if (mintCount > 1) {
+        return Promise.resolve({ token: "replacement_browser_token", expiresAt: "2099-01-01T00:00:00.000Z" });
+      }
+      return new Promise<never>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    });
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      data: { items: [], total: 0, balanceTotal: 0, page: 1, pageSize: 25 },
+    }));
+    const client = createBillingOperationsClient({ apiBaseUrl: "https://api.example", fetch: fetcher, getSession });
+    const firstController = new AbortController();
+    const first = client.getBills({}, firstController.signal);
+
+    firstController.abort();
+    const second = client.getBills({}, new AbortController().signal);
+
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    await expect(second).resolves.toMatchObject({ total: 0 });
+    expect(getSession).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
 });
