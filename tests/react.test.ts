@@ -9,6 +9,7 @@ import {
 } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
 import {
+  correctionRejectionSummary,
   createBillLifecycleClient,
   openPdfFromUserGesture,
   shouldShowSandboxControls,
@@ -53,6 +54,7 @@ import {
   visibleBillLifecycleActions,
 } from "../packages/react/src/bill-lifecycle-surfaces";
 import {
+  billSubmissionInitializationKey,
   applyBillSubmissionEvaluationDiagnoses,
   applyBillSubmissionEvaluationModifiers,
   BILL_SUBMISSION_REPORT_TYPES,
@@ -224,6 +226,31 @@ describe("atomic bill submission form contract", () => {
     const componentInput: BillSubmissionInput = sdkInput;
 
     expect(componentInput).toBe(validBill);
+  });
+
+  it("preserves an in-progress draft when polling reconstructs equivalent initial props", () => {
+    const originalKey = billSubmissionInitializationKey(validBill, [{
+      id: "document_1",
+      fileName: "synthetic-report.pdf",
+      documentType: "final_report",
+      loadBlob: async () => new Blob(),
+    }], "Synthetic Claims Administrator");
+    const refreshedKey = billSubmissionInitializationKey(structuredClone(validBill), [{
+      documentType: "final_report",
+      fileName: "synthetic-report.pdf",
+      id: "document_1",
+      loadBlob: async () => new Blob(["refreshed loader"]),
+    }], "Synthetic Claims Administrator");
+    const changedPayerKey = billSubmissionInitializationKey({
+      ...structuredClone(validBill),
+      claim: {
+        ...validBill.claim,
+        claimsAdministrator: { id: "payer_8", name: "Different Claims Administrator" },
+      },
+    });
+
+    expect(refreshedKey).toBe(originalKey);
+    expect(changedPayerKey).not.toBe(originalKey);
   });
 
   it("lets hosts make auto-attached documents removable", () => {
@@ -1402,6 +1429,24 @@ describe("connected bill status", () => {
 });
 
 describe("connected bill lifecycle", () => {
+  it("separates a clearinghouse rejection code from its readable reason", () => {
+    expect(correctionRejectionSummary({
+      reason: "A7:488 20260902 U 1300 Early adoption of ICD10 is not permitted",
+    })).toEqual({
+      code: "A7:488",
+      clearinghouseDetail: "20260902 U 1300",
+      description: "Early adoption of ICD10 is not permitted",
+    });
+    expect(correctionRejectionSummary({
+      code: "A7:488",
+      reason: "A7:488: Invalid diagnosis code",
+    })).toEqual({
+      code: "A7:488",
+      clearinghouseDetail: null,
+      description: "Invalid diagnosis code",
+    });
+  });
+
   it("does not refocus the dialog when a controlled field rerenders it", () => {
     const source = readFileSync(
       "packages/react/src/connected-bill-lifecycle.tsx",
