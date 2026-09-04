@@ -410,6 +410,8 @@ export type BillActivityRecord = {
  *  app, React, Angular, embeds) reads identically. */
 export type BillHistoryEntry = {
   id: string;
+  /** Immutable bill attempt that produced this event. Present on unified chain history. */
+  attemptId?: string;
   /** ISO timestamp for ordering and the Date column. */
   date: string;
   /** Short Action label — "Original Bill", "277 Accept", "Payment", "Note", … */
@@ -442,6 +444,20 @@ export type BillHistoryEntry = {
     codes?: Array<{ code: string; text: string }>;
     text?: string;
   };
+};
+
+/** One immutable transmission attempt within a logical bill chain. */
+export type BillAttemptSummary = {
+  id: string;
+  billNumber?: string | number;
+  label: string;
+  deliveryLabel?: string;
+  sentAt?: string;
+  ackLabel?: string;
+  ackAt?: string;
+  status?: string;
+  /** The latest attempt that receives lifecycle mutations. */
+  isCurrent: boolean;
 };
 
 export type BillPaymentRecord = {
@@ -596,6 +612,8 @@ export type BillLifecycleData = BillReviewData & {
   /** Presented history rows. Optional: absent when the API
    *  predates the presented-history rollout — fall back to `activity`. */
   history?: BillHistoryEntry[];
+  /** Immutable submissions that share this bill's unified history. */
+  attempts?: BillAttemptSummary[];
   payments: BillPaymentRecord[];
   remittance: BillRemittanceSummary;
   delivery: BillLifecycleDelivery;
@@ -808,6 +826,8 @@ export function secondReviewDeadline(
 export type ResubmitBillInput = BillActorInput & {
   reason?: string;
   bill: BrowserBillCreateInput;
+  /** Explicit delivery route confirmed by the biller for this new attempt. */
+  submission?: Omit<SubmitBillInput, keyof BillActorInput>;
   documents?: BrowserBillSubmissionDocument[];
 };
 /**
@@ -950,6 +970,8 @@ export type BillSubmissionClient = {
 /** Input for the pre-submission delivery preview keyed on a payer-directory id. */
 export type BillDeliveryPreviewInput = {
   claimsAdministratorId: string;
+  /** Selected payer child when the administrator exposes multiple payer routes. */
+  payerId?: string;
   /** Two-letter state; defaults to CA server-side. */
   injuryState?: string;
 };
@@ -1428,6 +1450,7 @@ export function createBillLifecycleClient({
     },
     async getDeliveryPreview(input) {
       const params = new URLSearchParams({ claimsAdministratorId: input.claimsAdministratorId.trim() });
+      if (input.payerId?.trim()) params.set("payerId", input.payerId.trim());
       if (input.injuryState?.trim()) params.set("injuryState", input.injuryState.trim());
       const response = await request(`/partner/v2/browser/delivery-preview?${params.toString()}`);
       if (!response.ok) throw await responseError(response, "Delivery routes could not be loaded.");

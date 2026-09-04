@@ -168,6 +168,8 @@ export type BillSubmissionSourceAttachment = {
 export type BillSubmissionUpload = { file: File; documentType: BillSubmissionDocumentType; description?: string; reportTypeCode?: string };
 export type BillSubmissionFormValue = {
   bill: CompleteBillSubmissionInput;
+  /** Delivery route explicitly confirmed by the biller, when the route picker is enabled. */
+  submission?: SendRouteSubmission;
   sourceAttachmentIds: string[];
   sourceAttachmentReportTypes: Record<string, string>;
   uploads: BillSubmissionUpload[];
@@ -206,10 +208,13 @@ export type BillSubmissionFormProps = {
   taxonomyOptions?: BillSubmissionTaxonomyOption[];
   /**
    * The delivery-method dialog shown when the biller submits.
-   * "auto" (default) shows it in connected mode whenever the delivery preview
-   * is available; "off" submits directly on MindBill's recommended route.
+   * "auto" (default) shows it whenever the delivery preview is available;
+   * "required" fails closed until the biller confirms a route; "off" submits
+   * directly on MindBill's recommended route.
    */
-  deliveryRoutePicker?: "auto" | "off";
+  deliveryRoutePicker?: "auto" | "required" | "off";
+  /** Heading for the delivery confirmation dialog. */
+  deliveryRouteDialogTitle?: ReactNode;
   /** Auto hides and forces J4 for med-legal bills; treatment bills show the full report-type directory. */
   attachmentReportTypeMode?: BillSubmissionAttachmentReportTypeMode;
   attachmentReportTypes?: readonly BillSubmissionReportTypeOption[];
@@ -689,7 +694,7 @@ export function BillSubmissionForm({
   initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
   fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -705,7 +710,7 @@ export function BillSubmissionForm({
   const [validationActive, setValidationActive] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
   // The delivery-method dialog staged with the validated bill.
-  const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; complete: CompleteBillSubmissionInput } | null>(null);
+  const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; value: BillSubmissionFormValue } | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]); const [payerLoading, setPayerLoading] = useState(false);
   const [payerSuggestions, setPayerSuggestions] = useState<BillReviewPayerSuggestion[]>([]);
@@ -896,41 +901,48 @@ export function BillSubmissionForm({
         ...(administrator ? { claimsAdministrator: submittedClaimsAdministrator(administrator) } : {}),
       },
     } as CompleteBillSubmissionInput;
-    if (onSubmit) {
-      setSubmitting(true);
-      try { await onSubmit({ bill: complete, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads }); }
-      catch (caught) { setFormError(caught instanceof Error ? caught.message : "Unable to submit the bill."); }
-      finally { setSubmitting(false); }
-      return;
-    }
-    // Connected mode: show the delivery-method dialog (e-bill / email / fax /
-    // mail with recipient overrides) before dispatch. Falls back to direct
-    // submission on MindBill's recommended route when the preview is
-    // unavailable (older API deployments, missing payers:read permission).
+    const value: BillSubmissionFormValue = { bill: complete, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads };
+    // Show the delivery-method dialog (e-bill / email / fax / mail with
+    // recipient overrides) before either connected or host-owned submission.
+    // Required mode deliberately fails closed so correction workflows cannot
+    // silently reuse the previous route when previewing the newly selected
+    // claims administrator fails.
     if (deliveryRoutePicker !== "off" && referenceClient) {
       setSubmitting(true);
       try {
         const delivery = await referenceClient.getDeliveryPreview({
           claimsAdministratorId: complete.claim.claimsAdministrator.id,
+          ...(complete.claim.claimsAdministrator.payerId ? { payerId: complete.claim.claimsAdministrator.payerId } : {}),
           ...(complete.claim.injuryState ? { injuryState: complete.claim.injuryState } : {}),
         });
         setSubmitting(false);
         setRouteError(null);
-        setRouteDialog({ delivery, complete });
+        setRouteDialog({ delivery, value });
         return;
-      } catch {
+      } catch (caught) {
         setSubmitting(false);
+        if (deliveryRoutePicker === "required") {
+          setFormError(caught instanceof Error ? caught.message : "Delivery routes could not be loaded. Nothing was sent.");
+          return;
+        }
       }
     }
-    await performConnectedSubmit(complete, undefined);
+    if (deliveryRoutePicker === "required") {
+      setFormError("Delivery confirmation is unavailable. Nothing was sent.");
+      return;
+    }
+    await performSubmit(value);
   }
 
-  async function performConnectedSubmit(
-    complete: CompleteBillSubmissionInput,
-    submission: SendRouteSubmission | undefined,
-  ): Promise<void> {
+  async function performSubmit(value: BillSubmissionFormValue): Promise<void> {
     setSubmitting(true);
     try {
+      if (onSubmit) {
+        await onSubmit(value);
+        setRouteDialog(null);
+        setRouteError(null);
+        return;
+      }
       if (!submissionClient) throw new Error("The connected billing client is unavailable.");
       const documents = await prepareBillSubmissionDocuments({
         attachments,
@@ -941,8 +953,8 @@ export function BillSubmissionForm({
         ...(fetchOverride ? { fetch: fetchOverride } : {}),
       });
       const result = await submissionClient.submitBill({
-        bill: complete,
-        ...(submission ? { submission } : {}),
+        bill: value.bill,
+        ...(value.submission ? { submission: value.submission } : {}),
         documents,
       });
       setRouteDialog(null);
@@ -950,7 +962,7 @@ export function BillSubmissionForm({
       await onSubmitted?.(result);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Unable to submit the bill.";
-      if (submission) setRouteError(message); else setFormError(message);
+      if (value.submission) setRouteError(message); else setFormError(message);
     }
     finally { setSubmitting(false); }
   }
@@ -1107,12 +1119,12 @@ export function BillSubmissionForm({
       {children ?? defaultLayout}
       {routeDialog ? (
         <SendRouteDialog
-          title="Send bill"
+          title={deliveryRouteDialogTitle}
           delivery={routeDialog.delivery}
           submitting={submitting}
           error={routeError}
           onCancel={() => { if (!submitting) { setRouteDialog(null); setRouteError(null); } }}
-          onConfirm={(submission) => { void performConnectedSubmit(routeDialog.complete, submission); }}
+          onConfirm={(submission) => { void performSubmit({ ...routeDialog.value, submission }); }}
         />
       ) : null}
     </form>

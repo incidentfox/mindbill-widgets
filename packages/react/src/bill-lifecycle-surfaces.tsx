@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactElement } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from "react";
 import type {
   BillEorDocument,
   BillHistoryEntry,
@@ -132,6 +132,8 @@ export function BillActivityTimeline({ events, emptyLabel = "No bill activity ye
 
 export type BillHistoryTableProps = SurfaceProps & {
   entries: readonly BillHistoryEntry[];
+  /** History row selected from the submissions ribbon. */
+  selectedEntryId?: string;
   emptyLabel?: string;
   /** Formats the Date column. Defaults to MM/DD/YYYY. */
   formatDate?: (iso: string) => string;
@@ -153,8 +155,15 @@ function historyDate(iso: string): string {
  * are pale-yellow, and 277 responses expand into decoded status-code sentences. The
  * rows come pre-worded from the MindBill API (`BillLifecycleData.history`).
  */
-export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.", appearance, className, style, formatDate = historyDate, documentHref, onOpenDocument }: BillHistoryTableProps): ReactElement {
+export function BillHistoryTable({ entries, selectedEntryId, emptyLabel = "No bill history yet.", appearance, className, style, formatDate = historyDate, documentHref, onOpenDocument }: BillHistoryTableProps): ReactElement {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const selectedRowRef = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    if (!selectedEntryId) return;
+    const selected = entries.find((entry) => entry.id === selectedEntryId);
+    if (selected?.details) setExpanded((current) => current[selectedEntryId] ? current : { ...current, [selectedEntryId]: true });
+    selectedRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [entries, selectedEntryId]);
   return (
     <section className={classes("mb-surface mb-history", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill history">
       <style>{lifecycleSurfaceStyles}</style>
@@ -164,6 +173,7 @@ export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.",
           <div className="mb-history-head" aria-hidden="true"><span>Date</span><span>Action</span><span>User</span><span>Details</span></div>
           <ul className="mb-history-rows">
             {entries.map((entry) => {
+              const isSelected = entry.id === selectedEntryId;
               const expandable = Boolean(entry.details);
               const isOpen = expandable && Boolean(expanded[entry.id]);
               const details = entry.details;
@@ -177,7 +187,12 @@ export function BillHistoryTable({ entries, emptyLabel = "No bill history yet.",
                 </span>
               </>;
               return (
-                <li key={entry.id} className={`mb-history-row is-${entry.tone}`}>
+                <li
+                  key={entry.id}
+                  ref={isSelected ? selectedRowRef : undefined}
+                  className={`mb-history-row is-${entry.tone}${isSelected ? " is-selected" : ""}`}
+                  aria-current={isSelected ? "true" : undefined}
+                >
                   {expandable ? <button
                     type="button"
                     className="mb-history-line is-expandable"
@@ -590,6 +605,7 @@ const lifecycleSurfaceStyles = `
 .mb-history-rows{list-style:none;margin:0;padding:0}.mb-history-row{border-top:1px solid var(--mb-border)}
 .mb-history-row.is-submission{background:color-mix(in srgb,var(--mb-accent) 9%,var(--mb-surface))}
 .mb-history-row.is-note{background:color-mix(in srgb,#f2c344 13%,var(--mb-surface))}
+.mb-history-row.is-selected{position:relative;background:color-mix(in srgb,var(--mb-accent) 15%,var(--mb-surface));box-shadow:inset 4px 0 0 var(--mb-accent),inset 0 0 0 1px color-mix(in srgb,var(--mb-accent) 44%,transparent)}
 .mb-history-line{display:grid;grid-template-columns:96px 160px 140px minmax(0,1fr);gap:12px;width:100%;padding:10px 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left}
 .mb-history-line.is-expandable{cursor:pointer}.mb-history-line.is-expandable:hover .mb-history-summary{text-decoration:underline}
 .mb-history-date{color:var(--mb-muted);font-size:13px}.mb-history-action{font-size:13.5px;font-weight:750}

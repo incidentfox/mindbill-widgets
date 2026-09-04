@@ -153,6 +153,11 @@ recommended route, or render the exported `SendRouteDialog` yourself for a custo
 flow. When the preview is unavailable, the form submits directly — behavior on
 older deployments is unchanged.
 
+Correction and Submit New Bill forms always require this confirmation. Their
+preview uses the administrator and subpayor selected in the edited form, so a
+biller who corrects a rejected wrong-payor submission can inspect the new route
+and deliberately switch to fax, email, mail, or e-bill before anything is sent.
+
 ## 2. Render the submitted lifecycle
 
 `ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, rejection details, EORs, remittance, and payments directly from MindBill. React and Angular both show rejected bills as an action-required surface with the full ordered issue list and acknowledgement codes; both also export that rejection notice for custom layouts. Do not pass or maintain lifecycle seed data in your application. Authenticated packet previews open the PDF directly in a new tab.
@@ -175,8 +180,11 @@ and acknowledgement history rows), and the five reported-status outcomes with
 call details — and records the result on the bill history. The Second Review
 panel prefills an editable LC §4622 appeal reason and, when the lifecycle
 includes the denial EOR, shows the 90-day filing deadline. Bills with two or
-more submissions also render a submissions ribbon (Original Bill, Second
-Review, Duplicate Bill, …) at the top of the React lifecycle view.
+more submissions also render a selectable submissions ribbon (Original Bill,
+Second Review, Duplicate Bill, …) at the top of the React lifecycle view. Each
+attempt includes its delivery method, sent date, and latest operational status
+and date (including 277 Reject and payment-deadline states). Selecting one opens
+and highlights its row inside the single complete history shared by the chain.
 
 ```tsx
 import { ConnectedBillLifecycle } from "@mindbill/react";

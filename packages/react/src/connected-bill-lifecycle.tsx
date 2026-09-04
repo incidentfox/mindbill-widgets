@@ -580,6 +580,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string>();
   const [panel, setPanel] = useState<Panel>("");
   const [notice, setNotice] = useState("");
   const [reason, setReason] = useState("");
@@ -661,6 +662,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       });
       await lifecycle.resubmitBill({
         bill: value.bill as BrowserBillCreateInput,
+        ...(value.submission ? { submission: value.submission } : {}),
         ...(documents.length ? { documents } : {}),
         ...(reason.trim() ? { reason: reason.trim() } : {}),
         ...actor,
@@ -674,7 +676,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
           ? cause.message
           : "The corrected bill could not be resubmitted.",
       );
-      return;
+      throw cause;
     }
     setPanel("");
     setReason("");
@@ -693,6 +695,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       });
       await lifecycle.submitNewBill({
         bill: value.bill as BrowserBillCreateInput,
+        ...(value.submission ? { submission: value.submission } : {}),
         ...(documents.length ? { documents } : {}),
         ...(reason.trim() ? { reason: reason.trim() } : {}),
         ...actor,
@@ -706,7 +709,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
           ? cause.message
           : "The new bill could not be submitted.",
       );
-      return;
+      throw cause;
     }
     setPanel("");
     setReason("");
@@ -724,14 +727,19 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
   const actions = data.lifecycle.actions.filter((action) => action.enabled && supportedActions.has(action.id));
   const showSandboxControls = shouldShowSandboxControls(data.environment, sandboxControls);
   const simulations = showSandboxControls ? sandboxScenarios(data.lifecycle.state) : [];
-  const ribbonItems = data.history ? billSubmissionsRibbonFromHistory(data.history) : [];
+  const mappedRibbonItems = data.history ? billSubmissionsRibbonFromHistory(data.history, data.attempts) : [];
+  const activeSubmissionId = selectedSubmissionId
+    ?? mappedRibbonItems.find((item) => item.active)?.id
+    ?? mappedRibbonItems[mappedRibbonItems.length - 1]?.id;
+  const ribbonItems = mappedRibbonItems.map((item) => ({ ...item, active: item.id === activeSubmissionId }));
+  const selectedHistoryEntryId = ribbonItems.find((item) => item.id === activeSubmissionId)?.historyEntryId;
   const statusContacts = reportBillStatusContacts(data.delivery);
   const receiptEntries = (data.history ?? []).filter((entry) => entry.kind === "submission" || entry.kind === "ack");
   const reviewDeadline = secondReviewDeadline(data.eors);
 
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
-    {ribbonItems.length >= 2 ? <BillSubmissionsRibbon items={ribbonItems} onSelect={() => setTab("history")} {...(appearance ? { appearance } : {})} /> : null}
+    {ribbonItems.length >= 2 ? <BillSubmissionsRibbon items={ribbonItems} onSelect={(item) => { setSelectedSubmissionId(item.id); setTab("history"); }} {...(appearance ? { appearance } : {})} /> : null}
     {data.lifecycle.state.toLowerCase() === "rejected" && data.rejection
       ? <BillRejectionNotice rejection={data.rejection} submittedAt={data.lifecycle.submittedAt ?? null} {...(appearance ? { appearance } : {})} />
       : <BillLifecycleProgress state={data.lifecycle.state} nativeStatus={data.lifecycle.nativeStatus} submittedAt={data.lifecycle.submittedAt ?? null} agingDays={data.lifecycle.agingDays ?? null} {...(appearance ? { appearance } : {})} />}
@@ -753,7 +761,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
 
       <BillReadOnlyForm data={data} onOpenAttachment={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
     </div> : <div className="mb-lifecycle-tabpanel" role="tabpanel">{data.history?.length
-      ? <BillHistoryTable entries={data.history} onOpenDocument={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
+      ? <BillHistoryTable entries={data.history} {...(selectedHistoryEntryId ? { selectedEntryId: selectedHistoryEntryId } : {})} onOpenDocument={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
       : <BillActivityTimeline events={data.activity} {...(appearance ? { appearance } : {})} />}</div>}
 
     {(viewEor || actions.length) ? <aside className="mb-lifecycle-actions-sheet" aria-label="Bill actions">
@@ -781,6 +789,8 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       attentionFields={correctionAttentionFields}
       attentionMessage={correctionAttentionFields.length ? "The rejected response points to the highlighted fields. Confirm every required value before resubmitting." : "Confirm the bill information below before resubmitting."}
       submitLabel={lifecycle.isMutating ? "Resubmitting…" : "Resubmit bill"}
+      deliveryRoutePicker="required"
+      deliveryRouteDialogTitle="Confirm corrected bill delivery"
       heading="Corrected bill information"
       description="The original submission stays unchanged. This form creates the next submission attempt."
       disabled={lifecycle.isMutating}
@@ -802,6 +812,8 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       {...(claimsAdministratorSources ? { claimsAdministratorSources } : {})}
       attentionMessage="Confirm every value carried over from the closed bill before submitting the new bill."
       submitLabel={lifecycle.isMutating ? "Submitting…" : "Submit New Bill"}
+      deliveryRoutePicker="required"
+      deliveryRouteDialogTitle="Confirm new bill delivery"
       heading="New bill information"
       description="The closed bill stays unchanged. This form submits a fresh bill linked to it."
       disabled={lifecycle.isMutating}

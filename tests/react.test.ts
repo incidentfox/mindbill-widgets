@@ -759,10 +759,10 @@ describe("pre-submission reference data", () => {
       .mockResolvedValueOnce(jsonResponse(preview));
     const client = createBillReferenceClient({ fetch: fetcher });
 
-    await expect(client.getDeliveryPreview({ claimsAdministratorId: "pd:zurich", injuryState: "CA" }))
+    await expect(client.getDeliveryPreview({ claimsAdministratorId: "pd:zurich", payerId: "pd:zurich/branch", injuryState: "CA" }))
       .resolves.toMatchObject({ payerName: "Zurich American Insurance Company", recommended: { route: "ebill" } });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/delivery-preview?claimsAdministratorId=pd%3Azurich&injuryState=CA",
+      "https://app.mindbill.org/partner/v2/browser/delivery-preview?claimsAdministratorId=pd%3Azurich&payerId=pd%3Azurich%2Fbranch&injuryState=CA",
     );
   });
 
@@ -1625,7 +1625,11 @@ describe("connected bill lifecycle", () => {
       diagnoses: ["M79.641"],
       serviceLines: [{ code: "ML201", units: 1 }],
     } satisfies CompleteBillSubmissionInput;
-    await expect(client.resubmitBill({ reason: "Selected the correct payer route.", bill: correctedBill })).resolves.toMatchObject({
+    await expect(client.resubmitBill({
+      reason: "Selected the correct payer route.",
+      bill: correctedBill,
+      submission: { route: "fax", destination: { faxNumber: "(555) 010-2040" }, attention: "Claims" },
+    })).resolves.toMatchObject({
       lifecycle: { state: "submitted" },
     });
 
@@ -1637,6 +1641,7 @@ describe("connected bill lifecycle", () => {
       action: "resubmit",
       reason: "Selected the correct payer route.",
       bill: correctedBill,
+      submission: { route: "fax", destination: { faxNumber: "(555) 010-2040" }, attention: "Claims" },
     }));
   });
 
@@ -1676,9 +1681,11 @@ describe("connected bill lifecycle", () => {
     expect(handler).toContain("setCorrectionError(\"\")");
     expect(handler).toContain("catch (cause)");
     expect(handler).toContain("setCorrectionError(");
-    expect(handler).toContain("return;");
+    expect(handler).toContain("throw cause;");
     // Success is the only path that closes the panel.
-    expect(handler.indexOf("setPanel(\"\")")).toBeGreaterThan(handler.indexOf("return;"));
+    expect(handler.indexOf("setPanel(\"\")")).toBeGreaterThan(handler.indexOf("throw cause;"));
+    expect(handler).toContain("...(value.submission ? { submission: value.submission } : {})");
+    expect(source).toContain('deliveryRoutePicker="required"');
     expect(source).toContain(
       "{correctionError ? <div className=\"mb-lifecycle-message error\" role=\"alert\">{correctionError}</div> : null}",
     );
@@ -1763,8 +1770,9 @@ describe("connected bill lifecycle", () => {
     expect(handler).toContain("setNewBillError(\"\")");
     expect(handler).toContain("catch (cause)");
     expect(handler).toContain("setNewBillError(");
-    expect(handler).toContain("return;");
-    expect(handler.indexOf("setPanel(\"\")")).toBeGreaterThan(handler.indexOf("return;"));
+    expect(handler).toContain("throw cause;");
+    expect(handler.indexOf("setPanel(\"\")")).toBeGreaterThan(handler.indexOf("throw cause;"));
+    expect(handler).toContain("...(value.submission ? { submission: value.submission } : {})");
     expect(source).toContain(
       "{newBillError ? <div className=\"mb-lifecycle-message error\" role=\"alert\">{newBillError}</div> : null}",
     );
@@ -2071,19 +2079,109 @@ describe("bill submissions ribbon", () => {
     expect(items).toEqual([
       {
         id: "hist_1",
+        historyEntryId: "hist_1",
         label: "Original Bill",
+        badge: "277 Accept",
+        badgeTone: "success",
         meta: [
           { label: "Delivery", value: "e-Bill (837)" },
           { label: "Sent", value: "08/14/2026" },
+          { label: "Accepted", value: "08/14/2026" },
         ],
       },
       {
         id: "hist_3",
+        historyEntryId: "hist_3",
         label: "Second Review",
         meta: [
           { label: "Delivery", value: "Fax" },
           { label: "Sent", value: "09/01/2026" },
         ],
+      },
+    ]);
+  });
+
+  it("summarizes each immutable attempt with its own rejection or payment deadline", () => {
+    const items = billSubmissionsRibbonFromHistory([
+      entry({ date: "2025-12-12T12:00:00.000Z" }),
+      entry({ id: "hist_2", kind: "ack", action: "277 Reject", summary: "The claims administrator rejected the submission.", tone: "problem", date: "2026-01-23T12:00:00.000Z" }),
+      entry({ id: "hist_3", action: "Original Bill", summary: "Electronically sent to the corrected payer.", date: "2026-02-02T12:00:00.000Z" }),
+      entry({
+        id: "hist_4",
+        kind: "ack",
+        action: "277 Accept",
+        summary: "The claims administrator accepted the submission.",
+        tone: "success",
+        date: "2026-02-14T12:00:00.000Z",
+        details: { complianceDueDates: [{ date: "2026-03-27T12:00:00.000Z", text: "Payment in 30 working days" }] },
+      }),
+    ]);
+
+    expect(items).toEqual([
+      {
+        id: "hist_1",
+        historyEntryId: "hist_1",
+        label: "Original Bill",
+        badge: "277 Reject",
+        badgeTone: "danger",
+        meta: [
+          { label: "Delivery", value: "e-Bill (837)" },
+          { label: "Sent", value: "12/12/2025" },
+          { label: "Rejected", value: "01/23/2026" },
+        ],
+      },
+      {
+        id: "hist_3",
+        historyEntryId: "hist_3",
+        label: "Original Bill",
+        badge: "Payment in 30 working days",
+        badgeTone: "warning",
+        meta: [
+          { label: "Delivery", value: "e-Bill (837)" },
+          { label: "Sent", value: "02/02/2026" },
+          { label: "Effective date", value: "03/27/2026" },
+        ],
+      },
+    ]);
+  });
+
+  it("uses backend attempt identity to associate interleaved unified-history rows", () => {
+    const items = billSubmissionsRibbonFromHistory([
+      entry({ id: "orig-sub", attemptId: "bill-original", date: "2025-12-12T12:00:00.000Z" }),
+      entry({ id: "corrected-sub", attemptId: "bill-corrected", action: "Corrected Bill", summary: "Faxed to (555) 010-2040.", date: "2026-02-02T12:00:00.000Z" }),
+      entry({ id: "orig-reject", attemptId: "bill-original", kind: "ack", action: "277 Reject", summary: "The original payer rejected the submission.", tone: "problem", date: "2026-02-03T12:00:00.000Z" }),
+      entry({ id: "corrected-accept", attemptId: "bill-corrected", kind: "ack", action: "277 Accept", summary: "The replacement payer accepted the submission.", tone: "success", date: "2026-02-04T12:00:00.000Z" }),
+    ], [
+      { id: "bill-original", label: "Original Bill", deliveryLabel: "e-Bill (837)", sentAt: "2025-12-12T12:00:00.000Z", isCurrent: false },
+      { id: "bill-corrected", label: "Corrected Bill (-1)", deliveryLabel: "Fax", sentAt: "2026-02-02T12:00:00.000Z", isCurrent: true },
+    ]);
+
+    expect(items).toEqual([
+      {
+        id: "bill-original",
+        historyEntryId: "orig-sub",
+        label: "Original Bill",
+        badge: "277 Reject",
+        badgeTone: "danger",
+        meta: [
+          { label: "Delivery", value: "e-Bill (837)" },
+          { label: "Sent", value: "12/12/2025" },
+          { label: "Rejected", value: "02/03/2026" },
+        ],
+        active: false,
+      },
+      {
+        id: "bill-corrected",
+        historyEntryId: "corrected-sub",
+        label: "Corrected Bill (-1)",
+        badge: "277 Accept",
+        badgeTone: "success",
+        meta: [
+          { label: "Delivery", value: "Fax" },
+          { label: "Sent", value: "02/02/2026" },
+          { label: "Accepted", value: "02/04/2026" },
+        ],
+        active: true,
       },
     ]);
   });
