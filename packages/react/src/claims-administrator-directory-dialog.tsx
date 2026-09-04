@@ -42,6 +42,7 @@ function payerDetails(payer: BillClaimsAdministratorPayer, index: number): React
     payer.optionType ? `Type: ${payer.optionType}` : null,
     payer.deliveryType ? `Delivery: ${payer.deliveryType}` : null,
     payer.clearinghouse && payer.payerId ? `${payer.clearinghouse}: ${payer.payerId}` : null,
+    payer.sourceClearinghouse && payer.sourcePayerId ? `Catalog route: ${payer.sourceClearinghouse} ${payer.sourcePayerId}` : null,
     ...identifiers,
     payer.preferredClearinghouse ? `Preferred: ${payer.preferredClearinghouse}` : null,
   ].filter((value): value is string => Boolean(value));

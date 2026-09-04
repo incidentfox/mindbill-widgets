@@ -91,6 +91,10 @@ export type BillReviewPayerOption = {
   deliveryType?: string | null;
   clearinghouse?: string | null;
   payerId?: string | null;
+  /** Original directory route when live delivery uses a replacement clearinghouse. */
+  sourceClearinghouse?: string | null;
+  /** Original directory payer ID when live delivery uses a replacement route. */
+  sourcePayerId?: string | null;
   clearinghousePayerIds?: Record<string, string>;
   preferredClearinghouse?: string | null;
 };
@@ -515,6 +519,8 @@ export type BillClaimsAdministratorPayer = {
   deliveryType?: string | null;
   clearinghouse?: string | null;
   payerId?: string | null;
+  sourceClearinghouse?: string | null;
+  sourcePayerId?: string | null;
   clearinghousePayerIds?: Record<string, string>;
   preferredClearinghouse?: string | null;
 };
@@ -1277,6 +1283,8 @@ export function createBillLifecycleClient({
           ...(typeof candidate.deliveryType === "string" ? { deliveryType: candidate.deliveryType } : {}),
           ...(typeof candidate.clearinghouse === "string" ? { clearinghouse: candidate.clearinghouse } : {}),
           ...(typeof candidate.payerId === "string" ? { payerId: candidate.payerId } : {}),
+          ...(typeof candidate.sourceClearinghouse === "string" ? { sourceClearinghouse: candidate.sourceClearinghouse } : {}),
+          ...(typeof candidate.sourcePayerId === "string" ? { sourcePayerId: candidate.sourcePayerId } : {}),
           ...(candidate.clearinghousePayerIds && typeof candidate.clearinghousePayerIds === "object" && !Array.isArray(candidate.clearinghousePayerIds)
             ? { clearinghousePayerIds: Object.fromEntries(Object.entries(candidate.clearinghousePayerIds).filter((entry): entry is [string, string] => typeof entry[1] === "string")) }
             : {}),
