@@ -21,8 +21,12 @@ describe("billing operations client", () => {
           expiresAt: "2099-01-01T00:00:00.000Z",
         });
       }
-      expect(url).toBe("https://sandbox-api.mindbill.org/partner/v2/browser/bills?status=all&age=61-90&taskLabel=Send+Bill&page=2");
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer browser_session_token");
+      if (url.includes("/partner/v2/browser/bills?")) {
+        expect(url).toBe("https://sandbox-api.mindbill.org/partner/v2/browser/bills?status=all&age=61-90&taskLabel=Send+Bill&page=2");
+      } else {
+        expect(url).toBe("https://sandbox-api.mindbill.org/partner/v2/browser/reports/productivity?from=2026-08-01&to=2026-08-31");
+      }
       return jsonResponse({ data: { items: [], total: 0, balanceTotal: 0, page: 2, pageSize: 25 } });
     });
     const client = createBillingOperationsClient({ fetch: fetcher });

@@ -8,12 +8,12 @@ import {
   type BillDeliveryOptions,
   type BillLifecycleData,
   type BillLifecycleSessionProvider,
-  type BillSubmissionRoute,
   type BrowserBillCreateInput,
   type BrowserBillSubmissionDocument,
   type BrowserBillSubmissionInput,
   type BrowserBillSubmissionResult,
   type ReportBillStatusId,
+  type BillSubmissionRoute,
 } from "@mindbill/browser";
 import type { MindBillAngularAppearance } from "./appearance";
 import { mindBillAngularAppearanceStyle } from "./appearance";
@@ -111,22 +111,6 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
         @if (panel === 'payment') { <form class="card action-form" (submit)="$event.preventDefault(); postPayment()"><h3>Post payment</h3><label>Amount<input required type="number" min="0.01" step="0.01" [(ngModel)]="payment.amount" name="amount"></label><label>Method<select [(ngModel)]="payment.method" name="method"><option value="check">Check</option><option value="eft">EFT</option></select></label><label>Deposit date<input required type="date" [(ngModel)]="payment.depositDate" name="depositDate"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Post payment</button></div></form> }
         @if (panel === 'review') { <form class="card action-form" (submit)="$event.preventDefault(); submitReview()"><h3>Submit Second Bill Review</h3><label>Reason<textarea required [(ngModel)]="review.reason" name="reason"></textarea></label><label>Payer claim control number<input required [(ngModel)]="review.payerClaimControlNumber" name="control"></label><label>Disputed amount<input type="number" min="0" step="0.01" [(ngModel)]="review.disputedAmount" name="disputed"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Submit review</button></div></form> }
         @if (panel === 'close') { <form class="card action-form" (submit)="$event.preventDefault(); closeBill()"><h3>Close bill</h3><label>Reason<textarea required [(ngModel)]="closeReason" name="closeReason"></textarea></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Close bill</button></div></form> }
-        @if (panel === 'duplicate') {
-          <form class="card action-form" (submit)="$event.preventDefault(); sendDuplicate()">
-            <h3>Send duplicate bill</h3>
-            @if (!duplicateDelivery) {
-              <p class="muted">{{ duplicateDeliveryError || 'Loading delivery options…' }}</p>
-              <div><button type="button" (click)="panel=''">Cancel</button>@if (duplicateDeliveryError) { <button class="primary" type="button" (click)="loadDuplicateDelivery()">Try again</button> }</div>
-            } @else {
-              <p class="muted">Resend the unchanged submission packet to {{ duplicateDelivery.payerName }}.</p>
-              <label>Delivery method<select [(ngModel)]="duplicate.route" name="duplicateRoute">@for (option of duplicateRoutes(); track option.route) { <option [ngValue]="option.route">{{ option.label }}</option> }</select></label>
-              @if (duplicate.route === 'fax') { <label>Fax number<input required [(ngModel)]="duplicate.faxNumber" name="duplicateFax" placeholder="(000) 000-0000"></label> }
-              @if (duplicate.route === 'email') { <label>Email<input required type="email" [(ngModel)]="duplicate.email" name="duplicateEmail" placeholder="claims@payer.example"></label> }
-              @if (duplicate.route === 'mail') { <label>Mailing address<textarea required [(ngModel)]="duplicate.mailingAddress" name="duplicateMail"></textarea></label> }
-              <div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit" [disabled]="store.mutating() || !duplicateReady()">Send duplicate</button></div>
-            }
-          </form>
-        }
         @if (panel === 'report_status') {
           <form class="card action-form" (submit)="$event.preventDefault(); reportStatus()">
             <h3>Report Bill Status</h3>
@@ -171,6 +155,43 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
               />
             </section>
           </div>
+        }
+        @if (panel === 'duplicate' && correctionInitialBill) {
+          <div class="correction-backdrop" (mousedown)="closeCorrectionBackdrop($event)">
+            <section class="correction-dialog" role="dialog" aria-modal="true" aria-label="Send duplicate bill">
+              <button type="button" class="dialog-close" aria-label="Close" (click)="panel=''">×</button>
+              <header><h2>Send duplicate bill</h2><p>The original submission remains immutable. Review or edit this fresh bill before choosing its delivery route and confirming transmission.</p></header>
+              <mindbill-bill-submission
+                [initialBill]="correctionInitialBill"
+                [attachments]="correctionAttachments"
+                [appearance]="appearance"
+                [sessionEndpoint]="sessionEndpoint"
+                [getSession]="getSession"
+                [apiBaseUrl]="apiBaseUrl"
+                [submitter]="duplicateFromForm"
+                heading="Duplicate bill information"
+                description="Review every field. The final step confirms the payer delivery route before the duplicate is sent."
+                submitLabel="Continue to delivery"
+                (submitted)="finishDuplicate()"
+              />
+            </section>
+          </div>
+        }
+        @if (panel === 'duplicate_route') {
+          <form class="card action-form" (submit)="$event.preventDefault(); sendDuplicate()">
+            <h3>Confirm duplicate bill delivery</h3>
+            @if (!duplicateDelivery) {
+              <p class="muted">{{ duplicateDeliveryError || 'Loading delivery options…' }}</p>
+              <div><button type="button" (click)="panel='duplicate'">Back</button>@if (duplicateDeliveryError) { <button class="primary" type="button" (click)="loadDuplicateDelivery()">Try again</button> }</div>
+            } @else {
+              <p class="muted">Confirm how this edited duplicate will be delivered to {{ duplicateDelivery.payerName }}.</p>
+              <label>Delivery method<select [(ngModel)]="duplicate.route" name="duplicateRoute">@for (option of duplicateRoutes(); track option.route) { <option [ngValue]="option.route">{{ option.label }}</option> }</select></label>
+              @if (duplicate.route === 'fax') { <label>Fax number<input required [(ngModel)]="duplicate.faxNumber" name="duplicateFax" placeholder="(000) 000-0000"></label> }
+              @if (duplicate.route === 'email') { <label>Email<input required type="email" [(ngModel)]="duplicate.email" name="duplicateEmail" placeholder="claims@payer.example"></label> }
+              @if (duplicate.route === 'mail') { <label>Mailing address<textarea required [(ngModel)]="duplicate.mailingAddress" name="duplicateMail"></textarea></label> }
+              <div><button type="button" (click)="panel='duplicate'">Back</button><button class="primary" type="submit" [disabled]="store.mutating() || !duplicateReady()">Send duplicate</button></div>
+            }
+          </form>
         }
         @if (panel === 'submit_new_bill' && correctionInitialBill) {
           <div class="correction-backdrop" (mousedown)="closeCorrectionBackdrop($event)">
@@ -234,12 +255,13 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   payment = { amount: 0, method: "check" as "check" | "eft", depositDate: new Date().toISOString().slice(0, 10) };
   review = { reason: "", payerClaimControlNumber: "", disputedAmount: 0 };
   readonly reportStatusOptions = REPORT_BILL_STATUS_OPTIONS;
-  duplicateDelivery: BillDeliveryOptions | null = null;
-  duplicateDeliveryError = "";
-  duplicate = { route: "ebill" as BillSubmissionRoute, faxNumber: "", email: "", mailingAddress: "" };
   report: { status: ReportBillStatusId | null; company: string; representativeName: string; representativeRole: string; phone: string; callReference: string; note: string } =
     { status: null, company: "", representativeName: "", representativeRole: "", phone: "", callReference: "", note: "" };
   reportContactSummary = "";
+  duplicateDelivery: BillDeliveryOptions | null = null;
+  duplicateDeliveryError = "";
+  duplicateDraftInput: BrowserBillSubmissionInput | null = null;
+  duplicate = { route: "ebill" as BillSubmissionRoute, faxNumber: "", email: "", mailingAddress: "" };
   correctionInitialBill: BrowserBillCreateInput | null = null;
   correctionAttachments: MindBillSubmissionAttachment[] = [];
   correctionAttentionFields: string[] = [];
@@ -273,47 +295,9 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     else if (action === "post_payment") this.panel = "payment";
     else if (action === "second_review" || action === "independent_bill_review") this.panel = "review";
     else if (action === "close") this.panel = "close";
-    else if (action === "send_duplicate") this.beginSendDuplicate();
+    else if (action === "send_duplicate") this.prepareDuplicate(data);
     else if (action === "report_bill_status") this.beginReportStatus(data);
     else if (action === "view_eor" && data.eors[0]) void this.openEor(data.eors[0].id, data.eors[0].filename);
-  }
-  beginSendDuplicate(): void { this.panel = "duplicate"; this.loadDuplicateDelivery(); }
-  loadDuplicateDelivery(): void {
-    this.duplicateDeliveryError = "";
-    if (this.duplicateDelivery) return;
-    this.store.getDeliveryOptions().then((delivery) => {
-      this.duplicateDelivery = delivery;
-      this.duplicate.route = delivery.recommended.route;
-      this.duplicate.faxNumber = delivery.contacts.faxNumber || "";
-      this.duplicate.email = delivery.contacts.claimsEmail || "";
-      this.duplicate.mailingAddress = delivery.contacts.mailingAddress || "";
-    }).catch((cause: unknown) => {
-      this.duplicateDeliveryError = cause instanceof Error ? cause.message : "Delivery options could not be loaded.";
-    });
-  }
-  duplicateRoutes(): BillDeliveryOption[] {
-    const seen = new Set<BillSubmissionRoute>();
-    return (this.duplicateDelivery?.options ?? []).filter((option) => {
-      if (seen.has(option.route)) return false;
-      seen.add(option.route);
-      return true;
-    });
-  }
-  duplicateReady(): boolean {
-    if (this.duplicate.route === "fax") return this.duplicate.faxNumber.replace(/\D/g, "").length >= 10;
-    if (this.duplicate.route === "email") return this.duplicate.email.includes("@");
-    if (this.duplicate.route === "mail") return this.duplicate.mailingAddress.trim().length > 2;
-    return true;
-  }
-  async sendDuplicate(): Promise<void> {
-    if (!this.duplicateDelivery || !this.duplicateReady()) return;
-    const route = this.duplicate.route;
-    const destination = route === "fax" ? { faxNumber: this.duplicate.faxNumber.trim() }
-      : route === "email" ? { email: this.duplicate.email.trim() }
-      : route === "mail" ? { mailingAddress: this.duplicate.mailingAddress.trim() }
-      : null;
-    await this.store.sendDuplicateBill({ route, ...(destination ? { destination } : {}) });
-    this.panel = ""; this.notice = "Duplicate bill sent.";
   }
   beginReportStatus(data: BillLifecycleData): void {
     const contacts = reportBillStatusContacts(data.delivery);
@@ -357,6 +341,58 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     return { billId: data.bill.id, bill: { id: data.bill.id, state: data.lifecycle.state } };
   };
   finishCorrection(): void { this.panel = ""; this.correctionReason = ""; this.notice = "Corrected submission sent."; }
+  readonly duplicateFromForm = async (input: BrowserBillSubmissionInput): Promise<BrowserBillSubmissionResult> => {
+    this.duplicateDraftInput = input;
+    this.panel = "duplicate_route";
+    await this.loadDuplicateDelivery();
+    const billId = this.store.data()?.bill.id || this.billId;
+    return { billId, bill: { id: billId, state: "draft" } };
+  };
+  finishDuplicate(): void { /* The route-confirmation panel owns the final transmission. */ }
+  async loadDuplicateDelivery(): Promise<void> {
+    this.duplicateDeliveryError = "";
+    if (this.duplicateDelivery) return;
+    try {
+      const delivery = await this.store.getDeliveryOptions();
+      this.duplicateDelivery = delivery;
+      this.duplicate.route = delivery.recommended.route;
+      this.duplicate.faxNumber = delivery.contacts.faxNumber || "";
+      this.duplicate.email = delivery.contacts.claimsEmail || "";
+      this.duplicate.mailingAddress = delivery.contacts.mailingAddress || "";
+    } catch (cause) {
+      this.duplicateDeliveryError = cause instanceof Error ? cause.message : "Delivery options could not be loaded.";
+    }
+  }
+  duplicateRoutes(): BillDeliveryOption[] {
+    const seen = new Set<BillSubmissionRoute>();
+    return (this.duplicateDelivery?.options ?? []).filter((option) => {
+      if (seen.has(option.route)) return false;
+      seen.add(option.route);
+      return true;
+    });
+  }
+  duplicateReady(): boolean {
+    if (!this.duplicateDraftInput) return false;
+    if (this.duplicate.route === "fax") return this.duplicate.faxNumber.replace(/\D/g, "").length >= 10;
+    if (this.duplicate.route === "email") return this.duplicate.email.includes("@");
+    if (this.duplicate.route === "mail") return this.duplicate.mailingAddress.trim().length > 2;
+    return true;
+  }
+  async sendDuplicate(): Promise<void> {
+    if (!this.duplicateDelivery || !this.duplicateDraftInput || !this.duplicateReady()) return;
+    const route = this.duplicate.route;
+    const destination = route === "fax" ? { faxNumber: this.duplicate.faxNumber.trim() }
+      : route === "email" ? { email: this.duplicate.email.trim() }
+      : route === "mail" ? { mailingAddress: this.duplicate.mailingAddress.trim() }
+      : null;
+    await this.store.sendDuplicateBill({
+      bill: this.duplicateDraftInput.bill,
+      ...(this.duplicateDraftInput.documents?.length ? { documents: this.duplicateDraftInput.documents } : {}),
+      submission: { route, ...(destination ? { destination } : {}) },
+    });
+    this.panel = "";
+    this.notice = "Duplicate bill sent.";
+  }
   // "Submit New Bill" from a CLOSED bill: same prefilled submission form as the
   // correction flow, but the server keeps the closed bill closed and creates a
   // fresh original linked to it (both records chain in the submissions timeline).
@@ -383,6 +419,22 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     this.correctionAttentionFields = [...new Set(data.rejection?.issues?.flatMap((issue) => issue.fieldPaths || []) ?? [])];
     this.correctionReason = "";
     this.panel = "resubmit";
+  }
+  private prepareDuplicate(data: BillLifecycleData): void {
+    this.correctionInitialBill = correctionBill(data);
+    this.correctionAttachments = data.bill.attachments.map((attachment) => ({
+      filename: attachment.filename,
+      documentType: correctionDocumentType(attachment.documentType),
+      ...(attachment.description ? { description: attachment.description } : {}),
+      ...(attachment.reportType ? { reportTypeCode: attachment.reportType } : {}),
+      loadBlob: () => this.store.getAttachment(attachment.id),
+      ...(attachment.documentType === "w9" ? { locked: true, badge: "Auto-attached" } : {}),
+    }));
+    this.correctionAttentionFields = [];
+    this.duplicateDraftInput = null;
+    this.duplicateDelivery = null;
+    this.duplicateDeliveryError = "";
+    this.panel = "duplicate";
   }
   private prepareNewBill(data: BillLifecycleData): void {
     this.correctionInitialBill = correctionBill(data);

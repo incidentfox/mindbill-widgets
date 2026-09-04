@@ -723,19 +723,12 @@ export type ReportBillStatusActionInput = ReportBillStatusInput & {
 };
 
 /**
- * Payload for the "send_duplicate" lifecycle action: resends the immutable
- * submission packet, unchanged, over the selected delivery route — typically
- * after the payer reports the bill is not on file.
+ * Payload for the "send_duplicate" lifecycle action. A duplicate is a fresh,
+ * editable bill snapshot linked to the submitted original. The original stays
+ * immutable; the biller must review the snapshot and explicitly confirm its
+ * delivery route before this action is posted.
  */
-export type SendDuplicateBillInput = BillActorInput & {
-  route: BillSubmissionRoute;
-  destination?: SubmitBillInput["destination"];
-  attention?: string;
-  subject?: string;
-  note?: string;
-  /** CC recipients for the email route (at most 10). */
-  cc?: string[];
-};
+export type SendDuplicateBillInput = ResubmitBillInput;
 
 export type ReportBillStatusContacts = {
   claimsAdmin: {

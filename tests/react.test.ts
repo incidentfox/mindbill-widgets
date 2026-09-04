@@ -1951,9 +1951,12 @@ describe("connected bill lifecycle", () => {
     const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
 
     await expect(client.sendDuplicateBill({
-      route: "fax",
-      destination: { faxNumber: "(555) 010-2040" },
-      attention: "Claims Intake",
+      bill: { externalId: "duplicate_789" } as never,
+      submission: {
+        route: "fax",
+        destination: { faxNumber: "(555) 010-2040" },
+        attention: "Claims Intake",
+      },
     })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
     await expect(client.reportBillStatus({
       status: "eor_pending",
@@ -1966,9 +1969,12 @@ describe("connected bill lifecycle", () => {
     );
     expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({
       action: "send_duplicate",
-      route: "fax",
-      destination: { faxNumber: "(555) 010-2040" },
-      attention: "Claims Intake",
+      bill: { externalId: "duplicate_789" },
+      submission: {
+        route: "fax",
+        destination: { faxNumber: "(555) 010-2040" },
+        attention: "Claims Intake",
+      },
     }));
     expect(fetcher.mock.calls[2]?.[0]).toBe(
       "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",

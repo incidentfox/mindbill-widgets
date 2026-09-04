@@ -18,7 +18,6 @@ import {
   reportBillStatusContacts,
   secondReviewDeadline,
   type BrowserBillCreateInput,
-  type BillDeliveryOptions,
   type BillClaimsAdministratorSource,
   type BillEorDocument,
   type BillLifecycleAction,
@@ -55,7 +54,6 @@ import {
 import type { BillReviewAttachment, BillSubmissionRoute } from "./native-bill-review";
 import { BillSubmissionsRibbon, billSubmissionsRibbonFromHistory } from "./bill-submissions-ribbon";
 import { ReportBillStatusDialog } from "./report-bill-status-dialog";
-import { SendRouteDialog } from "./send-route-dialog";
 
 export {
   SECOND_REVIEW_REASON_TEMPLATE,
@@ -588,8 +586,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
   const [newBillError, setNewBillError] = useState("");
   const [payment, setPayment] = useState<PostBillPaymentInput>({ amount: 0, penaltyAmount: 0, interestAmount: 0, method: "check", checkNumber: "", depositDate: today(), note: "" });
   const [review, setReview] = useState<SubmitSecondReviewInput>({ reason: "", payerClaimControlNumber: "", disputedAmount: undefined, attachmentIds: [], route: "ebill" });
-  const [duplicateDelivery, setDuplicateDelivery] = useState<BillDeliveryOptions | null>(null);
-  const [duplicateDeliveryError, setDuplicateDeliveryError] = useState("");
+  const [duplicateError, setDuplicateError] = useState("");
   const actor = actorName?.trim() ? { actorName: actorName.trim() } : {};
   const lastData = useRef<BillLifecycleData | null>(null);
   const correctionInitialBill = useMemo(() => data ? correctionBill(data) : null, [data]);
@@ -715,12 +712,33 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     setReason("");
     setNotice("New bill submitted.");
   };
-  const loadDuplicateDelivery = () => {
-    setDuplicateDeliveryError("");
-    if (duplicateDelivery) return;
-    lifecycle.getDeliveryOptions()
-      .then((options) => setDuplicateDelivery(options))
-      .catch((cause) => setDuplicateDeliveryError(cause instanceof Error ? cause.message : "Delivery options could not be loaded."));
+  const submitDuplicateFromForm = async (value: BillSubmissionFormValue) => {
+    setNotice("");
+    setDuplicateError("");
+    try {
+      const documents = await prepareBillSubmissionDocuments({
+        attachments: correctionAttachments,
+        selectedIds: value.sourceAttachmentIds,
+        reportTypeCodeByAttachmentId: value.sourceAttachmentReportTypes,
+        uploads: value.uploads,
+        ...(options.fetch ? { fetch: options.fetch } : {}),
+      });
+      await lifecycle.sendDuplicateBill({
+        bill: value.bill as BrowserBillCreateInput,
+        ...(value.submission ? { submission: value.submission } : {}),
+        ...(documents.length ? { documents } : {}),
+        ...actor,
+      });
+    } catch (cause) {
+      setDuplicateError(
+        cause instanceof Error && cause.message
+          ? cause.message
+          : "The duplicate bill could not be submitted.",
+      );
+      throw cause;
+    }
+    setPanel("");
+    setNotice("Duplicate bill sent.");
   };
   const viewEor = data.lifecycle.actions.find((action) => action.id === "view_eor" && action.enabled);
   const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "submit_new_bill", "second_review", "post_payment", "close", "reopen", "send_duplicate", "report_bill_status"]);
@@ -771,7 +789,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
         if (!next) return;
         if (next === "resubmit") setCorrectionError("");
         if (next === "submit_new_bill") setNewBillError("");
-        if (next === "send_duplicate") loadDuplicateDelivery();
+        if (next === "send_duplicate") setDuplicateError("");
         if (next === "second_review") setReview((current) => current.reason.trim() ? current : { ...current, reason: SECOND_REVIEW_REASON_TEMPLATE });
         setPanel(next);
       }}>{action.label}</button>)}
@@ -830,18 +848,31 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
 
     {(panel === "close" || panel === "reopen") ? <LifecycleDialog title={panel === "close" ? "Close bill" : "Reopen bill"} onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>{panel === "close" ? "Close bill" : "Reopen bill"}</h3><p>{panel === "close" ? "The immutable submission and history remain available." : "Return this bill to active follow-up without changing the submitted snapshot."}</p></div><label><span>Reason</span><textarea required value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !reason.trim()} onClick={() => void complete(panel === "close" ? "Bill closed." : "Bill reopened.", () => panel === "close" ? lifecycle.closeBill({ reason, ...actor } satisfies CloseBillInput) : lifecycle.reopenBill({ reason, ...actor } satisfies ReopenBillInput))}>{lifecycle.isMutating ? "Saving…" : panel === "close" ? "Close bill" : "Reopen bill"}</button></div></section></LifecycleDialog> : null}
 
-    {panel === "send_duplicate" ? (duplicateDelivery
-      ? <SendRouteDialog
-        title="Send duplicate bill"
-        delivery={duplicateDelivery}
-        submitting={lifecycle.isMutating}
-        error={lifecycle.error?.message ?? null}
-        onCancel={() => setPanel("")}
-        onConfirm={(submission) => void complete("Duplicate bill sent.", () => lifecycle.sendDuplicateBill({ ...submission, ...actor }))}
-      />
-      : <LifecycleDialog title="Send duplicate bill" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><div><h3>Send duplicate bill</h3><p>{duplicateDeliveryError || "Loading delivery options…"}</p></div><div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" onClick={() => setPanel("")}>Cancel</button>{duplicateDeliveryError ? <button type="button" className="mb-lifecycle-button primary" onClick={loadDuplicateDelivery}>Try again</button> : null}</div></section></LifecycleDialog>) : null}
+    {panel === "send_duplicate" && correctionInitialBill ? <LifecycleDialog title="Send duplicate bill" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Send duplicate bill</h3><p>Review and edit any bill field before creating a duplicate submission. The original bill and its history stay unchanged.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>The duplicate will be sent only after you confirm its delivery route in the next dialog.</span></div> : null}<CorrectionVerificationContact delivery={data.delivery} /><BillSubmissionForm
+      className="mbsf-lifecycle-correction"
+      initialBill={correctionInitialBill}
+      attachments={correctionAttachments}
+      onSubmit={submitDuplicateFromForm}
+      onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
+      onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
+      claimsAdministratorHint={claimsAdministratorHint}
+      {...(claimsAdministratorSources ? { claimsAdministratorSources } : {})}
+      attentionMessage="Confirm every carried-over value. You may edit any field before sending this duplicate."
+      submitLabel={lifecycle.isMutating ? "Sending…" : "Send duplicate"}
+      deliveryRoutePicker="required"
+      deliveryRouteDialogTitle="Confirm duplicate bill delivery"
+      heading="Duplicate bill information"
+      description="The submitted original remains immutable. This form creates and sends a linked duplicate."
+      disabled={lifecycle.isMutating}
+      {...(options.getSession ? { getSession: options.getSession } : {})}
+      {...(options.sessionEndpoint ? { sessionEndpoint: options.sessionEndpoint } : {})}
+      {...(options.apiBaseUrl ? { apiBaseUrl: options.apiBaseUrl } : {})}
+      {...(options.fetch ? { fetch: options.fetch } : {})}
+      {...(appearance ? { appearance } : {})}
+    />{duplicateError ? <div className="mb-lifecycle-message error" role="alert">{duplicateError}</div> : null}</section></LifecycleDialog> : null}
 
     {panel === "report_status" ? <ReportBillStatusDialog
+      {...(data.delivery.directory ? { directory: data.delivery.directory } : {})}
       {...(statusContacts.claimsAdmin ? { claimsAdmin: statusContacts.claimsAdmin } : {})}
       {...(statusContacts.billReview ? { billReview: statusContacts.billReview } : {})}
       {...(receiptEntries.length ? { receipt: <BillHistoryTable entries={receiptEntries} onOpenDocument={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} /> } : {})}
