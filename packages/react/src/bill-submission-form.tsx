@@ -410,6 +410,31 @@ function cloneInitialBill(bill: BillSubmissionInput): BillSubmissionInput {
   return cloned;
 }
 
+function stableInitializationValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableInitializationValue);
+  if (!value || typeof value !== "object") return typeof value === "function" ? undefined : value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([, entry]) => typeof entry !== "function")
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => [key, stableInitializationValue(entry)]));
+}
+
+/**
+ * Identifies the source draft represented by the host props. Hosts may rebuild
+ * equivalent objects during polling; that must not erase in-progress edits.
+ */
+export function billSubmissionInitializationKey(
+  initialBill: BillSubmissionInput,
+  attachments: BillSubmissionSourceAttachment[] = EMPTY_ATTACHMENTS,
+  sourceClaimsAdministratorName = "",
+): string {
+  return JSON.stringify(stableInitializationValue({
+    attachments,
+    initialBill,
+    sourceClaimsAdministratorName,
+  }));
+}
+
 function submittedLines(lines: BillSubmissionInput["serviceLines"]): BillSubmissionInput["serviceLines"] {
   return lines.filter(lineHasContent).map((line) => ({ ...line, code: line.code.trim(), modifiers: [...(line.modifiers ?? [])] }));
 }
@@ -701,6 +726,11 @@ export function BillSubmissionForm({
     .filter((source) => source.name.trim())
     .sort((left, right) => Number(right.source.toLowerCase() === "eams") - Number(left.source.toLowerCase() === "eams")), [claimsAdministratorSources]);
   const sourceClaimsAdministratorName = orderedClaimsAdministratorSources[0]?.name.trim() ?? "";
+  const initializationKey = useMemo(
+    () => billSubmissionInitializationKey(initialBill, attachments, sourceClaimsAdministratorName),
+    [initialBill, attachments, sourceClaimsAdministratorName],
+  );
+  const previousInitializationKey = useRef(initializationKey);
   const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
   const taxonomies = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_TAXONOMIES, taxonomyOptions), [taxonomyOptions]);
   const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialEvaluationType(initialBill));
@@ -717,11 +747,13 @@ export function BillSubmissionForm({
   );
 
   useEffect(() => {
+    if (previousInitializationKey.current === initializationKey) return;
+    previousInitializationKey.current = initializationKey;
     setBill(cloneInitialBill(initialBill)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
     setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
     setPayerResults([]); setPayerSuggestions([]); setSelectedPayerMetadata(null); setPayerQuery(null); setPayerHasMore(true); payerRequest.current += 1; payerAppendPending.current = false;
-  }, [initialBill, attachments, sourceClaimsAdministratorName]);
+  }, [initialBill, attachments, initializationKey]);
   useEffect(() => {
     if (!validationActive) return;
     const next = validateBillSubmission(bill).fieldErrors;
