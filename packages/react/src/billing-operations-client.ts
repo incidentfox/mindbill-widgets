@@ -166,10 +166,11 @@ export function createBillingOperationsClient({
   if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   let session: BillLifecycleSession | null = null;
   let pendingSession: Promise<BillLifecycleSession> | null = null;
+  let pendingSessionSignal: AbortSignal | null = null;
 
   const mintSession = async (signal: AbortSignal, force = false): Promise<BillLifecycleSession> => {
     if (!force && isFresh(session)) return session as BillLifecycleSession;
-    if (!force && pendingSession) return pendingSession;
+    if (!force && pendingSession && !pendingSessionSignal?.aborted) return pendingSession;
     const pending = getSession
       ? getSession({ signal })
       : fetcher(sessionEndpoint, {
@@ -186,9 +187,13 @@ export function createBillingOperationsClient({
       session = next;
       return next;
     }).finally(() => {
-      if (pendingSession === request) pendingSession = null;
+      if (pendingSession === request) {
+        pendingSession = null;
+        pendingSessionSignal = null;
+      }
     });
     pendingSession = request;
+    pendingSessionSignal = signal;
     return request;
   };
 
@@ -216,7 +221,7 @@ export function createBillingOperationsClient({
   };
 
   return {
-    clearSession() { session = null; pendingSession = null; },
+    clearSession() { session = null; pendingSession = null; pendingSessionSignal = null; },
     getBills(query = {}, signal) {
       return get<BillRegistryResult>(`/partner/v2/browser/bills${queryString(query)}`, signal);
     },
