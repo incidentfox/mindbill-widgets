@@ -1081,6 +1081,35 @@ describe("bill lifecycle surfaces", () => {
     expect(source).not.toContain("claimsAdministratorRecommendations(payerResults)");
   });
 
+  it("shows only claim-number guidance and affiliated entities in payer choices", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/bill-submission-form.tsx", import.meta.url),
+      "utf8",
+    );
+    const payerField = source.slice(
+      source.indexOf('{administrator?.payerSelectionRequired ? <Field path="claim.claimsAdministrator.payerId"'),
+      source.indexOf('<Field label="Injury description (optional)"'),
+    );
+
+    expect(payerField).toContain("option.hint");
+    expect(payerField).toContain("option.affiliatedEntities");
+    for (const hiddenMetadata of [
+      "option.aliases",
+      "option.optionType",
+      "option.deliveryType",
+      "option.clearinghouse",
+      "option.payerId",
+      "option.sourceClearinghouse",
+      "option.sourcePayerId",
+      "option.clearinghousePayerIds",
+      "option.preferredClearinghouse",
+      "option.default",
+      "option.route",
+    ]) {
+      expect(payerField).not.toContain(hiddenMetadata);
+    }
+  });
+
   it("renders all five claims-administrator directory tabs and partner-safe payer routes", () => {
     const source = readFileSync(
       new URL("../packages/react/src/claims-administrator-directory-dialog.tsx", import.meta.url),
