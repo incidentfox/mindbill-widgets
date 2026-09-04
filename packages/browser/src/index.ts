@@ -645,15 +645,33 @@ export type PostBillPaymentInput = BillActorInput & {
   depositDate: string;
   note?: string;
 };
-export type SubmitSecondReviewInput = BillActorInput & {
+export type SecondReviewLineInput = {
+  lineItemId: string;
   reason: string;
-  payerClaimControlNumber: string;
-  disputedAmount: number | undefined;
+  /** SBR-1 box for this service line. Omitted leaves the box blank. */
+  serviceAuthorized?: boolean;
+};
+
+export type SubmitSecondReviewInput = BillActorInput & {
+  /** @deprecated Prefer `lineItems[].reason`; retained for older hosts. */
+  reason?: string;
+  /** @deprecated MindBill derives this from the payer response on the server. */
+  payerClaimControlNumber?: string;
+  disputedAmount?: number;
   attachmentIds: string[];
   route: BillSubmissionRoute;
-  /** Optional subset of disputed line items; omitted = the whole bill. */
+  /** New PDFs to include with the Second Review. */
+  documents?: BrowserBillSubmissionDocument[];
+  destination?: SubmitBillInput["destination"];
+  attention?: string;
+  subject?: string;
+  note?: string;
+  cc?: string[];
+  /** Line-by-line SBR-1 selections, reasons, and authorization answers. */
+  lineItems?: SecondReviewLineInput[];
+  /** @deprecated Prefer `lineItems`; omitted = the whole bill. */
   lineItemIds?: string[];
-  /** SBR-1 box: whether the disputed service was authorized. */
+  /** @deprecated Prefer `lineItems[].serviceAuthorized`. */
   serviceAuthorized?: boolean;
 };
 

@@ -330,7 +330,7 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   async openAttachment(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getAttachment(id), filename); }
   async openEor(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getEor(id), filename); }
   async postPayment(): Promise<void> { await this.store.postPayment(this.payment); this.panel = ""; this.notice = "Payment posted."; }
-  async submitReview(): Promise<void> { await this.store.submitSecondReview({ ...this.review, disputedAmount: this.review.disputedAmount > 0 ? this.review.disputedAmount : undefined, attachmentIds: this.store.data()?.bill.attachments.map((document) => document.id) ?? [], route: "ebill" }); this.panel = ""; this.notice = "Second Review submitted."; }
+  async submitReview(): Promise<void> { await this.store.submitSecondReview({ ...this.review, ...(this.review.disputedAmount > 0 ? { disputedAmount: this.review.disputedAmount } : {}), attachmentIds: this.store.data()?.bill.attachments.map((document) => document.id) ?? [], route: "ebill" }); this.panel = ""; this.notice = "Second Review submitted."; }
   async closeBill(): Promise<void> { if (!this.closeReason.trim()) return; await this.store.closeBill({ reason: this.closeReason }); this.panel = ""; this.notice = "Bill closed."; }
   readonly resubmitFromForm = async (input: BrowserBillSubmissionInput): Promise<BrowserBillSubmissionResult> => {
     const data = await this.store.resubmitBill({

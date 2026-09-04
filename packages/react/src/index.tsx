@@ -299,6 +299,8 @@ export {
 } from "./connected-bill-lifecycle";
 export { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
 export type { ClaimsAdministratorDirectoryDialogProps } from "./claims-administrator-directory-dialog";
+export { SECOND_REVIEW_REASON_TEMPLATES, SecondReviewForm } from "./second-review-form";
+export type { SecondReviewFormProps } from "./second-review-form";
 export type {
   BillClaimsAdministratorContact,
   BillClaimsAdministratorDirectory,
