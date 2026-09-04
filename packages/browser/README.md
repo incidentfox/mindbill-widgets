@@ -35,6 +35,11 @@ const references = createBillReferenceClient({
   sessionEndpoint: "/api/mindbill/session",
 });
 
+const firstPayerPage = await references.listClaimsAdministrators({ limit: 50 });
+const nextPayerPage = await references.listClaimsAdministrators({
+  limit: 50,
+  offset: firstPayerPage.nextOffset,
+});
 const payers = await references.searchClaimsAdministrators("Zurich", "claim-123");
 const diagnoses = await references.searchDiagnosisCodes("left knee");
 const firstAlphabeticalPage = await references.searchDiagnosisCodes("", 100, 0);
@@ -44,13 +49,20 @@ const place = await references.lookupPostalCode("94403");
 
 `searchDiagnosisCodes(query, limit, offset)` supports directory browsing as well as search. Pass an empty query for ICD-10 code order; `limit` is capped at 100 and `offset` advances through the directory.
 
-Some claims administrators route bills through more than one payer. Search
-results mark them with `payerSelectionRequired: true` and list the choices in
-`payers` (`{ id, label, default? }`, with at most one entry marked `default`).
+`listClaimsAdministrators({ query, claimNumber, limit, offset })` supports both
+alphabetical browsing and search, returns `total` and `nextOffset`, and does not
+impose a minimum query length. The legacy `searchClaimsAdministrators` method
+remains as a results-only convenience wrapper.
+
+Some claims administrators route bills through more than one payer. Results mark
+them with `payerSelectionRequired: true` and list rich routing choices in `payers`:
+aliases, affiliated entities, claim-number hints, route and delivery type,
+clearinghouse, payer IDs, and the directory default marker are preserved.
 Send the chosen entry as `bill.claim.claimsAdministrator.payerId` on the atomic
 submission (the same optional `payerId` exists on `BillReviewSaveInput`);
 administrators without subpayors are unchanged and need no `payerId`.
-`defaultBillReviewPayerOption(payer)` returns the option to preselect.
+Interactive forms should require the user to choose a required routing payer;
+`defaultBillReviewPayerOption(payer)` only reads the source catalog's default marker.
 
 Submit a locally reviewed bill and its PDF attachments directly from the browser:
 

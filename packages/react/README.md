@@ -191,7 +191,8 @@ The component includes the interaction model, not just the markup:
 - paste-friendly `MM/DD/YYYY` date fields and required-field asterisks;
 - ZIP-to-city/state completion through MindBill's authenticated postal directory;
 - complete, server-backed ICD-10 search with an alphabetized 100-code first page, automatic 100-code scroll paging, common-injury quick picks, and removable chips;
-- canonical claims-administrator matching through the authenticated MindBill payer directory: exact aliases select automatically, while fuzzy matches show up to five explicit suggestions with claim-number pattern evidence;
+- an authenticated claims-administrator browser that opens to an alphabetized 50-item page, loads later pages on scroll, searches from the first character, and preserves exact-name and claim-number evidence;
+- explicit routing-payer selection when the administrator requires it, with aliases, affiliated entities, claim-number hints, delivery type, clearinghouse routes, and payer identifiers shown in context;
 - QME, AME, and Psych QME evaluation modes with medical-legal modifier defaults; Psych QME also seeds `Z04.6` when no more specific diagnosis was supplied, and exposes it as a Psych quick pick;
 - a searchable rendering-provider taxonomy combobox that accepts either a human-readable specialty search or an exact 10-character taxonomy code;
 - searchable workers-comp procedure/modifier controls, medical-legal fee-schedule amounts, totals, valid manual CPT/HCPCS entry, and an automatically maintained empty line;

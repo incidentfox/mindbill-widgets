@@ -316,7 +316,7 @@ describe("atomic bill submission form contract", () => {
     expect(validateBillSubmission(validBill)).toEqual({ valid: true, fieldErrors: {} });
   });
 
-  it("preselects the default payer when a subpayor administrator is chosen", () => {
+  it("requires an explicit payer even when the directory marks a default", () => {
     const payer = {
       id: "pd:multi-tpa",
       name: "Synthetic Multi-Payer TPA",
@@ -339,7 +339,6 @@ describe("atomic bill submission form contract", () => {
       name: "Synthetic Multi-Payer TPA",
       payerSelectionRequired: true,
       payers: payer.payers,
-      payerId: "pd:multi-tpa/beta",
     });
     expect(chooseClaimsAdministrator({
       ...payer,
@@ -581,7 +580,7 @@ describe("pre-submission reference data", () => {
 
     expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
       "/api/mindbill/session",
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Zurich&claimNumber=TEST-1",
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Zurich&claimNumber=TEST-1&limit=50",
       "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=left+knee&limit=30",
       "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=&limit=100&offset=100",
       "https://app.mindbill.org/partner/v2/browser/postal-codes?postalCode=94403",
@@ -592,6 +591,66 @@ describe("pre-submission reference data", () => {
       "Bearer short-lived-reference-token",
       "Bearer short-lived-reference-token",
     ]);
+  });
+
+  it("browses paginated administrators and preserves Sedgwick routing metadata", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: "short-lived-reference-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        total: 941,
+        nextOffset: 100,
+        results: [{
+          id: "pd:sedgwick",
+          name: "Sedgwick Claims Management Services, Inc.",
+          aliases: ["York Risk Services Group"],
+          affiliatedEntities: ["State Farm"],
+          payerSelectionRequired: true,
+          payers: [{
+            id: "pd:sedgwick/county-la-unit-c",
+            label: "County of Los Angeles (CA) Unit C",
+            aliases: ["CoLA"],
+            hint: "Claim numbers beginning with 3000 or C.",
+            affiliatedEntities: ["County of Los Angeles"],
+            optionType: "carrier",
+            deliveryType: "electronic",
+            route: "CorVel E4708",
+            clearinghouse: "CorVel",
+            payerId: "E4708",
+            clearinghousePayerIds: { carisk: "E4708" },
+            preferredClearinghouse: "carisk",
+          }],
+        }],
+      }));
+    const client = createBillReferenceClient({ fetch: fetcher });
+
+    await expect(client.listClaimsAdministrators({ limit: 50, offset: 50 })).resolves.toEqual({
+      total: 941,
+      nextOffset: 100,
+      results: [{
+        id: "pd:sedgwick",
+        name: "Sedgwick Claims Management Services, Inc.",
+        aliases: ["York Risk Services Group"],
+        affiliatedEntities: ["State Farm"],
+        payerSelectionRequired: true,
+        payers: [{
+          id: "pd:sedgwick/county-la-unit-c",
+          label: "County of Los Angeles (CA) Unit C",
+          aliases: ["CoLA"],
+          hint: "Claim numbers beginning with 3000 or C.",
+          affiliatedEntities: ["County of Los Angeles"],
+          optionType: "carrier",
+          deliveryType: "electronic",
+          route: "CorVel E4708",
+          clearinghouse: "CorVel",
+          payerId: "E4708",
+          clearinghousePayerIds: { carisk: "E4708" },
+          preferredClearinghouse: "carisk",
+        }],
+      }],
+    });
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?limit=50&offset=50",
+    );
   });
 
   it("previews delivery routes for a claims administrator before the bill exists", async () => {
@@ -957,7 +1016,9 @@ describe("bill lifecycle surfaces", () => {
       "utf8",
     );
 
-    expect(source).toContain("Search the claims administrator directory…");
+    expect(source).toContain("Browse or search claims administrators…");
+    expect(source).toContain("filterOptions={false}");
+    expect(source).toContain("onEndReached={() => loadPayers");
     expect(source).toContain("Claims administrator in your system:");
     expect(source).toContain("invalid={!administrator?.id}");
     expect(source).not.toContain("Showing 5 suggestions");
@@ -973,6 +1034,8 @@ describe("bill lifecycle surfaces", () => {
     for (const label of ["Main", "Bill Review", "Authorization Info", "Mailing Address", "Claim Number Pattern"]) {
       expect(source).toContain(JSON.stringify(label));
     }
+    expect(source).toContain("payer.clearinghouse");
+    expect(source).toContain("payer.payerId");
     expect(source).not.toContain("Directory ID");
     expect(source).toContain("payer.route");
     expect(source).toContain("var(--mb-surface,#fff)");
@@ -1630,7 +1693,7 @@ describe("connected bill lifecycle", () => {
       ],
     }]);
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Example+TPA&claimNumber=OTHER123",
+      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Example+TPA&claimNumber=OTHER123&limit=50",
     );
   });
 
