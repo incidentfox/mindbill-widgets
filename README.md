@@ -8,6 +8,8 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `NotificationSettings` / `ConnectedNotificationSettings` adds a default-off notification settings section for any partner's users, with explicit consent, assigned-bill or practice-wide scope, quiet hours and unsubscribe. Its host-server adapter keeps verified identity and access out of browser mutations. See [notification settings](docs/notification-settings.md).
 
+`NotificationRecipientsSettings` lets practice administrators invite **any email address** to those alerts, with no console account required. Recipients remain off until the email owner confirms. See [recipient invitations](docs/notification-recipients.md) for the host-server adapter, consent, scope and retry contract.
+
 ## Install
 
 ```bash
