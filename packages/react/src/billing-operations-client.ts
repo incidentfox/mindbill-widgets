@@ -23,6 +23,8 @@ export type BillRegistryItem = {
   dateOfService: string | null;
   procedureCodes: string[];
   billingProviderId: string | null;
+  renderingProviderId?: string | null;
+  renderingProviderName?: string | null;
   submittedAt: string | null;
   arAgeDays: number | null;
   totalCharge: number;
@@ -39,6 +41,8 @@ export type BillRegistryQuery = {
   age?: BillRegistryAge;
   claimsAdministrator?: string;
   billingProviderId?: string;
+  /** Doctor who performed the service, distinct from the billing practice. */
+  renderingProviderId?: string;
   taskSection?: string;
   taskType?: string;
   taskLabel?: string;
@@ -53,13 +57,14 @@ export type BillRegistryResult = {
   balanceTotal: number;
   page: number;
   pageSize: number;
+  filters?: { renderingProviders: Array<{ id: string; name: string }> };
 };
 
 export type BillTasksResult = {
   dashboard: BillTasksDashboardData;
   /** Separate status inventory; not included in actionable task totals. */
   waiting?: BillTasksDashboardData;
-  filters: { claimsAdministrators: Array<{ id: string; name: string }> };
+  filters: { claimsAdministrators: Array<{ id: string; name: string }>; renderingProviders?: Array<{ id: string; name: string }> };
 };
 
 export type ServiceLineItemsReport = {
@@ -113,7 +118,7 @@ export type BillingOperationsClientOptions = {
 export type BillingOperationsClient = {
   clearSession: () => void;
   getBills: (query?: BillRegistryQuery, signal?: AbortSignal) => Promise<BillRegistryResult>;
-  getBillTasks: (claimsAdministrator?: string, signal?: AbortSignal) => Promise<BillTasksResult>;
+  getBillTasks: (claimsAdministrator?: string, signal?: AbortSignal, renderingProviderId?: string) => Promise<BillTasksResult>;
   getServiceLineItems: (range: { from: string; to: string }, signal?: AbortSignal) => Promise<ServiceLineItemsReport>;
   getProductivity: (range: { from: string; to: string }, signal?: AbortSignal) => Promise<ProductivityReport>;
 };
@@ -239,9 +244,9 @@ export function createBillingOperationsClient({
         dir: sort ? (sort.endsWith("_asc") ? "asc" : "desc") : undefined,
       })}`, signal);
     },
-    getBillTasks(claimsAdministrator, signal) {
+    getBillTasks(claimsAdministrator, signal, renderingProviderId) {
       return get<BillTasksResult>(
-        `/partner/v2/bill-tasks${queryString({ claimsAdminId: claimsAdministrator })}`,
+        `/partner/v2/bill-tasks${queryString({ claimsAdminId: claimsAdministrator, renderingProviderId })}`,
         signal,
       );
     },

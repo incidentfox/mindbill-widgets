@@ -1,5 +1,6 @@
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
 export const DEFAULT_SESSION_ENDPOINT = "/api/mindbill/session";
+export { parseSecondReviewCorrection, type CorrectionDraft } from "./second-review-corrections";
 
 export type BillReviewDocumentType =
   | "final_report"
@@ -639,6 +640,8 @@ export type BillSubmissionDetail = {
   source: "submission_snapshot" | "bill_record" | "unavailable";
   capturedAt?: string | null;
   detail: HistoricalBillReviewData | null;
+  /** Exact retained files for this attempt; never regenerated from current bill values. */
+  artifacts?: Array<{ id: string; label: string; kind: "submitted_attachment" | "submitted_edi"; contentType: string }>;
 };
 
 export type BillLifecycleData = BillReviewData & {
@@ -1065,6 +1068,9 @@ export type BillLifecycleClient = {
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
   getPacket: () => Promise<Blob>;
+  getSubmissionArtifact: (attemptId: string, artifactId: string) => Promise<Blob>;
+  /** Prepare a self-filing packet. Does not file IBR or send anything to a payer. */
+  prepareIbrPacket: () => Promise<Blob>;
   previewCourtesyCopy: (input: BillCourtesyCopyInput) => Promise<BillCourtesyCopyPreview>;
   /** Reuse the same key when retrying the same send after a network interruption. */
   sendCourtesyCopy: (input: BillCourtesyCopyInput & { packetHash: string }, idempotencyKey: string) => Promise<BillCourtesyCopyResult>;
@@ -1534,6 +1540,24 @@ export function createBillLifecycleClient({
     async getPacket() {
       const response = await request(billPath("/packet"));
       if (!response.ok) throw await responseError(response, "Submission packet could not be downloaded.");
+      return response.blob();
+    },
+    async getSubmissionArtifact(attemptId, artifactId) {
+      const response = await request(billPath(`/submissions/${encodeURIComponent(attemptId)}/artifacts/${encodeURIComponent(artifactId)}`));
+      if (!response.ok) throw await responseError(response, "The retained submission file could not be downloaded.");
+      return response.blob();
+    },
+    async prepareIbrPacket() {
+      const prepared = await mutation(billPath("/actions"), {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "independent_bill_review" }),
+      }, "IBR packet could not be prepared.");
+      const body = await prepared.json() as { packetUrl?: unknown };
+      // Never forward the browser bearer token to an arbitrary response URL.
+      if (typeof body.packetUrl !== "string" || !/^\/partner\/v2\/(?:browser\/)?bills\/[A-Za-z0-9_-]+\/ibr-packet$/.test(body.packetUrl)) throw new Error("The billing service returned an invalid IBR packet path.");
+      // The server may resolve a root bill to its current linked bill.
+      const response = await request(body.packetUrl);
+      if (!response.ok) throw await responseError(response, "IBR packet could not be downloaded.");
       return response.blob();
     },
     async previewCourtesyCopy(input) {

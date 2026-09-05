@@ -17,15 +17,24 @@ describe("billing operations client", () => {
   ] as const)("maps dashboard filters and %s to the API contract", async (sort, wireSort, dir) => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       expect(Object.fromEntries(new URL(String(input)).searchParams)).toEqual({
-        status: "sent", age: "0-30", claimsAdminId: "payer-demo", billingProviderId: "provider-demo",
+        status: "sent", age: "0-30", claimsAdminId: "payer-demo", billingProviderId: "provider-demo", renderingProviderId: "doctor-demo",
         taskKind: "send_bill", taskLabel: "Send Bill", sort: wireSort, dir,
       });
       return jsonResponse({ data: { items: [], total: 0 } });
     });
     await createBillingOperationsClient({ fetch: fetcher, getSession: async () => ({ token: "test_browser_token" }) }).getBills({
-      status: "submitted", age: "0-30", claimsAdministrator: "payer-demo", billingProviderId: "provider-demo",
+      status: "submitted", age: "0-30", claimsAdministrator: "payer-demo", billingProviderId: "provider-demo", renderingProviderId: "doctor-demo",
       taskType: "send_bill", taskSection: "incomplete", taskLabel: "Send Bill", sort,
     });
+  });
+  it("filters dashboard tasks by doctor without changing the legacy payer argument", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: { filters: { claimsAdministrators: [], renderingProviders: [{ id: "doctor-demo", name: "Demo doctor" }] } } }));
+    const client = createBillingOperationsClient({ fetch: fetcher, getSession: async () => ({ token: "test_browser_token" }) });
+    const result = await client.getBillTasks("payer-demo", undefined, "doctor-demo");
+    expect(Object.fromEntries(new URL(String(fetcher.mock.calls[0]![0])).searchParams)).toEqual({ claimsAdminId: "payer-demo", renderingProviderId: "doctor-demo" });
+    expect(result.filters.renderingProviders).toEqual([{ id: "doctor-demo", name: "Demo doctor" }]);
+    await client.getBillTasks("payer-demo");
+    expect(Object.fromEntries(new URL(String(fetcher.mock.calls[1]![0])).searchParams)).toEqual({ claimsAdminId: "payer-demo" });
   });
   it("mints one short-lived session and sends registry filters to MindBill", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {

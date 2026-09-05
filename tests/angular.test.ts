@@ -5,6 +5,17 @@ import { mindBillAngularAppearanceStyle } from "../packages/angular/src/lib/appe
 import { billRejectionIssues, billRejectionIssueSummary } from "../packages/angular/src/lib/bill-rejection";
 import { ensureTrailingProcedureLine } from "../packages/angular/src/lib/procedure-lines";
 
+describe("Angular review action parity", () => {
+  it("keeps IBR packet preparation distinct from per-line corrected second review", () => {
+    const source = readFileSync(new URL("../packages/angular/src/lib/bill-lifecycle.component.ts", import.meta.url), "utf8");
+    expect(source).toContain('else if (action === "independent_bill_review")');
+    expect(source).not.toContain('action === "second_review" || action === "independent_bill_review"');
+    expect(source).toContain("parseSecondReviewCorrection(line)");
+    expect(source).toContain("lineItemId: line.id");
+    expect(source).toContain("The review has not been filed.");
+  });
+});
+
 describe("Angular bill rejection notice", () => {
   it("preserves ordered actionable issues and clearinghouse context", () => {
     const rejection = {

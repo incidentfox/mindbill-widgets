@@ -36,7 +36,8 @@ type ConnectedSurfaceProps = BillingOperationsClientOptions & {
 };
 
 const css = `
-.mbow{color:var(--mb-text);font:14px/1.45 var(--mb-font);background:var(--mb-soft);border-radius:var(--mb-radius);padding:20px}.mbow *{box-sizing:border-box}.mbow h2,.mbow h3,.mbow p{margin:0}.mbow a{color:var(--mb-accent)}
+.mbow-select{max-width:100%}
+.mbow{color:var(--mb-text);font:14px/1.45 var(--mb-font);background:var(--mb-soft);border-radius:var(--mb-radius);padding:20px}.mbow,.mbow *{box-sizing:border-box}.mbow h2,.mbow h3,.mbow p{margin:0}.mbow a{color:var(--mb-accent)}
 .mbow-workspace{width:100%;height:100%;max-height:var(--mbow-available-height,100dvh);min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .mbow-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}.mbow-head h2{font-size:24px;line-height:1.2}.mbow-sub{color:var(--mb-muted);margin-top:4px!important}.mbow-actions{display:flex;gap:8px;flex-wrap:wrap}
 .mbow-button,.mbow-input,.mbow-select{min-height:38px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbow-button{padding:7px 12px;cursor:pointer;font-weight:650}.mbow-button:hover{border-color:var(--mb-accent)}.mbow-button.primary{background:var(--mb-accent);border-color:var(--mb-accent);color:var(--mb-accent-contrast)}.mbow-button:disabled{opacity:.55;cursor:not-allowed}.mbow-input,.mbow-select{padding:7px 10px}.mbow-input{min-width:260px;flex:1}
@@ -50,6 +51,19 @@ const css = `
 
 function money(value: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+}
+
+function RenderingProviderFilter({ value, options, onChange }: {
+  value: string;
+  options: Array<{ id: string; name: string }> | undefined;
+  onChange: (value: string) => void;
+}): ReactElement | null {
+  if (!options && !value) return null;
+  return <select className="mbow-select" aria-label="Rendering provider filter" value={value} onChange={(event) => onChange(event.target.value)}>
+    <option value="">All rendering providers</option>
+    {value && !options?.some((option) => option.id === value) ? <option value={value}>Selected rendering provider</option> : null}
+    {options?.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+  </select>;
 }
 
 function shortDate(value: string | null): string {
@@ -153,6 +167,7 @@ function BillSearchContent({
         <option value="all">All A/R ages</option><option value="0-30">0–30 days</option><option value="31-60">31–60 days</option><option value="61-90">61–90 days</option><option value="91+">91+ days</option><option value="91-180">91–180 days</option><option value="181+">181+ days</option>
       </select>
       <button className="mbow-button" type="submit">Search</button>
+      <RenderingProviderFilter value={query.renderingProviderId ?? ""} options={result?.filters?.renderingProviders} onChange={(value) => update({ renderingProviderId: value })} />
     </form>
     <div className="mbow-card mbow-scroll">
       {loading ? <div className="mbow-state" role="status">Loading bills…</div> : error ? <div className="mbow-state mbow-error" role="alert">{error.message} <button className="mbow-button" type="button" onClick={() => void load()}>Retry</button></div> : result?.items.length === 0 ? <div className="mbow-state">No bills match these filters.</div> : <table className="mbow-table">
@@ -186,22 +201,23 @@ function taskQuery(cell: BillTasksDashboardCell): BillRegistryQuery {
 
 function BillTasksContent({ client, onDrillDown, appearance }: { client: ReturnType<typeof createBillingOperationsClient>; onDrillDown?: ((query: BillRegistryQuery) => void) | undefined; appearance?: MindBillReactAppearance | undefined }): ReactElement {
   const [claimsAdminId, setClaimsAdminId] = useState("");
+  const [renderingProviderId, setRenderingProviderId] = useState("");
   const [result, setResult] = useState<BillTasksResult | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
-  const load = useCallback(async (signal?: AbortSignal) => { setLoading(true); setError(null); try { setResult(await client.getBillTasks(claimsAdminId || undefined, signal)); } catch (cause) { if (!signal?.aborted) setError(cause instanceof Error ? cause : new Error("Bill tasks could not be loaded.")); } finally { if (!signal?.aborted) setLoading(false); } }, [claimsAdminId, client]);
+  const load = useCallback(async (signal?: AbortSignal) => { setLoading(true); setError(null); try { setResult(await client.getBillTasks(claimsAdminId || undefined, signal, renderingProviderId || undefined)); } catch (cause) { if (!signal?.aborted) setError(cause instanceof Error ? cause : new Error("Bill tasks could not be loaded.")); } finally { if (!signal?.aborted) setLoading(false); } }, [claimsAdminId, renderingProviderId, client]);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   if (loading && !result) return <div className="mbow-state">Loading bill tasks…</div>;
   if (error && !result) return <div className="mbow-state mbow-error">{error.message}</div>;
   if (!result) return <></>;
   const selectionProps = loading || error ? {} : {
-    onSelectCell: (cell: BillTasksDashboardCell) => onDrillDown?.({ ...taskQuery(cell), ...(claimsAdminId ? { claimsAdministrator: claimsAdminId } : {}) }),
+    onSelectCell: (cell: BillTasksDashboardCell) => onDrillDown?.({ ...taskQuery(cell), ...(claimsAdminId ? { claimsAdministrator: claimsAdminId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}) }),
   };
   return <>
     <p className="mbow-task-note">Open follow-up work grouped by task and age. {result.waiting ? "Sent and accepted bills waiting for a payer are shown below." : "Find sent and accepted bills in All bills."}</p>
     {loading ? <p role="status">Updating bill tasks…</p> : null}
     {error ? <p role="alert" className="mbow-error">{error.message}</p> : null}
-    <BillTasksDashboard data={result.dashboard} appearance={appearance ?? { preset: "mindbill" }} toolbar={<select aria-label="Claims administrator filter" className="mbow-select" value={claimsAdminId} onChange={(event) => setClaimsAdminId(event.target.value)}><option value="">All claims administrators</option>{result.filters.claimsAdministrators.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>} {...selectionProps} />
+    <BillTasksDashboard data={result.dashboard} appearance={appearance ?? { preset: "mindbill" }} toolbar={<div className="mbow-toolbar"><select aria-label="Claims administrator filter" className="mbow-select" value={claimsAdminId} onChange={(event) => setClaimsAdminId(event.target.value)}><option value="">All claims administrators</option>{result.filters.claimsAdministrators.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><RenderingProviderFilter value={renderingProviderId} options={result.filters.renderingProviders} onChange={setRenderingProviderId} /></div>} {...selectionProps} />
     {result.waiting ? <BillTasksDashboard data={result.waiting} appearance={appearance ?? { preset: "mindbill" }}
       heading="Bills waiting for payer" totalLabel="Bill Total" itemLabel="bills" grandTotalLabel="Waiting Bills Total" emptyLabel="No waiting bills"
       {...selectionProps}
@@ -240,17 +256,19 @@ export function ConnectedProductivityReport({ appearance, className, style, init
 export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
   initialView?: "tasks" | "bills" | "procedures" | "productivity";
   onCreateBill?: () => void;
+  /** Show simulation controls on selected sandbox bills. Never enables live simulations. */
+  sandboxControls?: boolean;
   /** Return contacts for the selected bill only; never auto-selects recipients. */
   getCourtesyCopyRecipientOptions?: (billId: string) => readonly CourtesyCopyRecipientOption[];
 };
 
-export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, getCourtesyCopyRecipientOptions, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
+export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, sandboxControls = false, getCourtesyCopyRecipientOptions, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
   const client = useClient(options); const [view, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const { workspaceRef, availableHeight } = useAvailableViewportHeight();
   const workspaceClassName = ["mbow-workspace", className].filter(Boolean).join(" ");
   const hasExplicitHeight = style?.height != null || style?.maxHeight != null;
   const workspaceStyle = availableHeight == null || hasExplicitHeight ? style : { ...style, maxHeight: availableHeight };
-  if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle billId={selectedBillId} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
+  if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
   const selectView = (next: typeof view) => { setView(next); setSelectedBillId(null); };
   const appearanceProps = appearance ? { appearance } : {};
   return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><div className="mbow-tabs" role="tablist">{([['tasks','Bill tasks'],['bills','All bills'],['procedures','Procedures'],['productivity','Productivity']] as const).map(([id,label]) => <button key={id} className={`mbow-tab ${view === id ? "active" : ""}`} type="button" role="tab" aria-selected={view === id} onClick={() => selectView(id)}>{label}</button>)}</div>{view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</Surface>;
