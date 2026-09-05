@@ -4,6 +4,8 @@ The integration has one durable object: a bill. Your application keeps its own c
 
 MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, payments, denials, reviews, and lifecycle history.
 
+`ConnectedBillLifecycle` also includes shared workspace team notes and a preview-first courtesy-copy email form. Hosts can supply case-scoped recipient choices without enrolling contacts in notifications. See [bill communications](docs/bill-communications.md) for recipient-option props, scopes, sandbox simulation, retry safety, and custom React integration.
+
 ## Install
 
 ```bash

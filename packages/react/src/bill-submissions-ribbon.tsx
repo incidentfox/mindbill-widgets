@@ -58,7 +58,18 @@ function attemptStatus(
   entries: readonly BillHistoryEntry[],
   attempt?: BillAttemptSummary,
 ): Pick<BillSubmissionRibbonItem, "badge" | "badgeTone" | "meta"> {
-  const rejected = [...entries].reverse().find((entry) =>
+  // Each attempt's server-resolved status includes events after its ACK.
+  // This applies to historical attempts as well as the current bill.
+  if (attempt?.status) return {
+    badge: attempt.status.replaceAll("_", " "),
+    badgeTone: attempt.status === "rejected" ? "danger" : /accepted|processed|paid/.test(attempt.status) ? "success" : "neutral",
+  };
+  const latestAck = [...entries].reverse().find((entry) => entry.kind === "ack");
+  const closed = [...entries].reverse().find((entry) => entry.kind === "close");
+  if (closed) return { badge: "Closed", badgeTone: "neutral", meta: [{ label: "Closed", value: ribbonDate(closed.date) }] };
+  const processed = [...entries].reverse().find((entry) => entry.kind === "eor" || entry.kind === "payment");
+  if (processed) return { badge: "Processed", badgeTone: "success", meta: [{ label: "Processed", value: ribbonDate(processed.date) }] };
+  const rejected = latestAck && [latestAck].find((entry) =>
     entry.kind === "ack" && (/reject|deni|error/i.test(entry.action) || entry.tone === "problem"),
   );
   if (rejected) return {
@@ -76,14 +87,7 @@ function attemptStatus(
     meta: [{ label: "Effective date", value: ribbonDate(complianceDueDate.date) }],
   };
 
-  const processed = [...entries].reverse().find((entry) => entry.kind === "eor" || entry.kind === "payment");
-  if (processed) return {
-    badge: "Processed",
-    badgeTone: "success",
-    meta: [{ label: "Processed", value: ribbonDate(processed.date) }],
-  };
-
-  const accepted = [...entries].reverse().find((entry) =>
+  const accepted = latestAck && [latestAck].find((entry) =>
     entry.kind === "ack" && (/accept/i.test(entry.action) || entry.tone === "success"),
   );
   if (accepted) return {
@@ -92,22 +96,10 @@ function attemptStatus(
     meta: [{ label: "Accepted", value: ribbonDate(accepted.date) }],
   };
 
-  const closed = [...entries].reverse().find((entry) => entry.kind === "close");
-  if (closed) return {
-    badge: "Closed",
-    badgeTone: "neutral",
-    meta: [{ label: "Closed", value: ribbonDate(closed.date) }],
-  };
-
   if (attempt?.ackLabel) return {
     badge: attempt.ackLabel,
     badgeTone: /reject|deni|error/i.test(attempt.ackLabel) ? "danger" : /accept/i.test(attempt.ackLabel) ? "success" : "neutral",
     ...(attempt.ackAt ? { meta: [{ label: /reject|deni|error/i.test(attempt.ackLabel) ? "Rejected" : "Acknowledged", value: ribbonDate(attempt.ackAt) }] } : {}),
-  };
-
-  if (attempt?.status) return {
-    badge: attempt.status.replaceAll("_", " "),
-    badgeTone: "neutral",
   };
 
   return {};

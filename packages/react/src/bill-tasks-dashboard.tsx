@@ -67,15 +67,15 @@ export type BillTasksDashboardProps = SurfaceProps & {
 
 const css = `
 .mbtk{color:var(--mb-text);font-family:var(--mb-font);font-size:14px}.mbtk *{box-sizing:border-box}.mbtk h2,.mbtk p{margin:0}
-.mbtk-heading{margin-bottom:14px}.mbtk-heading h2{font-size:24px}
+.mbtk-heading{margin-bottom:14px}.mbtk-heading h2{font-size:18px;font-weight:650;line-height:1.4}
 .mbtk-toolbar{margin-bottom:14px}
 .mbtk-section{margin-bottom:var(--mbtk-section-gap);border:var(--mbtk-border-width) solid var(--mbtk-border);border-radius:var(--mbtk-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow);overflow:hidden}
 .mbtk-grid{display:grid;grid-template-columns:var(--mbtk-cols);gap:0 10px;align-items:center;padding:0 16px}
 .mbtk-head{padding:12px 16px;border-bottom:1px solid var(--mb-border)}
 .mbtk-title{display:flex;align-items:center;gap:9px;min-width:0}
-.mbtk-dot{flex:0 0 auto;width:11px;height:11px;border-radius:50%;background:var(--mbtk-tone,var(--mb-muted))}
+.mbtk-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--mbtk-tone,var(--mb-muted))}
 .mbtk-title-text{min-width:0}
-.mbtk-title-text strong{display:block;font-size:15.5px;line-height:1.3}
+.mbtk-title-text strong{display:block;font-size:14px;line-height:1.3}
 .mbtk-basis{display:block;color:var(--mb-muted);font-size:12px;line-height:1.35}
 .mbtk-pill{justify-self:stretch;padding:5px 6px;border-radius:var(--mbtk-aging-radius);background:var(--mb-soft);background:var(--mbtk-pill);color:var(--mbtk-aging-text);font-size:11px;font-weight:750;line-height:1.25;text-align:center;white-space:nowrap}
 .mbtk-colhead{justify-self:stretch;color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:center;white-space:nowrap}

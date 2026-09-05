@@ -34,8 +34,8 @@ describe("dashboard appearance", () => {
         "--mbtk-red": "var(--mb-danger)",
         "--mbtk-link": "var(--mb-text)",
         "--mbtk-aging-text": "var(--mb-text)",
-        "--mbtk-aging-1": "color-mix(in srgb,var(--mb-accent) 6%,var(--mb-surface))",
-        "--mbtk-aging-5": "color-mix(in srgb,var(--mb-accent) 22%,var(--mb-surface))",
+        "--mbtk-aging-1": "color-mix(in srgb,var(--mb-accent) 5%,var(--mb-surface))",
+        "--mbtk-aging-5": "color-mix(in srgb,var(--mb-danger) 12%,var(--mb-surface))",
       });
     },
   );
@@ -51,7 +51,7 @@ describe("dashboard appearance", () => {
       "--mbtk-border": "#dddddd", "--mbtk-border-width": "0px", "--mbtk-radius": "4px",
       "--mbtk-section-gap": "12px", "--mbtk-row-height": "48px", "--mbtk-link": "#123456",
       "--mbtk-aging-1": "#eef0f4", "--mbtk-aging-text": "#203040", "--mbtk-aging-radius": "3px",
-      "--mbtk-aging-2": "color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))",
+      "--mbtk-aging-2": "color-mix(in srgb,var(--mb-accent) 8%,var(--mb-surface))",
       "--mbtk-violet": "#6b55a0", "--mbtk-red": "var(--mb-danger)",
     });
   });

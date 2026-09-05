@@ -12,6 +12,7 @@ import {
   type BillSubmissionUpload,
 } from "./bill-submission-form";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
+import { parseSecondReviewCorrection, type CorrectionDraft } from "./second-review-corrections";
 
 export const SECOND_REVIEW_REASON_TEMPLATES = [
   {
@@ -49,7 +50,7 @@ export const SECOND_REVIEW_REASON_TEMPLATES = [
 ] as const;
 
 type AuthorizationAnswer = "" | "yes" | "no";
-type LineDraft = { selected: boolean; reason: string; serviceAuthorized: AuthorizationAnswer };
+type LineDraft = CorrectionDraft & { selected: boolean; reason: string; serviceAuthorized: AuthorizationAnswer };
 
 export type SecondReviewFormProps = {
   data: BillLifecycleData;
@@ -72,7 +73,8 @@ const css = `
 .mb-second-review-upload{display:grid;place-items:center;min-height:82px;padding:16px;border:1px dashed color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));cursor:pointer}.mb-second-review-upload input{position:absolute;width:1px;height:1px;opacity:0}.mb-second-review-upload strong{color:var(--mb-accent)}
 .mb-second-review-uploaded{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}
 .mb-second-review-error{padding:10px 12px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger);font-size:13px}.mb-second-review-actions{display:flex;justify-content:flex-end;gap:10px}.mb-second-review-button{min-height:42px;padding:9px 16px;border-radius:var(--mb-control-radius);font:inherit;font-weight:740;cursor:pointer}.mb-second-review-button.secondary{border:1px solid var(--mb-border);background:var(--mb-surface);color:var(--mb-text)}.mb-second-review-button.primary{border:0;background:var(--mb-accent);color:var(--mb-accent-contrast)}.mb-second-review-button:disabled{opacity:.55;cursor:not-allowed}
-@media(max-width:680px){.mb-second-review{padding:16px}.mb-second-review-line-head{align-items:flex-start;flex-direction:column}.mb-second-review-metrics{flex-wrap:wrap}}
+.mb-second-review-corrections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.mb-second-review-correction-note{font-size:13px}
+@media(max-width:680px){.mb-second-review{padding:16px}.mb-second-review-line-head{align-items:flex-start;flex-direction:column}.mb-second-review-metrics{flex-wrap:wrap}.mb-second-review-corrections{grid-template-columns:1fr}}
 `;
 
 function money(value: number): string {
@@ -84,6 +86,11 @@ function initialLineDrafts(data: BillLifecycleData): Record<string, LineDraft> {
     selected: true,
     reason: "",
     serviceAuthorized: "" as AuthorizationAnswer,
+    correctBilling: false,
+    units: String(line.units),
+    modifiers: line.modifiers.join(", "),
+    charge: line.charge.toFixed(2),
+    chargeReviewed: false,
   }]] : []));
 }
 
@@ -107,7 +114,12 @@ export function SecondReviewForm({
   const selectableLines = useMemo(() => data.bill.lineItems.filter((line): line is typeof line & { id: string } => Boolean(line.id)), [data.bill.lineItems]);
   const selected = selectableLines.filter((line) => lines[line.id]?.selected);
   const invalidReason = selected.some((line) => !lines[line.id]?.reason.trim());
-  const disputedAmount = selected.reduce((sum, line) => sum + Math.max(0, line.charge), 0);
+  const correctionErrors = Object.fromEntries(selected.map((line) => {
+    try { parseSecondReviewCorrection(lines[line.id]!); return [line.id, ""]; }
+    catch (cause) { return [line.id, cause instanceof Error ? cause.message : "Review the corrected billing values."]; }
+  }));
+  const invalidCorrection = Object.values(correctionErrors).some(Boolean);
+  const disputedAmount = selected.reduce((sum, line) => sum + Math.max(0, !correctionErrors[line.id] && lines[line.id]?.correctBilling ? Number(lines[line.id]!.charge) : line.charge), 0);
 
   const patchLine = (id: string, patch: Partial<LineDraft>) => setLines((current) => {
     const line = current[id];
@@ -119,7 +131,7 @@ export function SecondReviewForm({
     if (!value) return;
     setLines((current) => Object.fromEntries(Object.entries(current).map(([id, line]) => [
       id,
-      line.selected ? { ...line, reason: value } : line,
+      line.selected ? { ...line, reason: value, ...(value === SECOND_REVIEW_REASON_TEMPLATES[5].value ? { correctBilling: true, chargeReviewed: false } : {}) } : line,
     ])));
   };
 
@@ -138,6 +150,7 @@ export function SecondReviewForm({
   const continueToDelivery = async () => {
     if (!selected.length) { setFormError("Select at least one service line."); return; }
     if (invalidReason) { setFormError("Enter a dispute reason for every selected service line."); return; }
+    if (invalidCorrection) { setFormError("Review the corrected billing values for each selected service line."); return; }
     setPreparing(true);
     setFormError("");
     try {
@@ -153,6 +166,7 @@ export function SecondReviewForm({
     setPreparing(true);
     setFormError("");
     try {
+      if (!selected.length || invalidReason || invalidCorrection) throw new Error("Review all selected service lines before submitting.");
       const documents = await prepareBillSubmissionDocuments({
         attachments: [],
         selectedIds: [],
@@ -165,6 +179,7 @@ export function SecondReviewForm({
           lineItemId: line.id,
           reason: draft.reason.trim(),
           ...(draft.serviceAuthorized === "" ? {} : { serviceAuthorized: draft.serviceAuthorized === "yes" }),
+          ...(draft.correctBilling ? { correction: parseSecondReviewCorrection(draft)! } : {}),
         };
       });
       await onSubmit({
@@ -193,13 +208,26 @@ export function SecondReviewForm({
           return <article className="mb-second-review-line" data-selected={draft?.selected} key={line.id}>
             <div className="mb-second-review-line-head"><label className="mb-second-review-check"><input type="checkbox" checked={Boolean(draft?.selected)} onChange={(event) => patchLine(line.id, { selected: event.target.checked })} /><span>{line.code}{line.modifiers.length ? `-${line.modifiers.join("-")}` : ""}</span></label><span className="mb-second-review-metrics"><span>{line.units} unit{line.units === 1 ? "" : "s"}</span><span>{money(line.charge)}</span></span></div>
             {draft?.selected ? <><label className="mb-second-review-field"><span className="mb-second-review-label">Reason for requesting Second Review</span><textarea className="mb-second-review-textarea" required value={draft.reason} onChange={(event) => patchLine(line.id, { reason: event.target.value })} /></label><div className="mb-second-review-auth" role="radiogroup" aria-label={`Service or good ${line.code} authorized`}><strong>Service/Good Authorized?</strong>{([['yes','Yes'],['no','No'],['','Not specified']] as const).map(([value, label]) => <label key={label}><input type="radio" name={`authorized-${line.id}`} checked={draft.serviceAuthorized === value} onChange={() => patchLine(line.id, { serviceAuthorized: value })} />{label}</label>)}</div></> : null}
+            {draft?.selected ? <>
+              <label className="mb-second-review-check"><input type="checkbox" checked={draft.correctBilling} onChange={(event) => patchLine(line.id, { correctBilling: event.target.checked, chargeReviewed: false })} />Correct units or modifiers on this submission</label>
+              {draft.correctBilling ? <>
+                <p className="mb-second-review-correction-note">Earlier submissions stay unchanged. Review the charge explicitly; changing units or modifiers does not recalculate it.</p>
+                <div className="mb-second-review-corrections">
+                  <label className="mb-second-review-field"><span className="mb-second-review-label">Corrected units</span><input className="mb-second-review-select" type="number" min="1" max="10000" step="1" value={draft.units} onChange={(event) => patchLine(line.id, { units: event.target.value, chargeReviewed: false })} /></label>
+                  <label className="mb-second-review-field"><span className="mb-second-review-label">Corrected modifiers</span><input className="mb-second-review-select" placeholder="95, 93 — or leave blank" value={draft.modifiers} onChange={(event) => patchLine(line.id, { modifiers: event.target.value, chargeReviewed: false })} /></label>
+                  <label className="mb-second-review-field"><span className="mb-second-review-label">Corrected charge ($)</span><input className="mb-second-review-select" type="number" min="0" max="999999.99" step="0.01" value={draft.charge} onChange={(event) => patchLine(line.id, { charge: event.target.value, chargeReviewed: false })} /></label>
+                </div>
+                <label className="mb-second-review-check"><input type="checkbox" checked={draft.chargeReviewed} onChange={(event) => patchLine(line.id, { chargeReviewed: event.target.checked })} />I reviewed the corrected charge</label>
+                {correctionErrors[line.id] ? <p className="mb-second-review-correction-note" role="status">{correctionErrors[line.id]}</p> : null}
+              </> : null}
+            </> : null}
           </article>;
         })}
         {!selectableLines.length ? <div className="mb-second-review-error">This bill has no stable service-line identifiers. Refresh the bill before submitting a Second Review.</div> : null}
       </section>
       <fieldset className="mb-second-review-packet"><legend>Supporting packet</legend>{data.bill.attachments.map((attachment) => <label className="mb-second-review-document" key={attachment.id}><input type="checkbox" checked={attachmentIds.includes(attachment.id)} onChange={(event) => setAttachmentIds((current) => event.target.checked ? [...current, attachment.id] : current.filter((id) => id !== attachment.id))} /><span><strong>{attachment.filename}</strong><small>{attachment.description || attachment.documentType}</small></span><button className="mb-second-review-link" type="button" onClick={() => void openAttachment(attachment).catch(() => undefined)}>View</button></label>)}<label className="mb-second-review-upload"><input type="file" accept="application/pdf,.pdf" multiple onChange={addUploads} /><span><strong>Choose one or more PDF files</strong> to attach</span></label>{uploads.map((upload, index) => <div className="mb-second-review-uploaded" key={`${upload.file.name}-${index}`}><span>{upload.file.name}</span><button className="mb-second-review-link" type="button" onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}</fieldset>
       {(formError || error?.message) ? <div className="mb-second-review-error" role="alert">{formError || error?.message}</div> : null}
-      <div className="mb-second-review-actions"><button className="mb-second-review-button secondary" type="button" disabled={submitting || preparing} onClick={onCancel}>Cancel</button><button className="mb-second-review-button primary" type="button" disabled={submitting || preparing || !selected.length || invalidReason} onClick={() => void continueToDelivery()}>{preparing ? "Preparing…" : "Continue to delivery"}</button></div>
+      <div className="mb-second-review-actions"><button className="mb-second-review-button secondary" type="button" disabled={submitting || preparing} onClick={onCancel}>Cancel</button><button className="mb-second-review-button primary" type="button" disabled={submitting || preparing || !selected.length || invalidReason || invalidCorrection} onClick={() => void continueToDelivery()}>{preparing ? "Preparing…" : "Continue to delivery"}</button></div>
     </section>
     {delivery ? <SendRouteDialog title="Confirm Second Review delivery" delivery={delivery} submitting={submitting || preparing} error={formError || error?.message || null} onCancel={() => setDelivery(null)} onConfirm={(route) => void submit(route)} /> : null}
   </>;

@@ -186,7 +186,7 @@ export function mindBillAppearanceStyle(
     "--mbtk-aging-radius": dashboard?.agingRadius ?? "var(--mb-control-radius)",
     ...Object.fromEntries(Array.from({ length: 5 }, (_, index) => [
       `--mbtk-aging-${index + 1}`,
-      dashboard?.agingColors?.[index] ?? `color-mix(in srgb,var(--mb-accent) ${6 + index * 4}%,var(--mb-surface))`,
+      dashboard?.agingColors?.[index] ?? `color-mix(in srgb,var(${index === 4 ? "--mb-danger" : "--mb-accent"}) ${[5, 8, 12, 16, 12][index]}%,var(--mb-surface))`,
     ])),
     ...style,
   } as CSSProperties;
