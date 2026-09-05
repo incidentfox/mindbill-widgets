@@ -13,6 +13,7 @@ import {
 } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { TaxIdInput, taxIdWrite } from "./tax-id-input";
+import { W9Upload } from "./w9-upload";
 
 // Embeddable organization onboarding (INC-1470): capture the practice name,
 // tax ID, group NPI, billing provider, locations, and W-9 ONCE, saved straight
@@ -124,7 +125,6 @@ export function OrganizationOnboarding({
   const [locations, setLocations] = useState<OrganizationLocationInput[]>([blankLocation()]);
   const [rendering, setRendering] = useState<OrganizationRenderingProviderInput>(blankRendering);
   const primaryGroup = useId();
-  const [w9File, setW9File] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedStep, setSavedStep] = useState<Record<string, boolean>>({});
@@ -196,11 +196,19 @@ export function OrganizationOnboarding({
     }, "practice");
   const saveLocations = () =>
     run(() => client.saveLocations(locations.filter((item) => item.name.trim() || item.street.trim())), "locations");
-  const saveW9 = () =>
-    run(async () => {
-      if (!w9File) throw new Error("Choose the practice W-9 PDF first.");
-      return client.saveW9({ filename: w9File.name, contentBase64: await fileToBase64(w9File) });
-    }, "w9");
+  const saveW9 = async (file: File) => {
+    setSaving(true);
+    try {
+      const next = await client.saveW9({ filename: file.name, contentBase64: await fileToBase64(file) });
+      adoptProfile(next);
+      setSavedStep((current) => ({ ...current, w9: true }));
+      onSaved?.(next);
+      if (variant === "onboarding") setStep("review");
+    } catch (error) {
+      onError?.(error instanceof Error ? error : new Error("The W-9 could not be saved."));
+      throw error;
+    } finally { setSaving(false); }
+  };
 
   const field = (label: string, value: string, onChange: (value: string) => void, span = false, placeholder = "") => (
     <label className={`mbob-field${span ? " mbob-span" : ""}`}>{label}
@@ -284,19 +292,7 @@ export function OrganizationOnboarding({
     </div>
   );
 
-  const w9Section = (
-    <div>
-      {profile?.w9 ? (
-        <div className="mbob-w9-current"><div><strong>{profile.w9.filename}</strong><span> · added {profile.w9.addDate}</span></div><span>Rides on every bill automatically</span></div>
-      ) : null}
-      <label className="mbob-drop">
-        <input type="file" accept="application/pdf,.pdf" onChange={(event) => setW9File(event.target.files?.[0] ?? null)} />
-        <strong>{w9File ? w9File.name : profile?.w9 ? "Replace the W-9 PDF" : "Drop the practice W-9 PDF here, or click to choose"}</strong>
-        <span>The W-9 is auto-attached to every submission.</span>
-      </label>
-      <div className="mbob-actions"><span className="mbob-status">{savedStep["w9"] ? "Saved to MindBill." : ""}</span><button className="mbob-save" type="button" disabled={saving || !w9File} onClick={saveW9}>{saving ? "Uploading…" : "Save W-9"}</button></div>
-    </div>
-  );
+  const w9Section = <div><p className="mbob-status">The saved W-9 is auto-attached to every submission.</p><W9Upload {...(appearance ? { appearance } : {})} {...(profile?.w9 ? { document: { filename: profile.w9.filename, addedAt: profile.w9.addDate } } : {})} onUpload={saveW9} disabled={saving} /></div>;
 
   const reviewSection = (
     <div className="mbob-check">
