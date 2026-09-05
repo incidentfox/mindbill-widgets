@@ -235,7 +235,7 @@ export function createBillingOperationsClient({
       void _taskSection;
       const sortKey = sort?.startsWith("balance_") ? "balanceDue"
         : sort?.startsWith("patient_") ? "patient" : sort ? "submitted" : undefined;
-      return get<BillRegistryResult>(`/partner/v2/browser/bills${queryString({
+      return get<BillRegistryResult>(`/partner/v2/bill-dashboard${queryString({
         ...filters,
         status: status === "submitted" ? "sent" : status,
         claimsAdminId: claimsAdministrator,
@@ -246,18 +246,18 @@ export function createBillingOperationsClient({
     },
     getBillTasks(claimsAdministrator, signal, renderingProviderId) {
       return get<BillTasksResult>(
-        `/partner/v2/browser/bill-tasks${queryString({ claimsAdminId: claimsAdministrator, renderingProviderId })}`,
+        `/partner/v2/bill-tasks${queryString({ claimsAdminId: claimsAdministrator, renderingProviderId })}`,
         signal,
       );
     },
     getServiceLineItems(range, signal) {
       return get<ServiceLineItemsReport>(
-        `/partner/v2/browser/reports/service-line-items${queryString(range)}`,
+        `/partner/v2/reports/service-line-items${queryString(range)}`,
         signal,
       );
     },
     getProductivity(range, signal) {
-      return get<ProductivityReport>(`/partner/v2/browser/reports/productivity${queryString(range)}`, signal);
+      return get<ProductivityReport>(`/partner/v2/reports/productivity${queryString(range)}`, signal);
     },
   };
 }

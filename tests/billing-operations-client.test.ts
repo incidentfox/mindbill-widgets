@@ -48,10 +48,10 @@ describe("billing operations client", () => {
         });
       }
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer browser_session_token");
-      if (url.includes("/partner/v2/browser/bills?")) {
+      if (url.includes("/partner/v2/bill-dashboard?")) {
         expect(Object.fromEntries(new URL(url).searchParams)).toEqual({ status: "all", age: "61-90", taskLabel: "Send Bill", page: "2" });
       } else {
-        expect(url).toBe("https://sandbox-api.mindbill.org/partner/v2/browser/reports/productivity?from=2026-08-01&to=2026-08-31");
+        expect(url).toBe("https://sandbox-api.mindbill.org/partner/v2/reports/productivity?from=2026-08-01&to=2026-08-31");
       }
       return jsonResponse({ data: { items: [], total: 0, balanceTotal: 0, page: 2, pageSize: 25 } });
     });

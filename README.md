@@ -331,3 +331,11 @@ The same bill contract supports California med-legal billing and `billingMode: "
 Use synthetic data in sandbox. Never put API keys, session tokens, or PHI in source control or public issues.
 
 MIT. “MindBill” and related marks are trademarks of IncidentFox, Inc.
+
+## Shared business API
+
+The browser SDK and server integrations use the same business endpoints under `/partner/v2`, with the same request and response contracts. Server integrations authenticate with an API key; browser SDKs accept only short-lived, origin-bound sessions minted on your server. Keep API keys out of browser code.
+
+`GET /partner/v2/bill-dashboard` provides the page-based list and totals used by the React dashboard. `GET /partner/v2/bills` remains the cursor-based list. Both support either credential; authentication does not select a different response shape. The SDK submits bills through `POST /partner/v2/bills`.
+
+Older `/partner/v2/browser/...` URLs remain compatibility aliases. Browser-session creation and credential management remain server-only. See [the API migration guide](docs/shared-api.md).

@@ -56,7 +56,7 @@ These are suggestions, not defaults: users choose To/CC contacts or enter addres
 
 ## API contract
 
-POST `/partner/v2/bills/{id}/courtesy-forward` using server `bills:write`, or `/partner/v2/browser/bills/{id}/courtesy-forward` using an origin-bound browser session and `bills:act`. Existing partner/workspace and bill restrictions apply.
+POST `/partner/v2/bills/{id}/courtesy-forward` using either a server API key with `bills:write` or an origin-bound browser session with `bills:act`. Both credentials use the same URL and request/response contract. Existing partner/workspace and bill restrictions apply.
 
 1. Preview with `{ "mode": "preview", "to": ["recipient@example.com"], "cc": [], "subject": "Courtesy copy", "bodyText": "For your records", "includeCms1500": true, "documentIds": [] }`.
 2. Review `pdfBase64` and verify recipients may receive the records. Raw JSON also contains `filename`, `documentCount`, `packetHash`, and `environment`; there is no `data` wrapper.

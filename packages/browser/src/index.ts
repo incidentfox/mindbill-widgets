@@ -1235,7 +1235,7 @@ export function createBillSubmissionClient({
     let browserSession = await mintSession(controller.signal);
     const perform = (current: BillLifecycleSession) => {
       const base = (current.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
-      return fetcher(`${base}/partner/v2/browser/bills`, {
+      return fetcher(`${base}/partner/v2/bills`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${current.token}`,
@@ -1331,7 +1331,7 @@ export function createBillLifecycleClient({
   };
 
   const billPath = (suffix = ""): string =>
-    `/partner/v2/browser/bills/${encodeURIComponent(currentBillId)}${suffix}`;
+    `/partner/v2/bills/${encodeURIComponent(currentBillId)}${suffix}`;
 
   const loadLifecycle = async (signal?: AbortSignal) => {
     const response = await request(billPath("/lifecycle"), {}, signal);
@@ -1350,7 +1350,7 @@ export function createBillLifecycleClient({
     const offset = Math.max(0, Math.floor(input.offset ?? 0));
     params.set("limit", String(limit));
     if (offset) params.set("offset", String(offset));
-    const response = await request(`/partner/v2/browser/claims-administrators?${params.toString()}`);
+    const response = await request(`/partner/v2/claims-administrators?${params.toString()}`);
     if (!response.ok) throw await responseError(response, "Claims administrator search is unavailable.");
     const body = await response.json() as { results?: unknown; suggestions?: unknown; total?: unknown; nextOffset?: unknown; recommendedId?: unknown };
     if (!Array.isArray(body.results)) throw new Error("Claims administrator search returned an invalid response.");
@@ -1444,7 +1444,7 @@ export function createBillLifecycleClient({
   const getClaimsAdministratorDirectory = async (id: string, injuryState?: string): Promise<BillClaimsAdministratorDirectory> => {
     const params = new URLSearchParams();
     if (injuryState?.trim()) params.set("injuryState", injuryState.trim());
-    const response = await request(`/partner/v2/browser/claims-administrators/${encodeURIComponent(id)}${params.size ? `?${params}` : ""}`);
+    const response = await request(`/partner/v2/claims-administrators/${encodeURIComponent(id)}${params.size ? `?${params}` : ""}`);
     if (!response.ok) throw await responseError(response, "Claims administrator details are unavailable.");
     const body = await response.json() as { data?: unknown };
     if (!body.data || typeof body.data !== "object") throw new Error("Claims administrator details returned an invalid response.");
@@ -1454,7 +1454,7 @@ export function createBillLifecycleClient({
   const searchDiagnosisCodes = async (query: string, limit = 30, offset = 0): Promise<BillDiagnosisCode[]> => {
     const params = new URLSearchParams({ q: query.trim(), limit: String(Math.max(1, Math.min(100, limit))) });
     if (offset > 0) params.set("offset", String(Math.max(0, Math.floor(offset))));
-    const response = await request(`/partner/v2/browser/diagnosis-codes?${params.toString()}`);
+    const response = await request(`/partner/v2/diagnosis-codes?${params.toString()}`);
     if (!response.ok) throw await responseError(response, "Diagnosis-code search is unavailable.");
     const body = await response.json() as { results?: unknown };
     if (!Array.isArray(body.results)) throw new Error("Diagnosis-code search returned an invalid response.");
@@ -1469,7 +1469,7 @@ export function createBillLifecycleClient({
 
   const lookupPostalCode = async (postalCode: string): Promise<BillPostalPlace | null> => {
     const params = new URLSearchParams({ postalCode: postalCode.trim() });
-    const response = await request(`/partner/v2/browser/postal-codes?${params.toString()}`);
+    const response = await request(`/partner/v2/postal-codes?${params.toString()}`);
     if (response.status === 404) return null;
     if (!response.ok) throw await responseError(response, "ZIP lookup is unavailable.");
     const body = await response.json() as { city?: unknown; state?: unknown };
@@ -1496,13 +1496,12 @@ export function createBillLifecycleClient({
     return normalizeLifecycle(body.data);
   };
   const simulateSandbox = async (input: SimulateSandboxBillInput): Promise<BillLifecycleData> => {
-    const response = await mutation(billPath("/simulate"), {
+    await mutation(`/partner/v2/sandbox/bills/${encodeURIComponent(currentBillId)}/simulate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
     }, "Sandbox lifecycle could not be simulated.");
-    const body = await response.json() as { data?: unknown };
-    return normalizeLifecycle(body.data);
+    return loadLifecycle();
   };
   return {
     getBillId() { return currentBillId; },
@@ -1523,7 +1522,7 @@ export function createBillLifecycleClient({
       const params = new URLSearchParams({ claimsAdministratorId: input.claimsAdministratorId.trim() });
       if (input.payerId?.trim()) params.set("payerId", input.payerId.trim());
       if (input.injuryState?.trim()) params.set("injuryState", input.injuryState.trim());
-      const response = await request(`/partner/v2/browser/delivery-preview?${params.toString()}`);
+      const response = await request(`/partner/v2/delivery-preview?${params.toString()}`);
       if (!response.ok) throw await responseError(response, "Delivery routes could not be loaded.");
       const body = await response.json() as { data?: unknown };
       return normalizeDeliveryOptions(body.data ?? body);
@@ -1741,18 +1740,18 @@ export function createOrganizationClient({
   };
 
   return {
-    getOrganization: () => request("/partner/v2/browser/organization"),
-    getBillingProfile: () => request("/partner/v2/browser/organization/billing-profile"),
+    getOrganization: () => request("/partner/v2/organization"),
+    getBillingProfile: () => request("/partner/v2/organization/billing-profile"),
     saveBillingProfile: (input) =>
-      request("/partner/v2/browser/organization/billing-profile", { method: "PUT", body: JSON.stringify({
+      request("/partner/v2/organization/billing-profile", { method: "PUT", body: JSON.stringify({
         ...input,
         ...(input.practiceIdentity ? { practiceIdentity: organizationTaxIdWrite(input.practiceIdentity) } : {}),
         ...(input.billingProviders ? { billingProviders: input.billingProviders.map(organizationTaxIdWrite) } : {}),
       }) }),
     saveLocations: (locations) =>
-      request("/partner/v2/browser/organization/locations", { method: "PUT", body: JSON.stringify({ locations }) }),
+      request("/partner/v2/organization/locations", { method: "PUT", body: JSON.stringify({ locations }) }),
     saveW9: (input) =>
-      request("/partner/v2/browser/organization/w9", { method: "PUT", body: JSON.stringify(input) }),
+      request("/partner/v2/organization/w9", { method: "PUT", body: JSON.stringify(input) }),
   };
 }
 

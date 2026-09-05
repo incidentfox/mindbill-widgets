@@ -640,10 +640,10 @@ describe("pre-submission reference data", () => {
 
     expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
       "/api/mindbill/session",
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Zurich&claimNumber=TEST-1&limit=50",
-      "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=left+knee&limit=30",
-      "https://app.mindbill.org/partner/v2/browser/diagnosis-codes?q=&limit=100&offset=100",
-      "https://app.mindbill.org/partner/v2/browser/postal-codes?postalCode=94403",
+      "https://app.mindbill.org/partner/v2/claims-administrators?q=Zurich&claimNumber=TEST-1&limit=50",
+      "https://app.mindbill.org/partner/v2/diagnosis-codes?q=left+knee&limit=30",
+      "https://app.mindbill.org/partner/v2/diagnosis-codes?q=&limit=100&offset=100",
+      "https://app.mindbill.org/partner/v2/postal-codes?postalCode=94403",
     ]);
     expect(fetcher.mock.calls.slice(1).map((call) => new Headers(call[1]?.headers).get("authorization"))).toEqual([
       "Bearer short-lived-reference-token",
@@ -745,7 +745,7 @@ describe("pre-submission reference data", () => {
       }],
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?claimNumber=WC57539&sourceClaimsAdministratorName=Sedgwick&employerName=Synthetic+Employer&limit=50&offset=50",
+      "https://app.mindbill.org/partner/v2/claims-administrators?claimNumber=WC57539&sourceClaimsAdministratorName=Sedgwick&employerName=Synthetic+Employer&limit=50&offset=50",
     );
   });
 
@@ -777,7 +777,7 @@ describe("pre-submission reference data", () => {
     await expect(client.getDeliveryPreview({ claimsAdministratorId: "pd:zurich", payerId: "pd:zurich/branch", injuryState: "CA" }))
       .resolves.toMatchObject({ payerName: "Zurich American Insurance Company", recommended: { route: "ebill" } });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/delivery-preview?claimsAdministratorId=pd%3Azurich&payerId=pd%3Azurich%2Fbranch&injuryState=CA",
+      "https://app.mindbill.org/partner/v2/delivery-preview?claimsAdministratorId=pd%3Azurich&payerId=pd%3Azurich%2Fbranch&injuryState=CA",
     );
   });
 
@@ -869,7 +869,7 @@ describe("connected bill submission", () => {
       bill: { state: "submitted" },
     });
 
-    expect(fetcher).toHaveBeenNthCalledWith(2, "https://app.mindbill.org/partner/v2/browser/bills", expect.objectContaining({
+    expect(fetcher).toHaveBeenNthCalledWith(2, "https://app.mindbill.org/partner/v2/bills", expect.objectContaining({
       method: "POST",
       headers: expect.objectContaining({
         authorization: "Bearer short-lived-submit-token",
@@ -1413,7 +1413,7 @@ describe("connected bill status", () => {
       body: JSON.stringify({}),
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_123/status",
+      "https://app.mindbill.org/partner/v2/bills/bill_123/status",
     );
     expect(fetcher.mock.calls[1]?.[1]?.headers).toEqual({
       authorization: "Bearer short-lived-session-token",
@@ -1569,10 +1569,10 @@ describe("connected bill lifecycle", () => {
       body: JSON.stringify({}),
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/lifecycle",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/lifecycle",
     );
     expect(fetcher.mock.calls[2]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/actions",
     );
     const actionHeaders = new Headers(fetcher.mock.calls[2]?.[1]?.headers);
     expect(actionHeaders.get("authorization")).toBe(
@@ -1619,7 +1619,7 @@ describe("connected bill lifecycle", () => {
     })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
 
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/actions",
     );
     expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({
       action: "add_note",
@@ -1648,7 +1648,7 @@ describe("connected bill lifecycle", () => {
       lifecycle: { state: "processed" },
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/packet",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/packet",
     );
     expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
       action: "reopen",
@@ -1670,6 +1670,7 @@ describe("connected bill lifecycle", () => {
         token: "short-lived-lifecycle-token",
         expiresAt: "2099-08-26T00:00:00.000Z",
       }))
+      .mockResolvedValueOnce(jsonResponse({ data: { scenario: "rejected" } }))
       .mockResolvedValueOnce(jsonResponse({ data: rejected }))
       .mockResolvedValueOnce(jsonResponse({ data: submitted }));
     const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
@@ -1698,10 +1699,11 @@ describe("connected bill lifecycle", () => {
     });
 
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/simulate",
+      "https://app.mindbill.org/partner/v2/sandbox/bills/bill_789/simulate",
     );
     expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({ scenario: "rejected" }));
-    expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
+    expect(fetcher.mock.calls[2]?.[0]).toBe("https://app.mindbill.org/partner/v2/bills/bill_789/lifecycle");
+    expect(fetcher.mock.calls[3]?.[1]?.body).toBe(JSON.stringify({
       action: "resubmit",
       reason: "Selected the correct payer route.",
       bill: correctedBill,
@@ -1810,7 +1812,7 @@ describe("connected bill lifecycle", () => {
     });
 
     expect(fetcher.mock.calls[2]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/actions",
     );
     expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
       action: "submit_new_bill",
@@ -1937,7 +1939,7 @@ describe("connected bill lifecycle", () => {
       ],
     }]);
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/claims-administrators?q=Example+TPA&claimNumber=OTHER123&limit=50",
+      "https://app.mindbill.org/partner/v2/claims-administrators?q=Example+TPA&claimNumber=OTHER123&limit=50",
     );
   });
 
@@ -1994,7 +1996,7 @@ describe("connected bill lifecycle", () => {
 
     await expect(client.getDeliveryOptions()).resolves.toEqual(deliveryOptions);
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/delivery-options",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/delivery-options",
     );
   });
 
@@ -2029,7 +2031,7 @@ describe("connected bill lifecycle", () => {
     })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
 
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/actions",
     );
     expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({
       action: "send_duplicate",
@@ -2041,7 +2043,7 @@ describe("connected bill lifecycle", () => {
       },
     }));
     expect(fetcher.mock.calls[2]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/actions",
     );
     expect(fetcher.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
       action: "report_bill_status",
