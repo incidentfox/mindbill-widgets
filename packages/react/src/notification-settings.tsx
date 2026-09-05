@@ -138,6 +138,7 @@ function NotificationSettingsSession({ adapter, appearance, className, style, on
     } catch {
       if (current !== request.current) return;
       setPhase("ready");
+      setConsent(false);
       setFailed(true);
       setNotice("We couldn't confirm your changes. Retry, or reload settings to check their current state.");
     }

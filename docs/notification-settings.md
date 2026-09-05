@@ -42,6 +42,9 @@ export function BillingNotificationSettings({ accountKey, csrfToken }: {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+      // Our host route uses 409 when a rejected/expired consent receipt needs
+      // fresh consent. Do not clear receipts for ambiguous network/server failures.
+      if (response.status === 409) pending = undefined;
       if (!response.ok) throw new Error("Notification settings request failed");
       return response;
     }
