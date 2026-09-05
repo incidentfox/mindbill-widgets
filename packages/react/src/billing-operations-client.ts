@@ -6,6 +6,39 @@ import {
   type BillTasksDashboardData,
 } from "@mindbill/browser";
 
+/** Confirmed cash ledger entries, never pending EOR/835 estimates or imported legacy payments. */
+export type PaymentReviewItem = {
+  id: string;
+  billId: string;
+  billNumber: number | null;
+  patientName: string;
+  claimNumber: string;
+  dateOfService: string | null;
+  receivedDate: string | null;
+  postedDate: string | null;
+  status: "received";
+  method: string;
+  source: string;
+  checkNumber: string | null;
+  amount: number;
+};
+export type PaymentReviewQuery = {
+  q?: string;
+  receivedFrom?: string;
+  receivedTo?: string;
+  renderingProviderId?: string;
+  page?: number;
+  pageSize?: number;
+};
+export type PaymentReviewResult = {
+  items: PaymentReviewItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Totals span all matching entries, not only the current page. */
+  summary: { postedTotal: number; entryCount: number; uniquePatients: number };
+};
+
 export type BillRegistryStatus = {
   id: string;
   label: string;
@@ -116,6 +149,7 @@ export type BillingOperationsClientOptions = {
 };
 
 export type BillingOperationsClient = {
+  getPaymentReview: (query?: PaymentReviewQuery, signal?: AbortSignal) => Promise<PaymentReviewResult>;
   clearSession: () => void;
   getBills: (query?: BillRegistryQuery, signal?: AbortSignal) => Promise<BillRegistryResult>;
   getBillTasks: (claimsAdministrator?: string, signal?: AbortSignal, renderingProviderId?: string) => Promise<BillTasksResult>;
@@ -255,6 +289,9 @@ export function createBillingOperationsClient({
         `/partner/v2/reports/service-line-items${queryString(range)}`,
         signal,
       );
+    },
+    getPaymentReview(query = {}, signal) {
+      return get<PaymentReviewResult>(`/partner/v2/reports/payments${queryString(query)}`, signal);
     },
     getProductivity(range, signal) {
       return get<ProductivityReport>(`/partner/v2/reports/productivity${queryString(range)}`, signal);

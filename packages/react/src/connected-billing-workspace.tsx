@@ -15,6 +15,7 @@ import {
 import type { BillTasksDashboardCell } from "./bill-tasks-dashboard";
 import { BillTasksDashboard } from "./bill-tasks-dashboard";
 import { ConnectedBillLifecycle } from "./connected-bill-lifecycle";
+import { ConnectedPaymentReview } from "./payment-review";
 import type { CourtesyCopyRecipientOption } from "./bill-courtesy-copy-form";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import {
@@ -254,7 +255,9 @@ export function ConnectedProductivityReport({ appearance, className, style, init
 }
 
 export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
-  initialView?: "tasks" | "bills" | "procedures" | "productivity";
+  initialView?: "tasks" | "bills" | "procedures" | "productivity" | "payments";
+  /** Optional host-owned payment entry action. Review itself is read-only. */
+  onPostPayment?: () => void;
   onCreateBill?: () => void;
   /** Show simulation controls on selected sandbox bills. Never enables live simulations. */
   sandboxControls?: boolean;
@@ -262,7 +265,7 @@ export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
   getCourtesyCopyRecipientOptions?: (billId: string) => readonly CourtesyCopyRecipientOption[];
 };
 
-export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, sandboxControls = false, getCourtesyCopyRecipientOptions, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
+export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
   const client = useClient(options); const [view, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const { workspaceRef, availableHeight } = useAvailableViewportHeight();
   const workspaceClassName = ["mbow-workspace", className].filter(Boolean).join(" ");
@@ -271,5 +274,5 @@ export function ConnectedBillingWorkspace({ appearance, className, style, initia
   if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
   const selectView = (next: typeof view) => { setView(next); setSelectedBillId(null); };
   const appearanceProps = appearance ? { appearance } : {};
-  return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><div className="mbow-tabs" role="tablist">{([['tasks','Bill tasks'],['bills','All bills'],['procedures','Procedures'],['productivity','Productivity']] as const).map(([id,label]) => <button key={id} className={`mbow-tab ${view === id ? "active" : ""}`} type="button" role="tab" aria-selected={view === id} onClick={() => selectView(id)}>{label}</button>)}</div>{view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</Surface>;
+  return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><div className="mbow-tabs" role="tablist">{([['tasks','Bill tasks'],['bills','All bills'],['procedures','Procedures'],['productivity','Productivity'],['payments','Payment review']] as const).map(([id,label]) => <button key={id} className={`mbow-tab ${view === id ? "active" : ""}`} type="button" role="tab" aria-selected={view === id} onClick={() => selectView(id)}>{label}</button>)}</div>{view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : view === "payments" ? <ConnectedPaymentReview {...options} {...appearanceProps} {...(onPostPayment ? { onPostPayment } : {})} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</Surface>;
 }

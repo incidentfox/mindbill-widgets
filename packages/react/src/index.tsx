@@ -247,6 +247,11 @@ export type {
 } from "./report-bill-status-dialog";
 
 export { BillingSettings, OrganizationOnboarding } from "./organization-onboarding";
+export { W9Upload } from "./w9-upload";
+export type { W9UploadProps, W9ExtractionStatus } from "./w9-upload";
+export { ConnectedPaymentReview } from "./payment-review";
+export type { ConnectedPaymentReviewProps, PaymentReviewRange } from "./payment-review";
+export type { PaymentReviewItem, PaymentReviewQuery, PaymentReviewResult } from "./billing-operations-client";
 export type { OrganizationOnboardingProps } from "./organization-onboarding";
 
 export { ConnectedNotificationSettings, NotificationSettings } from "./notification-settings";

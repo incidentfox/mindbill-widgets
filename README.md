@@ -283,6 +283,53 @@ Available operations include close, Second Bill Review, EOR reads, and payment p
 
 ## Data ownership
 
+### Payment review
+
+`ConnectedBillingWorkspace` includes a **Payment review** tab (`initialView="payments"`).
+For a standalone page, use `ConnectedPaymentReview` with the same `sessionEndpoint`,
+`getSession`, and `appearance` options. Its `initialQuery` accepts `q`, `receivedFrom`,
+`receivedTo`, `renderingProviderId`, `page`, and `pageSize`. By default it shows this
+month through today; users can choose quick ranges or custom received dates.
+
+The component calls `GET /partner/v2/reports/payments` through the short-lived browser
+session. It displays **confirmed cash only**: pending EOR/835 amounts, bounced payments,
+and historical legacy payments are excluded. Summary totals cover the entire filtered
+result, not just the current page. **Export page** downloads only the displayed entries
+with spreadsheet-formula protection. `onSelectBill(billId)` opens a host-owned detail
+view; the workspace wires this to its bill detail automatically. Optional
+`onPostPayment()` exposes a host-owned payment entry action; reviewing or exporting
+payments never posts or changes a payment. This report requires organization-wide
+`bills:read` access, not an assigned-bill-only session.
+
+### Host-owned W-9 upload and extraction
+
+`W9Upload` is the shared presentational widget used by `BillingSettings`. If you already
+store a practice W-9 and extract its EIN/remittance address, keep those authorized server
+routes and use the same widget without creating a second source of truth:
+
+```tsx
+<W9Upload
+  document={{ filename: "practice-w9.pdf", addedAt: "2026-09-01" }}
+  extractionStatus="complete"
+  maxSizeBytes={10_000_000}
+  onUpload={uploadThroughYourAuthenticatedServer}
+  onView={openYourAuthorizedDocument}
+  onRetryExtraction={retryThroughYourAuthenticatedServer}
+  appearance={appearance}
+/>
+```
+
+`onUpload(file)` must reject when upload fails. Extraction states are `idle`, `queued`,
+`processing`, `complete`, `not_found`, and `failed`. The widget provides PDF selection,
+drag/drop, size checks (20 MiB default), progress, retry, and safe errors. The host remains
+responsible for server-side file validation, storage, extraction, authorization, and
+reviewing extracted values before saving. It does not extract an EIN itself or expose
+full tax IDs. In particular, adding `W9Upload` does not automatically enable extraction
+on a backend that only stores documents. Hosts with page-wide drop handling should
+ignore drops originating inside `.mbw9` to avoid uploading the same file twice.
+
+### Saved billing profiles
+
 `BillingSettings` provides reusable billing/rendering provider, service-location, and W-9
 setup. `BillSubmissionForm` accepts host-owned or MindBill-backed `profileOptions` and
 `profileDisplay="expanded" | "compact"`; selections become editable bill snapshots, not
