@@ -698,6 +698,8 @@ export type SecondReviewLineInput = {
   reason: string;
   /** SBR-1 box for this service line. Omitted leaves the box blank. */
   serviceAuthorized?: boolean;
+  /** Absolute corrected values for this Second Review only; charge is explicitly reviewed, never inferred. */
+  correction?: { units: number; modifiers: string[]; charge: number };
 };
 
 export type SubmitSecondReviewInput = BillActorInput & {
