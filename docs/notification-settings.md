@@ -13,7 +13,10 @@ the billing components. Mount it in your existing settings page; no new doctor
 account in the MindBill console is necessary.
 
 Notifications start **off** with no categories selected. The user chooses status
-updates and/or 30/60/90-day reminders, explicitly consents and saves. Changed
+updates, 30/60/90-day reminders and/or a daily or weekly activity digest, explicitly
+consents and saves. Digests contain activity counts, not patient details, financial
+reports or attachments. They arrive at 9 am Pacific daily or on Mondays for weekly
+delivery. Changed
 enabled preferences, including quiet hours, require consent again. Unsubscribing
 does not require consent. Sandbox is a preview and never sends these emails.
 
@@ -94,6 +97,7 @@ type NotificationSettingsSnapshot = {
     statusUpdates: boolean;
     agingDays: (30 | 60 | 90)[];
     quietHours: boolean;
+    reportDigest?: "off" | "daily" | "weekly"; // omitted means off
   };
   email: string; // display only: verified, server-selected consent destination
   audience: "practice" | "assigned_bills"; // display only: server-authorized scope
@@ -113,7 +117,7 @@ and show the new scope before collecting new consent.
 The component's save callback receives only:
 
 ```ts
-{ enabled, statusUpdates, agingDays, quietHours, consent: boolean }
+{ enabled, statusUpdates, agingDays, quietHours, reportDigest, consent: boolean }
 ```
 
 There are no browser mutation fields for another user's identity, email address,
@@ -170,6 +174,7 @@ For every host request:
   statusUpdates: validatedPreferences.statusUpdates,
   agingDays: validatedPreferences.agingDays,
   quietHours: validatedPreferences.quietHours,
+  reportDigest: validatedPreferences.reportDigest ?? "off",
   consent: {
     grantedAt: recordedConsent.timestamp,
     emailVerifiedAt: trustedEmailVerification.timestamp,
