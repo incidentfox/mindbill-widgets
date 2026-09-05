@@ -132,6 +132,8 @@ export type UseBillLifecycleResult = {
   openAttachment: (attachment: Pick<BillReviewAttachment, "id">) => Promise<void>;
   openEor: (document: BillEorDocument) => Promise<void>;
   downloadPacket: () => Promise<void>;
+  downloadSubmissionArtifact: (attemptId: string, artifactId: string, label: string) => Promise<void>;
+  downloadIbrPacket: () => Promise<void>;
   addNote: BillLifecycleClient["addNote"];
   previewCourtesyCopy: BillLifecycleClient["previewCourtesyCopy"];
   sendCourtesyCopy: BillLifecycleClient["sendCourtesyCopy"];
@@ -283,6 +285,32 @@ export function useBillLifecycle({
       throw nextError;
     }
   }, [client]);
+  const downloadSubmissionArtifact = useCallback(async (attemptId: string, artifactId: string, label: string) => {
+    setError(null);
+    try {
+      const blob = await client.getSubmissionArtifact(attemptId, artifactId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = label.replace(/[\\/]/g, "_");
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error("Submission file could not be downloaded.");
+      if (mounted.current) setError(nextError);
+      throw nextError;
+    }
+  }, [client]);
+  const downloadIbrPacket = useCallback(async () => {
+    setError(null);
+    setIsMutating(true);
+    try { await openPdfFromUserGesture(() => client.prepareIbrPacket()); }
+    catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error("IBR packet could not be prepared.");
+      if (mounted.current) setError(nextError);
+      throw nextError;
+    } finally { if (mounted.current) setIsMutating(false); }
+  }, [client]);
 
   return {
     billId: providedBillId,
@@ -299,6 +327,8 @@ export function useBillLifecycle({
     openAttachment,
     openEor,
     downloadPacket,
+    downloadSubmissionArtifact,
+    downloadIbrPacket,
     addNote: (input) => mutate(() => client.addNote(input)),
     previewCourtesyCopy: (input) => client.previewCourtesyCopy(input),
     sendCourtesyCopy: (input, key) => client.sendCourtesyCopy(input, key),
@@ -337,7 +367,7 @@ export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   onChanged?: (data: BillLifecycleData) => void;
 };
 
-type Panel = "" | "resubmit" | "submit_new_bill" | "second_review" | "payment" | "close" | "reopen" | "send_duplicate" | "report_status" | "courtesy_copy";
+type Panel = "" | "resubmit" | "submit_new_bill" | "second_review" | "ibr" | "payment" | "close" | "reopen" | "send_duplicate" | "report_status" | "courtesy_copy";
 type Tab = "details" | "history";
 
 function LifecycleDialog({ children, title, wide = false, onClose }: { children: ReactNode; title: string; wide?: boolean; onClose: () => void }): ReactElement {
@@ -574,6 +604,7 @@ function actionPanel(action: BillLifecycleAction): Panel {
   if (action.id === "resubmit") return "resubmit";
   if (action.id === "submit_new_bill") return "submit_new_bill";
   if (action.id === "second_review") return "second_review";
+  if (action.id === "independent_bill_review") return "ibr";
   if (action.id === "post_payment") return "payment";
   if (action.id === "close") return "close";
   if (action.id === "reopen") return "reopen";
@@ -780,7 +811,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     setNotice("Duplicate bill sent.");
   };
   const viewEor = data.lifecycle.actions.find((action) => action.id === "view_eor" && action.enabled);
-  const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "submit_new_bill", "second_review", "post_payment", "close", "reopen", "send_duplicate", "report_bill_status"]);
+  const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "submit_new_bill", "second_review", "independent_bill_review", "post_payment", "close", "reopen", "send_duplicate", "report_bill_status"]);
   const actions = data.lifecycle.actions.filter((action) => action.enabled && supportedActions.has(action.id));
   const mappedRibbonItems = data.history ? billSubmissionsRibbonFromHistory(data.history, data.attempts) : [];
   const activeSubmissionId = (mappedRibbonItems.some((item) => item.id === selectedSubmissionId) ? selectedSubmissionId : null)
@@ -835,6 +866,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
 
       {historical ? <p className="mb-lifecycle-card">{selectedDetail?.source === "submission_snapshot" ? "Saved as submitted. This previous submission is read-only; payment balances and current actions are shown on the current bill." : displayedData ? "Historical bill record. An exact as-submitted snapshot was not recorded for this older attempt; these are the stored bill values, not a guaranteed copy of the original packet." : "Detailed values were not saved for this historical submission. Select the current submission to see the current bill. We will not substitute current data for this older attempt."}</p> : null}
       {displayedData ? <BillReadOnlyForm key={activeSubmissionId} data={displayedData} {...(!historical ? { onOpenAttachment: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} /> : null}
+      {historical && selectedAttempt ? <section className="mb-lifecycle-card" aria-label="Retained submission files"><h3>Retained submission files</h3><p>Exact files saved for this submission. These downloads do not include a regenerated current bill or a later EOR.</p>{selectedDetail?.artifacts?.length ? selectedDetail.artifacts.map((artifact) => <button type="button" className="mb-lifecycle-button secondary" key={artifact.id} onClick={() => void lifecycle.downloadSubmissionArtifact(selectedAttempt.id, artifact.id, artifact.label).catch(() => undefined)}>Download {artifact.kind === "submitted_edi" ? "submitted EDI" : "submitted attachment"}: {artifact.label}</button>) : <p>No retained files are available for this submission.</p>}</section> : null}
       {!historical ? <section className="mb-lifecycle-notes" aria-label="Bill notes">
         <header><div><h3>Team notes</h3><p>Shared with your workspace’s billing team. Never sent to the payer.</p></div><span>{billNotes.length}</span></header>
         {billNotes.length ? <ol>{billNotes.map((entry) => <li key={entry.id}><p>{entry.summary}</p><small>{entry.actor || "System"} · {usDate(entry.date)}</small></li>)}</ol> : <p className="mb-lifecycle-notes-empty">No notes yet.</p>}
@@ -857,6 +889,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     </aside> : null}
 
     {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><BillCourtesyCopyForm documents={data.bill.attachments} recipientOptions={courtesyCopyRecipientOptions} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></LifecycleDialog> : null}
+    {activePanel === "ibr" ? <LifecycleDialog title="Prepare Independent Bill Review packet" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><header style={{ paddingRight: 44 }}><h3>Prepare Independent Bill Review packet</h3></header><p>Download a PDF packet for self-filing Independent Bill Review (IBR). Preparing this packet does not file the review, send it to a payer, or change the bill status.</p>{lifecycle.error ? <p role="alert" className="mb-lifecycle-message error">{lifecycle.error.message}</p> : null}<div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadIbrPacket().then(() => { setPanel(""); setNotice("IBR packet prepared for self-filing. The review has not been filed."); }).catch(() => undefined)}>{lifecycle.isMutating ? "Preparing…" : "Prepare IBR packet"}</button></div></section></LifecycleDialog> : null}
     {activePanel === "resubmit" && correctionInitialBill ? <LifecycleDialog title="Correct and resubmit" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Correct and resubmit</h3><p>Review the rejected snapshot, correct the highlighted information, and submit a new immutable attempt under this bill.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>Resubmitting sends a real bill. Confirm the corrected information before continuing.</span></div> : null}{data.rejection ? <CorrectionRejectionReason rejection={data.rejection} /> : null}<CorrectionVerificationContact delivery={data.delivery} /><label className="mb-lifecycle-correction-note"><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
       className="mbsf-lifecycle-correction"
       initialBill={correctionInitialBill}
@@ -960,6 +993,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
 }
 
 const CONNECTED_LIFECYCLE_STYLES = `
+.mb-connected-lifecycle{grid-template-columns:minmax(0,1fr);min-width:0}.mb-lifecycle-tabpanel{min-width:0;grid-template-columns:minmax(0,1fr)}.mb-lifecycle-tabpanel>*{min-width:0}
 .mb-lifecycle-attempt-detail{display:grid;gap:15px;padding:18px;border:1px solid color-mix(in srgb,var(--mb-accent) 38%,var(--mb-border));border-radius:var(--mb-radius,14px);background:color-mix(in srgb,var(--mb-accent) 5%,var(--mb-surface))}.mb-lifecycle-attempt-detail>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.mb-lifecycle-attempt-detail>header span{color:var(--mb-accent);font-size:.72rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.mb-lifecycle-attempt-detail h3{margin:3px 0 0;font-size:1.08rem}.mb-lifecycle-attempt-detail>header>strong{padding:4px 9px;border:1px solid color-mix(in srgb,var(--mb-accent) 35%,var(--mb-border));border-radius:999px;background:var(--mb-surface);color:var(--mb-accent);font-size:.75rem}.mb-lifecycle-attempt-detail dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0}.mb-lifecycle-attempt-detail dl>div{display:grid;gap:2px;min-width:0}.mb-lifecycle-attempt-detail dt{color:var(--mb-muted);font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.mb-lifecycle-attempt-detail dd{min-width:0;margin:0;font-weight:700;overflow-wrap:anywhere}
 .mb-lifecycle-notes{display:grid;gap:14px;padding:20px;border:1px solid var(--mb-border);border-radius:var(--mb-radius,14px);background:var(--mb-surface)}.mb-lifecycle-notes>header{display:flex;align-items:center;justify-content:space-between;gap:16px}.mb-lifecycle-notes h3{margin:0;font-size:1.08rem}.mb-lifecycle-notes header p{margin:3px 0 0;color:var(--mb-muted)}.mb-lifecycle-notes>header>span{display:grid;place-items:center;min-width:28px;height:28px;border-radius:999px;background:var(--mb-soft);font-weight:750}.mb-lifecycle-notes ol{display:grid;gap:9px;margin:0;padding:0;list-style:none}.mb-lifecycle-notes li{padding:11px 13px;border-left:3px solid color-mix(in srgb,var(--mb-accent) 52%,var(--mb-border));border-radius:0 8px 8px 0;background:var(--mb-soft)}.mb-lifecycle-notes li p{margin:0;white-space:pre-wrap}.mb-lifecycle-notes li small{display:block;margin-top:4px;color:var(--mb-muted)}.mb-lifecycle-notes-empty{margin:0;color:var(--mb-muted)}.mb-lifecycle-notes form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px}.mb-lifecycle-notes label{display:grid;gap:6px;font-size:.82rem;font-weight:750}.mb-lifecycle-notes textarea{width:100%;min-height:76px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius,8px);background:var(--mb-input,#fff);color:var(--mb-text);font:inherit;resize:vertical}
 .mb-lifecycle-simulator{display:grid;gap:14px;padding:18px;border:1px solid #b8dadd;border-radius:var(--mb-radius,14px);background:#f2fbfb}.mb-lifecycle-simulator>div:first-child>span{color:var(--mb-accent);font-size:.72rem;font-weight:850;letter-spacing:.09em;text-transform:uppercase}.mb-lifecycle-simulator h3{margin:3px 0 0;font-size:1.05rem}.mb-lifecycle-simulator p{margin:4px 0 0;color:var(--mb-muted)}.mb-lifecycle-simulator-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.mb-lifecycle-simulator-actions button{min-height:76px;border:1px solid #a9cccf;border-radius:10px;background:var(--mb-surface);color:var(--mb-text);cursor:pointer;padding:12px 14px;text-align:left;font:inherit}.mb-lifecycle-simulator-actions button:hover{border-color:var(--mb-accent);box-shadow:0 3px 14px rgba(23,108,112,.1)}.mb-lifecycle-simulator-actions button:disabled{cursor:not-allowed;opacity:.55}.mb-lifecycle-simulator-actions button strong,.mb-lifecycle-simulator-actions button span{display:block}.mb-lifecycle-simulator-actions button span{margin-top:3px;color:var(--mb-muted);font-size:.83rem}.mb-lifecycle-simulator-idle{padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.72)}

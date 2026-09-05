@@ -4,6 +4,8 @@ import { FormsModule } from "@angular/forms";
 import {
   REPORT_BILL_STATUS_OPTIONS,
   reportBillStatusContacts,
+  parseSecondReviewCorrection,
+  type CorrectionDraft,
   type BillDeliveryOption,
   type BillDeliveryOptions,
   type BillLifecycleData,
@@ -109,7 +111,31 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
         <div class="actions">@for (action of data.lifecycle.actions; track action.id) { @if (action.id !== 'view_eor' || data.eors.length) { <button type="button" [class.primary]="action.primary" [disabled]="!action.enabled || store.mutating()" (click)="beginAction(action.id, data)">{{ action.label }}</button> } }</div>
 
         @if (panel === 'payment') { <form class="card action-form" (submit)="$event.preventDefault(); postPayment()"><h3>Post payment</h3><label>Amount<input required type="number" min="0.01" step="0.01" [(ngModel)]="payment.amount" name="amount"></label><label>Method<select [(ngModel)]="payment.method" name="method"><option value="check">Check</option><option value="eft">EFT</option></select></label><label>Deposit date<input required type="date" [(ngModel)]="payment.depositDate" name="depositDate"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Post payment</button></div></form> }
-        @if (panel === 'review') { <form class="card action-form" (submit)="$event.preventDefault(); submitReview()"><h3>Submit Second Bill Review</h3><label>Reason<textarea required [(ngModel)]="review.reason" name="reason"></textarea></label><label>Payer claim control number<input required [(ngModel)]="review.payerClaimControlNumber" name="control"></label><label>Disputed amount<input type="number" min="0" step="0.01" [(ngModel)]="review.disputedAmount" name="disputed"></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Submit review</button></div></form> }
+        @if (panel === 'ibr') { <section class="card action-form"><h3>Prepare Independent Bill Review packet</h3><p>Download a PDF packet for self-filing IBR. This does not file the review, send it to a payer, or change the bill status.</p>@if (store.error(); as error) { <p role="alert" class="error">{{ error.message }}</p> }<div><button type="button" [disabled]="store.mutating()" (click)="panel=''">Cancel</button><button type="button" class="primary" [disabled]="store.mutating()" (click)="prepareIbrPacket()">{{ store.mutating() ? 'Preparing…' : 'Prepare IBR packet' }}</button></div></section> }
+        @if (panel === 'review') {
+          <form class="card action-form" (submit)="$event.preventDefault(); submitReview()">
+            <h3>Submit Second Bill Review</h3>
+            <p class="muted">Select the service lines to dispute. The payer claim control number is resolved from the bill.</p>
+            @for (line of reviewLines; track line.id) {
+              <fieldset class="card" [disabled]="store.mutating()">
+                <legend><label class="review-check"><input type="checkbox" [(ngModel)]="line.selected" [name]="'selected-' + line.id"> {{ line.code }}</label></legend>
+                @if (line.selected) {
+                  <label>Reason for this line<textarea required [(ngModel)]="line.reason" [name]="'reason-' + line.id"></textarea></label>
+                  <label class="review-check"><input type="checkbox" [(ngModel)]="line.correctBilling" [name]="'correct-' + line.id"> Correct units, modifiers, or charge</label>
+                  @if (line.correctBilling) {
+                    <label>Corrected units<input required type="number" min="1" max="10000" step="1" [ngModel]="line.units" (ngModelChange)="line.units = '' + $event; line.chargeReviewed = false" [name]="'units-' + line.id"></label>
+                    <label>Corrected modifiers<input [ngModel]="line.modifiers" (ngModelChange)="line.modifiers = $event; line.chargeReviewed = false" [name]="'modifiers-' + line.id" placeholder="95, 93"></label>
+                    <small class="muted">Up to four unique modifiers. Leave blank to remove all modifiers.</small>
+                    <label>Corrected charge<input required type="number" min="0" max="999999.99" step="0.01" [ngModel]="line.charge" (ngModelChange)="line.charge = '' + $event; line.chargeReviewed = false" [name]="'charge-' + line.id"></label>
+                    <label class="review-check"><input type="checkbox" [(ngModel)]="line.chargeReviewed" [name]="'reviewed-' + line.id"> I reviewed the corrected charge. It is not recalculated automatically.</label>
+                  }
+                }
+              </fieldset>
+            }
+            @if (reviewError) { <p class="error" role="alert">{{ reviewError }}</p> }
+            <div><button type="button" [disabled]="store.mutating()" (click)="panel=''">Cancel</button><button class="primary" type="submit" [disabled]="store.mutating()">{{ store.mutating() ? 'Submitting…' : 'Submit review' }}</button></div>
+          </form>
+        }
         @if (panel === 'close') { <form class="card action-form" (submit)="$event.preventDefault(); closeBill()"><h3>Close bill</h3><label>Reason<textarea required [(ngModel)]="closeReason" name="closeReason"></textarea></label><div><button type="button" (click)="panel=''">Cancel</button><button class="primary" type="submit">Close bill</button></div></form> }
         @if (panel === 'report_status') {
           <form class="card action-form" (submit)="$event.preventDefault(); reportStatus()">
@@ -219,6 +245,7 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
     </section>
   `,
   styles: [`
+    .action-form fieldset{box-sizing:border-box;width:100%;min-width:0;display:grid;gap:12px}.action-form label.review-check{display:flex;align-items:center;gap:8px}.review-check input{width:16px;height:16px;min-height:0;margin:0;padding:0}.action-form .error{color:var(--danger)}
     :host{display:block}.mb{font-family:var(--font);color:var(--t);background:var(--bg);padding:20px}.summary,.card,.columns,.rejection{display:block;max-width:1120px;margin:0 auto 16px}.summary{display:flex;justify-content:space-between;align-items:end}.summary h2{margin:4px 0}.summary p,.muted{color:var(--m)}.eyebrow,dt{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--m)}.money{text-align:right}.money span{display:block;font-size:28px;font-weight:800}.money small{color:var(--m)}.card{background:var(--s);border:1px solid var(--b);border-radius:var(--r);padding:20px}.card-title{display:flex;justify-content:space-between;gap:20px}.card-title h3{margin:0}.card-title p{margin:5px 0;color:var(--m)}.progress ol{display:flex;list-style:none;padding:0;margin:0}.progress li{flex:1;text-align:center;position:relative;color:var(--m)}.progress li:before{content:"";position:absolute;top:16px;left:0;right:0;border-top:2px solid var(--b)}.progress li:first-child:before{left:50%}.progress li:last-child:before{right:50%}.progress b{position:relative;z-index:1;display:grid;place-items:center;width:32px;height:32px;margin:auto;border:2px solid var(--b);border-radius:50%;background:var(--s)}.progress .complete b,.progress .current b{border-color:var(--a);background:var(--a);color:var(--ac)}.progress span{display:block;margin-top:8px;font-size:12px;font-weight:700}.snapshot dl,.columns dl{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.snapshot dd,.columns dd{font-weight:700;margin:6px 0}.columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}.columns .card{margin:0}.rows,.timeline{list-style:none;margin:12px 0 0;padding:0}.rows li{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--b)}.rows small{display:block;color:var(--m);margin-top:3px}.timeline li{display:flex;gap:14px;padding:10px 0}.timeline i{width:10px;height:10px;margin-top:5px;border:3px solid var(--a);border-radius:50%}.timeline p{margin:4px 0}.timeline small{color:var(--m)}button,input,select,textarea{font:inherit;border:1px solid var(--b);border-radius:var(--cr);padding:9px 12px;background:var(--s);color:var(--t)}button{cursor:pointer;font-weight:700}.primary{background:var(--a);border-color:var(--a);color:var(--ac)}.actions{max-width:1120px;margin:0 auto;display:flex;justify-content:flex-end;gap:10px}.action-form{display:grid;gap:12px}.action-form label{display:grid;gap:5px;font-weight:700}.action-form div{display:flex;justify-content:flex-end;gap:10px}.state{max-width:720px;margin:auto;padding:32px;text-align:center}.state span{display:block;margin:8px}.error{color:#9b1c1c}.notice{max-width:1120px;margin:0 auto 12px;color:var(--m)}@media(max-width:760px){.mb{padding:12px}.summary,.columns{display:block}.money{text-align:left;margin-top:12px}.columns .card{margin-bottom:12px}.snapshot dl,.columns dl{grid-template-columns:1fr 1fr}.progress span{font-size:10px}.card{padding:15px}}
     .history{border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-top:12px}.history-head{display:grid;grid-template-columns:96px 150px 130px minmax(0,1fr);gap:12px;padding:8px 14px;background:color-mix(in srgb,var(--b) 26%,var(--s));color:var(--m);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.history-rows{list-style:none;margin:0;padding:0}.history-rows>li{border-top:1px solid var(--b)}.history-rows>li.is-submission{background:color-mix(in srgb,var(--a) 9%,var(--s))}.history-rows>li.is-note{background:color-mix(in srgb,#f2c344 13%,var(--s))}
     .history-line{display:grid;grid-template-columns:96px 150px 130px minmax(0,1fr);gap:12px;width:100%;padding:10px 14px;border:0;border-radius:0;background:transparent;text-align:left;font-weight:400;cursor:default}.history-line:not(:disabled){cursor:pointer}.history-line:not(:disabled):hover .h-summary{text-decoration:underline}
@@ -253,7 +280,8 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   notice = "";
   closeReason = "";
   payment = { amount: 0, method: "check" as "check" | "eft", depositDate: new Date().toISOString().slice(0, 10) };
-  review = { reason: "", payerClaimControlNumber: "", disputedAmount: 0 };
+  reviewLines: Array<CorrectionDraft & { id: string; code: string; selected: boolean; reason: string }> = [];
+  reviewError = "";
   readonly reportStatusOptions = REPORT_BILL_STATUS_OPTIONS;
   report: { status: ReportBillStatusId | null; company: string; representativeName: string; representativeRole: string; phone: string; callReference: string; note: string } =
     { status: null, company: "", representativeName: "", representativeRole: "", phone: "", callReference: "", note: "" };
@@ -293,7 +321,15 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     if (action === "resubmit") this.prepareCorrection(data);
     else if (action === "submit_new_bill") this.prepareNewBill(data);
     else if (action === "post_payment") this.panel = "payment";
-    else if (action === "second_review" || action === "independent_bill_review") this.panel = "review";
+    else if (action === "independent_bill_review") { this.store.error.set(null); this.panel = "ibr"; }
+    else if (action === "second_review") {
+      this.reviewLines = data.bill.lineItems.filter((line) => Boolean(line.id)).map((line) => ({
+        id: line.id!, code: line.code, selected: true, reason: "", correctBilling: false,
+        units: String(line.units), modifiers: line.modifiers.join(", "), charge: String(line.charge), chargeReviewed: false,
+      }));
+      this.reviewError = "";
+      this.panel = "review";
+    }
     else if (action === "close") this.panel = "close";
     else if (action === "send_duplicate") this.prepareDuplicate(data);
     else if (action === "report_bill_status") this.beginReportStatus(data);
@@ -329,8 +365,30 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   }
   async openAttachment(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getAttachment(id), filename); }
   async openEor(id: string, filename: string): Promise<void> { this.openBlob(await this.store.getEor(id), filename); }
+  async prepareIbrPacket(): Promise<void> {
+    if (this.store.mutating()) return;
+    try {
+      this.openBlob(await this.store.prepareIbrPacket(), "independent-bill-review.pdf");
+      this.panel = "";
+      this.notice = "IBR packet prepared for self-filing. The review has not been filed.";
+    } catch { /* Store error is displayed in the preparation panel. */ }
+  }
   async postPayment(): Promise<void> { await this.store.postPayment(this.payment); this.panel = ""; this.notice = "Payment posted."; }
-  async submitReview(): Promise<void> { await this.store.submitSecondReview({ ...this.review, ...(this.review.disputedAmount > 0 ? { disputedAmount: this.review.disputedAmount } : {}), attachmentIds: this.store.data()?.bill.attachments.map((document) => document.id) ?? [], route: "ebill" }); this.panel = ""; this.notice = "Second Review submitted."; }
+  async submitReview(): Promise<void> {
+    if (this.store.mutating()) return;
+    this.reviewError = "";
+    try {
+      const selected = this.reviewLines.filter((line) => line.selected);
+      if (!selected.length) throw new Error("Select at least one service line to dispute.");
+      const lineItems = selected.map((line) => {
+        if (!line.reason.trim()) throw new Error(`Enter a reason for ${line.code}.`);
+        const correction = parseSecondReviewCorrection(line);
+        return { lineItemId: line.id, reason: line.reason.trim(), ...(correction ? { correction } : {}) };
+      });
+      await this.store.submitSecondReview({ lineItems, attachmentIds: this.store.data()?.bill.attachments.map((document) => document.id) ?? [], route: "ebill" });
+      this.panel = ""; this.notice = "Second Review submitted.";
+    } catch (error) { this.reviewError = error instanceof Error ? error.message : "Unable to submit the review. Try again."; }
+  }
   async closeBill(): Promise<void> { if (!this.closeReason.trim()) return; await this.store.closeBill({ reason: this.closeReason }); this.panel = ""; this.notice = "Bill closed."; }
   readonly resubmitFromForm = async (input: BrowserBillSubmissionInput): Promise<BrowserBillSubmissionResult> => {
     const data = await this.store.resubmitBill({

@@ -62,6 +62,17 @@ export class MindBillLifecycleStore {
   getDeliveryOptions() { return this.requireClient().getDeliveryOptions(); }
   getAttachment(id: string) { return this.requireClient().getAttachment(id); }
   getEor(id: string) { return this.requireClient().getEor(id); }
+  async prepareIbrPacket() {
+    if (this.mutating()) throw new Error("A billing action is already in progress.");
+    this.mutating.set(true);
+    this.error.set(null);
+    try { return await this.requireClient().prepareIbrPacket(); }
+    catch (cause) {
+      const error = cause instanceof Error ? cause : new Error("IBR packet could not be prepared.");
+      this.error.set(error);
+      throw error;
+    } finally { this.mutating.set(false); }
+  }
   closeBill(input: CloseBillInput) { return this.mutate(() => this.requireClient().closeBill(input)); }
   postPayment(input: PostBillPaymentInput) { return this.mutate(() => this.requireClient().postPayment(input)); }
   resubmitBill(input: ResubmitBillInput) { return this.mutate(() => this.requireClient().resubmitBill(input)); }

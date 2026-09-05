@@ -205,7 +205,7 @@ export function Billing({ billId }: { billId: string }) {
 The host contract is identical in sandbox and live environments. Sandbox
 simulation controls are never inferred from the response environment; they are
 available only to dedicated developer tooling that explicitly passes
-`sandboxControls={true}`.
+`sandboxControls={true}` on `ConnectedBillLifecycle` or `ConnectedBillingWorkspace`.
 
 Use `preset: "midnight-cyan"` for a pale-blue and midnight theme with restrained rounded controls, `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers submission, status, EORs, payments, reviews, and close actions. The task dashboard inherits that palette: neutral card borders, semantic status markers, and accent-tinted aging headers. See [theme customization](docs/theme-customization.md) for typed dashboard colors, geometry, spacing, and CSS overrides.
 
@@ -302,7 +302,10 @@ SSN writes fail closed if server encryption has not been configured.
 
 `ConnectedBillingWorkspace` separates follow-up tasks from Sent/Accepted bills waiting
 for payer responses. Waiting inventory has its own totals and may overlap overdue tasks;
-do not add those totals together. Drill-down preserves status, age, and payer filters.
+do not add those totals together. Drill-down preserves status, age, payer, and rendering-provider filters.
+The doctor picker uses workspace-scoped `filters.renderingProviders` from the browser API,
+not doctors inferred from the current page. Rendering providers are distinct from billing
+practices. `ConnectedBillSearch` also accepts `initialQuery={{ renderingProviderId: "provider-id" }}`.
 Dashboard colors, borders, radii, spacing, and aging palettes are configurable through
 [appearance tokens](./docs/theme-customization.md).
 

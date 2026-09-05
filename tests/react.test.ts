@@ -2277,6 +2277,12 @@ describe("bill submissions ribbon", () => {
 });
 
 describe("connected billing workspace integration contracts", () => {
+  it("contains wide EOR tables inside the lifecycle column", () => {
+    const source = readFileSync(new URL("../packages/react/src/connected-bill-lifecycle.tsx", import.meta.url), "utf8");
+    expect(source).toContain(".mb-connected-lifecycle{grid-template-columns:minmax(0,1fr);min-width:0}");
+    expect(source).toContain(".mb-lifecycle-tabpanel{min-width:0;grid-template-columns:minmax(0,1fr)}");
+    expect(source).toContain(".mb-lifecycle-tabpanel>*{min-width:0}");
+  });
   it("owns overflow and measures its remaining viewport height", () => {
     const source = readFileSync(
       new URL("../packages/react/src/connected-billing-workspace.tsx", import.meta.url),
@@ -2289,6 +2295,9 @@ describe("connected billing workspace integration contracts", () => {
     expect(source).toContain('const workspaceClassName = ["mbow-workspace", className]');
     expect(source).toContain("style?.height != null || style?.maxHeight != null");
     expect(source).toContain("availableHeight == null || hasExplicitHeight ? style : { ...style, maxHeight: availableHeight }");
+    expect(source).toContain(".mbow,.mbow *{box-sizing:border-box}");
+    expect(source).toContain("sandboxControls = false");
+    expect(source).toContain("sandboxControls={sandboxControls}");
   });
 
   it("keeps submission selection in bill details instead of switching to history", () => {
