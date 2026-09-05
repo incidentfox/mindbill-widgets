@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBillingOperationsClient, type PaymentReviewItem } from "../packages/react/src/billing-operations-client";
-import { paymentReviewCsv, paymentReviewDateRange } from "../packages/react/src/payment-review";
+import { paymentReviewCsv, paymentReviewDateRange, paymentReviewRowKey } from "../packages/react/src/payment-review";
 import { validateW9File } from "../packages/react/src/w9-upload";
 
 describe("confirmed payment review", () => {
+  it("keeps repeated ledger IDs on different bills distinct, including delimiter-like IDs", () => {
+    expect(paymentReviewRowKey({ billId: "bill-a", id: "entry-1" })).not.toBe(paymentReviewRowKey({ billId: "bill-b", id: "entry-1" }));
+    expect(paymentReviewRowKey({ billId: "bill:a", id: "entry" })).not.toBe(paymentReviewRowKey({ billId: "bill", id: "a:entry" }));
+    expect(paymentReviewRowKey({ billId: "bill-a", id: "entry-1" })).toBe(paymentReviewRowKey({ billId: "bill-a", id: "entry-1" }));
+  });
+
   it("uses local received dates and Monday-based weeks across year boundaries", () => {
     const now = new Date(2027, 0, 3, 23, 30);
     expect(paymentReviewDateRange("today", now)).toEqual({ receivedFrom: "2027-01-03", receivedTo: "2027-01-03" });
