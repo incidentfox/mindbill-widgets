@@ -501,6 +501,8 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
     ...(billing ? { billingProvider: {
       name: billing.name,
       taxId: billing.taxId,
+      ...(billing.taxIdType ? { taxIdType: billing.taxIdType } : {}),
+      ...(billing.taxIdType === "SSN" && billing.taxIdConfigured ? { sourceBillId: data.bill.id, ...(billing.taxIdLast4 ? { taxIdLast4: billing.taxIdLast4 } : {}) } : {}),
       npi: billing.npi,
       ...(billing.phone ? { phone: billing.phone } : {}),
       address: {

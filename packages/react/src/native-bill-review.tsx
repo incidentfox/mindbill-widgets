@@ -20,6 +20,9 @@ export type BillReviewDocumentType =
 export type BillReviewBillingProvider = {
   name: string;
   taxId: string;
+  taxIdType?: "EIN" | "SSN";
+  taxIdConfigured?: boolean;
+  taxIdLast4?: string;
   npi: string;
   billType: "Professional" | "Institutional";
   phone?: string;
@@ -708,7 +711,7 @@ export function BillReviewForm({
     if (!adjFormatValid) result.push("Valid WCAB / ADJ number");
     if (data.bill.billingMode === "med_legal" && !draft.dos) result.push("Date of service");
     if (!draft.billingProvider.name.trim()) result.push("Practice name");
-    if (!draft.billingProvider.taxId.trim()) result.push("Tax ID");
+    if (!draft.billingProvider.taxId.trim() && !(draft.billingProvider.taxIdType === "SSN" && draft.billingProvider.taxIdConfigured)) result.push("Tax ID");
     if (!draft.billingProvider.npi.trim()) result.push("Billing NPI");
     if (!draft.clinician.name.trim() || !draft.clinician.npi.trim()) result.push("Clinician and NPI");
     if (![draft.location.name, draft.location.street, draft.location.city, draft.location.state, draft.location.zip].every((value) => value.trim())) result.push("Service location");
@@ -955,7 +958,8 @@ export function BillReviewForm({
         <div className="mb-native-section-head"><div><h3>Billing practice</h3><p>Payee identity and billing address for this claim.</p></div></div>
         <div className="mb-native-grid three">
           <Field label="Practice name" required disabled={!editable} value={draft.billingProvider.name} onChange={(value) => updateBillingProvider("name", value)} />
-          <Field label="Tax ID" required disabled={!editable} value={draft.billingProvider.taxId} onChange={(value) => updateBillingProvider("taxId", value)} />
+          <label className="mb-native-field"><span>Tax ID type</span><select disabled={!editable} value={draft.billingProvider.taxIdType ?? "EIN"} onChange={(event) => setDraft((current) => ({ ...current, billingProvider: { ...current.billingProvider, taxIdType: event.target.value as "EIN" | "SSN", taxId: "", taxIdConfigured: false, taxIdLast4: "" } }))}><option value="EIN">EIN (business)</option><option value="SSN">SSN (individual)</option></select></label>
+          <Field label="Tax ID" type={draft.billingProvider.taxIdType === "SSN" ? "password" : "text"} required={!(draft.billingProvider.taxIdType === "SSN" && draft.billingProvider.taxIdConfigured)} disabled={!editable} value={draft.billingProvider.taxId} {...(draft.billingProvider.taxIdType === "SSN" && draft.billingProvider.taxIdConfigured ? { hint: `Saved SSN ending in ${draft.billingProvider.taxIdLast4 ?? "••••"}. Leave blank to keep this bill's saved number.` } : {})} onChange={(value) => updateBillingProvider("taxId", value)} />
           <Field label="Billing NPI" required disabled={!editable} value={draft.billingProvider.npi} onChange={(value) => updateBillingProvider("npi", value)} />
           <Field label="Phone" optional disabled={!editable} value={draft.billingProvider.phone || ""} onChange={(value) => updateBillingProvider("phone", value)} />
           <Field label="Billing street" required disabled={!editable} value={draft.billingProvider.billingStreet || ""} onChange={(value) => updateBillingProvider("billingStreet", value)} />

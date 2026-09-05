@@ -480,8 +480,9 @@ function correctionBill(data: BillLifecycleData): BrowserBillCreateInput {
       claimsAdministrator: { id: data.injury.claimsAdminId || "", name: data.injury.claimsAdminName || "" },
     },
     service: { date: data.bill.dos, ...(data.bill.dosEnd !== undefined ? { endDate: data.bill.dosEnd } : {}), ...(data.bill.authorizationNumber !== undefined ? { authorizationNumber: data.bill.authorizationNumber } : {}) },
-    billingProvider: {
+    billingProvider: billing?.taxIdType === 'SSN' && billing.taxIdConfigured ? { sourceBillId: data.bill.id } : {
       name: billing?.name || "", taxId: billing?.taxId || "", npi: billing?.npi || "", phone: billing?.phone || "",
+      ...(billing?.taxIdType ? { taxIdType: billing.taxIdType } : {}),
       address: { line1: billing?.billingStreet || "", city: billing?.billingCity || "", state: billing?.billingState || "", postalCode: billing?.billingZip || "" },
     },
     renderingProvider: {

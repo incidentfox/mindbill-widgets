@@ -7,7 +7,7 @@ export type BillSubmissionProfileOption<K extends "billingProvider" | "rendering
   value: NonNullable<BillSubmissionInput[K]>;
 };
 
-/** Supply host-owned snapshots or convert a MindBill organization profile. IDs stay in the UI. */
+/** Supply host-owned snapshots or convert a MindBill organization profile. SSNs use server-resolved references. */
 export type BillSubmissionProfileOptions = {
   billingProviders?: readonly BillSubmissionProfileOption<"billingProvider">[];
   renderingProviders?: readonly BillSubmissionProfileOption<"renderingProvider">[];
@@ -19,7 +19,9 @@ export function organizationProfileOptions(profile: OrganizationProfileData): Bi
   return {
     billingProviders: profile.billingProviders.map((provider) => ({
       id: provider.id, label: provider.name,
-      value: { name: provider.name, taxId: provider.taxId, npi: provider.npi, ...(provider.phone !== undefined ? { phone: provider.phone } : {}),
+      value: { name: provider.name,
+        ...(provider.taxIdType === "SSN" ? { savedProviderId: provider.id, taxIdType: "SSN" as const, taxIdLast4: provider.taxIdLast4 ?? "" } : { taxId: provider.taxId ?? "", taxIdType: "EIN" as const }),
+        npi: provider.npi, ...(provider.phone !== undefined ? { phone: provider.phone } : {}),
         address: { line1: provider.billingStreet ?? "", city: provider.billingCity ?? "", state: provider.billingState ?? "", postalCode: provider.billingZip ?? "" } },
     })),
     renderingProviders: (profile.renderingProviders ?? []).filter((provider) => provider.active !== false).map((provider) => ({

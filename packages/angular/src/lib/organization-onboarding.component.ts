@@ -3,11 +3,13 @@ import { ChangeDetectorRef, Component, EventEmitter, inject, Input, OnInit, Outp
 import { FormsModule } from "@angular/forms";
 import {
   createOrganizationClient,
+  organizationTaxIdWrite,
   type BillLifecycleSessionProvider,
   type OrganizationBillingProviderInput,
   type OrganizationClient,
   type OrganizationLocationInput,
   type OrganizationProfileData,
+  type OrganizationPracticeIdentity,
 } from "@mindbill/browser";
 import type { MindBillAngularAppearance } from "./bill-lifecycle.component";
 
@@ -54,7 +56,10 @@ async function fileToBase64(file: File): Promise<string> {
           <div class="grid">
             <label>Practice name<input [(ngModel)]="identity.name" [disabled]="saving"></label>
             <label>Legal name<input [(ngModel)]="identity.legalName" [disabled]="saving"></label>
-            <label>Tax ID (EIN)<input [(ngModel)]="identity.taxId" placeholder="94-1234567" [disabled]="saving"></label>
+            <label>Practice tax ID type<select [ngModel]="identity.taxIdType ?? 'EIN'" (ngModelChange)="setTaxIdType(identity, $event)" [disabled]="saving"><option value="EIN">EIN</option><option value="SSN">SSN</option></select></label>
+            <div class="tax-id"><label>{{ identity.taxIdType === 'SSN' ? 'Practice SSN' : 'Practice EIN' }}<input [(ngModel)]="identity.taxId" [type]="identity.taxIdType === 'SSN' ? 'password' : 'text'" autocomplete="off" inputmode="numeric" [disabled]="saving"></label>
+              @if (identity.taxIdType === 'SSN' && identity.taxIdConfigured) { <small>SSN ending in {{ identity.taxIdLast4 }} is saved. Leave blank to keep it, or enter a replacement.</small><button type="button" class="add" [disabled]="saving" (click)="clearTaxId(identity)">Clear saved practice SSN</button> }
+            </div>
             <label>Group NPI<input [(ngModel)]="identity.npi" [disabled]="saving"></label>
             <label>Phone<input [(ngModel)]="identity.phone" [disabled]="saving"></label>
             <label>Email<input [(ngModel)]="identity.email" [disabled]="saving"></label>
@@ -62,7 +67,10 @@ async function fileToBase64(file: File): Promise<string> {
           <h3>Billing provider (pay-to)</h3>
           <div class="grid">
             <label>Billing provider name<input [(ngModel)]="provider.name" [disabled]="saving"></label>
-            <label>Billing tax ID<input [(ngModel)]="provider.taxId" [disabled]="saving"></label>
+            <label>Billing tax ID type<select [ngModel]="provider.taxIdType ?? 'EIN'" (ngModelChange)="setTaxIdType(provider, $event)" [disabled]="saving"><option value="EIN">EIN</option><option value="SSN">SSN</option></select></label>
+            <div class="tax-id"><label>{{ provider.taxIdType === 'SSN' ? 'Billing SSN' : 'Billing EIN' }}<input [(ngModel)]="provider.taxId" [type]="provider.taxIdType === 'SSN' ? 'password' : 'text'" autocomplete="off" inputmode="numeric" [disabled]="saving"></label>
+              @if (provider.taxIdType === 'SSN' && provider.taxIdConfigured) { <small>SSN ending in {{ provider.taxIdLast4 }} is saved. Leave blank to keep it, or enter a replacement.</small><button type="button" class="add" [disabled]="saving" (click)="clearTaxId(provider)">Clear saved billing SSN</button> }
+            </div>
             <label>Billing NPI<input [(ngModel)]="provider.npi" [disabled]="saving"></label>
             <label>Billing phone<input [(ngModel)]="provider.phone" [disabled]="saving"></label>
             <label class="span">Street<input [(ngModel)]="provider.billingStreet" [disabled]="saving"></label>
@@ -129,8 +137,9 @@ async function fileToBase64(file: File): Promise<string> {
     .steps button.done i{color:#159447;font-style:normal}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px}.span{grid-column:1/-1}
     label{display:grid;gap:7px;font-size:13px;font-weight:720}
-    input:not([type=radio]):not([type=file]){width:100%;min-height:44px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}
-    input:focus{outline:3px solid color-mix(in srgb,var(--a) 22%,transparent);border-color:var(--a)}
+    input:not([type=radio]):not([type=file]),select{width:100%;min-height:44px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}
+    input:focus,select:focus{outline:3px solid color-mix(in srgb,var(--a) 22%,transparent);border-color:var(--a)}
+    .tax-id{display:grid;gap:7px;align-content:start}.tax-id small{color:var(--m);font-size:12px}.tax-id button{justify-self:start}
     h3{margin:20px 0 12px;padding-top:16px;border-top:1px solid var(--b);font-size:15px}
     .loc{display:grid;grid-template-columns:1.2fr 1.4fr .9fr .4fr .6fr auto auto;gap:10px;align-items:end;border-top:1px solid color-mix(in srgb,var(--b) 60%,transparent);padding:12px 0}
     .loc:first-of-type{border-top:0}
@@ -181,7 +190,7 @@ export class MindBillOrganizationOnboardingComponent implements OnInit {
   step: StepId = "practice";
   saving = false;
   saved: Record<string, boolean> = {};
-  identity = { name: "", legalName: "", taxId: "", npi: "", phone: "", email: "" };
+  identity: OrganizationPracticeIdentity = { name: "", legalName: "", taxId: "", taxIdType: "EIN", npi: "", phone: "", email: "" };
   provider: OrganizationBillingProviderInput = { name: "", taxId: "", npi: "", billType: "Professional", phone: "", billingStreet: "", billingCity: "", billingState: "", billingZip: "" };
   locations: OrganizationLocationInput[] = [{ name: "", street: "", city: "", state: "", zip: "", isPrimary: false }];
   w9File: File | null = null;
@@ -220,12 +229,15 @@ export class MindBillOrganizationOnboardingComponent implements OnInit {
   private adoptProfile(profile: OrganizationProfileData): void {
     this.profile = profile;
     this.identity = {
-      name: profile.practiceIdentity.name ?? this.identity.name,
-      legalName: profile.practiceIdentity.legalName ?? this.identity.legalName,
-      taxId: profile.practiceIdentity.taxId ?? this.identity.taxId,
-      npi: profile.practiceIdentity.npi ?? this.identity.npi,
-      phone: profile.practiceIdentity.phone ?? this.identity.phone,
-      email: profile.practiceIdentity.email ?? this.identity.email,
+      name: profile.practiceIdentity.name ?? this.identity.name ?? '',
+      legalName: profile.practiceIdentity.legalName ?? this.identity.legalName ?? '',
+      taxId: profile.practiceIdentity.taxId ?? '',
+      taxIdType: profile.practiceIdentity.taxIdType ?? 'EIN',
+      taxIdLast4: profile.practiceIdentity.taxIdLast4 ?? '',
+      taxIdConfigured: profile.practiceIdentity.taxIdConfigured ?? false,
+      npi: profile.practiceIdentity.npi ?? this.identity.npi ?? '',
+      phone: profile.practiceIdentity.phone ?? this.identity.phone ?? '',
+      email: profile.practiceIdentity.email ?? this.identity.email ?? '',
     };
     if (profile.billingProviders[0]) this.provider = { billType: "Professional", ...profile.billingProviders[0] };
     if (profile.locations.length) this.locations = profile.locations.map((item) => ({ ...item }));
@@ -272,11 +284,23 @@ export class MindBillOrganizationOnboardingComponent implements OnInit {
 
   savePractice(): void {
     void this.run(() => this.client.saveBillingProfile({
-      practiceIdentity: this.identity,
-      ...(this.provider.name.trim() || this.provider.taxId.trim() || this.provider.npi.trim()
-        ? { billingProviders: [this.provider] }
+      practiceIdentity: organizationTaxIdWrite(this.identity),
+      ...(this.provider.id || this.provider.name.trim() || this.provider.taxId?.trim() || this.provider.npi.trim()
+        ? { billingProviders: [organizationTaxIdWrite(this.provider)] }
         : {}),
     }), "practice");
+  }
+
+  setTaxIdType(value: OrganizationPracticeIdentity, type: 'EIN' | 'SSN'): void {
+    if ((value.taxIdType ?? 'EIN') === type) return;
+    value.taxIdType = type;
+    this.clearTaxId(value);
+  }
+
+  clearTaxId(value: OrganizationPracticeIdentity): void {
+    value.taxId = '';
+    value.taxIdLast4 = '';
+    value.taxIdConfigured = false;
   }
 
   saveLocations(): void {

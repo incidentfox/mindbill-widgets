@@ -191,14 +191,19 @@ async function blobToBase64(blob: Blob): Promise<string> {
 
       <fieldset id="mbs-provider"><legend>Providers &amp; place of service</legend><div class="grid">
         <h3 class="wide">Billing provider</h3>
-        <label [class.invalid]="bad('billingProvider.name')">Billing provider name <b>*</b><input name="billingProvider" [(ngModel)]="bill.billingProvider.name"></label>
-        <label [class.invalid]="bad('billingProvider.taxId')">Tax ID <b>*</b><input name="taxId" [(ngModel)]="bill.billingProvider.taxId"></label>
-        <label [class.invalid]="bad('billingProvider.npi')">Billing NPI <b>*</b><input name="billingNpi" [(ngModel)]="bill.billingProvider.npi" inputmode="numeric" maxlength="10"></label>
-        <label [class.invalid]="bad('billingProvider.phone')">Billing phone <b>*</b><input name="billingPhone" type="tel" [(ngModel)]="bill.billingProvider.phone"></label>
-        <label class="wide" [class.invalid]="bad('billingProvider.address.line1')">Billing address <b>*</b><input name="billingAddress" [(ngModel)]="bill.billingProvider.address.line1"></label>
-        <label [class.invalid]="bad('billingProvider.address.postalCode')">Billing ZIP <b>*</b><input name="billingZip" [(ngModel)]="bill.billingProvider.address.postalCode" inputmode="numeric"></label>
-        <label [class.invalid]="bad('billingProvider.address.city')">Billing city <b>*</b><input name="billingCity" [(ngModel)]="bill.billingProvider.address.city"></label>
-        <label [class.invalid]="bad('billingProvider.address.state')">Billing state <b>*</b><input name="billingState" [(ngModel)]="bill.billingProvider.address.state" maxlength="2"></label>
+        @if (inlineBillingProvider; as provider) {
+          <label [class.invalid]="bad('billingProvider.name')">Billing provider name <b>*</b><input name="billingProvider" [(ngModel)]="provider.name"></label>
+          <label>Tax ID type<select name="taxIdType" [ngModel]="provider.taxIdType ?? 'EIN'" (ngModelChange)="setBillingTaxIdType($event)"><option value="EIN">EIN</option><option value="SSN">SSN</option></select></label>
+          <label [class.invalid]="bad('billingProvider.taxId')">{{ provider.taxIdType === 'SSN' ? 'SSN' : 'EIN' }} <b>*</b><input name="taxId" [(ngModel)]="provider.taxId" [type]="provider.taxIdType === 'SSN' ? 'password' : 'text'" autocomplete="off" inputmode="numeric"></label>
+          <label [class.invalid]="bad('billingProvider.npi')">Billing NPI <b>*</b><input name="billingNpi" [(ngModel)]="provider.npi" inputmode="numeric" maxlength="10"></label>
+          <label [class.invalid]="bad('billingProvider.phone')">Billing phone <b>*</b><input name="billingPhone" type="tel" [(ngModel)]="provider.phone"></label>
+          <label class="wide" [class.invalid]="bad('billingProvider.address.line1')">Billing address <b>*</b><input name="billingAddress" [(ngModel)]="provider.address.line1"></label>
+          <label [class.invalid]="bad('billingProvider.address.postalCode')">Billing ZIP <b>*</b><input name="billingZip" [(ngModel)]="provider.address.postalCode" inputmode="numeric"></label>
+          <label [class.invalid]="bad('billingProvider.address.city')">Billing city <b>*</b><input name="billingCity" [(ngModel)]="provider.address.city"></label>
+          <label [class.invalid]="bad('billingProvider.address.state')">Billing state <b>*</b><input name="billingState" [(ngModel)]="provider.address.state" maxlength="2"></label>
+        } @else {
+          <div class="wide" [class.invalid]="bad('billingProvider.savedProviderId') || bad('billingProvider.sourceBillId')"><span>Using a saved billing provider</span><small>The saved tax ID is resolved securely when you submit, without returning the SSN to this form.</small><div class="quick"><button type="button" (click)="useManualBillingProvider()">Enter a different billing provider</button></div></div>
+        }
         <h3 class="wide">Rendering provider</h3>
         <label [class.invalid]="bad('renderingProvider.name')">Rendering provider name <b>*</b><input name="renderingProvider" [(ngModel)]="bill.renderingProvider.name"></label>
         <label [class.invalid]="bad('renderingProvider.npi')">Rendering provider NPI <b>*</b><input name="renderingNpi" [(ngModel)]="bill.renderingProvider.npi" inputmode="numeric" maxlength="10"></label>
@@ -276,6 +281,21 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   @Output() billChange = new EventEmitter<BrowserBillCreateInput>();
 
   bill = {} as BrowserBillCreateInput;
+  get inlineBillingProvider(): Extract<BrowserBillCreateInput['billingProvider'], { name: string }> | null {
+    const provider = this.bill.billingProvider;
+    return provider && 'name' in provider ? provider : null;
+  }
+
+  setBillingTaxIdType(type: 'EIN' | 'SSN'): void {
+    const provider = this.inlineBillingProvider;
+    if (!provider || (provider.taxIdType ?? 'EIN') === type) return;
+    provider.taxIdType = type;
+    provider.taxId = '';
+  }
+
+  useManualBillingProvider(): void {
+    this.bill.billingProvider = { name: '', taxId: '', taxIdType: 'EIN', npi: '', phone: '', address: { line1: '', city: '', state: '', postalCode: '' } };
+  }
   workingAttachments: MindBillSubmissionAttachment[] = [];
   payerQuery = "";
   payerResults: BillReviewPayer[] = [];
@@ -552,12 +572,21 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       ["claim.claimsAdministrator", this.bill.claim.claimsAdministrator.id],
       ["claim.claimsAdministrator.payerId", !this.payerSelectionRequired || this.bill.claim.claimsAdministrator.payerId],
       ["diagnoses", this.bill.diagnoses.length],
-      ["billingProvider.name", this.bill.billingProvider.name], ["billingProvider.taxId", this.bill.billingProvider.taxId], ["billingProvider.npi", this.bill.billingProvider.npi], ["billingProvider.phone", this.bill.billingProvider.phone],
-      ["billingProvider.address.line1", this.bill.billingProvider.address.line1], ["billingProvider.address.city", this.bill.billingProvider.address.city], ["billingProvider.address.state", this.bill.billingProvider.address.state], ["billingProvider.address.postalCode", this.bill.billingProvider.address.postalCode],
       ["renderingProvider.name", this.bill.renderingProvider.name], ["renderingProvider.npi", this.bill.renderingProvider.npi], ["renderingProvider.taxonomy", this.bill.renderingProvider.taxonomy],
       ["serviceLocation.placeOfServiceCode", this.bill.serviceLocation.placeOfServiceCode], ["serviceLocation.address.line1", this.bill.serviceLocation.address.line1], ["serviceLocation.address.city", this.bill.serviceLocation.address.city], ["serviceLocation.address.state", this.bill.serviceLocation.address.state], ["serviceLocation.address.postalCode", this.bill.serviceLocation.address.postalCode],
       ["serviceLines", this.bill.serviceLines.some((line) => required(line.code) && (line.units ?? 1) > 0)],
     ];
+    const provider = this.bill.billingProvider;
+    if ('savedProviderId' in provider) {
+      candidates.push(['billingProvider.savedProviderId', provider.savedProviderId]);
+    } else if ('sourceBillId' in provider) {
+      candidates.push(['billingProvider.sourceBillId', provider.sourceBillId]);
+    } else {
+      candidates.push(
+        ['billingProvider.name', provider.name], ['billingProvider.taxId', provider.taxId], ['billingProvider.npi', provider.npi], ['billingProvider.phone', provider.phone],
+        ['billingProvider.address.line1', provider.address.line1], ['billingProvider.address.city', provider.address.city], ['billingProvider.address.state', provider.address.state], ['billingProvider.address.postalCode', provider.address.postalCode],
+      );
+    }
     this.invalidFields = new Set(candidates.filter(([, value]) => !value || !required(value)).map(([path]) => path));
     if (this.invalidFields.size) {
       this.errorMessage = `Complete ${this.invalidFields.size} highlighted required field${this.invalidFields.size === 1 ? "" : "s"} before submitting.`;

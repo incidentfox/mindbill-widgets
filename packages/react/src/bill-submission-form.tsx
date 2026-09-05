@@ -113,6 +113,7 @@ export type BillSubmissionInput = {
   service: { date: string; endDate?: string | null; authorizationNumber?: string | null };
   billingProvider?: {
     name?: string; taxId?: string; npi?: string; phone?: string; address?: BillSubmissionAddress;
+    taxIdType?: "EIN" | "SSN"; savedProviderId?: string; sourceBillId?: string; taxIdLast4?: string;
   };
   renderingProvider?: {
     name?: string; specialty?: string; npi?: string; taxonomy?: string; licenseNumber?: string;
@@ -138,8 +139,8 @@ export type CompleteBillSubmissionInput = Omit<
     claimsAdministrator: { id: string; name: string; payerId?: string };
   };
   billingProvider: {
-    name: string; taxId: string; npi: string; phone: string; address: BillSubmissionAddress;
-  };
+    name: string; taxId: string; taxIdType?: "EIN" | "SSN"; npi: string; phone: string; address: BillSubmissionAddress;
+  } | { savedProviderId: string } | { sourceBillId: string };
   renderingProvider: NonNullable<BillSubmissionInput["renderingProvider"]> & {
     name: string; npi: string; taxonomy: string;
   };
@@ -476,6 +477,7 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("claim.dateOfInjury", bill.claim.dateOfInjury, "Enter the date of injury.");
   required("claim.claimsAdministrator", bill.claim.claimsAdministrator?.name, "Select a claims administrator so MindBill can route this bill.");
   required("service.date", bill.service.date, "Enter the date of service.");
+  if (!bill.billingProvider?.savedProviderId?.trim() && !bill.billingProvider?.sourceBillId?.trim()) {
   required("billingProvider.name", bill.billingProvider?.name, "Enter the billing provider name.");
   required("billingProvider.taxId", bill.billingProvider?.taxId, "Enter the billing provider Tax ID (EIN or SSN).");
   required("billingProvider.npi", bill.billingProvider?.npi, "Enter the billing provider NPI.");
@@ -484,6 +486,7 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("billingProvider.address.city", bill.billingProvider?.address?.city, "Enter the billing provider city.");
   required("billingProvider.address.state", bill.billingProvider?.address?.state, "Enter the billing provider 2-letter state code.");
   required("billingProvider.address.postalCode", bill.billingProvider?.address?.postalCode, "Enter the billing provider ZIP code.");
+  }
   required("renderingProvider.name", bill.renderingProvider?.name, "Enter the rendering provider name.");
   required("renderingProvider.npi", bill.renderingProvider?.npi, "Enter the rendering provider NPI.");
   required("renderingProvider.taxonomy", bill.renderingProvider?.taxonomy, "Enter the rendering provider taxonomy code.");
@@ -504,11 +507,11 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   if (bill.patient.dateOfBirth && !parseBillSubmissionDate(bill.patient.dateOfBirth)) errors["patient.dateOfBirth"] = "Use MM/DD/YYYY";
   if (bill.claim.dateOfInjury && !parseBillSubmissionDate(bill.claim.dateOfInjury)) errors["claim.dateOfInjury"] = "Use MM/DD/YYYY";
   if (bill.patient.address.state.trim().length !== 2) errors["patient.address.state"] = "Use a 2-letter state code";
-  if (bill.billingProvider?.address?.state && bill.billingProvider.address.state.trim().length !== 2) errors["billingProvider.address.state"] = "Use a 2-letter state code.";
+  if (!bill.billingProvider?.savedProviderId && !bill.billingProvider?.sourceBillId && bill.billingProvider?.address?.state && bill.billingProvider.address.state.trim().length !== 2) errors["billingProvider.address.state"] = "Use a 2-letter state code.";
   if (bill.serviceLocation?.address?.state && bill.serviceLocation.address.state.trim().length !== 2) errors["serviceLocation.address.state"] = "Use a 2-letter state code.";
   const digits = (value?: string) => value?.replace(/\D/g, "") ?? "";
-  if (bill.billingProvider?.taxId && digits(bill.billingProvider.taxId).length !== 9) errors["billingProvider.taxId"] = "Enter a valid 9-digit EIN or SSN.";
-  if (bill.billingProvider?.npi && !/^\d{10}$/.test(digits(bill.billingProvider.npi))) errors["billingProvider.npi"] = "Enter a valid 10-digit NPI.";
+  if (!bill.billingProvider?.savedProviderId && !bill.billingProvider?.sourceBillId && bill.billingProvider?.taxId && digits(bill.billingProvider.taxId).length !== 9) errors["billingProvider.taxId"] = "Enter a valid 9-digit EIN or SSN.";
+  if (!bill.billingProvider?.savedProviderId && !bill.billingProvider?.sourceBillId && bill.billingProvider?.npi && !/^\d{10}$/.test(digits(bill.billingProvider.npi))) errors["billingProvider.npi"] = "Enter a valid 10-digit NPI.";
   if (bill.renderingProvider?.npi && !/^\d{10}$/.test(digits(bill.renderingProvider.npi))) errors["renderingProvider.npi"] = "Enter a valid 10-digit NPI.";
   if (bill.renderingProvider?.taxonomy && !/^[A-Za-z0-9]{10}$/.test(bill.renderingProvider.taxonomy.trim())) errors["renderingProvider.taxonomy"] = "Enter a valid 10-character taxonomy code.";
   if (bill.serviceLocation?.placeOfServiceCode && !/^\d{2}$/.test(bill.serviceLocation.placeOfServiceCode.trim())) errors["serviceLocation.placeOfServiceCode"] = "Enter a valid 2-digit place of service code.";
@@ -903,6 +906,8 @@ export function BillSubmissionForm({
     const administrator = clean.claim.claimsAdministrator;
     const complete = {
       ...clean,
+      ...(clean.billingProvider?.savedProviderId ? { billingProvider: { savedProviderId: clean.billingProvider.savedProviderId } } : {}),
+      ...(clean.billingProvider?.sourceBillId ? { billingProvider: { sourceBillId: clean.billingProvider.sourceBillId } } : {}),
       claim: {
         ...clean.claim,
         ...(administrator ? { claimsAdministrator: submittedClaimsAdministrator(administrator) } : {}),
@@ -1073,8 +1078,17 @@ export function BillSubmissionForm({
       <summary hidden={!compactProviders} onClick={(event) => { event.preventDefault(); setProviderEditing((current) => !current); }} style={{ cursor: "pointer", marginBottom: 12 }}>Review or edit provider details</summary>
       <div className="mbsf-grid">
       <h4 className="mbsf-subhead">Billing provider</h4>
+      {bill.billingProvider?.savedProviderId || bill.billingProvider?.sourceBillId ? <div className="mbsf-span"><p>Using {bill.billingProvider.sourceBillId ? "this bill’s original" : "saved"} billing provider: {bill.billingProvider.name}. SSN ending in {bill.billingProvider.taxIdLast4 || "••••"} stays on MindBill’s server.</p><button type="button" className="mbsf-secondary" disabled={locked} onClick={() => setBill((c) => {
+        const billingProvider = { ...c.billingProvider, taxIdType: "EIN" as const, taxId: "" };
+        delete billingProvider.savedProviderId;
+        delete billingProvider.sourceBillId;
+        delete billingProvider.taxIdLast4;
+        return { ...c, billingProvider };
+      })}>Enter different billing provider details</button></div> : null}
+      <fieldset disabled={locked || Boolean(bill.billingProvider?.savedProviderId || bill.billingProvider?.sourceBillId)} style={{ display: "contents" }}>
       <Field path="billingProvider.name" label="Billing provider name" required error={errors["billingProvider.name"]}>{text(bill.billingProvider?.name, (name) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, name } })))}</Field>
-      <Field path="billingProvider.taxId" label="Tax ID (EIN / SSN)" required error={errors["billingProvider.taxId"]}>{text(bill.billingProvider?.taxId, (taxId) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, taxId } })), { inputMode: "numeric" })}</Field>
+      <Field label="Tax ID type"><select className="mbsf-select" value={bill.billingProvider?.taxIdType ?? "EIN"} onChange={(event) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, taxIdType: event.target.value as "EIN" | "SSN", taxId: "" } }))}><option value="EIN">EIN (business)</option><option value="SSN">SSN (individual)</option></select></Field>
+      <Field path="billingProvider.taxId" label={bill.billingProvider?.taxIdType === "SSN" ? "SSN" : "EIN"} required error={errors["billingProvider.taxId"]}><input className="mbsf-input" autoComplete="off" type={bill.billingProvider?.taxIdType === "SSN" ? "password" : "text"} inputMode="numeric" value={bill.billingProvider?.taxId ?? ""} onChange={(event) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, taxId: event.target.value } }))} /></Field>
       <Field path="billingProvider.npi" label="Billing provider NPI" required error={errors["billingProvider.npi"]}>{text(bill.billingProvider?.npi, (npi) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>
       <Field path="billingProvider.phone" label="Billing provider phone" required error={errors["billingProvider.phone"]}>{text(bill.billingProvider?.phone, (phone) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, phone } })), { type: "tel" })}</Field>
       <Field path="billingProvider.address.line1" label="Billing address line 1" required span error={errors["billingProvider.address.line1"]}>{text(bill.billingProvider?.address?.line1, (line1) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1, line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: c.billingProvider?.address?.state ?? "", postalCode: c.billingProvider?.address?.postalCode ?? "" } } })))}</Field>
@@ -1082,6 +1096,7 @@ export function BillSubmissionForm({
       <Field path="billingProvider.address.city" label="Billing city" required error={errors["billingProvider.address.city"]}>{text(bill.billingProvider?.address?.city, (city) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city, state: c.billingProvider?.address?.state ?? "", postalCode: c.billingProvider?.address?.postalCode ?? "" } } })))}</Field>
       <Field path="billingProvider.address.state" label="Billing state" required error={errors["billingProvider.address.state"]}>{text(bill.billingProvider?.address?.state, (state) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.billingProvider?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
       <Field path="billingProvider.address.postalCode" label="Billing ZIP" required error={errors["billingProvider.address.postalCode"]}>{text(bill.billingProvider?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: c.billingProvider?.address?.state ?? "", postalCode } } })))}</Field>
+      </fieldset>
       <h4 className="mbsf-subhead">Rendering provider</h4>
       <Field path="renderingProvider.name" label="Rendering provider name" required error={errors["renderingProvider.name"]}>{text(bill.renderingProvider?.name, (name) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, name } })))}</Field>
       <Field path="renderingProvider.npi" label="Rendering provider NPI" required error={errors["renderingProvider.npi"]}>{text(bill.renderingProvider?.npi, (npi) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>

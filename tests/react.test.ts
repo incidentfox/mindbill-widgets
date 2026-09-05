@@ -286,6 +286,14 @@ describe("atomic bill submission form contract", () => {
     });
   });
 
+  it("validates saved billing provider references without requiring a browser SSN", () => {
+    expect(validateBillSubmission({ ...validBill, billingProvider: { savedProviderId: "bp-1" } })).toEqual({ valid: true, fieldErrors: {} });
+    expect(validateBillSubmission({ ...validBill, billingProvider: { savedProviderId: "bp-1", taxId: "masked", npi: "old", address: { line1: "", city: "", state: "California", postalCode: "" } } })).toEqual({ valid: true, fieldErrors: {} });
+    expect(validateBillSubmission({ ...validBill, billingProvider: { savedProviderId: " " } }).valid).toBe(false);
+    expect(validateBillSubmission({ ...validBill, billingProvider: { sourceBillId: "bill-1" } })).toEqual({ valid: true, fieldErrors: {} });
+    expect(validateBillSubmission({ ...validBill, billingProvider: { sourceBillId: " " } }).valid).toBe(false);
+  });
+
   it("requires at least one ICD-10 diagnosis code", () => {
     expect(validateBillSubmission({ ...validBill, diagnoses: [] })).toEqual({
       valid: false,
@@ -1163,6 +1171,14 @@ describe("bill lifecycle surfaces", () => {
 });
 
 describe("bill review mutation snapshots", () => {
+  it("keeps the explicit SSN preservation sentinel, never ciphertext or display-only last four", () => {
+    const input = {
+      claimsAdminId: "payer-1", dos: "2026-09-04", lineItems: [],
+      billingProvider: { name: "Synthetic", taxId: "", taxIdType: "SSN", taxIdConfigured: true, taxIdLast4: "0000", taxIdEncrypted: "never-send", npi: "1234567890", billType: "Professional" },
+    } as Parameters<typeof sanitizeBillReviewSaveInput>[0];
+    expect(sanitizeBillReviewSaveInput(input).billingProvider).toEqual({ name: "Synthetic", taxId: "", taxIdType: "SSN", taxIdConfigured: true, npi: "1234567890", billType: "Professional" });
+  });
+
   it("removes display-only lifecycle fields before a v2 save", () => {
     const input = {
       claimsAdminId: "payer-1",

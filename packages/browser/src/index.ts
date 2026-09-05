@@ -15,6 +15,9 @@ export type BillReviewDocumentType =
 export type BillReviewBillingProvider = {
   name: string;
   taxId: string;
+  taxIdType?: "EIN" | "SSN";
+  taxIdConfigured?: boolean;
+  taxIdLast4?: string;
   npi: string;
   billType: "Professional" | "Institutional";
   phone?: string;
@@ -294,7 +297,7 @@ export function sanitizeBillReviewSaveInput(
       : {}),
     ...(input.billingProvider ? {
       billingProvider: pickDefined(input.billingProvider, [
-        "name", "taxId", "npi", "billType", "phone", "billingStreet",
+        "name", "taxId", "taxIdType", "taxIdConfigured", "npi", "billType", "phone", "billingStreet",
         "billingCity", "billingState", "billingZip",
       ]) as BillReviewBillingProvider,
     } : {}),
@@ -906,7 +909,7 @@ export type BrowserBillCreateInput = {
     };
   };
   service: { date: string; endDate?: string | null; authorizationNumber?: string | null };
-  billingProvider: { name: string; taxId: string; npi: string; phone: string; address: BrowserBillAddress };
+  billingProvider: { name: string; taxId: string; taxIdType?: "EIN" | "SSN"; npi: string; phone: string; address: BrowserBillAddress } | { savedProviderId: string } | { sourceBillId: string };
   renderingProvider: {
     name: string;
     specialty?: string;
@@ -1534,16 +1537,31 @@ export function createBillReferenceClient(
 // ---------------------------------------------------------------------------
 // Organization profile client (INC-1470): backs the embeddable
 // OrganizationOnboarding / BillingSettings components. Requires a browser
-// session minted with the OPTIONAL organization:manage permission; sessions
-// without it are rejected by the API and nothing else changes.
+// session minted with organization:manage for administrative operations.
+// Read-only saved billing profiles need only an org-wide bills:create session.
+
+/** Convert masked profile state to a write without clearing an unchanged saved SSN. */
+export function organizationTaxIdWrite<T extends { taxId?: string; taxIdType?: "EIN" | "SSN"; taxIdLast4?: string; taxIdConfigured?: boolean }>(value: T): Omit<T, "taxIdLast4" | "taxIdConfigured"> {
+  const input = { ...value };
+  delete input.taxIdLast4;
+  delete input.taxIdConfigured;
+  if (value.taxIdType === "SSN" && value.taxIdConfigured && !value.taxId?.trim()) delete input.taxId;
+  return input;
+}
 
 export type OrganizationPracticeIdentity = {
   name?: string; legalName?: string; taxId?: string; npi?: string;
+  taxIdType?: "EIN" | "SSN";
+  /** Read-only metadata. Saved SSNs are never returned in taxId. */
+  taxIdLast4?: string; taxIdConfigured?: boolean;
   phone?: string; email?: string; website?: string;
 };
 
 export type OrganizationBillingProviderInput = {
-  id?: string; externalId?: string; name: string; taxId: string; npi: string;
+  id?: string; externalId?: string; name: string; taxId?: string; npi: string;
+  taxIdType?: "EIN" | "SSN";
+  /** Read-only metadata; omit taxId on updates to preserve a saved SSN. */
+  taxIdLast4?: string; taxIdConfigured?: boolean;
   billType?: "Professional" | "Institutional"; phone?: string;
   billingStreet?: string; billingCity?: string; billingState?: string; billingZip?: string;
 };
@@ -1582,6 +1600,8 @@ export type OrganizationClientOptions = {
 
 export type OrganizationClient = {
   getOrganization: () => Promise<OrganizationProfileData>;
+  /** Masked saved profiles for bill entry; requires org-wide bills:create. */
+  getBillingProfile: () => Promise<OrganizationProfileData>;
   saveBillingProfile: (input: {
     practiceIdentity?: OrganizationPracticeIdentity;
     billingProviders?: OrganizationBillingProviderInput[];
@@ -1642,8 +1662,13 @@ export function createOrganizationClient({
 
   return {
     getOrganization: () => request("/partner/v2/browser/organization"),
+    getBillingProfile: () => request("/partner/v2/browser/organization/billing-profile"),
     saveBillingProfile: (input) =>
-      request("/partner/v2/browser/organization/billing-profile", { method: "PUT", body: JSON.stringify(input) }),
+      request("/partner/v2/browser/organization/billing-profile", { method: "PUT", body: JSON.stringify({
+        ...input,
+        ...(input.practiceIdentity ? { practiceIdentity: organizationTaxIdWrite(input.practiceIdentity) } : {}),
+        ...(input.billingProviders ? { billingProviders: input.billingProviders.map(organizationTaxIdWrite) } : {}),
+      }) }),
     saveLocations: (locations) =>
       request("/partner/v2/browser/organization/locations", { method: "PUT", body: JSON.stringify({ locations }) }),
     saveW9: (input) =>
