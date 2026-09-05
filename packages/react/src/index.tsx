@@ -257,6 +257,7 @@ export type { OrganizationOnboardingProps } from "./organization-onboarding";
 export { ConnectedNotificationSettings, NotificationSettings } from "./notification-settings";
 export { ConnectedNotificationRecipientsSettings, NotificationRecipientsSettings } from "./notification-recipients";
 export type { NotificationRecipient, NotificationRecipientInvitation, NotificationRecipientsAdapter, NotificationRecipientsSettingsProps, NotificationRecipientsSnapshot } from "./notification-recipients";
+export type { NotificationReportDigest } from "./notification-settings";
 export type {
   NotificationAgingDay,
   NotificationPreferences,

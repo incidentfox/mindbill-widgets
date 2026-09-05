@@ -11,8 +11,9 @@ invitation. The email owner follows a 48-hour link, reviews the destination,
 practice-wide or assigned-bill scope, categories and quiet hours, then explicitly
 confirms. Opening a link alone never enables email. Alerts have an unsubscribe link.
 
-This supports bill status/payment alerts and 30/60/90-day follow-up reminders, **not
-scheduled financial report digests, patient reports or attachments**. Recipient
+This supports bill status/payment alerts, 30/60/90-day follow-up reminders and optional
+daily or weekly activity digests. Digests summarize activity counts at 9 am Pacific
+(weekly on Monday), **not financial reports, patient reports or attachments**. Recipient
 email choices in a courtesy-copy form do not enroll anyone in alerts.
 
 ## Embed the administrative settings section
@@ -94,6 +95,7 @@ requested audience, and forward it unchanged:
   statusUpdates: true,
   agingDays: [30, 60, 90],
   quietHours: true,
+  reportDigest: "off", // default; or "daily" / "weekly" after recipient confirmation
 }
 ```
 
@@ -125,6 +127,12 @@ New invitations for an existing recipient disable the previous subscription unti
 fresh confirmation. Email/scope changes clear bill assignments; sync newly authorized
 assignments explicitly. Revocation/unsubscribe invalidates old invitations, including
 already-consumed links. Expired links require a deliberately new invitation/receipt.
+
+Existing subscriptions remain digest-off when upgraded. Include `reportDigest` in
+your host's strict request allowlist; omitted values mean `"off"`. A digest can be
+the only category selected. Changing its frequency requires a new confirmation,
+just like changing other categories. Reuse the existing settings component and
+adapter; no new component or database migration is needed.
 
 ## Activation and safe testing
 
