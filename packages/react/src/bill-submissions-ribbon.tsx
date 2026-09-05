@@ -167,12 +167,12 @@ export function billSubmissionsRibbonFromHistory(
 const css = `
 .mbsr{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;color:var(--mb-text);font-family:var(--mb-font);font-size:13px}
 .mbsr *{box-sizing:border-box}
-.mbsr-chip{flex:0 0 auto;display:grid;gap:7px;min-width:180px;max-width:280px;padding:11px 13px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:inherit;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.mbsr-chip{flex:0 0 240px;display:grid;gap:7px;width:240px;min-width:min(240px,85vw);max-width:280px;padding:11px 13px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:inherit;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
 .mbsr-chip:hover{border-color:var(--mb-accent)}
 .mbsr-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));box-shadow:0 0 0 1px var(--mb-accent) inset}
-.mbsr-top{display:flex;align-items:center;gap:8px;min-width:0}
-.mbsr-label{font-size:13.5px;font-weight:760;line-height:1.3;overflow-wrap:anywhere}
-.mbsr-badge{flex:0 0 auto;padding:2px 8px;border:1px solid color-mix(in srgb,var(--mb-muted) 45%,var(--mb-border));border-radius:999px;background:var(--mb-soft);font-size:11px;font-weight:700;white-space:nowrap}
+.mbsr-top{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
+.mbsr-label{min-width:0;font-size:13.5px;font-weight:760;line-height:1.3;overflow-wrap:normal;word-break:normal}
+.mbsr-badge{justify-self:start;max-width:100%;padding:2px 8px;border:1px solid color-mix(in srgb,var(--mb-muted) 45%,var(--mb-border));border-radius:999px;background:var(--mb-soft);font-size:11px;font-weight:700;white-space:normal}
 .mbsr-badge[data-tone=success]{border-color:color-mix(in srgb,#23876f 52%,var(--mb-border));background:color-mix(in srgb,#23876f 11%,var(--mb-surface));color:#176452}
 .mbsr-badge[data-tone=warning]{border-color:color-mix(in srgb,var(--mb-warning) 55%,var(--mb-border));background:color-mix(in srgb,var(--mb-warning) 12%,var(--mb-surface))}
 .mbsr-badge[data-tone=danger]{border-color:color-mix(in srgb,var(--mb-danger) 45%,var(--mb-border));background:color-mix(in srgb,var(--mb-danger) 9%,var(--mb-surface));color:var(--mb-danger)}
