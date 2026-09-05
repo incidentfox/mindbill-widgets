@@ -1,4 +1,6 @@
 "use client";
+export { organizationProfileOptions } from "./billing-profile-options";
+export type { BillSubmissionProfileOptions, BillSubmissionProfileOption } from "./billing-profile-options";
 
 import "@mindbill/embed";
 import type { CSSProperties, ReactElement } from "react";

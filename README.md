@@ -205,7 +205,7 @@ simulation controls are never inferred from the response environment; they are
 available only to dedicated developer tooling that explicitly passes
 `sandboxControls={true}`.
 
-Use `preset: "midnight-cyan"` for a spacious pale-blue and midnight theme with pill-shaped controls, `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers submission, status, EORs, payments, reviews, and close actions.
+Use `preset: "midnight-cyan"` for a pale-blue and midnight theme with restrained rounded controls, `preset: "orange-bright"` for a compact orange theme, or override individual appearance tokens on any preset. The same theme covers submission, status, EORs, payments, reviews, and close actions. The task dashboard inherits that palette: neutral card borders, semantic status markers, and accent-tinted aging headers. See [theme customization](docs/theme-customization.md) for typed dashboard colors, geometry, spacing, and CSS overrides.
 
 Angular uses the same bill ID, browser session, API calls, and lifecycle rules:
 
@@ -278,6 +278,18 @@ if (status.data.state === "denied") {
 Available operations include close, Second Bill Review, EOR reads, and payment posting. A submitted bill is never edited or corrected in place. Signed webhooks provide live updates; `listEvents(cursor)` recovers missed deliveries.
 
 ## Data ownership
+
+`BillingSettings` provides reusable billing/rendering provider, service-location, and W-9
+setup. `BillSubmissionForm` accepts host-owned or MindBill-backed `profileOptions` and
+`profileDisplay="expanded" | "compact"`; selections become editable bill snapshots, not
+mutable references. See [saved profiles and authorization](./docs/saved-profiles.md).
+Personal SSN storage is not supported by this settings flow.
+
+`ConnectedBillingWorkspace` separates follow-up tasks from Sent/Accepted bills waiting
+for payer responses. Waiting inventory has its own totals and may overlap overdue tasks;
+do not add those totals together. Drill-down preserves status, age, and payer filters.
+Dashboard colors, borders, radii, spacing, and aging palettes are configurable through
+[appearance tokens](./docs/theme-customization.md).
 
 - Keep everything in your database: send complete bill snapshots and stable `externalId` values.
 - Keep billing in MindBill: query bills, documents, status, and events by organization.

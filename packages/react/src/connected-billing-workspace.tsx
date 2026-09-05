@@ -126,7 +126,7 @@ function BillSearchContent({
   onSelectBill?: ((bill: BillRegistryItem) => void) | undefined;
   heading?: ReactNode | undefined;
 }): ReactElement {
-  const [query, setQuery] = useState<BillRegistryQuery>({ status: "all", age: "all", page: 1, pageSize: 25, sort: "submitted_desc", ...initialQuery });
+  const [query, setQuery] = useState<BillRegistryQuery>({ age: "all", page: 1, pageSize: 25, sort: "submitted_desc", ...initialQuery, status: initialQuery?.status === "submitted" ? "sent" : initialQuery?.status ?? "all" });
   const [draft, setDraft] = useState(initialQuery?.q ?? "");
   const [result, setResult] = useState<BillRegistryResult | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -146,7 +146,7 @@ function BillSearchContent({
     <form className="mbow-toolbar" onSubmit={(event) => { event.preventDefault(); update({ q: draft.trim() }); }}>
       <input className="mbow-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Search patient, bill ID, claim, or external ID…" aria-label="Search bills" />
       <select className="mbow-select" value={query.status ?? "all"} onChange={(event) => update({ status: event.target.value })} aria-label="Bill status">
-        <option value="all">All statuses</option><option value="incomplete">Incomplete</option><option value="submitted">Submitted</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="processed">Processed</option><option value="paid">Paid</option><option value="closed">Closed</option>
+        <option value="all">All statuses</option><option value="incomplete">Incomplete</option><option value="sent">Sent</option><option value="accepted">Accepted</option><option value="accepted_no_response">Accepted — response overdue</option><option value="rejected">Rejected</option><option value="processed">Processed</option><option value="paid">Paid</option><option value="closed">Closed</option>
       </select>
       <select className="mbow-select" value={query.age ?? "all"} onChange={(event) => update({ age: event.target.value as BillRegistryAge })} aria-label="A/R age">
         <option value="all">All A/R ages</option><option value="0-30">0–30 days</option><option value="31-60">31–60 days</option><option value="61-90">61–90 days</option><option value="91+">91+ days</option><option value="91-180">91–180 days</option><option value="181+">181+ days</option>
@@ -154,13 +154,13 @@ function BillSearchContent({
       <button className="mbow-button" type="submit">Search</button>
     </form>
     <div className="mbow-card mbow-scroll">
-      {loading && !result ? <div className="mbow-state" role="status">Loading bills…</div> : error && !result ? <div className="mbow-state mbow-error" role="alert">{error.message} <button className="mbow-button" type="button" onClick={() => void load()}>Retry</button></div> : result?.items.length === 0 ? <div className="mbow-state">No bills match these filters.</div> : <table className="mbow-table">
+      {loading ? <div className="mbow-state" role="status">Loading bills…</div> : error ? <div className="mbow-state mbow-error" role="alert">{error.message} <button className="mbow-button" type="button" onClick={() => void load()}>Retry</button></div> : result?.items.length === 0 ? <div className="mbow-state">No bills match these filters.</div> : <table className="mbow-table">
         <thead><tr><th>Bill</th><th>Patient</th><th>DOS</th><th>Codes</th><th>Claims administrator</th><th>Status</th><th>Submitted / A/R age</th><th className="mbow-money">Balance due</th></tr></thead>
         <tbody>{result?.items.map((bill) => <tr key={bill.id} className={onSelectBill ? "clickable" : ""} onClick={() => onSelectBill?.(bill)}>
           <td className="mbow-strong">#{bill.billNumber}</td><td>{bill.patientName}</td><td>{shortDate(bill.dateOfService)}</td><td>{bill.procedureCodes.join(", ") || "—"}</td><td>{bill.claimsAdministrator || "—"}</td><td><span className={`mbow-badge ${bill.status.tone ?? ""}`}>{bill.status.label}</span></td><td>{shortDate(bill.submittedAt)}<div className="mbow-muted">{bill.arAgeDays == null ? "—" : `${bill.arAgeDays} days`}</div></td><td className="mbow-money mbow-strong">{money(bill.balanceDue)}</td>
         </tr>)}</tbody>
       </table>}
-      {result ? <div className="mbow-pager"><span>Showing {result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1}–{Math.min(result.page * result.pageSize, result.total)} of {result.total}</span><span><button className="mbow-button" type="button" disabled={result.page <= 1} onClick={() => update({ page: result.page - 1 })}>Previous</button> {result.page} / {pageCount} <button className="mbow-button" type="button" disabled={result.page >= pageCount} onClick={() => update({ page: result.page + 1 })}>Next</button></span></div> : null}
+      {result && !loading && !error ? <div className="mbow-pager"><span>Showing {result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1}–{Math.min(result.page * result.pageSize, result.total)} of {result.total}</span><span><button className="mbow-button" type="button" disabled={result.page <= 1} onClick={() => update({ page: result.page - 1 })}>Previous</button> {result.page} / {pageCount} <button className="mbow-button" type="button" disabled={result.page >= pageCount} onClick={() => update({ page: result.page + 1 })}>Next</button></span></div> : null}
     </div>
   </>;
 }
@@ -177,6 +177,9 @@ export type ConnectedBillTasksDashboardProps = ConnectedSurfaceProps & {
 function taskQuery(cell: BillTasksDashboardCell): BillRegistryQuery {
   const [taskType, taskLabel] = cell.rowId.split("::", 2);
   const age = cell.bucketId === "1-30" ? "0-30" : cell.bucketId as BillRegistryAge | null;
+  if (cell.sectionId === "waiting_sent" || cell.sectionId === "waiting_accepted") {
+    return { status: cell.rowId, ...(age ? { age } : {}) };
+  }
   return { status: "all", taskSection: cell.sectionId, ...(taskType ? { taskType } : {}), ...(taskLabel ? { taskLabel } : {}), ...(age ? { age } : {}) };
 }
 
@@ -190,9 +193,18 @@ function BillTasksContent({ client, onDrillDown, appearance }: { client: ReturnT
   if (loading && !result) return <div className="mbow-state">Loading bill tasks…</div>;
   if (error && !result) return <div className="mbow-state mbow-error">{error.message}</div>;
   if (!result) return <></>;
+  const selectionProps = loading || error ? {} : {
+    onSelectCell: (cell: BillTasksDashboardCell) => onDrillDown?.({ ...taskQuery(cell), ...(claimsAdminId ? { claimsAdministrator: claimsAdminId } : {}) }),
+  };
   return <>
-    <p className="mbow-task-note">Open follow-up work only. Sent bills waiting on a payer stay available in <strong>All bills</strong>.</p>
-    <BillTasksDashboard data={result.dashboard} appearance={appearance ?? { preset: "mindbill" }} toolbar={<select className="mbow-select" value={claimsAdminId} onChange={(event) => setClaimsAdminId(event.target.value)}><option value="">All claims administrators</option>{result.filters.claimsAdministrators.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>} onSelectCell={(cell) => onDrillDown?.(taskQuery(cell))} />
+    <p className="mbow-task-note">Open follow-up work grouped by task and age. {result.waiting ? "Sent and accepted bills waiting for a payer are shown below." : "Find sent and accepted bills in All bills."}</p>
+    {loading ? <p role="status">Updating bill tasks…</p> : null}
+    {error ? <p role="alert" className="mbow-error">{error.message}</p> : null}
+    <BillTasksDashboard data={result.dashboard} appearance={appearance ?? { preset: "mindbill" }} toolbar={<select aria-label="Claims administrator filter" className="mbow-select" value={claimsAdminId} onChange={(event) => setClaimsAdminId(event.target.value)}><option value="">All claims administrators</option>{result.filters.claimsAdministrators.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>} {...selectionProps} />
+    {result.waiting ? <BillTasksDashboard data={result.waiting} appearance={appearance ?? { preset: "mindbill" }}
+      heading="Bills waiting for payer" totalLabel="Bill Total" itemLabel="bills" grandTotalLabel="Waiting Bills Total" emptyLabel="No waiting bills"
+      {...selectionProps}
+      footnote="Waiting bills can also have overdue follow-up tasks above. These bill totals are separate from task totals." /> : null}
   </>;
 }
 

@@ -57,6 +57,8 @@ export type BillRegistryResult = {
 
 export type BillTasksResult = {
   dashboard: BillTasksDashboardData;
+  /** Separate status inventory; not included in actionable task totals. */
+  waiting?: BillTasksDashboardData;
   filters: { claimsAdministrators: Array<{ id: string; name: string }> };
 };
 
@@ -223,7 +225,19 @@ export function createBillingOperationsClient({
   return {
     clearSession() { session = null; pendingSession = null; pendingSessionSignal = null; },
     getBills(query = {}, signal) {
-      return get<BillRegistryResult>(`/partner/v2/browser/bills${queryString(query)}`, signal);
+      const { claimsAdministrator, taskType, taskSection: _taskSection, sort, status, ...filters } = query;
+      // Section is a presentation grouping, not a supported bill-list filter.
+      void _taskSection;
+      const sortKey = sort?.startsWith("balance_") ? "balanceDue"
+        : sort?.startsWith("patient_") ? "patient" : sort ? "submitted" : undefined;
+      return get<BillRegistryResult>(`/partner/v2/browser/bills${queryString({
+        ...filters,
+        status: status === "submitted" ? "sent" : status,
+        claimsAdminId: claimsAdministrator,
+        taskKind: taskType,
+        sort: sortKey,
+        dir: sort ? (sort.endsWith("_asc") ? "asc" : "desc") : undefined,
+      })}`, signal);
     },
     getBillTasks(claimsAdministrator, signal) {
       return get<BillTasksResult>(
