@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createOrganizationClient } from "../packages/browser/src/index";
+import { createOrganizationClient, organizationTaxIdWrite } from "../packages/browser/src/index";
 
 const profile = {
   organizationId: "org-1",
@@ -16,6 +16,30 @@ function sessionResponse() {
 }
 
 describe("organization client", () => {
+  it("loads masked billing choices through the read-only billing profile route", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(sessionResponse()).mockResolvedValueOnce(new Response(JSON.stringify({ data: profile }), { status: 200 }));
+    const client = createOrganizationClient({ apiBaseUrl: "https://api.test", fetch: fetchMock });
+    expect(await client.getBillingProfile()).toEqual(profile);
+    expect(fetchMock.mock.calls[1]![0]).toBe("https://api.test/partner/v2/browser/organization/billing-profile");
+    expect(fetchMock.mock.calls[1]![1].method).toBeUndefined();
+  });
+  it("preserves masked SSNs and strips read-only metadata without mutating state", () => {
+    const state = { name: "Synthetic", taxIdType: "SSN" as const, taxId: "", taxIdLast4: "0000", taxIdConfigured: true };
+    expect(organizationTaxIdWrite(state)).toEqual({ name: "Synthetic", taxIdType: "SSN" });
+    expect(state.taxIdConfigured).toBe(true);
+    expect(organizationTaxIdWrite({ ...state, taxId: "000-00-0000" })).toEqual({ name: "Synthetic", taxIdType: "SSN", taxId: "000-00-0000" });
+    expect(organizationTaxIdWrite({ ...state, taxIdConfigured: false })).toEqual({ name: "Synthetic", taxIdType: "SSN", taxId: "" });
+    expect(organizationTaxIdWrite({ taxIdType: "EIN", taxId: "94-1234567" })).toEqual({ taxIdType: "EIN", taxId: "94-1234567" });
+  });
+
+  it("round-trips masked profile reads as preserve operations", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => Promise.resolve(String(url).includes("/session") ? sessionResponse() : new Response(JSON.stringify({ data: profile }), { status: 200 })));
+    const client = createOrganizationClient({ apiBaseUrl: "https://api.test", fetch: fetchMock });
+    const masked = { taxIdType: "SSN" as const, taxId: "", taxIdLast4: "0000", taxIdConfigured: true };
+    await client.saveBillingProfile({ practiceIdentity: masked, billingProviders: [{ id: "bp-1", name: "Synthetic", npi: "1111111111", ...masked }] });
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
+    expect(JSON.parse(put[1].body as string)).toEqual({ practiceIdentity: { taxIdType: "SSN" }, billingProviders: [{ id: "bp-1", name: "Synthetic", npi: "1111111111", taxIdType: "SSN" }] });
+  });
   it("mints a session then GETs the profile with the bearer token", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(sessionResponse())

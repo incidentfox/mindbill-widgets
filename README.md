@@ -283,7 +283,20 @@ Available operations include close, Second Bill Review, EOR reads, and payment p
 setup. `BillSubmissionForm` accepts host-owned or MindBill-backed `profileOptions` and
 `profileDisplay="expanded" | "compact"`; selections become editable bill snapshots, not
 mutable references. See [saved profiles and authorization](./docs/saved-profiles.md).
-Personal SSN storage is not supported by this settings flow.
+Billing tax IDs support EIN or SSN (`taxIdType`, default `EIN`). Saved SSNs are
+encrypted by MindBill and read back as an empty `taxId` with `taxIdLast4` and
+`taxIdConfigured`; the full value is not returned to the browser. Settings leave
+an unchanged SSN blank to preserve it, or let the user explicitly replace/clear it.
+Direct API callers must omit `taxId` to preserve it and send `taxId: ""` to clear it.
+`organizationTaxIdWrite` converts masked profile state to that write contract.
+
+For bill creation, `organizationProfileOptions(profile)` converts an SSN provider
+to a server-resolved `billingProvider: { savedProviderId }` reference. MindBill
+checks organization ownership and freezes the provider into the bill; later
+profile edits do not rewrite submitted bills. Host-owned inline providers may
+instead pass `taxIdType: "SSN"` and `taxId` over the authenticated API. Never put
+SSNs in logs, URLs, analytics, local storage, or your own persisted form drafts.
+SSN writes fail closed if server encryption has not been configured.
 
 `ConnectedBillingWorkspace` separates follow-up tasks from Sent/Accepted bills waiting
 for payer responses. Waiting inventory has its own totals and may overlap overdue tasks;

@@ -16,6 +16,12 @@ const profile: OrganizationProfileData = {
 };
 
 describe("saved billing profile options", () => {
+  it("uses an opaque server reference for SSNs, never a plaintext tax ID", () => {
+    const options = organizationProfileOptions({ ...profile, billingProviders: [{ ...profile.billingProviders[0]!, taxIdType: "SSN", taxId: "000-00-0000", taxIdLast4: "0000", taxIdConfigured: true }] });
+    const provider = options.billingProviders![0]!.value;
+    expect(provider).toMatchObject({ savedProviderId: "bp-1", taxIdType: "SSN", taxIdLast4: "0000" });
+    expect(provider).not.toHaveProperty("taxId");
+  });
   it("adapts active profiles into editable bill snapshots, not stored references", () => {
     const options = organizationProfileOptions(profile);
     expect(options.renderingProviders).toHaveLength(1);

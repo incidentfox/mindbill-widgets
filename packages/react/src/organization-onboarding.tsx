@@ -12,6 +12,7 @@ import {
   type OrganizationRenderingProviderInput,
 } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { TaxIdInput, taxIdWrite } from "./tax-id-input";
 
 // Embeddable organization onboarding (INC-1470): capture the practice name,
 // tax ID, group NPI, billing provider, locations, and W-9 ONCE, saved straight
@@ -52,7 +53,8 @@ const css = `
 .mbob-step{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-surface);padding:7px 13px;color:var(--mb-muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .mbob-step[data-active=true]{border-color:var(--mb-accent);color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 8%,var(--mb-surface))}
 .mbob-step[data-done=true] i{color:var(--mb-success);font-style:normal}
-.mbob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px}.mbob-span{grid-column:1/-1}
+.mbob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;align-items:start}.mbob-span{grid-column:1/-1}
+.mbob-tax-id label{display:grid;gap:7px}.mbob-tax-id small{color:var(--mb-muted);font-weight:450;line-height:1.5}.mbob-tax-id button{justify-self:start;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);padding:8px 10px;font:inherit;cursor:pointer}
 .mbob-field{display:grid;gap:7px;font-size:13px;font-weight:720}
 .mbob-field input,.mbob-field select{width:100%;min-height:44px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);padding:10px 12px;color:var(--mb-text);font:inherit;font-weight:450}
 .mbob-field input:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}
@@ -117,7 +119,7 @@ export function OrganizationOnboarding({
   const [profile, setProfile] = useState<OrganizationProfileData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState<StepId>("practice");
-  const [identity, setIdentity] = useState({ name: "", legalName: "", taxId: "", npi: "", phone: "", email: "" });
+  const [identity, setIdentity] = useState<{ name: string; legalName: string; taxId: string; npi: string; phone: string; email: string; taxIdType?: "EIN" | "SSN"; taxIdLast4?: string; taxIdConfigured?: boolean }>({ name: "", legalName: "", taxId: "", npi: "", phone: "", email: "" });
   const [provider, setProvider] = useState<OrganizationBillingProviderInput>({ name: "", taxId: "", npi: "", billType: "Professional", phone: "", billingStreet: "", billingCity: "", billingState: "", billingZip: "" });
   const [locations, setLocations] = useState<OrganizationLocationInput[]>([blankLocation()]);
   const [rendering, setRendering] = useState<OrganizationRenderingProviderInput>(blankRendering);
@@ -133,7 +135,10 @@ export function OrganizationOnboarding({
     setIdentity((current) => ({
       name: next.practiceIdentity.name ?? current.name,
       legalName: next.practiceIdentity.legalName ?? current.legalName,
-      taxId: next.practiceIdentity.taxId ?? current.taxId,
+      taxId: next.practiceIdentity.taxId ?? "",
+      taxIdType: next.practiceIdentity.taxIdType ?? "EIN",
+      taxIdLast4: next.practiceIdentity.taxIdLast4 ?? "",
+      taxIdConfigured: next.practiceIdentity.taxIdConfigured ?? false,
       npi: next.practiceIdentity.npi ?? current.npi,
       phone: next.practiceIdentity.phone ?? current.phone,
       email: next.practiceIdentity.email ?? current.email,
@@ -184,12 +189,9 @@ export function OrganizationOnboarding({
 
   const savePractice = () =>
     run(() => {
-      if ([identity.taxId, provider.taxId].some((value) => /^\d{3}-\d{2}-\d{4}$/.test(value.trim()))) {
-        throw new Error("Saved organization profiles support EINs only. Do not enter an SSN.");
-      }
       return client.saveBillingProfile({
-        practiceIdentity: identity,
-        ...(provider.name.trim() || provider.taxId.trim() || provider.npi.trim() ? { billingProviders: [provider] } : {}),
+        practiceIdentity: taxIdWrite(identity),
+        ...(provider.name.trim() || provider.taxId?.trim() || provider.npi.trim() ? { billingProviders: [taxIdWrite(provider)] } : {}),
       });
     }, "practice");
   const saveLocations = () =>
@@ -214,11 +216,11 @@ export function OrganizationOnboarding({
 
   const practiceSection = (
     <div>
-      <p className="mbob-status">Save business EINs only. Do not enter an SSN; saved personal tax IDs are not supported by this settings flow.</p>
+      <p className="mbob-status">Choose EIN for a business or SSN for an individual. Saved SSNs are encrypted and shown only by their last four digits.</p>
       <div className="mbob-grid">
         {field("Practice name", identity.name, (name) => setIdentity((c) => ({ ...c, name })))}
         {field("Legal name", identity.legalName, (legalName) => setIdentity((c) => ({ ...c, legalName })))}
-        {field("Tax ID (EIN)", identity.taxId, (taxId) => setIdentity((c) => ({ ...c, taxId })), false, "94-1234567")}
+        <TaxIdInput label="Practice tax ID" value={identity} disabled={saving} onChange={(patch) => setIdentity((c) => ({ ...c, ...patch }))} />
         {field("Group NPI", identity.npi, (npi) => setIdentity((c) => ({ ...c, npi })))}
         {field("Phone", identity.phone, (phone) => setIdentity((c) => ({ ...c, phone })))}
         {field("Email", identity.email, (email) => setIdentity((c) => ({ ...c, email })))}
@@ -232,7 +234,7 @@ export function OrganizationOnboarding({
       </label>
       <div className="mbob-grid">
         {field("Billing provider name", provider.name, (name) => setProvider((c) => ({ ...c, name })))}
-        {field("Billing tax ID (EIN only)", provider.taxId, (taxId) => setProvider((c) => ({ ...c, taxId })))}
+        <TaxIdInput label="Billing tax ID" value={provider} disabled={saving} onChange={(patch) => setProvider((c) => ({ ...c, ...patch }))} />
         {field("Billing NPI", provider.npi, (npi) => setProvider((c) => ({ ...c, npi })))}
         {field("Billing phone", provider.phone ?? "", (phone) => setProvider((c) => ({ ...c, phone })))}
         {field("Street", provider.billingStreet ?? "", (billingStreet) => setProvider((c) => ({ ...c, billingStreet })), true)}
