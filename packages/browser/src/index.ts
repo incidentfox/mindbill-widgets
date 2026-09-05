@@ -1555,7 +1555,7 @@ export function createBillLifecycleClient({
       }, "IBR packet could not be prepared.");
       const body = await prepared.json() as { packetUrl?: unknown };
       // Never forward the browser bearer token to an arbitrary response URL.
-      if (typeof body.packetUrl !== "string" || !/^\/partner\/v2\/browser\/bills\/[A-Za-z0-9_-]+\/ibr-packet$/.test(body.packetUrl)) throw new Error("The billing service returned an invalid IBR packet path.");
+      if (typeof body.packetUrl !== "string" || !/^\/partner\/v2\/(?:browser\/)?bills\/[A-Za-z0-9_-]+\/ibr-packet$/.test(body.packetUrl)) throw new Error("The billing service returned an invalid IBR packet path.");
       // The server may resolve a root bill to its current linked bill.
       const response = await request(body.packetUrl);
       if (!response.ok) throw await responseError(response, "IBR packet could not be downloaded.");

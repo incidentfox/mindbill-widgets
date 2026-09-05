@@ -13,9 +13,9 @@ describe("retained submission files and IBR preparation", () => {
     expect(new Headers(fetcher.mock.calls[1]![1]?.headers).get("authorization")).toBe("Bearer synthetic-token");
   });
 
-  it("prepares and securely downloads a self-filing IBR packet without submitting second review", async () => {
+  it.each(["/partner/v2/browser/bills", "/partner/v2/bills"])("prepares and securely downloads a self-filing IBR packet via %s without submitting second review", async (prefix) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(session())
-      .mockResolvedValueOnce(json({ ok: true, packetUrl: "/partner/v2/browser/bills/current-linked-bill/ibr-packet" }))
+      .mockResolvedValueOnce(json({ ok: true, packetUrl: `${prefix}/current-linked-bill/ibr-packet` }))
       .mockResolvedValueOnce(new Response("pdf bytes", { headers: { "content-type": "application/pdf" } }));
     const client = createBillLifecycleClient({ billId: "root-bill", fetch: fetcher });
     expect(await (await client.prepareIbrPacket()).text()).toBe("pdf bytes");
@@ -25,9 +25,19 @@ describe("retained submission files and IBR preparation", () => {
     expect(new Headers(fetcher.mock.calls[2]![1]?.headers).get("authorization")).toBe("Bearer synthetic-token");
   });
 
-  it("rejects arbitrary response URLs before disclosing browser credentials", async () => {
+  it.each([
+    "https://untrusted.example/ibr-packet",
+    "//untrusted.example/ibr-packet",
+    "/partner/v2/bills/current-linked-bill/ibr-packet?token=exfiltrate",
+    "/partner/v2/bills/current-linked-bill/ibr-packet#fragment",
+    "/partner/v2/bills/current-linked-bill/../ibr-packet",
+    "/partner/v2/bills/%2e%2e/ibr-packet",
+    "/partner/v2/bills/current-linked-bill/documents/ibr-packet",
+    "/partner/v2/bills/current-linked-bill/ibr-packet/extra",
+    "/partner/v2/browser/bills/current-linked-bill/packet",
+  ])("rejects unsafe response path %s before disclosing browser credentials", async (packetUrl) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(session())
-      .mockResolvedValueOnce(json({ packetUrl: "https://untrusted.example/ibr-packet" }));
+      .mockResolvedValueOnce(json({ packetUrl }));
     const client = createBillLifecycleClient({ billId: "root-bill", fetch: fetcher });
     await expect(client.prepareIbrPacket()).rejects.toThrow("invalid IBR packet path");
     expect(fetcher).toHaveBeenCalledTimes(2);
