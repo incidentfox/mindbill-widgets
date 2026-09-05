@@ -610,6 +610,22 @@ export type BillRejection = {
   source?: string | null;
 };
 
+export type BillTeamNote = { id: string; body: string; author: string; createdAt: string; pinned: boolean };
+
+export type BillCourtesyCopyInput = {
+  to: string[];
+  cc?: string[];
+  subject: string;
+  bodyText: string;
+  includeCms1500?: boolean;
+  documentIds?: string[];
+};
+export type BillCourtesyCopyPreview = {
+  filename: string; documentCount: number; packetHash: string; pdfBase64: string;
+  environment: "sandbox" | "live";
+};
+export type BillCourtesyCopyResult = { ok: boolean; sent: boolean; simulated?: boolean; dryRun?: boolean; messageId?: string };
+
 export type BillLifecycleData = BillReviewData & {
   environment: "sandbox" | "live";
   lifecycle: {
@@ -625,6 +641,8 @@ export type BillLifecycleData = BillReviewData & {
   /** Presented history rows. Optional: absent when the API
    *  predates the presented-history rollout — fall back to `activity`. */
   history?: BillHistoryEntry[];
+  /** Canonical team notes, shared with the MindBill app. Absent on older APIs. */
+  notes?: BillTeamNote[];
   /** Immutable submissions that share this bill's unified history. */
   attempts?: BillAttemptSummary[];
   payments: BillPaymentRecord[];
@@ -1028,6 +1046,9 @@ export type BillLifecycleClient = {
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
   getPacket: () => Promise<Blob>;
+  previewCourtesyCopy: (input: BillCourtesyCopyInput) => Promise<BillCourtesyCopyPreview>;
+  /** Reuse the same key when retrying the same send after a network interruption. */
+  sendCourtesyCopy: (input: BillCourtesyCopyInput & { packetHash: string }, idempotencyKey: string) => Promise<BillCourtesyCopyResult>;
   addNote: (input: AddBillNoteInput) => Promise<BillLifecycleData>;
   closeBill: (input: CloseBillInput) => Promise<BillLifecycleData>;
   reopenBill: (input: ReopenBillInput) => Promise<BillLifecycleData>;
@@ -1496,6 +1517,22 @@ export function createBillLifecycleClient({
       const response = await request(billPath("/packet"));
       if (!response.ok) throw await responseError(response, "Submission packet could not be downloaded.");
       return response.blob();
+    },
+    async previewCourtesyCopy(input) {
+      const response = await request(billPath("/courtesy-forward"), {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...input, mode: "preview" }),
+      });
+      if (!response.ok) throw await responseError(response, "Courtesy copy could not be previewed.");
+      return response.json() as Promise<BillCourtesyCopyPreview>;
+    },
+    async sendCourtesyCopy(input, key) {
+      if (!key.trim() || key.length > 255) throw new Error("A stable idempotency key is required to send a courtesy copy.");
+      const response = await request(billPath("/courtesy-forward"), {
+        method: "POST", headers: { "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify({ ...input, mode: "send" }),
+      });
+      if (!response.ok) throw await responseError(response, "Courtesy copy could not be sent. Retry with the same key to check the result safely.");
+      return response.json() as Promise<BillCourtesyCopyResult>;
     },
     addNote(input) { return action({ action: "add_note", ...input }, "Note could not be added."); },
     closeBill(input) { return action({ action: "close", ...input }, "Bill could not be closed."); },

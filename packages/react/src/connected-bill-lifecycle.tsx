@@ -54,6 +54,7 @@ import type { BillReviewAttachment } from "./native-bill-review";
 import { BillSubmissionsRibbon, billSubmissionsRibbonFromHistory } from "./bill-submissions-ribbon";
 import { ReportBillStatusDialog } from "./report-bill-status-dialog";
 import { SecondReviewForm } from "./second-review-form";
+import { BillCourtesyCopyForm } from "./bill-courtesy-copy-form";
 
 export {
   SECOND_REVIEW_REASON_TEMPLATE,
@@ -99,6 +100,16 @@ export type {
 
 const DEFAULT_REFRESH_INTERVAL = 60_000;
 
+/** Canonical team notes plus legacy API notes, without rendering their audit mirror twice. */
+export function billTeamNotes(data: Pick<BillLifecycleData, "notes" | "history">) {
+  const notes = data.notes ?? [];
+  const canonicalIds = new Set(notes.map((note) => note.id));
+  const legacy = (data.history ?? []).filter((entry) => entry.kind === "note" &&
+    !canonicalIds.has(entry.id) && !notes.some((note) => entry.id.endsWith(`:ev-${note.id}`)));
+  return [...legacy, ...notes.map((note) => ({ id: note.id, summary: note.body, actor: note.author, date: note.createdAt }))]
+    .sort((left, right) => right.date.localeCompare(left.date));
+}
+
 export type UseBillLifecycleOptions = BillLifecycleClientOptions & {
   refreshInterval?: number;
   enabled?: boolean;
@@ -120,6 +131,8 @@ export type UseBillLifecycleResult = {
   openEor: (document: BillEorDocument) => Promise<void>;
   downloadPacket: () => Promise<void>;
   addNote: BillLifecycleClient["addNote"];
+  previewCourtesyCopy: BillLifecycleClient["previewCourtesyCopy"];
+  sendCourtesyCopy: BillLifecycleClient["sendCourtesyCopy"];
   closeBill: BillLifecycleClient["closeBill"];
   reopenBill: BillLifecycleClient["reopenBill"];
   postPayment: BillLifecycleClient["postPayment"];
@@ -285,6 +298,8 @@ export function useBillLifecycle({
     openEor,
     downloadPacket,
     addNote: (input) => mutate(() => client.addNote(input)),
+    previewCourtesyCopy: (input) => client.previewCourtesyCopy(input),
+    sendCourtesyCopy: (input, key) => client.sendCourtesyCopy(input, key),
     closeBill: (input) => mutate(() => client.closeBill(input)),
     reopenBill: (input) => mutate(() => client.reopenBill(input)),
     postPayment: (input) => mutate(() => client.postPayment(input)),
@@ -318,7 +333,7 @@ export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   onChanged?: (data: BillLifecycleData) => void;
 };
 
-type Panel = "" | "resubmit" | "submit_new_bill" | "second_review" | "payment" | "close" | "reopen" | "send_duplicate" | "report_status";
+type Panel = "" | "resubmit" | "submit_new_bill" | "second_review" | "payment" | "close" | "reopen" | "send_duplicate" | "report_status" | "courtesy_copy";
 type Tab = "details" | "history";
 
 function LifecycleDialog({ children, title, wide = false, onClose }: { children: ReactNode; title: string; wide?: boolean; onClose: () => void }): ReactElement {
@@ -763,7 +778,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     ?? mappedRibbonItems[mappedRibbonItems.length - 1]?.id;
   const ribbonItems = mappedRibbonItems.map((item) => ({ ...item, active: item.id === activeSubmissionId }));
   const selectedAttempt = data.attempts?.find((attempt) => attempt.id === activeSubmissionId);
-  const billNotes = (data.history ?? []).filter((entry) => entry.kind === "note").slice().reverse();
+  const billNotes = billTeamNotes(data);
   const statusContacts = reportBillStatusContacts(data.delivery);
   const receiptEntries = (data.history ?? []).filter((entry) => entry.kind === "submission" || entry.kind === "ack");
   const reviewDeadline = secondReviewDeadline(data.eors);
@@ -778,6 +793,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     <header className="mb-lifecycle-head">
       <div><div className="mb-lifecycle-title"><h2>Bill #{data.bill.billNumber}</h2></div><p>Claim {data.injury.claimNumber || "—"}{lifecycle.isRefreshing ? " · Refreshing…" : ""}</p></div>
       <button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadPacket().catch(() => undefined)}>Download packet</button>
+      <button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("courtesy_copy")}>Forward copy</button>
     </header>
 
     <div className="mb-lifecycle-tabs" role="tablist" aria-label="Bill view">
@@ -802,7 +818,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
 
       <BillReadOnlyForm data={data} onOpenAttachment={lifecycle.openAttachment} {...(appearance ? { appearance } : {})} />
       <section className="mb-lifecycle-notes" aria-label="Bill notes">
-        <header><div><h3>Bill notes</h3><p>Shared with everyone working this bill through the Partner API.</p></div><span>{billNotes.length}</span></header>
+        <header><div><h3>Team notes</h3><p>Shared with your workspace’s billing team. Never sent to the payer.</p></div><span>{billNotes.length}</span></header>
         {billNotes.length ? <ol>{billNotes.map((entry) => <li key={entry.id}><p>{entry.summary}</p><small>{entry.actor || "System"} · {usDate(entry.date)}</small></li>)}</ol> : <p className="mb-lifecycle-notes-empty">No notes yet.</p>}
         <form onSubmit={(event) => { event.preventDefault(); void addNote(); }}><label><span>Add a note</span><textarea value={note} maxLength={2000} placeholder="Add context for the billing team…" onChange={(event) => setNote(event.target.value)} /></label><button type="submit" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating || !note.trim()}>{lifecycle.isMutating ? "Adding…" : "Add note"}</button></form>
       </section>
@@ -822,6 +838,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       }}>{action.label}</button>)}
     </aside> : null}
 
+    {panel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><BillCourtesyCopyForm documents={data.bill.attachments} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></LifecycleDialog> : null}
     {panel === "resubmit" && correctionInitialBill ? <LifecycleDialog title="Correct and resubmit" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Correct and resubmit</h3><p>Review the rejected snapshot, correct the highlighted information, and submit a new immutable attempt under this bill.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>Resubmitting sends a real bill. Confirm the corrected information before continuing.</span></div> : null}{data.rejection ? <CorrectionRejectionReason rejection={data.rejection} /> : null}<CorrectionVerificationContact delivery={data.delivery} /><label className="mb-lifecycle-correction-note"><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
       className="mbsf-lifecycle-correction"
       initialBill={correctionInitialBill}

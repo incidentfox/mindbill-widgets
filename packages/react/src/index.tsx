@@ -1,4 +1,8 @@
 "use client";
+
+export { BillCourtesyCopyForm } from "./bill-courtesy-copy-form";
+export type { BillCourtesyCopyFormProps } from "./bill-courtesy-copy-form";
+export type { BillCourtesyCopyInput, BillCourtesyCopyPreview, BillCourtesyCopyResult, BillTeamNote } from "@mindbill/browser";
 export { organizationProfileOptions } from "./billing-profile-options";
 export type { BillSubmissionProfileOptions, BillSubmissionProfileOption } from "./billing-profile-options";
 
