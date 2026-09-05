@@ -20,7 +20,7 @@ describe("organization client", () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(sessionResponse()).mockResolvedValueOnce(new Response(JSON.stringify({ data: profile }), { status: 200 }));
     const client = createOrganizationClient({ apiBaseUrl: "https://api.test", fetch: fetchMock });
     expect(await client.getBillingProfile()).toEqual(profile);
-    expect(fetchMock.mock.calls[1]![0]).toBe("https://api.test/partner/v2/browser/organization/billing-profile");
+    expect(fetchMock.mock.calls[1]![0]).toBe("https://api.test/partner/v2/organization/billing-profile");
     expect(fetchMock.mock.calls[1]![1].method).toBeUndefined();
   });
   it("preserves masked SSNs and strips read-only metadata without mutating state", () => {
@@ -49,7 +49,7 @@ describe("organization client", () => {
     expect(result.organizationId).toBe("org-1");
     expect(fetchMock.mock.calls[0]![0]).toBe("/api/mindbill/session");
     const [url, init] = fetchMock.mock.calls[1]!;
-    expect(url).toBe("https://api.test/partner/v2/browser/organization");
+    expect(url).toBe("https://api.test/partner/v2/organization");
     expect(new Headers(init.headers).get("authorization")).toBe("Bearer tok-12345");
   });
 
@@ -67,9 +67,9 @@ describe("organization client", () => {
     await client.saveW9({ filename: "w9.pdf", contentBase64: "JVBERi0=" });
     const putCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT");
     expect(putCalls.map(([url]) => String(url).replace("https://api.test", ""))).toEqual([
-      "/partner/v2/browser/organization/billing-profile",
-      "/partner/v2/browser/organization/locations",
-      "/partner/v2/browser/organization/w9",
+      "/partner/v2/organization/billing-profile",
+      "/partner/v2/organization/locations",
+      "/partner/v2/organization/w9",
     ]);
     expect(JSON.parse(putCalls[1]![1].body as string)).toEqual({ locations: [{ name: "A", street: "1 St", city: "SF", state: "CA", zip: "94103" }] });
   });
