@@ -1554,12 +1554,20 @@ export type OrganizationLocationInput = {
   isPrimary?: boolean; active?: boolean;
 };
 
+export type OrganizationRenderingProviderInput = {
+  id?: string; externalId?: string; name: string; npi: string; specialty?: string;
+  taxonomy?: string; licenseNumber?: string; licenseState?: string;
+  isQME?: boolean; isAME?: boolean; email?: string; active?: boolean;
+};
+
 export type OrganizationChecklistItem = { id: string; label: string; complete: boolean };
 
 export type OrganizationProfileData = {
   organizationId: string;
   practiceIdentity: OrganizationPracticeIdentity;
   billingProviders: Array<OrganizationBillingProviderInput & { id: string }>;
+  /** Optional for compatibility with older organization-profile responses. */
+  renderingProviders?: Array<OrganizationRenderingProviderInput & { id: string }>;
   locations: Array<OrganizationLocationInput & { id: string }>;
   w9: { filename: string; addDate: string; taxYear?: number } | null;
   onboarding: { status: string | null; complete: boolean; checklist: OrganizationChecklistItem[] };
@@ -1577,6 +1585,7 @@ export type OrganizationClient = {
   saveBillingProfile: (input: {
     practiceIdentity?: OrganizationPracticeIdentity;
     billingProviders?: OrganizationBillingProviderInput[];
+    renderingProviders?: OrganizationRenderingProviderInput[];
   }) => Promise<OrganizationProfileData>;
   saveLocations: (locations: OrganizationLocationInput[]) => Promise<OrganizationProfileData>;
   saveW9: (input: { filename: string; contentBase64: string; taxYear?: number }) => Promise<OrganizationProfileData>;
@@ -1680,6 +1689,9 @@ export type BillTasksDashboardRow = {
   /** One count per aging bucket, in bucket order. */
   counts: number[];
   total: number;
+  /** Summed item balanceDue per bucket; optional for older count-only payloads. */
+  balances?: number[];
+  balanceTotal?: number;
   /** Collected item refs per aging bucket, in bucket order. */
   refs: string[][];
 };
@@ -1699,6 +1711,8 @@ export type BillTasksDashboardSection = BillTasksDashboardSectionInput & {
   /** Per-bucket totals across the section's rows. */
   totals: number[];
   total: number;
+  balanceTotals?: number[];
+  balanceTotal?: number;
   empty: boolean;
 };
 
@@ -1706,6 +1720,9 @@ export type BillTasksDashboardData = {
   sections: BillTasksDashboardSection[];
   grandTotals: number[];
   grandTotal: number;
+  /** Work-item sums, not deduplicated financial A/R across task categories. */
+  grandBalanceTotals?: number[];
+  grandBalanceTotal?: number;
 };
 
 /**
@@ -1740,12 +1757,16 @@ export function buildBillTasksDashboard(
     rows: [],
     totals: zeros(),
     total: 0,
+    balanceTotals: zeros(),
+    balanceTotal: 0,
     empty: true,
   }));
   const sectionById = new Map(built.map((section) => [section.id, section]));
   const rowByKey = new Map<string, BillTasksDashboardRow>();
   const grandTotals = zeros();
   let grandTotal = 0;
+  const grandBalanceTotals = zeros();
+  let grandBalanceTotal = 0;
 
   for (const item of items) {
     const section = sectionById.get(item.sectionId);
@@ -1758,6 +1779,8 @@ export function buildBillTasksDashboard(
         label: item.rowLabel,
         counts: zeros(),
         total: 0,
+        balances: zeros(),
+        balanceTotal: 0,
         refs: buckets.map(() => []),
       };
       rowByKey.set(key, row);
@@ -1765,14 +1788,21 @@ export function buildBillTasksDashboard(
       section.empty = false;
     }
     const bucketIndex = billTasksAgingBucketIndex(item.ageDays, buckets);
+    const balance = Number.isFinite(item.balanceDue) ? item.balanceDue! : 0;
     row.counts[bucketIndex] = (row.counts[bucketIndex] ?? 0) + 1;
     row.total += 1;
+    row.balances![bucketIndex] = (row.balances![bucketIndex] ?? 0) + balance;
+    row.balanceTotal = (row.balanceTotal ?? 0) + balance;
     if (item.ref) row.refs[bucketIndex]?.push(item.ref);
     section.totals[bucketIndex] = (section.totals[bucketIndex] ?? 0) + 1;
     section.total += 1;
+    section.balanceTotals![bucketIndex] = (section.balanceTotals![bucketIndex] ?? 0) + balance;
+    section.balanceTotal = (section.balanceTotal ?? 0) + balance;
     grandTotals[bucketIndex] = (grandTotals[bucketIndex] ?? 0) + 1;
     grandTotal += 1;
+    grandBalanceTotals[bucketIndex] = (grandBalanceTotals[bucketIndex] ?? 0) + balance;
+    grandBalanceTotal += balance;
   }
 
-  return { sections: built, grandTotals, grandTotal };
+  return { sections: built, grandTotals, grandTotal, grandBalanceTotals, grandBalanceTotal };
 }

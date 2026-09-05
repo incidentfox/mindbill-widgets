@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   createOrganizationClient,
   type BillLifecycleSessionProvider,
@@ -9,6 +9,7 @@ import {
   type OrganizationClient,
   type OrganizationLocationInput,
   type OrganizationProfileData,
+  type OrganizationRenderingProviderInput,
 } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 
@@ -34,9 +35,10 @@ export type OrganizationOnboardingProps = {
   onError?: (error: Error) => void;
 };
 
-type StepId = "practice" | "locations" | "w9" | "review";
+type StepId = "practice" | "rendering" | "locations" | "w9" | "review";
 const STEPS: Array<{ id: StepId; label: string }> = [
   { id: "practice", label: "Practice & billing" },
+  { id: "rendering", label: "Rendering providers" },
   { id: "locations", label: "Locations" },
   { id: "w9", label: "W-9" },
   { id: "review", label: "Review" },
@@ -49,13 +51,13 @@ const css = `
 .mbob-steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
 .mbob-step{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-surface);padding:7px 13px;color:var(--mb-muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .mbob-step[data-active=true]{border-color:var(--mb-accent);color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 8%,var(--mb-surface))}
-.mbob-step[data-done=true] i{color:#159447;font-style:normal}
+.mbob-step[data-done=true] i{color:var(--mb-success);font-style:normal}
 .mbob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px}.mbob-span{grid-column:1/-1}
 .mbob-field{display:grid;gap:7px;font-size:13px;font-weight:720}
-.mbob-field input{width:100%;min-height:44px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);padding:10px 12px;color:var(--mb-text);font:inherit;font-weight:450}
+.mbob-field input,.mbob-field select{width:100%;min-height:44px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);padding:10px 12px;color:var(--mb-text);font:inherit;font-weight:450}
 .mbob-field input:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}
 .mbob-subhead{margin:20px 0 12px!important;padding-top:16px;border-top:1px solid var(--mb-border);font-size:15px}
-.mbob-loc{display:grid;grid-template-columns:1.2fr 1.4fr .9fr .4fr .6fr auto auto;gap:10px;align-items:end;border-top:1px solid color-mix(in srgb,var(--mb-border) 60%,transparent);padding:12px 0}
+.mbob-loc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:end;border-top:1px solid color-mix(in srgb,var(--mb-border) 60%,transparent);padding:16px 0}
 .mbob-loc:first-of-type{border-top:0}
 .mbob-primary{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mb-muted);white-space:nowrap;padding-bottom:12px}
 .mbob-remove{border:0;background:transparent;color:var(--mb-muted);font-size:20px;cursor:pointer;padding-bottom:8px}
@@ -63,22 +65,23 @@ const css = `
 .mbob-drop{display:grid;place-content:center;gap:6px;min-height:150px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);text-align:center;cursor:pointer;position:relative}
 .mbob-drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .mbob-drop span{color:var(--mb-muted);font-size:13px}
-.mbob-w9-current{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #9fd6b4;border-radius:var(--mb-control-radius);background:#f3fcf6;padding:12px 14px;margin-bottom:14px}
+.mbob-w9-current{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid color-mix(in srgb,var(--mb-success) 35%,var(--mb-border));border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-success) 8%,var(--mb-surface));padding:12px 14px;margin-bottom:14px}
 .mbob-w9-current span{color:var(--mb-muted);font-size:13px}
 .mbob-check{display:grid;gap:9px}
 .mbob-check-item{display:flex;align-items:center;gap:10px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);padding:11px 14px}
-.mbob-check-item[data-complete=true]{border-color:#9fd6b4;background:#f3fcf6}
+.mbob-check-item[data-complete=true]{border-color:color-mix(in srgb,var(--mb-success) 35%,var(--mb-border));background:color-mix(in srgb,var(--mb-success) 8%,var(--mb-surface))}
 .mbob-check-item i{font-style:normal}
 .mbob-actions{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:20px}
 .mbob-save{min-width:170px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);padding:12px 22px;font:inherit;font-weight:780;cursor:pointer}
 .mbob-save:disabled{opacity:.6;cursor:wait}
 .mbob-error{margin-top:14px;border-left:4px solid var(--mb-danger);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 8%,var(--mb-surface));padding:12px 14px;color:var(--mb-danger)}
 .mbob-status{color:var(--mb-muted)}
-.mbob-done{color:#159447;font-weight:750}
+.mbob-done{color:var(--mb-success);font-weight:750}
 @media(max-width:820px){.mbob-grid{grid-template-columns:1fr}.mbob-span{grid-column:auto}.mbob-loc{grid-template-columns:1fr 1fr;align-items:center}.mbob-loc>*{grid-column:auto}}
 `;
 
 const blankLocation = (): OrganizationLocationInput => ({ name: "", street: "", city: "", state: "", zip: "", isPrimary: false });
+const blankRendering = (): OrganizationRenderingProviderInput => ({ name: "", npi: "", specialty: "", taxonomy: "", active: true });
 
 async function fileToBase64(file: File): Promise<string> {
   const buffer = new Uint8Array(await file.arrayBuffer());
@@ -117,6 +120,8 @@ export function OrganizationOnboarding({
   const [identity, setIdentity] = useState({ name: "", legalName: "", taxId: "", npi: "", phone: "", email: "" });
   const [provider, setProvider] = useState<OrganizationBillingProviderInput>({ name: "", taxId: "", npi: "", billType: "Professional", phone: "", billingStreet: "", billingCity: "", billingState: "", billingZip: "" });
   const [locations, setLocations] = useState<OrganizationLocationInput[]>([blankLocation()]);
+  const [rendering, setRendering] = useState<OrganizationRenderingProviderInput>(blankRendering);
+  const primaryGroup = useId();
   const [w9File, setW9File] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +139,7 @@ export function OrganizationOnboarding({
       email: next.practiceIdentity.email ?? current.email,
     }));
     if (next.billingProviders[0]) setProvider({ billType: "Professional", ...next.billingProviders[0] });
+    if (next.renderingProviders?.[0]) setRendering({ ...next.renderingProviders[0] });
     if (next.locations.length) setLocations(next.locations.map((item) => ({ ...item })));
     if (next.onboarding.complete && !completedFired.current) {
       completedFired.current = true;
@@ -163,7 +169,7 @@ export function OrganizationOnboarding({
       setSavedStep((current) => ({ ...current, [stepId]: true }));
       onSaved?.(next);
       if (variant === "onboarding") {
-        const order: StepId[] = ["practice", "locations", "w9", "review"];
+        const order: StepId[] = STEPS.map((item) => item.id);
         const nextStep = order[order.indexOf(stepId) + 1];
         if (nextStep) setStep(nextStep);
       }
@@ -177,11 +183,15 @@ export function OrganizationOnboarding({
   };
 
   const savePractice = () =>
-    run(() =>
-      client.saveBillingProfile({
+    run(() => {
+      if ([identity.taxId, provider.taxId].some((value) => /^\d{3}-\d{2}-\d{4}$/.test(value.trim()))) {
+        throw new Error("Saved organization profiles support EINs only. Do not enter an SSN.");
+      }
+      return client.saveBillingProfile({
         practiceIdentity: identity,
         ...(provider.name.trim() || provider.taxId.trim() || provider.npi.trim() ? { billingProviders: [provider] } : {}),
-      }), "practice");
+      });
+    }, "practice");
   const saveLocations = () =>
     run(() => client.saveLocations(locations.filter((item) => item.name.trim() || item.street.trim())), "locations");
   const saveW9 = () =>
@@ -204,6 +214,7 @@ export function OrganizationOnboarding({
 
   const practiceSection = (
     <div>
+      <p className="mbob-status">Save business EINs only. Do not enter an SSN; saved personal tax IDs are not supported by this settings flow.</p>
       <div className="mbob-grid">
         {field("Practice name", identity.name, (name) => setIdentity((c) => ({ ...c, name })))}
         {field("Legal name", identity.legalName, (legalName) => setIdentity((c) => ({ ...c, legalName })))}
@@ -213,9 +224,15 @@ export function OrganizationOnboarding({
         {field("Email", identity.email, (email) => setIdentity((c) => ({ ...c, email })))}
       </div>
       <h3 className="mbob-subhead">Billing provider (pay-to)</h3>
+      <label className="mbob-field">Saved billing provider
+        <select disabled={saving} value={provider.id ?? ""} onChange={(event) => setProvider({ ...(profile?.billingProviders.find((item) => item.id === event.target.value) ?? { name: "", taxId: "", npi: "" }) })}>
+          <option value="">Add a billing provider</option>
+          {profile?.billingProviders.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+      </label>
       <div className="mbob-grid">
         {field("Billing provider name", provider.name, (name) => setProvider((c) => ({ ...c, name })))}
-        {field("Billing tax ID", provider.taxId, (taxId) => setProvider((c) => ({ ...c, taxId })))}
+        {field("Billing tax ID (EIN only)", provider.taxId, (taxId) => setProvider((c) => ({ ...c, taxId })))}
         {field("Billing NPI", provider.npi, (npi) => setProvider((c) => ({ ...c, npi })))}
         {field("Billing phone", provider.phone ?? "", (phone) => setProvider((c) => ({ ...c, phone })))}
         {field("Street", provider.billingStreet ?? "", (billingStreet) => setProvider((c) => ({ ...c, billingStreet })), true)}
@@ -227,17 +244,37 @@ export function OrganizationOnboarding({
     </div>
   );
 
+  const renderingSection = <div>
+    <label className="mbob-field">Saved rendering provider
+      <select disabled={saving} value={rendering.id ?? ""} onChange={(event) => setRendering({ ...(profile?.renderingProviders?.find((item) => item.id === event.target.value) ?? blankRendering()) })}>
+        <option value="">Add a rendering provider</option>
+        {profile?.renderingProviders?.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active === false ? " (inactive)" : ""}</option>)}
+      </select>
+    </label>
+    <div className="mbob-grid" style={{ marginTop: 16 }}>
+      {field("Rendering provider name", rendering.name, (name) => setRendering((c) => ({ ...c, name })))}
+      {field("Rendering NPI", rendering.npi, (npi) => setRendering((c) => ({ ...c, npi })))}
+      {field("Taxonomy", rendering.taxonomy ?? "", (taxonomy) => setRendering((c) => ({ ...c, taxonomy })))}
+      {field("Specialty", rendering.specialty ?? "", (specialty) => setRendering((c) => ({ ...c, specialty })))}
+      {field("License number", rendering.licenseNumber ?? "", (licenseNumber) => setRendering((c) => ({ ...c, licenseNumber })))}
+      {field("License state", rendering.licenseState ?? "", (licenseState) => setRendering((c) => ({ ...c, licenseState: licenseState.toUpperCase().slice(0, 2) })))}
+      <label><input disabled={saving} type="checkbox" checked={rendering.active !== false} onChange={(event) => setRendering((c) => ({ ...c, active: event.target.checked }))} /> Available for new bills</label>
+    </div>
+    <div className="mbob-actions"><span className="mbob-status">{savedStep["rendering"] ? "Saved to MindBill." : "Saved profiles do not change previously submitted bills."}</span><button className="mbob-save" type="button" disabled={saving || !rendering.name.trim()} onClick={() => run(() => client.saveBillingProfile({ renderingProviders: [rendering] }), "rendering")}>{saving ? "Saving…" : "Save rendering provider"}</button></div>
+  </div>;
+
   const locationsSection = (
     <div>
       {locations.map((location, index) => (
         <div className="mbob-loc" key={location.id ?? index}>
-          {field("Name", location.name, (name) => setLocation(index, { name }))}
+          {field("Name", location.name ?? "", (name) => setLocation(index, { name }))}
           {field("Street", location.street, (street) => setLocation(index, { street }))}
           {field("City", location.city, (city) => setLocation(index, { city }))}
           {field("State", location.state, (state) => setLocation(index, { state: state.toUpperCase().slice(0, 2) }))}
           {field("ZIP", location.zip, (zip) => setLocation(index, { zip }))}
-          <label className="mbob-primary"><input type="radio" name="mbob-primary" checked={location.isPrimary === true} onChange={() => setLocation(index, { isPrimary: true })} /> Primary</label>
-          <button className="mbob-remove" type="button" aria-label="Remove location" onClick={() => setLocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+          {field("Place of service code", location.posCode ?? "", (posCode) => setLocation(index, { posCode }), false, "11")}
+          <label className="mbob-primary"><input disabled={saving || location.active === false} type="radio" name={primaryGroup} checked={location.isPrimary === true} onChange={() => setLocation(index, { isPrimary: true })} /> Primary</label>
+          {location.id ? <button className="mbob-secondary" disabled={saving} type="button" onClick={() => setLocation(index, { active: location.active === false, ...(location.active !== false ? { isPrimary: false } : {}) })}>{location.active === false ? "Restore" : "Archive"}</button> : <button className="mbob-remove" disabled={saving} type="button" aria-label="Remove location" onClick={() => setLocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>}
         </div>
       ))}
       <button className="mbob-add" type="button" onClick={() => setLocations((current) => [...current, blankLocation()])}>+ Add location</button>
@@ -270,7 +307,7 @@ export function OrganizationOnboarding({
     </div>
   );
 
-  const sections: Record<StepId, ReactElement> = { practice: practiceSection, locations: locationsSection, w9: w9Section, review: reviewSection };
+  const sections: Record<StepId, ReactElement> = { practice: practiceSection, rendering: renderingSection, locations: locationsSection, w9: w9Section, review: reviewSection };
 
   return (
     <div className={`mbob ${className}`.trim()} style={{ ...mindBillAppearanceStyle(appearance), ...style }}>
@@ -292,6 +329,8 @@ export function OrganizationOnboarding({
         ) : (
           <>
             {practiceSection}
+            <h3 className="mbob-subhead">Rendering providers</h3>
+            {renderingSection}
             <h3 className="mbob-subhead">Locations</h3>
             {locationsSection}
             <h3 className="mbob-subhead">Practice W-9</h3>

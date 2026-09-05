@@ -10,6 +10,23 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("billing operations client", () => {
+  it.each([
+    ["submitted_desc", "submitted", "desc"], ["submitted_asc", "submitted", "asc"],
+    ["balance_desc", "balanceDue", "desc"], ["balance_asc", "balanceDue", "asc"],
+    ["patient_asc", "patient", "asc"],
+  ] as const)("maps dashboard filters and %s to the API contract", async (sort, wireSort, dir) => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      expect(Object.fromEntries(new URL(String(input)).searchParams)).toEqual({
+        status: "sent", age: "0-30", claimsAdminId: "payer-demo", billingProviderId: "provider-demo",
+        taskKind: "send_bill", taskLabel: "Send Bill", sort: wireSort, dir,
+      });
+      return jsonResponse({ data: { items: [], total: 0 } });
+    });
+    await createBillingOperationsClient({ fetch: fetcher, getSession: async () => ({ token: "test_browser_token" }) }).getBills({
+      status: "submitted", age: "0-30", claimsAdministrator: "payer-demo", billingProviderId: "provider-demo",
+      taskType: "send_bill", taskSection: "incomplete", taskLabel: "Send Bill", sort,
+    });
+  });
   it("mints one short-lived session and sends registry filters to MindBill", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
@@ -23,7 +40,7 @@ describe("billing operations client", () => {
       }
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer browser_session_token");
       if (url.includes("/partner/v2/browser/bills?")) {
-        expect(url).toBe("https://sandbox-api.mindbill.org/partner/v2/browser/bills?status=all&age=61-90&taskLabel=Send+Bill&page=2");
+        expect(Object.fromEntries(new URL(url).searchParams)).toEqual({ status: "all", age: "61-90", taskLabel: "Send Bill", page: "2" });
       } else {
         expect(url).toBe("https://sandbox-api.mindbill.org/partner/v2/browser/reports/productivity?from=2026-08-01&to=2026-08-31");
       }

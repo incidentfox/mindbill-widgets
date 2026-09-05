@@ -126,8 +126,8 @@ describe("partner appearance presets", () => {
       accentColor: "#05092e",
       backgroundColor: "#edf6ff",
       textColor: "#05092e",
-      borderRadius: "0px",
-      controlRadius: "999px",
+      borderRadius: "10px",
+      controlRadius: "6px",
       fontFamily: "Geist, Inter, ui-sans-serif, system-ui, sans-serif",
     });
     expect(resolveMindBillAppearance({ preset: "calm-clinical" })).toMatchObject({

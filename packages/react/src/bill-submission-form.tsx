@@ -21,6 +21,7 @@ import {
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
+import type { BillSubmissionProfileOptions } from "./billing-profile-options";
 import {
   BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
   calculateBillSubmissionAllowedAmount,
@@ -177,6 +178,10 @@ export type BillSubmissionFormValue = {
 
 export type BillSubmissionFormProps = {
   initialBill: BillSubmissionInput;
+  /** Host-owned choices or organizationProfileOptions(profile). Selection copies a snapshot into this bill only. */
+  profileOptions?: BillSubmissionProfileOptions;
+  /** Compact keeps provider fields available behind an edit disclosure; validation errors expand it. */
+  profileDisplay?: "expanded" | "compact";
   attachments?: BillSubmissionSourceAttachment[];
   /**
    * Legacy custom submission escape hatch. Connected forms should omit this so
@@ -692,6 +697,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 
 export function BillSubmissionForm({
   initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
+  profileOptions, profileDisplay = "expanded",
   fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
@@ -703,6 +709,7 @@ export function BillSubmissionForm({
   children,
 }: BillSubmissionFormProps): ReactElement {
   const [bill, setBill] = useState(() => cloneInitialBill(initialBill));
+  const [providerEditing, setProviderEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
   const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
   const [uploads, setUploads] = useState<BillSubmissionUpload[]>([]); const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1046,7 +1053,25 @@ export function BillSubmissionForm({
       </Field>
     </div></fieldset>;
 
-  const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend><div className="mbsf-grid">
+  const compactProviders = profileDisplay === "compact";
+  const providerErrors = Object.keys(errors).some((path) => /^(billingProvider|renderingProvider|serviceLocation)\./.test(path));
+  const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend>
+    <div className="mbsf-grid">
+      {([ ["billingProviders", "billingProvider", "Billing provider"], ["renderingProviders", "renderingProvider", "Rendering provider"], ["serviceLocations", "serviceLocation", "Service location"] ] as const).map(([collection, key, label]) => {
+        const options = profileOptions?.[collection];
+        return options?.length ? <Field key={key} label={`Saved ${label.toLowerCase()}`}>
+          <ComboBox ariaLabel={`Saved ${label.toLowerCase()}`} disabled={locked} value="" placeholder={bill[key]?.name || `Choose ${label.toLowerCase()}…`} options={options.map(({ id, label: optionLabel }) => ({ id, label: optionLabel }))} onSelect={({ id }) => {
+            const option = options.find((candidate) => candidate.id === id);
+            if (option) setBill((current) => ({ ...current, [key]: structuredClone(option.value) }));
+          }} />
+          <small className="mbsf-help">{bill[key]?.name ? `Current: ${bill[key]?.name}` : "Select a profile or enter details below."}</small>
+        </Field> : null;
+      })}
+    </div>
+    {compactProviders ? <p className="mbsf-help">{[bill.billingProvider?.name, bill.renderingProvider?.name, bill.serviceLocation?.name].filter(Boolean).join(" · ") || "Enter provider details or choose saved profiles."}</p> : null}
+    <details open={!compactProviders || providerEditing || providerErrors}>
+      <summary hidden={!compactProviders} onClick={(event) => { event.preventDefault(); setProviderEditing((current) => !current); }} style={{ cursor: "pointer", marginBottom: 12 }}>Review or edit provider details</summary>
+      <div className="mbsf-grid">
       <h4 className="mbsf-subhead">Billing provider</h4>
       <Field path="billingProvider.name" label="Billing provider name" required error={errors["billingProvider.name"]}>{text(bill.billingProvider?.name, (name) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, name } })))}</Field>
       <Field path="billingProvider.taxId" label="Tax ID (EIN / SSN)" required error={errors["billingProvider.taxId"]}>{text(bill.billingProvider?.taxId, (taxId) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, taxId } })), { inputMode: "numeric" })}</Field>
@@ -1068,7 +1093,7 @@ export function BillSubmissionForm({
       <Field path="serviceLocation.address.city" label="Service city" required error={errors["serviceLocation.address.city"]}>{text(bill.serviceLocation?.address?.city, (city) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city, state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
       <Field path="serviceLocation.address.state" label="Service state" required error={errors["serviceLocation.address.state"]}>{text(bill.serviceLocation?.address?.state, (state) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
       <Field path="serviceLocation.address.postalCode" label="Service ZIP" required error={errors["serviceLocation.address.postalCode"]}>{text(bill.serviceLocation?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode } } })))}</Field>
-    </div></fieldset>;
+    </div></details></fieldset>;
 
   const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Evaluation &amp; service lines</legend>
       <p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>

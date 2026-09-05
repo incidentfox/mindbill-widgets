@@ -19,6 +19,21 @@ export type MindBillReactAppearance = MindBillAppearance & {
   dangerColor?: string;
   successColor?: string;
   warningColor?: string;
+  /** Dashboard-only overrides. Omitted values follow the selected brand palette. */
+  dashboard?: {
+    borderColor?: string;
+    borderWidth?: string;
+    borderRadius?: string;
+    sectionGap?: string;
+    rowMinHeight?: string;
+    linkColor?: string;
+    /** Small status markers, not full-card border colors. */
+    sectionColors?: Partial<Record<"violet" | "red" | "blue" | "green" | "amber" | "neutral", string>>;
+    /** Backgrounds in bucket order; omitted entries use progressively stronger accent tints. */
+    agingColors?: readonly string[];
+    agingTextColor?: string;
+    agingRadius?: string;
+  };
 };
 
 export const mindBillThemePresets = {
@@ -115,8 +130,8 @@ export const mindBillThemePresets = {
     textColor: "#05092e",
     mutedColor: "#596078",
     borderColor: "#d9dae1",
-    borderRadius: "0px",
-    controlRadius: "999px",
+    borderRadius: "10px",
+    controlRadius: "6px",
     shadow: "0 1px 2px rgba(5,9,46,.04)",
     dangerColor: "#b42318",
     successColor: "#167a58",
@@ -137,6 +152,7 @@ export function mindBillAppearanceStyle(
   style?: CSSProperties,
 ): CSSProperties {
   const resolved = resolveMindBillAppearance(appearance);
+  const dashboard = resolved.dashboard;
   return {
     "--mb-accent": resolved.accentColor,
     "--mb-accent-contrast": resolved.accentTextColor,
@@ -153,6 +169,25 @@ export function mindBillAppearanceStyle(
     "--mb-danger": resolved.dangerColor,
     "--mb-success": resolved.successColor,
     "--mb-warning": resolved.warningColor,
+    "--mbtk-border": dashboard?.borderColor ?? "var(--mb-border)",
+    "--mbtk-border-width": dashboard?.borderWidth ?? "1px",
+    "--mbtk-radius": dashboard?.borderRadius ?? "var(--mb-radius)",
+    "--mbtk-section-gap": dashboard?.sectionGap ?? "16px",
+    "--mbtk-row-height": dashboard?.rowMinHeight ?? "44px",
+    // Brand accents can be intentionally pale. Counts remain legible on a surface.
+    "--mbtk-link": dashboard?.linkColor ?? "var(--mb-text)",
+    "--mbtk-violet": dashboard?.sectionColors?.violet ?? "var(--mb-accent)",
+    "--mbtk-red": dashboard?.sectionColors?.red ?? "var(--mb-danger)",
+    "--mbtk-blue": dashboard?.sectionColors?.blue ?? "var(--mb-accent)",
+    "--mbtk-green": dashboard?.sectionColors?.green ?? "var(--mb-success)",
+    "--mbtk-amber": dashboard?.sectionColors?.amber ?? "var(--mb-warning)",
+    "--mbtk-neutral": dashboard?.sectionColors?.neutral ?? "var(--mb-muted)",
+    "--mbtk-aging-text": dashboard?.agingTextColor ?? "var(--mb-text)",
+    "--mbtk-aging-radius": dashboard?.agingRadius ?? "var(--mb-control-radius)",
+    ...Object.fromEntries(Array.from({ length: 5 }, (_, index) => [
+      `--mbtk-aging-${index + 1}`,
+      dashboard?.agingColors?.[index] ?? `color-mix(in srgb,var(--mb-accent) ${6 + index * 4}%,var(--mb-surface))`,
+    ])),
     ...style,
   } as CSSProperties;
 }
