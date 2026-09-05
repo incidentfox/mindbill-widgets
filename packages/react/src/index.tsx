@@ -249,6 +249,16 @@ export type {
 export { BillingSettings, OrganizationOnboarding } from "./organization-onboarding";
 export type { OrganizationOnboardingProps } from "./organization-onboarding";
 
+export { ConnectedNotificationSettings, NotificationSettings } from "./notification-settings";
+export type {
+  NotificationAgingDay,
+  NotificationPreferences,
+  NotificationSettingsAdapter,
+  NotificationSettingsProps,
+  NotificationSettingsSnapshot,
+  NotificationSettingsUpdate,
+} from "./notification-settings";
+
 export {
   ConnectedBillStatus,
   createBillStatusClient,

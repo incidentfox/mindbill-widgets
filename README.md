@@ -6,6 +6,8 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `ConnectedBillLifecycle` also includes shared workspace team notes and a preview-first courtesy-copy email form. Hosts can supply case-scoped recipient choices without enrolling contacts in notifications. See [bill communications](docs/bill-communications.md) for recipient-option props, scopes, sandbox simulation, retry safety, and custom React integration.
 
+`NotificationSettings` / `ConnectedNotificationSettings` adds a default-off notification settings section for any partner's users, with explicit consent, assigned-bill or practice-wide scope, quiet hours and unsubscribe. Its host-server adapter keeps verified identity and access out of browser mutations. See [notification settings](docs/notification-settings.md).
+
 ## Install
 
 ```bash
