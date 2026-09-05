@@ -7,20 +7,21 @@ import type {
   BillClaimsAdministratorPattern,
   BillLifecycleDelivery,
   BillReviewAttachment,
-  BillReviewData,
+  HistoricalBillReviewData,
 } from "@mindbill/browser";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
 
 export type BillReadOnlyFormProps = {
-  data: BillReviewData & { delivery?: BillLifecycleDelivery };
+  data: HistoricalBillReviewData & { delivery?: BillLifecycleDelivery };
   appearance?: MindBillReactAppearance;
   className?: string;
   style?: CSSProperties;
   onOpenAttachment?: (attachment: BillReviewAttachment) => void | Promise<void>;
 };
 
-function money(value: number): string {
+function money(value: number | null): string {
+  if (value == null) return "Not recorded";
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value);
 }
 

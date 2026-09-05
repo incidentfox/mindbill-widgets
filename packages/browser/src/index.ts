@@ -626,6 +626,21 @@ export type BillCourtesyCopyPreview = {
 };
 export type BillCourtesyCopyResult = { ok: boolean; sent: boolean; simulated?: boolean; dryRun?: boolean; messageId?: string };
 
+/** Historical financial balances are unavailable, not zero. */
+export type HistoricalBillReviewData = Omit<BillReviewData, "bill"> & {
+  bill: Omit<BillReviewData["bill"], "totalPaid" | "balanceDue"> & {
+    totalPaid: number | null;
+    balanceDue: number | null;
+  };
+};
+export type BillSubmissionDetail = {
+  attemptId: string;
+  billId: string;
+  source: "submission_snapshot" | "bill_record" | "unavailable";
+  capturedAt?: string | null;
+  detail: HistoricalBillReviewData | null;
+};
+
 export type BillLifecycleData = BillReviewData & {
   environment: "sandbox" | "live";
   lifecycle: {
@@ -645,6 +660,8 @@ export type BillLifecycleData = BillReviewData & {
   notes?: BillTeamNote[];
   /** Immutable submissions that share this bill's unified history. */
   attempts?: BillAttemptSummary[];
+  /** Per-attempt details. Older APIs may omit this; never substitute the current bill. */
+  submissionDetails?: BillSubmissionDetail[];
   payments: BillPaymentRecord[];
   remittance: BillRemittanceSummary;
   delivery: BillLifecycleDelivery;

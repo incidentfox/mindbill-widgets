@@ -1845,8 +1845,8 @@ describe("connected bill lifecycle", () => {
     // snapshot with carried-forward documents. The dialog has one close control
     // (the accessible X), rather than a second full-width Cancel action.
     const dialog = source.slice(
-      source.indexOf('panel === "submit_new_bill"'),
-      source.indexOf('panel === "second_review"'),
+      source.indexOf('activePanel === "submit_new_bill"'),
+      source.indexOf('activePanel === "second_review"'),
     );
     expect(dialog).toContain("initialBill={correctionInitialBill}");
     expect(dialog).toContain("attachments={correctionAttachments}");
@@ -2136,6 +2136,17 @@ describe("bill submissions ribbon", () => {
     summary: "Electronically sent to Acme Insurance Co.",
     tone: "submission",
     ...overrides,
+  });
+
+  it("does not show an old rejection after acceptance or the current bill's closure", () => {
+    const history = [entry({ attemptId: "attempt" }),
+      entry({ id: "reject", attemptId: "attempt", kind: "ack", action: "277 Reject", tone: "problem" }),
+      entry({ id: "accept", attemptId: "attempt", kind: "ack", action: "277 Accept", tone: "success" })];
+    expect(billSubmissionsRibbonFromHistory(history)[0]?.badge).toBe("277 Accept");
+    expect(billSubmissionsRibbonFromHistory(history, [{ id: "attempt", label: "Original Bill", isCurrent: true, status: "closed" }])[0]?.badge).toBe("closed");
+    for (const status of ["processed", "closed"]) {
+      expect(billSubmissionsRibbonFromHistory(history, [{ id: "historical", label: "Original Bill", isCurrent: false, status, ackLabel: "277 Accept" }])[0]?.badge).toBe(status);
+    }
   });
 
   it("maps only submission history entries into chips", () => {

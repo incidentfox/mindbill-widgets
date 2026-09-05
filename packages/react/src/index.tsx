@@ -320,6 +320,8 @@ export type {
   BillLifecycleClient,
   BillLifecycleClientOptions,
   BillLifecycleData,
+  BillSubmissionDetail,
+  HistoricalBillReviewData,
   BillLifecycleDelivery,
   BillLifecycleSession,
   BillLifecycleSessionProvider,
