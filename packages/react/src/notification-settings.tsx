@@ -4,11 +4,14 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactEleme
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 
 export type NotificationAgingDay = 30 | 60 | 90;
+export type NotificationReportDigest = "off" | "daily" | "weekly";
 export type NotificationPreferences = {
   enabled: boolean;
   statusUpdates: boolean;
   agingDays: NotificationAgingDay[];
   quietHours: boolean;
+  /** Optional for existing adapters; omitted means off. */
+  reportDigest?: NotificationReportDigest;
 };
 
 /** A projection from the host's authenticated server, not the raw administrative API. */
@@ -40,7 +43,7 @@ export type NotificationSettingsProps = {
 };
 
 export function defaultNotificationPreferences(): NotificationPreferences {
-  return { enabled: false, statusUpdates: false, agingDays: [], quietHours: true };
+  return { enabled: false, statusUpdates: false, agingDays: [], quietHours: true, reportDigest: "off" };
 }
 
 /** Allowlist the browser payload even when callers supply objects with extra properties. */
@@ -50,17 +53,20 @@ export function notificationSettingsUpdate(preferences: NotificationPreferences,
     statusUpdates: preferences.statusUpdates === true,
     agingDays: ([30, 60, 90] as const).filter(day => preferences.agingDays.includes(day)),
     quietHours: preferences.quietHours === true,
+    reportDigest: preferences.reportDigest === "daily" || preferences.reportDigest === "weekly" ? preferences.reportDigest : "off",
     consent: consent === true,
   };
 }
 
 export function notificationSettingsNeedsConsent(previous: NotificationPreferences | null, next: NotificationPreferences): boolean {
   if (!next.enabled) return false;
+  if ((previous?.reportDigest ?? "off") !== (next.reportDigest ?? "off")) return true;
   if (!previous?.enabled || previous.statusUpdates !== next.statusUpdates || previous.quietHours !== next.quietHours) return true;
   return JSON.stringify(notificationSettingsUpdate(previous, false).agingDays) !== JSON.stringify(notificationSettingsUpdate(next, false).agingDays);
 }
 
 const css = `
+.mbns-digest{display:grid;gap:6px;margin-top:12px}.mbns-digest select{font:inherit;min-height:44px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);padding:10px 12px}.mbns-digest select:focus-visible{outline:2px solid var(--mb-accent);outline-offset:3px}
 .mbns{color:var(--mb-text);font-family:var(--mb-font);font-size:14px;line-height:1.5;min-width:0}.mbns *{box-sizing:border-box}.mbns h2,.mbns p{margin:0}.mbns-card{padding:24px;background:var(--mb-surface);border:1px solid var(--mb-border);border-radius:var(--mb-radius);box-shadow:var(--mb-shadow)}
 .mbns-header{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;margin-bottom:24px}.mbns h2{font-size:20px;line-height:1.3;font-weight:700}.mbns-muted{color:var(--mb-muted)}.mbns-header p{margin-top:6px;max-width:56ch}.mbns-badge{flex-shrink:0;background:var(--mb-soft);color:var(--mb-muted);padding:4px 9px;border-radius:var(--mb-control-radius);font-size:12px;font-weight:650}
 .mbns-account{padding:14px 16px;background:var(--mb-soft);border-radius:var(--mb-control-radius);margin-bottom:20px;overflow-wrap:anywhere}.mbns-account strong{display:block;font-weight:650}.mbns-account p{margin-top:3px;font-size:13px}
@@ -108,7 +114,7 @@ function NotificationSettingsSession({ adapter, appearance, className, style, on
   }, [adapter, reload]);
 
   const needsConsent = notificationSettingsNeedsConsent(snapshot?.preferences ?? null, draft);
-  const hasCategory = draft.statusUpdates || draft.agingDays.length > 0;
+  const hasCategory = draft.statusUpdates || draft.agingDays.length > 0 || (draft.reportDigest ?? "off") !== "off";
   const changed = JSON.stringify(notificationSettingsUpdate(draft, false)) !== JSON.stringify(notificationSettingsUpdate(snapshot?.preferences ?? defaultNotificationPreferences(), false));
   const busy = phase !== "ready";
   const canSave = !busy && changed && (!draft.enabled || (!!snapshot?.canEnable && hasCategory && (!needsConsent || consent)));
@@ -157,6 +163,7 @@ function NotificationSettingsSession({ adapter, appearance, className, style, on
           <label className="mbns-check"><input type="checkbox" checked={draft.statusUpdates} onChange={event => update({ statusUpdates: event.target.checked })} /><span><strong>Bill status changes</strong><small>Follow accepted, rejected, processed and payment updates.</small></span></label>
           <p className="mbns-muted">Remind me when a bill is still waiting for a payer:</p><div className="mbns-days">{([30, 60, 90] as const).map(day => <label key={day} className="mbns-check"><input type="checkbox" checked={draft.agingDays.includes(day)} onChange={event => update({ agingDays: event.target.checked ? [...draft.agingDays, day] : draft.agingDays.filter(value => value !== day) })} /><span>{day} days</span></label>)}</div>
           <label className="mbns-check"><input type="checkbox" checked={draft.quietHours} onChange={event => update({ quietHours: event.target.checked })} /><span><strong>Quiet hours</strong><small>Hold emails from 7 pm to 7 am Pacific time.</small></span></label>
+          <label className="mbns-digest"><strong>Scheduled activity digest</strong><select value={draft.reportDigest ?? "off"} onChange={event => update({ reportDigest: event.target.value as NotificationReportDigest })}><option value="off">Off</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select><small className="mbns-muted">Activity counts at 9 am Pacific, every day or every Monday. No patient details, financial reports or attachments.</small></label>
         </fieldset>
         {draft.enabled && !hasCategory && <p className="mbns-notice">Select at least one update type to enable notifications.</p>}
         {needsConsent && <label className="mbns-check mbns-consent"><input type="checkbox" checked={consent} disabled={busy || !snapshot.canEnable} onChange={event => setConsent(event.target.checked)} /><span>I agree to receive the selected billing emails {snapshot.audience === "practice" ? "for this practice" : "for bills assigned to me"} at the address above. I can unsubscribe at any time.</span></label>}
