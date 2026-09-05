@@ -34,7 +34,7 @@ POST `/partner/v2/bills/{id}/courtesy-forward` using server `bills:write`, or `/
 
 The hash binds source documents, recipients, and message. Changes require a new preview. If delivery is uncertain, do not reopen the form or generate a new key: delivery may already have occurred. Interrupted requests retain a processing marker; retries return `409 request_in_progress` until an operator reconciles delivery.
 
-Limits: 20 To and 20 CC addresses, 200-character subject, 10,000-character message, 30 selected documents, and a 25 MB packet. Cover sheet comes first, then optional CMS-1500 and selected documents in supplied order. Invalid PDFs and documents outside the bill fail before delivery. From and Reply-To use the workspace inbox and cannot be overridden.
+Limits: 20 To and 20 CC addresses, 200-character subject, 10,000-character message, 30 selected documents, and a 25 MB packet. Cover sheet comes first, then optional CMS-1500 and selected documents in the bill's document order. Invalid PDFs and documents outside the bill fail before delivery. From and Reply-To use the workspace inbox and cannot be overridden.
 
 Sandbox returns `{ "ok": true, "sent": false, "simulated": true }` and never invokes email transport. Inspect `sent`, `simulated`, and `dryRun`, not `ok` alone. Live success records history and emits `bill.courtesy_copy_sent` with opaque audit linkage.
 
