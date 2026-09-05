@@ -1588,6 +1588,30 @@ describe("connected bill lifecycle", () => {
     );
   });
 
+  it("adds a server-owned bill note through the lifecycle action endpoint", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({
+        token: "short-lived-lifecycle-token",
+        expiresAt: "2099-08-26T00:00:00.000Z",
+      }))
+      .mockResolvedValueOnce(jsonResponse({ data: lifecycle }));
+    const client = createBillLifecycleClient({ billId: "bill_789", fetch: fetcher });
+
+    await expect(client.addNote({
+      note: "Called bill review; EOR remains pending.",
+      actorName: "Casey Biller",
+    })).resolves.toMatchObject({ lifecycle: { state: "denied" } });
+
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "https://app.mindbill.org/partner/v2/browser/bills/bill_789/actions",
+    );
+    expect(fetcher.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({
+      action: "add_note",
+      note: "Called bill review; EOR remains pending.",
+      actorName: "Casey Biller",
+    }));
+  });
+
   it("downloads the immutable submission packet and reopens a closed bill", async () => {
     const packet = new Blob(["synthetic packet"], { type: "application/pdf" });
     const reopened = {
@@ -2222,6 +2246,33 @@ describe("bill submissions ribbon", () => {
     expect(billSubmissionsRibbonDeliveryLabel("Emailed to claims@example.com.")).toBe("Email");
     expect(billSubmissionsRibbonDeliveryLabel("Mailed to PO Box 1234.")).toBe("Mail");
     expect(billSubmissionsRibbonDeliveryLabel("Hand delivered.")).toBe("Sent");
+  });
+});
+
+describe("connected billing workspace integration contracts", () => {
+  it("owns overflow and measures its remaining viewport height", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/connected-billing-workspace.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(".mbow-workspace{width:100%;height:100%;max-height:var(--mbow-available-height,100dvh);min-height:0;overflow:auto");
+    expect(source).toContain("setAvailableHeight(Math.max(240, viewportHeight - top - 16))");
+    expect(source).toContain("viewportHeight - top - 16");
+    expect(source).toContain('const workspaceClassName = ["mbow-workspace", className]');
+    expect(source).toContain("style?.height != null || style?.maxHeight != null");
+    expect(source).toContain("availableHeight == null || hasExplicitHeight ? style : { ...style, maxHeight: availableHeight }");
+  });
+
+  it("keeps submission selection in bill details instead of switching to history", () => {
+    const source = readFileSync(
+      new URL("../packages/react/src/connected-bill-lifecycle.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('setSelectedSubmissionId(item.id); setTab("details")');
+    expect(source).toContain('aria-label="Selected submission detail"');
+    expect(source).toContain("Add a note");
   });
 });
 

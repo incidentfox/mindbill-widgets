@@ -3,9 +3,12 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
+  type Ref,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -33,6 +36,7 @@ type ConnectedSurfaceProps = BillingOperationsClientOptions & {
 
 const css = `
 .mbow{color:var(--mb-text);font:14px/1.45 var(--mb-font);background:var(--mb-soft);border-radius:var(--mb-radius);padding:20px}.mbow *{box-sizing:border-box}.mbow h2,.mbow h3,.mbow p{margin:0}.mbow a{color:var(--mb-accent)}
+.mbow-workspace{width:100%;height:100%;max-height:var(--mbow-available-height,100dvh);min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .mbow-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}.mbow-head h2{font-size:24px;line-height:1.2}.mbow-sub{color:var(--mb-muted);margin-top:4px!important}.mbow-actions{display:flex;gap:8px;flex-wrap:wrap}
 .mbow-button,.mbow-input,.mbow-select{min-height:38px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbow-button{padding:7px 12px;cursor:pointer;font-weight:650}.mbow-button:hover{border-color:var(--mb-accent)}.mbow-button.primary{background:var(--mb-accent);border-color:var(--mb-accent);color:var(--mb-accent-contrast)}.mbow-button:disabled{opacity:.55;cursor:not-allowed}.mbow-input,.mbow-select{padding:7px 10px}.mbow-input{min-width:260px;flex:1}
 .mbow-tabs{display:flex;gap:4px;border-bottom:1px solid var(--mb-border);margin-bottom:18px;overflow:auto}.mbow-tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--mb-muted);padding:10px 13px;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.mbow-tab.active{color:var(--mb-text);border-bottom-color:var(--mb-accent)}
@@ -61,13 +65,43 @@ function defaultRange(days = 29): { from: string; to: string } {
   return { from: iso(from), to: iso(to) };
 }
 
-function Surface({ appearance, className = "", style, children }: {
+function Surface({ appearance, className = "", style, children, surfaceRef }: {
   appearance?: MindBillReactAppearance | undefined;
   className?: string | undefined;
   style?: CSSProperties | undefined;
   children: ReactNode;
+  surfaceRef?: Ref<HTMLDivElement> | undefined;
 }): ReactElement {
-  return <div className={`mbow ${className}`.trim()} style={mindBillAppearanceStyle(appearance, style)}><style>{css}</style>{children}</div>;
+  return <div ref={surfaceRef} className={`mbow ${className}`.trim()} style={mindBillAppearanceStyle(appearance, style)}><style>{css}</style>{children}</div>;
+}
+
+function useAvailableViewportHeight() {
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const [availableHeight, setAvailableHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const element = workspaceRef.current;
+    if (!element || typeof window === "undefined") return;
+    let frame = 0;
+    const update = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const top = Math.max(0, element.getBoundingClientRect().top);
+        setAvailableHeight(Math.max(240, viewportHeight - top - 16));
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, []);
+  return { workspaceRef, availableHeight };
 }
 
 function useClient(options: BillingOperationsClientOptions) {
@@ -197,8 +231,12 @@ export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
 
 export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
   const client = useClient(options); const [view, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
-  if (selectedBillId) return <Surface appearance={appearance} className={className} style={style}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle billId={selectedBillId} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
+  const { workspaceRef, availableHeight } = useAvailableViewportHeight();
+  const workspaceClassName = ["mbow-workspace", className].filter(Boolean).join(" ");
+  const hasExplicitHeight = style?.height != null || style?.maxHeight != null;
+  const workspaceStyle = availableHeight == null || hasExplicitHeight ? style : { ...style, maxHeight: availableHeight };
+  if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle billId={selectedBillId} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
   const selectView = (next: typeof view) => { setView(next); setSelectedBillId(null); };
   const appearanceProps = appearance ? { appearance } : {};
-  return <Surface appearance={appearance} className={className} style={style}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><div className="mbow-tabs" role="tablist">{([['tasks','Bill tasks'],['bills','All bills'],['procedures','Procedures'],['productivity','Productivity']] as const).map(([id,label]) => <button key={id} className={`mbow-tab ${view === id ? "active" : ""}`} type="button" role="tab" aria-selected={view === id} onClick={() => selectView(id)}>{label}</button>)}</div>{view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</Surface>;
+  return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><div className="mbow-tabs" role="tablist">{([['tasks','Bill tasks'],['bills','All bills'],['procedures','Procedures'],['productivity','Productivity']] as const).map(([id,label]) => <button key={id} className={`mbow-tab ${view === id ? "active" : ""}`} type="button" role="tab" aria-selected={view === id} onClick={() => selectView(id)}>{label}</button>)}</div>{view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</Surface>;
 }

@@ -14,6 +14,11 @@ const billing = createBillLifecycleClient({
 
 const data = await billing.getLifecycle();
 const packet = await billing.getPacket();
+
+await billing.addNote({
+  note: "Called bill review; EOR is still pending.",
+  actorName: "Casey Biller",
+});
 ```
 
 The browser client loads immutable snapshots, server-owned activity history,
@@ -134,6 +139,13 @@ gets the next patient-control-number suffix (`-1`, `-2`, `-3`, ...), while the
 public `billId` remains stable. Rejection issues can include `fieldPaths`; use
 them to call attention to implicated controls without treating the
 clearinghouse response as a replacement for normal validation.
+
+`data.attempts` identifies each immutable transmission with its own `id` and
+also exposes the canonical `billId`. A bill can have more than one transmission
+(for example the original and its Second Review), so use the attempt `id` for
+selection and use `billId` only when addressing the bill resource. Notes added
+with `addNote` are server-owned lifecycle activity and are returned to every
+authorized partner session for that bill.
 
 Pass `billId` for the submitted bill. An optional `resource: { billId }`
 restriction makes the session usable for only that bill.

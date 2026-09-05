@@ -95,6 +95,24 @@ import { BillReadOnlyForm } from "@mindbill/react";
 
 `ConnectedBillLifecycle` composes this component with the Details / Bill history switch, so most partners should not assemble these pieces themselves.
 
+`ConnectedBillingWorkspace` is the complete task, search, procedure,
+productivity, and bill-detail experience. It measures the space remaining in
+the browser viewport and owns vertical scrolling, so dashboard shells cannot
+trap content below the fold. Hosts can still give it an explicit height:
+
+```tsx
+<main style={{ height: "100dvh", minHeight: 0 }}>
+  <ConnectedBillingWorkspace
+    sessionEndpoint="/api/mindbill/session"
+    onCreateBill={() => router.push("/billing/new")}
+  />
+</main>
+```
+
+For flex or grid shells, setting `min-height: 0` on the workspace's ancestors
+remains a useful layout default. An explicit `height` or `maxHeight` in the
+component's `style` prop continues to take precedence.
+
 `BillRejectionNotice` is also exported for custom lifecycle layouts. It presents every API-provided rejection issue in order, keeps technical acknowledgement codes alongside the actionable descriptions, and shows when the bill was sent and rejected. The connected lifecycle includes it automatically whenever the current state is `rejected`.
 
 ```tsx
@@ -344,7 +362,15 @@ attempt's latest acknowledgement or payment state — for example `277 Reject`
 or `Payment in 30 working days` — plus delivery, sent date, and the relevant
 reject/effective date. `billSubmissionsRibbonFromHistory` derives those chips
 from one unified history across every attempt. In `ConnectedBillLifecycle`, a
-chip click opens that shared history and highlights the selected submission.
+chip click keeps the Details tab open and shows that transmission's receipt,
+delivery, sent date, and status. The immutable bill detail remains below it;
+the complete cross-attempt audit trail is available only through the explicit
+Bill history tab.
+
+The connected lifecycle also renders server-owned bill notes and an **Add note**
+control. Custom compositions can call `useBillLifecycle({ billId }).addNote({
+note, actorName })`; note activity is shared with other authorized partner and
+MindBill users.
 
 `ReportBillStatusDialog` records the outcome of a payment-status phone call to the Claims Administrator / Bill Review vendor: payer contacts, the host-rendered submission receipt (for example a `BillHistoryTable`), and the five standard reported statuses (`REPORT_BILL_STATUS_OPTIONS`). The host posts the resulting `ReportBillStatusInput` through its own lifecycle action call.
 

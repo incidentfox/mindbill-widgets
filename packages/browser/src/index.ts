@@ -351,6 +351,10 @@ export type BillActorInput = {
   actorName?: string;
 };
 
+export type AddBillNoteInput = BillActorInput & {
+  note: string;
+};
+
 export type SubmitBillInput = BillActorInput & {
   route: BillSubmissionRoute;
   destination?: {
@@ -448,7 +452,11 @@ export type BillHistoryEntry = {
 
 /** One immutable transmission attempt within a logical bill chain. */
 export type BillAttemptSummary = {
+  /** Unique transmission identity. Draft attempts fall back to the bill record ID. */
   id: string;
+  /** Underlying bill record. Multiple transmissions may share this value. */
+  billId?: string;
+  submissionId?: string;
   billNumber?: string | number;
   label: string;
   deliveryLabel?: string;
@@ -456,6 +464,8 @@ export type BillAttemptSummary = {
   ackLabel?: string;
   ackAt?: string;
   status?: string;
+  complianceLabel?: string;
+  complianceAt?: string;
   /** The latest attempt that receives lifecycle mutations. */
   isCurrent: boolean;
 };
@@ -1015,6 +1025,7 @@ export type BillLifecycleClient = {
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
   getPacket: () => Promise<Blob>;
+  addNote: (input: AddBillNoteInput) => Promise<BillLifecycleData>;
   closeBill: (input: CloseBillInput) => Promise<BillLifecycleData>;
   reopenBill: (input: ReopenBillInput) => Promise<BillLifecycleData>;
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
@@ -1483,6 +1494,7 @@ export function createBillLifecycleClient({
       if (!response.ok) throw await responseError(response, "Submission packet could not be downloaded.");
       return response.blob();
     },
+    addNote(input) { return action({ action: "add_note", ...input }, "Note could not be added."); },
     closeBill(input) { return action({ action: "close", ...input }, "Bill could not be closed."); },
     reopenBill(input) { return action({ action: "reopen", ...input }, "Bill could not be reopened."); },
     postPayment(input) { return action({ action: "post_payment", penaltyAmount: 0, interestAmount: 0, ...input, checkNumber: input.checkNumber ?? "" }, "Payment could not be posted."); },
