@@ -1,5 +1,11 @@
 # Partner-managed notification settings
 
+For an administrator entering **other recipient email addresses**, use
+[NotificationRecipientsSettings](notification-recipients.md). Its email-confirmation
+flow does not require those recipients to have accounts or your app to attest their
+email verification. The self-service flow below remains available for verified
+signed-in users managing their own preferences.
+
 `NotificationSettings` (also exported as `ConnectedNotificationSettings`) is a
 ready-to-embed React settings section for **any partner**, not a Docura-specific
 feature. It uses the same `appearance`, `className` and `style` customization as
