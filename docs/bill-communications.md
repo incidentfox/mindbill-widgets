@@ -24,6 +24,36 @@ const client = createBillLifecycleClient({ billId, sessionEndpoint: "/api/mindbi
 
 Permanent API keys belong only on your server. The form requires PDF review and recipient confirmation before explicit send. Colors, surfaces, borders, and radii follow shared `appearance` tokens.
 
+### Bring your own recipient choices
+
+Pass existing case contacts without building another contact-management screen:
+
+```tsx
+import type { CourtesyCopyRecipientOption } from "@mindbill/react";
+
+const caseContacts: CourtesyCopyRecipientOption[] = [
+  { name: "Example counsel", email: "counsel@example.com" },
+  { name: "Practice office", email: "office@example.com" },
+];
+
+<ConnectedBillLifecycle
+  billId={billId}
+  sessionEndpoint="/api/mindbill/session"
+  courtesyCopyRecipientOptions={caseContacts}
+/>
+
+<ConnectedBillingWorkspace
+  sessionEndpoint="/api/mindbill/session"
+  getCourtesyCopyRecipientOptions={(selectedBillId) => contactsByBill[selectedBillId] ?? []}
+/>
+```
+
+For the standalone form, use `recipientOptions={caseContacts}`. Supply only contacts the signed-in user may see for that bill; the workspace callback is deliberately bill-scoped. Load contacts in the host app, then pass the resulting array (or return it synchronously from the callback).
+
+These are suggestions, not defaults: users choose To/CC contacts or enter addresses manually. Display names are escaped labels; only email addresses enter the preview/send request. Invalid suggestions are omitted, duplicate addresses are collapsed case-insensitively, and already-selected contacts are disabled in both pickers. The server still validates recipients and limits. Changing a recipient discards the previous preview and confirmation. Suggestions are not persisted as contacts and do not grant permission to disclose records.
+
+**Courtesy-copy choices do not enroll anyone in bill-notification emails.** Notification subscriptions require the recipient's separate consent and workspace authorization; passing a contact here never creates a subscription or triggers email.
+
 ## API contract
 
 POST `/partner/v2/bills/{id}/courtesy-forward` using server `bills:write`, or `/partner/v2/browser/bills/{id}/courtesy-forward` using an origin-bound browser session and `bills:act`. Existing partner/workspace and bill restrictions apply.

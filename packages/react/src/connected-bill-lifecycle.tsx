@@ -54,7 +54,7 @@ import type { BillReviewAttachment } from "./native-bill-review";
 import { BillSubmissionsRibbon, billSubmissionsRibbonFromHistory } from "./bill-submissions-ribbon";
 import { ReportBillStatusDialog } from "./report-bill-status-dialog";
 import { SecondReviewForm } from "./second-review-form";
-import { BillCourtesyCopyForm } from "./bill-courtesy-copy-form";
+import { BillCourtesyCopyForm, type CourtesyCopyRecipientOption } from "./bill-courtesy-copy-form";
 
 export {
   SECOND_REVIEW_REASON_TEMPLATE,
@@ -316,6 +316,8 @@ export function useBillLifecycle({
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
   appearance?: MindBillReactAppearance;
+  /** Case-scoped suggestions; recipients must still be selected and confirmed. */
+  courtesyCopyRecipientOptions?: readonly CourtesyCopyRecipientOption[];
   /** Human-readable name recorded for user-initiated bill actions. */
   actorName?: string;
   /** Optional host-system claims-administrator name shown as a selection hint. */
@@ -596,7 +598,7 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
   return enabled && environment === "sandbox";
 }
 
-export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministratorHint, claimsAdministratorSources, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -854,7 +856,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
       }}>{action.label}</button>)}
     </aside> : null}
 
-    {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><BillCourtesyCopyForm documents={data.bill.attachments} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></LifecycleDialog> : null}
+    {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><BillCourtesyCopyForm documents={data.bill.attachments} recipientOptions={courtesyCopyRecipientOptions} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></LifecycleDialog> : null}
     {activePanel === "resubmit" && correctionInitialBill ? <LifecycleDialog title="Correct and resubmit" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Correct and resubmit</h3><p>Review the rejected snapshot, correct the highlighted information, and submit a new immutable attempt under this bill.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>Resubmitting sends a real bill. Confirm the corrected information before continuing.</span></div> : null}{data.rejection ? <CorrectionRejectionReason rejection={data.rejection} /> : null}<CorrectionVerificationContact delivery={data.delivery} /><label className="mb-lifecycle-correction-note"><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
       className="mbsf-lifecycle-correction"
       initialBill={correctionInitialBill}

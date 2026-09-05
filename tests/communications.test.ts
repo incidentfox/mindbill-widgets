@@ -1,8 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBillLifecycleClient } from "../packages/browser/src/index";
 import { billTeamNotes } from "../packages/react/src/connected-bill-lifecycle";
+import { courtesyCopyRecipientOptions } from "../packages/react/src/bill-courtesy-copy-form";
 
 describe("bill communications", () => {
+  it("normalizes suggestions without permitting header injection or duplicate contacts", () => {
+    expect(courtesyCopyRecipientOptions([
+      { email: " counsel@example.com ", name: " Example Counsel " },
+      { email: "COUNSEL@example.com", name: "Duplicate" },
+      { email: "invalid" },
+      { email: "other@example.com\r\nBcc:bad@example.com" },
+      { email: "first@example.com,second@example.com" },
+      { email: "office@example.com" },
+    ])).toEqual([{ email: "counsel@example.com", name: "Example Counsel" }, { email: "office@example.com" }]);
+  });
+
   it("requires a preview and reuses the caller's delivery identity on retries", async () => {
     const response = (data: unknown) => new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
     const fetcher = vi.fn<typeof fetch>()
