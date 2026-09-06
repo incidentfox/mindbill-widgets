@@ -1,6 +1,6 @@
 # Historical files and Independent Bill Review
 
-`ConnectedBillLifecycle` opens a selected older submission in read-only bill details. Its **Retained submission files** section lists only the exact files persisted for that attempt. Missing historical files are shown as unavailable; the component never substitutes the current packet or a later Explanation of Review (EOR).
+`ConnectedBillLifecycle` shows **Retained submission files** for the current submission, including a bill with only one attempt, and for a selected older submission. The section lists only the exact files persisted for that attempt. Older submissions open in read-only bill details. Missing historical files are shown as unavailable; the component never substitutes the current packet or a later Explanation of Review (EOR).
 
 The browser client exposes `getSubmissionArtifact(attemptId, artifactId)`. Use the opaque artifact IDs from `submissionDetails[].artifacts`, and construct the lifecycle client with the original root bill ID. The authenticated endpoint returns a blob. Labels, IDs, and content types do not expose storage keys or signed URLs. Historic EOR association is not implied by this contract.
 

@@ -112,6 +112,23 @@ export function billTeamNotes(data: Pick<BillLifecycleData, "notes" | "history">
     .sort((left, right) => right.date.localeCompare(left.date));
 }
 
+/** Resolve one attempt without substituting files or snapshots from another bill. */
+export function billLifecycleSubmissionSelection(
+  data: Pick<BillLifecycleData, "history" | "attempts" | "submissionDetails">,
+  selectedSubmissionId?: string,
+) {
+  const mappedRibbonItems = billSubmissionsRibbonFromHistory(data.history ?? [], data.attempts);
+  const activeSubmissionId = (mappedRibbonItems.some((item) => item.id === selectedSubmissionId) ? selectedSubmissionId : null)
+    ?? mappedRibbonItems.find((item) => item.active)?.id
+    ?? mappedRibbonItems[mappedRibbonItems.length - 1]?.id;
+  const ribbonItems = mappedRibbonItems.map((item) => ({ ...item, active: item.id === activeSubmissionId }));
+  const selectedAttempt = data.attempts?.find((attempt) => attempt.id === activeSubmissionId);
+  const historical = selectedAttempt ? !selectedAttempt.isCurrent
+    : !!activeSubmissionId && activeSubmissionId !== mappedRibbonItems.at(-1)?.id;
+  const selectedDetail = selectedAttempt ? data.submissionDetails?.find((item) => item.attemptId === activeSubmissionId && item.billId === selectedAttempt.billId) : null;
+  return { activeSubmissionId, ribbonItems, selectedAttempt, historical, selectedDetail };
+}
+
 export type UseBillLifecycleOptions = BillLifecycleClientOptions & {
   refreshInterval?: number;
   enabled?: boolean;
@@ -813,15 +830,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
   const viewEor = data.lifecycle.actions.find((action) => action.id === "view_eor" && action.enabled);
   const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "submit_new_bill", "second_review", "independent_bill_review", "post_payment", "close", "reopen", "send_duplicate", "report_bill_status"]);
   const actions = data.lifecycle.actions.filter((action) => action.enabled && supportedActions.has(action.id));
-  const mappedRibbonItems = data.history ? billSubmissionsRibbonFromHistory(data.history, data.attempts) : [];
-  const activeSubmissionId = (mappedRibbonItems.some((item) => item.id === selectedSubmissionId) ? selectedSubmissionId : null)
-    ?? mappedRibbonItems.find((item) => item.active)?.id
-    ?? mappedRibbonItems[mappedRibbonItems.length - 1]?.id;
-  const ribbonItems = mappedRibbonItems.map((item) => ({ ...item, active: item.id === activeSubmissionId }));
-  const selectedAttempt = data.attempts?.find((attempt) => attempt.id === activeSubmissionId);
-  const historical = selectedAttempt ? !selectedAttempt.isCurrent
-    : !!activeSubmissionId && activeSubmissionId !== mappedRibbonItems.at(-1)?.id;
-  const selectedDetail = historical && selectedAttempt ? data.submissionDetails?.find((item) => item.attemptId === activeSubmissionId && item.billId === selectedAttempt.billId) : null;
+  const { activeSubmissionId, ribbonItems, selectedAttempt, historical, selectedDetail } = billLifecycleSubmissionSelection(data, selectedSubmissionId);
   const activePanel = historical ? "" : panel;
   const showSandboxControls = shouldShowSandboxControls(data.environment, sandboxControls) && !historical;
   const simulations = showSandboxControls ? sandboxScenarios(data.lifecycle.state) : [];
@@ -866,7 +875,7 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
 
       {historical ? <p className="mb-lifecycle-card">{selectedDetail?.source === "submission_snapshot" ? "Saved as submitted. This previous submission is read-only; payment balances and current actions are shown on the current bill." : displayedData ? "Historical bill record. An exact as-submitted snapshot was not recorded for this older attempt; these are the stored bill values, not a guaranteed copy of the original packet." : "Detailed values were not saved for this historical submission. Select the current submission to see the current bill. We will not substitute current data for this older attempt."}</p> : null}
       {displayedData ? <BillReadOnlyForm key={activeSubmissionId} data={displayedData} {...(!historical ? { onOpenAttachment: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} /> : null}
-      {historical && selectedAttempt ? <section className="mb-lifecycle-card" aria-label="Retained submission files"><h3>Retained submission files</h3><p>Exact files saved for this submission. These downloads do not include a regenerated current bill or a later EOR.</p>{selectedDetail?.artifacts?.length ? selectedDetail.artifacts.map((artifact) => <button type="button" className="mb-lifecycle-button secondary" key={artifact.id} onClick={() => void lifecycle.downloadSubmissionArtifact(selectedAttempt.id, artifact.id, artifact.label).catch(() => undefined)}>Download {artifact.kind === "submitted_edi" ? "submitted EDI" : "submitted attachment"}: {artifact.label}</button>) : <p>No retained files are available for this submission.</p>}</section> : null}
+      {selectedAttempt ? <section className="mb-lifecycle-card" aria-label="Retained submission files"><h3>Retained submission files</h3><p>Exact files saved for this submission. These downloads do not include a regenerated current bill or a later EOR.</p>{selectedDetail?.artifacts?.length ? selectedDetail.artifacts.map((artifact) => <button type="button" className="mb-lifecycle-button secondary" key={artifact.id} onClick={() => void lifecycle.downloadSubmissionArtifact(selectedAttempt.id, artifact.id, artifact.label).catch(() => undefined)}>Download {artifact.kind === "submitted_edi" ? "submitted EDI" : "submitted attachment"}: {artifact.label}</button>) : <p>No retained files are available for this submission.</p>}</section> : null}
       {!historical ? <section className="mb-lifecycle-notes" aria-label="Bill notes">
         <header><div><h3>Team notes</h3><p>Shared with your workspace’s billing team. Never sent to the payer.</p></div><span>{billNotes.length}</span></header>
         {billNotes.length ? <ol>{billNotes.map((entry) => <li key={entry.id}><p>{entry.summary}</p><small>{entry.actor || "System"} · {usDate(entry.date)}</small></li>)}</ol> : <p className="mb-lifecycle-notes-empty">No notes yet.</p>}
