@@ -455,15 +455,37 @@ describe("atomic bill submission form contract", () => {
       "93",
     ]);
     expect(applyBillSubmissionEvaluationModifiers(lines, "psych_qme")[0]?.modifiers).toEqual([
+      "95",
       "96",
       "93",
     ]);
+  });
+
+  it("combines evaluator role and psychiatric modifiers without changing unrelated modifiers", () => {
+    const lines = ["ML201", "ML202", "ML203"].map((code) => ({ code, modifiers: ["-95", "-96", "93"], units: 1 }));
+    const ame = applyBillSubmissionEvaluationModifiers(lines, "psych_ame");
+    expect(ame.map((line) => line.modifiers)).toEqual(Array(3).fill(["94", "96", "93"]));
+    expect(applyBillSubmissionEvaluationModifiers(ame, "psych_qme").map((line) => line.modifiers))
+      .toEqual(Array(3).fill(["95", "96", "93"]));
+    expect(applyBillSubmissionEvaluationModifiers(ame, "qme")[0]?.modifiers).toEqual(["95", "93"]);
+    expect(calculateBillSubmissionAllowedAmount({ code: "ML201", modifiers: ["94", "96"], units: 1 })).toBe(4735.25);
+    expect(calculateBillSubmissionAllowedAmount({ code: "ML201", modifiers: ["95", "96"], units: 1 })).toBe(4030);
+  });
+
+  it("does not apply psychiatric multipliers to missed appointments or record review", () => {
+    const lines = ["ML200", "MLPRR"].map((code) => ({ code, modifiers: ["94", "96"], units: 1 }));
+    expect(applyBillSubmissionEvaluationModifiers(lines, "psych_qme").map((line) => line.modifiers))
+      .toEqual([["95"], ["95"]]);
+    expect(applyBillSubmissionEvaluationModifiers(lines, "psych_ame").map((line) => line.modifiers))
+      .toEqual([[], []]);
   });
 
   it("seeds the Psych QME diagnosis without replacing a specific diagnosis", () => {
     expect(applyBillSubmissionEvaluationDiagnoses([], "psych_qme")).toEqual(["Z04.6"]);
     expect(applyBillSubmissionEvaluationDiagnoses(undefined, "psych_qme")).toEqual(["Z04.6"]);
     expect(applyBillSubmissionEvaluationDiagnoses(["F43.10"], "psych_qme")).toEqual(["F43.10"]);
+    expect(applyBillSubmissionEvaluationDiagnoses([], "psych_ame")).toEqual(["Z04.6"]);
+    expect(applyBillSubmissionEvaluationDiagnoses(["F43.10"], "psych_ame")).toEqual(["F43.10"]);
     expect(applyBillSubmissionEvaluationDiagnoses([], "qme")).toEqual([]);
   });
 
