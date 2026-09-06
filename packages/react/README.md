@@ -389,3 +389,12 @@ import { OrganizationOnboarding } from "@mindbill/react";
 ```
 
 The session must be minted with the optional `organization:manage` permission. Each step saves independently through idempotent upserts that never delete records created elsewhere; the review step mirrors MindBill's onboarding checklist and `onCompleted` fires when everything required is in place.
+
+## Dental and authorization drafts
+
+`DentalDraftEditor` captures dental services, tooth details, and nullable extended
+practice charges. `RfaDraftForm` prepares unsigned requests for authorization,
+including review type, rationale, and requested services. Both save through your
+host-server callback; saving does not transmit or authorize anything. See
+[treatment draft integration](../../docs/treatment-drafts.md) for input types,
+revision handling, charge semantics, and signing boundaries.
