@@ -81,7 +81,7 @@ export const BILL_SUBMISSION_REPORT_TYPES: readonly BillSubmissionReportTypeOpti
   { code: "RX", label: "Renewable Oxygen Content Averaging Report" }, { code: "SG", label: "Symptoms Document" },
   { code: "V5", label: "Death Notification" }, { code: "XP", label: "Photographs" },
 ] as const;
-export type BillSubmissionEvaluationType = "qme" | "ame" | "psych_qme";
+export type BillSubmissionEvaluationType = "qme" | "ame" | "psych_qme" | "psych_ame";
 export type BillSubmissionAddress = { line1: string; line2?: string; city: string; state: string; postalCode: string };
 export type BillSubmissionDiagnosisOption = { code: string; description: string };
 export type BillSubmissionProcedureOption = { code: string; description: string; allowedAmount?: number };
@@ -381,38 +381,42 @@ export function formatBillSubmissionDate(value: string | null | undefined): stri
   return `${month}/${day}/${year}`;
 }
 
-function evaluationModifier(type: BillSubmissionEvaluationType, code: string): string | undefined {
-  if (!/^ML(?:200|201|202|203|PRR)$/.test(code.toUpperCase())) return undefined;
-  if (type === "ame") return code.toUpperCase() === "ML200" || code.toUpperCase() === "MLPRR" ? undefined : "94";
-  if (type === "psych_qme") return code.toUpperCase() === "ML200" ? "95" : code.toUpperCase() === "MLPRR" ? undefined : "96";
-  return "95";
+function evaluationModifiers(type: BillSubmissionEvaluationType, code: string): string[] {
+  const normalizedCode = code.toUpperCase();
+  if (!/^ML(?:200|201|202|203|PRR)$/.test(normalizedCode)) return [];
+  const isAme = type === "ame" || type === "psych_ame";
+  if (normalizedCode === "ML200" || normalizedCode === "MLPRR") return isAme ? [] : ["95"];
+  const modifiers = [isAme ? "94" : "95"];
+  if (type === "psych_qme" || type === "psych_ame") modifiers.push("96");
+  return modifiers;
 }
 export function applyBillSubmissionEvaluationModifiers(
   lines: BillSubmissionInput["serviceLines"], type: BillSubmissionEvaluationType,
 ): BillSubmissionInput["serviceLines"] {
   return lines.map((line) => {
-    const auto = evaluationModifier(type, line.code);
+    const auto = evaluationModifiers(type, line.code);
     const modifiers = (line.modifiers ?? []).filter((item) => !["94", "95", "96"].includes(item.replace(/^-/, "")));
-    return { ...line, modifiers: auto ? [auto, ...modifiers] : modifiers };
+    return { ...line, modifiers: [...auto, ...modifiers] };
   });
 }
 
 export const PSYCH_QME_DEFAULT_DIAGNOSIS = "Z04.6";
 
-/** Seed Psych QME's general examination code only when no diagnosis was supplied. */
+/** Seed the psychiatric examination code only when no diagnosis was supplied. */
 export function applyBillSubmissionEvaluationDiagnoses(
   diagnoses: string[] | undefined,
   type: BillSubmissionEvaluationType,
 ): string[] {
   const current = [...(diagnoses ?? [])];
-  return type === "psych_qme" && !current.some((code) => code.trim())
+  return (type === "psych_qme" || type === "psych_ame") && !current.some((code) => code.trim())
     ? [PSYCH_QME_DEFAULT_DIAGNOSIS]
     : current;
 }
 
 function initialEvaluationType(bill: BillSubmissionInput): BillSubmissionEvaluationType {
-  if (bill.renderingProvider?.isAme) return "ame";
-  return bill.renderingProvider?.specialty?.toLowerCase().includes("psych") ? "psych_qme" : "qme";
+  const isPsych = bill.renderingProvider?.specialty?.toLowerCase().includes("psych");
+  if (bill.renderingProvider?.isAme) return isPsych ? "psych_ame" : "ame";
+  return isPsych ? "psych_qme" : "qme";
 }
 
 function cloneInitialBill(bill: BillSubmissionInput): BillSubmissionInput {
@@ -885,7 +889,7 @@ export function BillSubmissionForm({
     setPostalStatus("Looking up ZIP…"); void lookup(postalCode).then((place) => { if (!place) return setPostalStatus("ZIP not found"); setAddress({ city: place.city, state: place.state.toUpperCase() }); setPostalStatus(`${place.city}, ${place.state.toUpperCase()} filled from ZIP`); }).catch(() => setPostalStatus("ZIP lookup unavailable"));
   };
   const changeEvaluation = (type: BillSubmissionEvaluationType) => {
-    setEvaluationType(type); setBill((current) => ({ ...current, diagnoses: applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type), renderingProvider: { ...current.renderingProvider, isAme: type === "ame", isQme: type !== "ame", ...(type === "psych_qme" && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(current.serviceLines, type) }));
+    setEvaluationType(type); setBill((current) => ({ ...current, diagnoses: applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type), renderingProvider: { ...current.renderingProvider, isAme: type === "ame" || type === "psych_ame", isQme: type === "qme" || type === "psych_qme", ...((type === "psych_qme" || type === "psych_ame") && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(current.serviceLines, type) }));
   };
   const lineCharge = (line: BillSubmissionInput["serviceLines"][number]) => calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
   const total = submittedLines(bill.serviceLines).reduce((sum, line) => sum + (lineCharge(line) ?? 0), 0);
@@ -1112,11 +1116,11 @@ export function BillSubmissionForm({
 
   const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Evaluation &amp; service lines</legend>
       <p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
-      <div className="mbsf-segments" role="group" aria-label="Evaluation type">{([ ["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"] ] as const).map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
-      <p className="mbsf-help">{evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric QME — eligible ML evaluation codes default to modifier -96 (-95 for ML200)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
+      <div className="mbsf-segments" role="group" aria-label="Evaluation type">{([ ["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"], ["psych_ame", "Psych AME"] ] as const).map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
+      <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
       <div className="mbsf-lines" data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span><span>Dx</span><span>Units<RequiredMark /></span><span>Allowed</span><span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
-          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const auto = evaluationModifier(evaluationType, option.id); setLine(index, { code: option.id, ...(auto ? { modifiers: [auto, ...(line.modifiers ?? []).filter((item) => !["94", "95", "96"].includes(item.replace(/^-/, "")))] } : line.modifiers ? { modifiers: line.modifiers } : {}) }); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
+          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={modifiers.filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
           <div data-label="Dx"><div className="mbsf-dx">{(bill.diagnoses ?? []).length ? (bill.diagnoses ?? []).map((code, dxIndex) => { const pointer = dxIndex + 1; const active = (line.diagnosisPointers ?? []).includes(pointer); return <button type="button" key={code} className="mbsf-dx-chip" data-active={active} title={`${String.fromCharCode(64 + pointer)} — ${code}`} aria-pressed={active} aria-label={`Point line ${index + 1} at diagnosis ${code}`} onClick={() => setLine(index, { diagnosisPointers: active ? (line.diagnosisPointers ?? []).filter((item) => item !== pointer) : [...(line.diagnosisPointers ?? []), pointer].sort((left, right) => left - right) })}>{String.fromCharCode(64 + pointer)}</button>; }) : <small className="mbsf-help">Add diagnoses above</small>}</div></div>
           <div data-label="Units" data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
