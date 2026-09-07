@@ -146,6 +146,14 @@ curated workers-comp procedure and modifier catalog, medical-legal fee rules, di
 quick picks, and locked practice W-9 behavior. Pass optional catalog props only to add
 organization-specific choices.
 
+Each service line has four searchable ICD-10 dropdowns. Selecting a diagnosis adds it
+to the bill's diagnosis list and links only that line; removing or reordering bill
+diagnoses preserves the remaining links. Pass `treatmentBilling` to the same form to
+include treatment procedures in the existing procedure picker and obtain dated fee
+quotes through the browser session. Verified quotes supply the total line charge;
+unavailable rates and incomplete service details require review before submission.
+See [procedure search and fee quotes](./docs/procedure-fees.md).
+
 When the biller submits, the form shows a delivery-method dialog by default: the
 verified e-bill route with its payer ID (shown only when the payer has an e-route),
 then fax and email with the payer contacts on file, then physical mail — channels
@@ -367,6 +375,8 @@ Dashboard colors, borders, radii, spacing, and aging palettes are configurable t
 - Mix both: send your stable patient and claim IDs while MindBill remains the billing system of record. Every bill still freezes the exact values that were submitted.
 
 The same bill contract supports California med-legal billing and `billingMode: "professional"` for IME, treatment, malpractice, hourly, and activity-based workflows. Professional service lines carry the explicit charge supplied by the partner; med-legal lines use MindBill fee-schedule logic.
+
+For organizations with treatment billing enabled, the browser reference and lifecycle clients expose `searchProcedureCodes` and `quoteFee`. Search the procedure catalog, then quote the service using its date and verified context. A priced quote returns the total line amount in cents; review outcomes require resolution before using a charge. See [procedure search and fee quotes](./docs/procedure-fees.md) for the contracts and examples.
 
 ## Reference
 

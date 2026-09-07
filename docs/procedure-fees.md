@@ -1,0 +1,72 @@
+# Procedure search and fee quotes
+
+`createBillReferenceClient` and `createBillLifecycleClient` expose `searchProcedureCodes` and `quoteFee`. Both use short-lived, origin-bound browser sessions with `bills:read`; the organization must have treatment billing enabled. Keep session issuance on your trusted server.
+
+## Existing React form
+
+Enable treatment on the existing component, retaining its patient, claim, diagnosis,
+service-line, attachment, and submission workflow:
+
+```tsx
+<BillSubmissionForm
+  initialBill={bill}
+  treatmentBilling
+  getSession={getMindBillSession}
+  onSubmitted={({ billId }) => saveBillLink(billId)}
+/>
+```
+
+Each line has four ICD-10 search dropdowns backed by the same diagnosis catalog.
+The bill supports twelve unique diagnoses and four unique diagnosis pointers per line.
+Treatment procedures use the existing procedure picker. The form quotes California
+fees for the service date and location, after the biller supplies required service
+facts in the line's fee details. Quotes for unsupported services, dates, or jurisdictions
+remain marked for review and cannot silently reuse an old charge. Current context
+controls cover office visits and therapeutic exercise; other services may need review.
+Medical-legal and treatment services require separate bills.
+
+Hosts with custom reference integrations may supply `onSearchProcedureCodes` and
+`onQuoteFee`; these callbacks use the exported browser input and result types. The
+default implementation uses the same short-lived session as the rest of the form.
+
+## Browser clients
+
+```ts
+import { createBillReferenceClient } from "@mindbill/browser";
+
+const reference = createBillReferenceClient({
+  sessionEndpoint: "/api/mindbill/session",
+});
+const catalog = await reference.searchProcedureCodes({
+  query: "99",
+  limit: 30,
+  jurisdiction: "CA",
+});
+// catalog.results contains { code } entries.
+```
+
+Search uses `GET /partner/v2/procedure-codes`. The query is an optional procedure-code prefix of up to five alphanumeric characters. The limit defaults to 30 and is bounded to 1–100. Supported catalog jurisdictions are `CA` (default), `NY`, and `OWCP`. The result contains `results`, `total`, `limit`, `jurisdiction`, and `catalogAsOf`. `catalogAsOf` describes the catalog snapshot, not the effective date of a rate. A catalog entry does not guarantee a payable fee for a service date.
+
+`quoteFee(input: BillFeeQuoteInput): Promise<BillFeeQuote>` posts to `POST /partner/v2/fee-quotes` and unwraps its `data` result. Supply the procedure `code` and `dateOfService` (`YYYY-MM-DD`), plus the applicable verified service context. Optional inputs include `units`, `modifiers`, `chargeCents`, `serviceZip`, `hasFeeAgreement`, and report qualifications. Physician and therapy services have distinct context fields; the exported `BillFeeQuoteInput` type lists them. Do not infer attestations merely to obtain a price. Missing context or unavailable rates can require review.
+
+```ts
+const quote = await reference.quoteFee({
+  code: "99213",
+  dateOfService: "2026-08-24",
+  units: 1,
+  serviceZip: "95814",
+  // Add physicianContext only from verified service facts.
+});
+
+if (quote.status === "priced") {
+  const totalLineDollars = quote.amountCents / 100;
+  // This is already the total for the line; do not multiply by units again.
+  console.log(totalLineDollars);
+} else {
+  console.log(quote.reason);
+}
+```
+
+A priced quote includes `amountCents`, `scheduleMaximumCents`, `basis`, `provenance`, and `notes`. Other outcomes are `requires_review` and `not_separately_payable`, each with `reason` and `provenance`; neither provides a billable amount. Provenance identifies source URLs and effective dates. Pricing failures reject the promise. Requote when procedure, date, units, modifiers, location, charge, or applicable service facts change, and discard responses for an older form state.
+
+Service lines may carry an optional `rfaItemId` linking an existing RFA item. This identifier is separate from fee pricing: preserve it for the same authorized service, and clear it when changing the procedure so a different service is not linked to the previous authorization. When the last linked line is replaced or removed, the form also clears its bill authorization number. Explicit authorization on an initially unlinked bill remains unchanged. A fee quote does not establish authorization.

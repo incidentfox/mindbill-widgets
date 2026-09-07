@@ -1,0 +1,144 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  remapBillSubmissionDiagnoses,
+  setBillSubmissionLineDiagnosis,
+  validateBillSubmission,
+  type BillSubmissionInput,
+} from "../packages/react/src/bill-submission-form";
+
+function syntheticBill(): BillSubmissionInput {
+  const address = { line1: "100 Example Street", city: "Sacramento", state: "CA", postalCode: "95814" };
+  return {
+    billingMode: "professional",
+    patient: { firstName: "Synthetic", lastName: "Example", dateOfBirth: "1980-01-02", address },
+    claim: {
+      claimNumber: "SYNTHETIC-CLAIM",
+      employer: "Synthetic Employer",
+      dateOfInjury: "2026-08-01",
+      claimsAdministrator: { id: "synthetic_payer", name: "Synthetic Claims Administrator" },
+    },
+    service: { date: "2026-08-24" },
+    billingProvider: { name: "Synthetic Medical Group", taxId: "123456789", npi: "1234567890", phone: "9165550100", address },
+    renderingProvider: { name: "Synthetic Physician", npi: "1098765432", taxonomy: "207X00000X" },
+    serviceLocation: { name: "Synthetic Office", placeOfServiceCode: "11", address },
+    diagnoses: ["M54.50", "M54.2", "M79.641"],
+    serviceLines: [
+      { code: "99213", units: 1, charge: 100, diagnosisPointers: [1] },
+      { code: "97110", units: 1, charge: 50, diagnosisPointers: [2] },
+    ],
+  };
+}
+
+describe("service line ICD-10 assignments", () => {
+  it("assigns a newly searched diagnosis to only the selected line and leaves the input unchanged", () => {
+    const original = syntheticBill();
+    const before = structuredClone(original);
+    const updated = setBillSubmissionLineDiagnosis(original, 1, 1, " m25.562 ");
+
+    expect(updated.diagnoses).toEqual(["M54.50", "M54.2", "M79.641", "M25.562"]);
+    expect(updated.serviceLines.map((line) => line.diagnosisPointers)).toEqual([[1], [2, 4]]);
+    expect(original).toEqual(before);
+  });
+
+  it("replaces a diagnosis in one line without changing another line using that diagnosis", () => {
+    const original = syntheticBill();
+    original.serviceLines[1]!.diagnosisPointers = [1, 2];
+    const updated = setBillSubmissionLineDiagnosis(original, 0, 0, "M79.641");
+
+    expect(updated.serviceLines.map((line) => line.diagnosisPointers)).toEqual([[3], [1, 2]]);
+    expect(updated.diagnoses).toEqual(original.diagnoses);
+  });
+
+  it("preserves the diagnosis meaning and priority of every line after removing and reordering claim diagnoses", () => {
+    const original = syntheticBill();
+    original.serviceLines[0]!.diagnosisPointers = [3, 1];
+    original.serviceLines[1]!.diagnosisPointers = [2, 3];
+    const updated = remapBillSubmissionDiagnoses(original, ["M79.641", "M54.50"]);
+
+    expect(updated.serviceLines.map((line) => line.diagnosisPointers)).toEqual([[1, 2], [1]]);
+    expect(original.serviceLines.map((line) => line.diagnosisPointers)).toEqual([[3, 1], [2, 3]]);
+  });
+
+  it("clears a line assignment when its claim diagnosis is removed instead of assigning the next diagnosis", () => {
+    const updated = remapBillSubmissionDiagnoses(syntheticBill(), ["M54.2", "M79.641"]);
+
+    expect(updated.serviceLines.map((line) => line.diagnosisPointers)).toEqual([[], [1]]);
+    expect(validateBillSubmission(updated).fieldErrors["serviceLines.0.diagnosisPointers"]).toBeDefined();
+  });
+
+  it("removes a selected slot and keeps the remaining line diagnoses in order", () => {
+    const original = syntheticBill();
+    original.serviceLines[0]!.diagnosisPointers = [1, 2, 3];
+    const updated = setBillSubmissionLineDiagnosis(original, 0, 1, "");
+
+    expect(updated.serviceLines[0]!.diagnosisPointers).toEqual([1, 3]);
+    expect(updated.serviceLines[1]!.diagnosisPointers).toEqual([2]);
+    expect(updated.diagnoses).toEqual(original.diagnoses);
+  });
+
+  it("deduplicates a diagnosis chosen in multiple slots", () => {
+    const original = syntheticBill();
+    original.serviceLines[0]!.diagnosisPointers = [1, 2, 3];
+    const updated = setBillSubmissionLineDiagnosis(original, 0, 1, "M54.50");
+
+    expect(updated.serviceLines[0]!.diagnosisPointers).toEqual([1, 3]);
+    expect(validateBillSubmission(updated).valid).toBe(true);
+  });
+
+  it("caps claim diagnoses at twelve and still permits existing diagnoses at the limit", () => {
+    const codes = Array.from({ length: 13 }, (_, index) => `Z99.${index}`);
+    const full = remapBillSubmissionDiagnoses(syntheticBill(), codes);
+
+    expect(full.diagnoses).toEqual(codes.slice(0, 12));
+    expect(setBillSubmissionLineDiagnosis(full, 0, 0, codes[12]!)).toBe(full);
+    expect(setBillSubmissionLineDiagnosis(full, 0, 0, codes[11]!).serviceLines[0]!.diagnosisPointers).toEqual([12]);
+  });
+
+  it("rejects host-provided initial bills with more than twelve claim diagnoses", () => {
+    const bill = syntheticBill();
+    bill.diagnoses = Array.from({ length: 13 }, (_, index) => `Z99.${index}`);
+
+    expect(validateBillSubmission(bill).fieldErrors.diagnoses).toBeDefined();
+  });
+
+  it("preserves assignments while normalizing whitespace and case in initial diagnoses", () => {
+    const bill = syntheticBill();
+    bill.diagnoses = [" m54.50 ", "m54.2", "M79.641"];
+    const updated = remapBillSubmissionDiagnoses(bill, ["M54.2", "M54.50"]);
+
+    expect(updated.serviceLines.map((line) => line.diagnosisPointers)).toEqual([[2], [1]]);
+  });
+
+  it("allows four diagnoses on a line and rejects a fifth slot without adding a claim diagnosis", () => {
+    const original = syntheticBill();
+    original.serviceLines[0]!.diagnosisPointers = [1, 2, 3];
+    const full = setBillSubmissionLineDiagnosis(original, 0, 3, "M25.562");
+
+    expect(full.serviceLines[0]!.diagnosisPointers).toEqual([1, 2, 3, 4]);
+    expect(setBillSubmissionLineDiagnosis(full, 0, 4, "M25.561")).toBe(full);
+    expect(validateBillSubmission(full).valid).toBe(true);
+  });
+
+  it("requires an explicit diagnosis on each professional service line even with claim diagnoses", () => {
+    const bill = syntheticBill();
+    delete bill.serviceLines[1]!.diagnosisPointers;
+
+    const result = validateBillSubmission(bill);
+    expect(result.valid).toBe(false);
+    expect(result.fieldErrors["serviceLines.1.diagnosisPointers"]).toBeDefined();
+    expect(result.fieldErrors["serviceLines.0.diagnosisPointers"]).toBeUndefined();
+    expect(validateBillSubmission({
+      ...bill,
+      billingMode: "med_legal",
+      serviceLines: [{ code: "ML201", units: 1 }],
+    }).valid).toBe(true);
+  });
+
+  it.each([[1, 1], [0], [4], [1.5], [1, 2, 3, 1, 2]])("rejects invalid or duplicate diagnosis pointers %j", (...pointers) => {
+    const bill = syntheticBill();
+    bill.serviceLines[0]!.diagnosisPointers = pointers;
+
+    expect(validateBillSubmission(bill).fieldErrors["serviceLines.0.diagnosisPointers"]).toBeDefined();
+  });
+});
