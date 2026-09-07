@@ -970,6 +970,8 @@ export type BrowserBillCreateInput = {
     serviceDate?: string;
     serviceDateEnd?: string | null;
     diagnosisPointers?: number[];
+    /** Existing authorized RFA item linked to this service line. */
+    rfaItemId?: string;
   }>;
 };
 
@@ -1040,11 +1042,89 @@ export type BillDeliveryPreviewInput = {
   injuryState?: string;
 };
 
+export type BillProcedureCodeSearchInput = {
+  query?: string;
+  limit?: number;
+  jurisdiction?: "CA" | "NY" | "OWCP";
+};
+
+/** Catalog membership does not imply that a fee is available for a service date. */
+export type BillProcedureCodePage = {
+  results: Array<{ code: string }>;
+  total: number;
+  limit: number;
+  jurisdiction: "CA" | "NY" | "OWCP";
+  catalogAsOf: string | null;
+};
+
+export type BillFeeSource = {
+  id: string;
+  url: string;
+  sha256?: string;
+  effectiveFrom: string;
+  effectiveThrough: string;
+};
+
+export type BillFeeQuoteInput = {
+  code: string;
+  dateOfService: string;
+  chargeCents?: number;
+  units?: number;
+  modifiers?: string[];
+  pages?: number;
+  reportKind?: "progress" | "permanent_stationary_pr3" | "permanent_stationary_pr4";
+  hasFeeAgreement?: boolean;
+  serviceZip?: string;
+  /** Supply verified service facts; omitted context can require review. */
+  physicianContext?: {
+    providerKind: "physician" | "physician_assistant" | "nurse_practitioner" | "clinical_nurse_specialist" | "other";
+    incidentToPhysicianService?: boolean;
+    placeOfService: string;
+    standaloneService: boolean;
+    globalPeriodApplies: boolean;
+    hpsaBonusEligible: boolean;
+  };
+  therapyContext?: {
+    providerKind: "physical_therapist" | "other";
+    personallyPerformed: boolean;
+    hospitalPatient: boolean;
+    incidentToPhysicianService: boolean;
+    assistantInvolved: boolean;
+    placeOfService: string;
+    directOneOnOneMinutes: number;
+    totalVisitMinutes: number;
+    visitsOnDate: number;
+    completeSameDayServices: boolean;
+    otherSameDayServices: boolean;
+    globalPeriodApplies: boolean;
+    hpsaBonusEligible: boolean;
+  };
+  reportQualification?:
+    | { kind: "psychiatric_report"; requestedBy: "wcab" | "administrative_director"; medicalLegalEvaluation: boolean; reportPayableUnderMedicalLegalSchedule: boolean }
+    | { kind: "consultation_report"; requestedBy: "wcab" | "administrative_director" | "qme" | "ame"; medicalLegalEvaluation: boolean; reportPayableUnderMedicalLegalSchedule: boolean }
+    | { kind: "chart_notes"; requestedBy: "claims_administrator"; writtenRequest: boolean }
+    | { kind: "duplicate_report"; requestedBy: "claims_administrator"; writtenRequest: boolean; relatedToBilling: boolean; initialRequiredCopy: boolean };
+};
+
+export type BillFeeQuote =
+  | {
+    status: "priced";
+    /** Total for the service line in cents, already accounting for units. */
+    amountCents: number;
+    scheduleMaximumCents: number;
+    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs";
+    provenance: BillFeeSource[];
+    notes: string[];
+  }
+  | { status: "requires_review" | "not_separately_payable"; reason: string; provenance: BillFeeSource[] };
+
 export type BillReferenceClient = {
   listClaimsAdministrators: (input?: BillReviewPayerListInput) => Promise<BillReviewPayerPage>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
+  searchProcedureCodes: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
+  quoteFee: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   /**
    * Delivery-route preview (recommended route + selectable options + payer
@@ -1062,6 +1142,8 @@ export type BillLifecycleClient = {
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
+  searchProcedureCodes: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
+  quoteFee: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
   getDeliveryPreview: (input: BillDeliveryPreviewInput) => Promise<BillDeliveryOptions>;
@@ -1467,6 +1549,42 @@ export function createBillLifecycleClient({
     });
   };
 
+  const searchProcedureCodes = async (input: BillProcedureCodeSearchInput = {}): Promise<BillProcedureCodePage> => {
+    const limit = Number.isFinite(input.limit) ? Math.max(1, Math.min(100, Math.floor(input.limit!))) : 30;
+    const params = new URLSearchParams({ q: input.query?.trim() ?? "", limit: String(limit), jurisdiction: input.jurisdiction?.trim().toUpperCase() || "CA" });
+    const response = await request(`/partner/v2/procedure-codes?${params}`);
+    if (!response.ok) throw await responseError(response, "Procedure-code search is unavailable.");
+    const body = await response.json() as Partial<BillProcedureCodePage>;
+    if (!Array.isArray(body.results) || typeof body.total !== "number" || !Number.isFinite(body.total) || body.total < 0 || typeof body.limit !== "number" || !Number.isFinite(body.limit) || body.limit < 1 || !["CA", "NY", "OWCP"].includes(body.jurisdiction ?? "") || !(body.catalogAsOf === null || typeof body.catalogAsOf === "string")) {
+      throw new Error("Procedure-code search returned an invalid response.");
+    }
+    return {
+      results: body.results.flatMap((entry) => entry && typeof entry.code === "string" && entry.code.trim() ? [{ code: entry.code }] : []),
+      total: body.total,
+      limit: body.limit,
+      jurisdiction: body.jurisdiction!,
+      catalogAsOf: body.catalogAsOf,
+    };
+  };
+
+  const quoteFee = async (input: BillFeeQuoteInput): Promise<BillFeeQuote> => {
+    const response = await request("/partner/v2/fee-quotes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) throw await responseError(response, "Fee-schedule pricing is unavailable.");
+    const body = await response.json() as { data?: BillFeeQuote };
+    const quote = body.data;
+    if (!quote || !Array.isArray(quote.provenance)) throw new Error("Fee quote returned an invalid response.");
+    if (quote.status === "priced") {
+      if (!Number.isSafeInteger(quote.amountCents) || quote.amountCents < 0 || !Number.isSafeInteger(quote.scheduleMaximumCents) || quote.scheduleMaximumCents < 0 || !["ca_report", "ca_physician_rbrvs", "ca_therapy_rbrvs"].includes(quote.basis) || !Array.isArray(quote.notes) || quote.notes.some((note) => typeof note !== "string")) throw new Error("Fee quote returned an invalid response.");
+    } else if ((quote.status !== "requires_review" && quote.status !== "not_separately_payable") || typeof quote.reason !== "string") {
+      throw new Error("Fee quote returned an invalid response.");
+    }
+    return quote;
+  };
+
   const lookupPostalCode = async (postalCode: string): Promise<BillPostalPlace | null> => {
     const params = new URLSearchParams({ postalCode: postalCode.trim() });
     const response = await request(`/partner/v2/postal-codes?${params.toString()}`);
@@ -1511,6 +1629,8 @@ export function createBillLifecycleClient({
     searchClaimsAdministrators,
     getClaimsAdministratorDirectory,
     searchDiagnosisCodes,
+    searchProcedureCodes,
+    quoteFee,
     lookupPostalCode,
     async getDeliveryOptions() {
       const response = await request(billPath("/delivery-options"));
@@ -1607,6 +1727,8 @@ export function createBillReferenceClient(
     searchClaimsAdministrators: lifecycle.searchClaimsAdministrators,
     getClaimsAdministratorDirectory: lifecycle.getClaimsAdministratorDirectory,
     searchDiagnosisCodes: lifecycle.searchDiagnosisCodes,
+    searchProcedureCodes: lifecycle.searchProcedureCodes,
+    quoteFee: lifecycle.quoteFee,
     lookupPostalCode: lifecycle.lookupPostalCode,
     getDeliveryPreview: lifecycle.getDeliveryPreview,
     clearSession: lifecycle.clearSession,

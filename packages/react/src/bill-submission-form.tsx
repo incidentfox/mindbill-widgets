@@ -6,6 +6,10 @@ import {
   createBillReferenceClient,
   createBillSubmissionClient,
   type BillDeliveryOptions,
+  type BillFeeQuote,
+  type BillFeeQuoteInput,
+  type BillProcedureCodeSearchInput,
+  type BillProcedureCodePage,
   type BillClaimsAdministratorSource,
   type BillClaimsAdministratorDirectory,
   type BrowserBillSubmissionDocument,
@@ -124,6 +128,8 @@ export type BillSubmissionInput = {
   serviceLines: Array<{
     code: string; modifiers?: string[]; units?: number; serviceDate?: string;
     serviceDateEnd?: string | null; charge?: number; diagnosisPointers?: number[];
+    /** Authorized RFA item associated with this procedure. Cleared when its code changes. */
+    rfaItemId?: string;
   }>;
 };
 
@@ -177,6 +183,23 @@ export type BillSubmissionFormValue = {
   uploads: BillSubmissionUpload[];
 };
 
+export type BillSubmissionFeeContext = Omit<BillFeeQuoteInput, "code" | "dateOfService" | "units" | "modifiers" | "serviceZip" | "chargeCents">;
+
+type FeeDetails = { providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | ""; confirmed?: boolean; confirmationKey?: string; minutes?: number; totalMinutes?: number };
+const isMedicalLegalCode = (code: string) => /^ML/i.test(code.trim());
+
+/** Context and service changes produce a different quote request; amounts are never reused across requests. */
+export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSubmissionInput["serviceLines"][number], context: BillSubmissionFeeContext = {}): BillFeeQuoteInput {
+  const dateOfService = parseBillSubmissionDate(line.serviceDate ?? bill.service.date) ?? "";
+  const otherSameDayServices = Boolean(dateOfService) && bill.serviceLines.filter((candidate) => candidate.code.trim() && parseBillSubmissionDate(candidate.serviceDate ?? bill.service.date) === dateOfService).length > 1;
+  return {
+    ...context,
+    ...(otherSameDayServices && context.physicianContext ? { physicianContext: { ...context.physicianContext, standaloneService: false } } : {}),
+    ...(otherSameDayServices && context.therapyContext ? { therapyContext: { ...context.therapyContext, otherSameDayServices: true } } : {}),
+    code: line.code.trim().toUpperCase(), dateOfService, units: line.units ?? 1, modifiers: line.modifiers ?? [], serviceZip: bill.serviceLocation?.address?.postalCode ?? "",
+  };
+}
+
 export type BillSubmissionFormProps = {
   initialBill: BillSubmissionInput;
   /** Host-owned choices or organizationProfileOptions(profile). Selection copies a snapshot into this bill only. */
@@ -209,6 +232,10 @@ export type BillSubmissionFormProps = {
   onSearchDiagnoses?: (query: string, limit?: number, offset?: number) => Promise<BillSubmissionDiagnosisOption[]>;
   onLookupPostalCode?: (postalCode: string) => Promise<BillSubmissionPostalPlace | null>;
   procedureOptions?: BillSubmissionProcedureOption[];
+  /** Extend the existing procedure picker with treatment codes and authoritative fee quotes. */
+  treatmentBilling?: boolean;
+  onSearchProcedureCodes?: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
+  onQuoteFee?: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
   modifierOptions?: BillSubmissionModifierOption[];
   /** Common NUCC provider taxonomies are bundled; supplied values extend or replace matching codes. */
   taxonomyOptions?: BillSubmissionTaxonomyOption[];
@@ -362,6 +389,18 @@ export function ensureTrailingBillSubmissionLine(
   return normalized;
 }
 
+export function replaceBillSubmissionServiceLines(
+  bill: BillSubmissionInput,
+  serviceLines: BillSubmissionInput["serviceLines"],
+): BillSubmissionInput {
+  const lostLastRfaLink = bill.serviceLines.some((line) => line.rfaItemId)
+    && !serviceLines.some((line) => line.rfaItemId);
+  const service = lostLastRfaLink ? { ...bill.service } : bill.service;
+  // A linked authorization must not follow a replacement, unrelated procedure.
+  if (lostLastRfaLink) delete service.authorizationNumber;
+  return { ...bill, service, serviceLines };
+}
+
 export function parseBillSubmissionDate(value: string): string | undefined {
   const trimmed = value.trim();
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
@@ -394,6 +433,7 @@ export function applyBillSubmissionEvaluationModifiers(
   lines: BillSubmissionInput["serviceLines"], type: BillSubmissionEvaluationType,
 ): BillSubmissionInput["serviceLines"] {
   return lines.map((line) => {
+    if (!isMedicalLegalCode(line.code)) return line;
     const auto = evaluationModifiers(type, line.code);
     const modifiers = (line.modifiers ?? []).filter((item) => !["94", "95", "96"].includes(item.replace(/^-/, "")));
     return { ...line, modifiers: [...auto, ...modifiers] };
@@ -419,9 +459,41 @@ function initialEvaluationType(bill: BillSubmissionInput): BillSubmissionEvaluat
   return isPsych ? "psych_qme" : "qme";
 }
 
-function cloneInitialBill(bill: BillSubmissionInput): BillSubmissionInput {
+/** Preserve the meaning of every line pointer when the claim diagnosis list changes. */
+export function remapBillSubmissionDiagnoses(bill: BillSubmissionInput, nextCodes: string[]): BillSubmissionInput {
+  const diagnoses = [...new Set(nextCodes.map((code) => code.trim().toUpperCase()).filter(Boolean))].slice(0, 12);
+  return { ...bill, diagnoses, serviceLines: bill.serviceLines.map((line) => ({
+    ...line,
+    ...(line.diagnosisPointers ? { diagnosisPointers: line.diagnosisPointers.flatMap((pointer) => {
+      const code = bill.diagnoses?.[pointer - 1];
+      const index = code ? diagnoses.indexOf(code.trim().toUpperCase()) : -1;
+      return index < 0 ? [] : [index + 1];
+    }) } : {}),
+  })) };
+}
+
+/** Select a diagnosis for one service line without assigning it to other lines. */
+export function setBillSubmissionLineDiagnosis(bill: BillSubmissionInput, lineIndex: number, slot: number, code: string): BillSubmissionInput {
+  if (!bill.serviceLines[lineIndex] || slot < 0 || slot > 3) return bill;
+  const diagnoses = [...(bill.diagnoses ?? [])];
+  const normalized = code.trim().toUpperCase();
+  if (normalized && !diagnoses.includes(normalized)) {
+    if (diagnoses.length >= 12) return bill;
+    diagnoses.push(normalized);
+  }
+  return { ...bill, diagnoses, serviceLines: bill.serviceLines.map((line, index) => {
+    if (index !== lineIndex) return line;
+    const pointers = [...(line.diagnosisPointers ?? [])];
+    if (normalized) pointers[slot] = diagnoses.indexOf(normalized) + 1;
+    else pointers.splice(slot, 1);
+    return { ...line, diagnosisPointers: [...new Set(pointers.filter((pointer) => Number.isInteger(pointer) && pointer > 0))].slice(0, 4) };
+  }) };
+}
+
+function cloneInitialBill(bill: BillSubmissionInput, treatmentBilling = false): BillSubmissionInput {
   const cloned = cloneBill(bill);
-  cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
+  if (treatmentBilling && cloned.serviceLines.some((line) => line.code.trim() && !isMedicalLegalCode(line.code))) cloned.billingMode = "professional";
+  if (cloned.billingMode !== "professional") cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
   return cloned;
 }
 
@@ -499,6 +571,7 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("serviceLocation.address.city", bill.serviceLocation?.address?.city, "Enter the service facility city.");
   required("serviceLocation.address.state", bill.serviceLocation?.address?.state, "Enter the service facility 2-letter state code.");
   required("serviceLocation.address.postalCode", bill.serviceLocation?.address?.postalCode, "Enter the service facility ZIP code.");
+  if ((bill.diagnoses?.length ?? 0) > 12) errors.diagnoses = "Select no more than 12 claim diagnoses.";
   if (!(bill.diagnoses ?? []).some((code) => code.trim())) {
     errors.diagnoses = "Select at least one ICD-10 diagnosis code.";
   }
@@ -520,11 +593,14 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   if (bill.renderingProvider?.taxonomy && !/^[A-Za-z0-9]{10}$/.test(bill.renderingProvider.taxonomy.trim())) errors["renderingProvider.taxonomy"] = "Enter a valid 10-character taxonomy code.";
   if (bill.serviceLocation?.placeOfServiceCode && !/^\d{2}$/.test(bill.serviceLocation.placeOfServiceCode.trim())) errors["serviceLocation.placeOfServiceCode"] = "Enter a valid 2-digit place of service code.";
   const lines = submittedLines(bill.serviceLines);
+  if (lines.some((line) => isMedicalLegalCode(line.code)) && lines.some((line) => line.code && !isMedicalLegalCode(line.code))) errors.serviceLines = "Submit medical-legal and treatment services on separate bills.";
   if (!lines.length) errors.serviceLines = "Add at least one service line";
   lines.forEach((line, index) => {
     required(`serviceLines.${index}.code`, line.code, "Select a procedure code.");
+    const pointers = line.diagnosisPointers ?? [];
+    if (pointers.length > 4 || new Set(pointers).size !== pointers.length || pointers.some((pointer) => !Number.isInteger(pointer) || pointer < 1 || pointer > (bill.diagnoses?.length ?? 0)) || (bill.billingMode === "professional" && !pointers.length)) errors[`serviceLines.${index}.diagnosisPointers`] = "Select up to four diagnoses for this service line.";
     if (!Number.isInteger(line.units) || (line.units ?? 0) < 1) errors[`serviceLines.${index}.units`] = "Enter at least 1 unit";
-    if (bill.billingMode === "professional" && (!Number.isFinite(line.charge) || (line.charge ?? 0) < 0)) errors[`serviceLines.${index}.charge`] = "Enter the billed charge";
+    if (bill.billingMode === "professional" && (!Number.isFinite(line.charge) || (line.charge ?? 0) <= 0)) errors[`serviceLines.${index}.charge`] = "Enter the billed charge";
   });
   return { valid: Object.keys(errors).length === 0, fieldErrors: errors };
 }
@@ -539,9 +615,9 @@ const css = `
 .mbsf-source-evidence{display:grid;gap:4px;color:var(--mb-muted);font-size:13px}.mbsf-source-evidence a{color:var(--mb-accent);font-weight:700}.mbsf-source-evidence q{color:var(--mb-text)}.mbsf-suggestions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--mb-muted);font-size:13px}.mbsf-suggestion{padding:5px 10px;border:1px solid color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));color:var(--mb-accent);font:inherit;font-weight:700;cursor:pointer}.mbsf-suggestion:hover,.mbsf-suggestion:focus{outline:2px solid color-mix(in srgb,var(--mb-accent) 25%,transparent)}.mbsf-claim-patterns{display:grid;gap:4px;margin-top:2px;font-size:13px}.mbsf-claim-patterns[data-state=match]{color:#087f5b}.mbsf-claim-patterns[data-state=warning]{color:#9a5200}.mbsf-claim-pattern-list{color:var(--mb-muted)}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
-.mbsf-lines{margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(112px,.7fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
+.mbsf-lines{margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;position:relative}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-fee-details[open]{display:grid;gap:12px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
 .mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-type{width:min(360px,32vw);flex:0 1 360px}.mbsf-attach-type .mbsf-label{display:block;margin-bottom:6px;font-size:12px}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
-@media(max-width:820px){.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head{display:none}.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2),.mbsf-line>div:nth-child(3){grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-payer-option{align-items:flex-start}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start;flex-basis:calc(100% - 150px)}.mbsf-attach-type{width:100%;flex-basis:100%;order:3}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf.mbsf-lifecycle-correction .mbsf-actions{position:static;bottom:auto}.mbsf-submit{width:100%}}
+@media(max-width:820px){.mbsf-line-diagnoses{grid-template-columns:repeat(4,minmax(0,1fr))}.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head{display:none}.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2),.mbsf-line>div:nth-child(3){grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-payer-option{align-items:flex-start}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start;flex-basis:calc(100% - 150px)}.mbsf-attach-type{width:100%;flex-basis:100%;order:3}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf.mbsf-lifecycle-correction .mbsf-actions{position:static;bottom:auto}.mbsf-submit{width:100%}}
 `;
 
 function RequiredMark(): ReactElement { return <span className="mbsf-star"> *</span>; }
@@ -551,10 +627,16 @@ function Field({ label, required, error, invalid, path, span, children }: { labe
 function TextDateInput({ value, onChange, disabled, required, ariaLabel }: { value?: string | null | undefined; onChange: (value: string) => void; disabled: boolean; required?: boolean; ariaLabel: string }): ReactElement {
   const [display, setDisplay] = useState(() => formatBillSubmissionDate(value));
   const [invalid, setInvalid] = useState(false);
-  useEffect(() => { setDisplay(formatBillSubmissionDate(value)); setInvalid(false); }, [value]);
+  const emittedValue = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    // Preserve the partially typed text when the parent echoes our cleared model.
+    if (emittedValue.current !== undefined && value === emittedValue.current) { emittedValue.current = undefined; return; }
+    emittedValue.current = undefined;
+    setDisplay(formatBillSubmissionDate(value)); setInvalid(false);
+  }, [value]);
   return <><input className="mbsf-input" type="text" inputMode="numeric" autoComplete="off" placeholder="MM/DD/YYYY" aria-label={ariaLabel} aria-invalid={invalid} required={required} disabled={disabled} value={display} onChange={(event) => {
     const next = event.target.value; const parsed = parseBillSubmissionDate(next); setDisplay(next); setInvalid(Boolean(next && !parsed));
-    if (!next.trim()) onChange(""); else if (parsed) onChange(parsed);
+    emittedValue.current = parsed ?? ""; onChange(emittedValue.current);
   }} onBlur={() => setInvalid(Boolean(display && !parseBillSubmissionDate(display)))} />{invalid ? <small className="mbsf-error">Use MM/DD/YYYY</small> : null}</>;
 }
 
@@ -593,7 +675,7 @@ function focusFirstInvalid(form: HTMLFormElement): void {
 
 function customProcedureOption(query: string): ComboOption | null {
   const code = query.trim().toUpperCase().replace(/\s+/g, "");
-  if (!/^(?:\d{5}|[A-Z]\d{4}|ML(?:20[0-5]|PRR))$/.test(code)) return null;
+  if (!/^(?:\d{5}|[A-Z]\d{4}|WC\d{3}|ML(?:20[0-5]|PRR))$/.test(code)) return null;
   return { id: code, label: code, detail: "Use this CPT, HCPCS, or medical-legal code" };
 }
 
@@ -707,7 +789,7 @@ export function BillSubmissionForm({
   profileOptions, profileDisplay = "expanded",
   fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -715,7 +797,7 @@ export function BillSubmissionForm({
   attentionFields = [], attentionMessage,
   children,
 }: BillSubmissionFormProps): ReactElement {
-  const [bill, setBill] = useState(() => cloneInitialBill(initialBill));
+  const [bill, setBill] = useState(() => cloneInitialBill(initialBill, treatmentBilling));
   const [providerEditing, setProviderEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
   const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
@@ -737,17 +819,23 @@ export function BillSubmissionForm({
   const [diagnosisResults, setDiagnosisResults] = useState<BillSubmissionDiagnosisOption[]>([]);
   const [diagnosisLoading, setDiagnosisLoading] = useState(false); const [diagnosisLoadingMore, setDiagnosisLoadingMore] = useState(false);
   const [diagnosisQuery, setDiagnosisQuery] = useState<string | null>(null); const [diagnosisHasMore, setDiagnosisHasMore] = useState(true);
+  const [procedureResults, setProcedureResults] = useState<BillSubmissionProcedureOption[]>([]);
+  const [procedureLoading, setProcedureLoading] = useState(false);
+  const [procedureError, setProcedureError] = useState<string | null>(null);
+  const procedureRequest = useRef(0);
+  const [feeDetails, setFeeDetails] = useState<Record<number, FeeDetails>>({});
+  const [feeQuotes, setFeeQuotes] = useState<Record<string, BillFeeQuote | { status: "error"; reason: string }>>({});
   const [postalStatus, setPostalStatus] = useState<string | null>(null); const [dragActive, setDragActive] = useState(false);
   const formRef = useRef<HTMLFormElement>(null); const fileInput = useRef<HTMLInputElement>(null);
   const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false); const payerRequest = useRef(0); const payerAppendPending = useRef(false);
-  const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, procedureOptions), [procedureOptions]);
+  const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, [...(procedureOptions ?? []), ...procedureResults, ...(treatmentBilling ? [{code: "WC002", description: "Progress report"}, {code: "WC003", description: "Permanent and stationary report (PR-3)"}, {code: "WC004", description: "Permanent and stationary report (PR-4)"}] : [])]), [procedureOptions, procedureResults, treatmentBilling]);
   const orderedClaimsAdministratorSources = useMemo(() => [...(claimsAdministratorSources ?? [])]
     .filter((source) => source.name.trim())
     .sort((left, right) => Number(right.source.toLowerCase() === "eams") - Number(left.source.toLowerCase() === "eams")), [claimsAdministratorSources]);
   const sourceClaimsAdministratorName = orderedClaimsAdministratorSources[0]?.name.trim() ?? "";
   const initializationKey = useMemo(
-    () => billSubmissionInitializationKey(initialBill, attachments, sourceClaimsAdministratorName),
-    [initialBill, attachments, sourceClaimsAdministratorName],
+    () => `${treatmentBilling}:${billSubmissionInitializationKey(initialBill, attachments, sourceClaimsAdministratorName)}`,
+    [initialBill, attachments, sourceClaimsAdministratorName, treatmentBilling],
   );
   const previousInitializationKey = useRef(initializationKey);
   const modifiers = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_MODIFIERS, modifierOptions), [modifierOptions]);
@@ -768,16 +856,12 @@ export function BillSubmissionForm({
   useEffect(() => {
     if (previousInitializationKey.current === initializationKey) return;
     previousInitializationKey.current = initializationKey;
-    setBill(cloneInitialBill(initialBill)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
+    setFeeDetails({}); setFeeQuotes({});
+    setBill(cloneInitialBill(initialBill, treatmentBilling)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
     setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
     setPayerResults([]); setPayerSuggestions([]); setSelectedPayerMetadata(null); setPayerQuery(null); setPayerHasMore(true); payerRequest.current += 1; payerAppendPending.current = false;
-  }, [initialBill, attachments, initializationKey]);
-  useEffect(() => {
-    if (!validationActive) return;
-    const next = validateBillSubmission(bill).fieldErrors;
-    setErrors(missingAttachmentReportType ? { ...next, attachments: "Select a report type for every attachment." } : next);
-  }, [bill, missingAttachmentReportType, validationActive]);
+  }, [initialBill, attachments, initializationKey, treatmentBilling]);
   useEffect(() => {
     const root = formRef.current;
     if (!root) return;
@@ -813,14 +897,23 @@ export function BillSubmissionForm({
   }, [addFiles]);
 
   const setAddress = (patch: Partial<BillSubmissionAddress>) => setBill((current) => ({ ...current, patient: { ...current.patient, address: { ...current.patient.address, ...patch } } }));
-  const setLine = (index: number, patch: Partial<BillSubmissionInput["serviceLines"][number]>) => setBill((current) => ({ ...current, serviceLines: ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => {
-    if (lineIndex !== index) return line;
-    const next = { ...line, ...patch };
-    const charge = calculateBillSubmissionAllowedAmount(next, procedures);
-    if (charge != null) return { ...next, charge };
-    if (Object.hasOwn(patch, "code")) { const withoutCharge = { ...next }; delete withoutCharge.charge; return withoutCharge; }
-    return next;
-  })) }));
+  const setLine = (index: number, patch: Partial<BillSubmissionInput["serviceLines"][number]>) => {
+    if (Object.hasOwn(patch, "code")) setFeeDetails((current) => ({ ...current, [index]: {} }));
+    setBill((current) => {
+      const serviceLines = ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => {
+        if (lineIndex !== index) return line;
+        const next = { ...line, ...patch };
+        if (patch.code != null && patch.code !== line.code) delete next.rfaItemId;
+        if (treatmentBilling && next.code && !isMedicalLegalCode(next.code)) { delete next.charge; return next; }
+        const charge = calculateBillSubmissionAllowedAmount(next, procedures);
+        if (charge != null) return { ...next, charge };
+        if (Object.hasOwn(patch, "code")) delete next.charge;
+        return next;
+      }));
+      const populated = serviceLines.filter((line) => line.code.trim());
+      return { ...replaceBillSubmissionServiceLines(current, serviceLines), ...(treatmentBilling && populated.length ? { billingMode: populated.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
+    });
+  };
   const text = (value: string | null | undefined, onChange: (value: string) => void, options: Pick<React.InputHTMLAttributes<HTMLInputElement>, "placeholder" | "maxLength" | "type" | "inputMode"> = {}) => <input className="mbsf-input" disabled={locked} value={value ?? ""} onChange={(event) => onChange(event.target.value)} {...options} />;
   const loadPayers = useCallback((query: string, append = false): void => {
     const trimmed = query.trim();
@@ -881,6 +974,18 @@ export function BillSubmissionForm({
       diagnosisAppendPending.current = false; setDiagnosisLoading(false); setDiagnosisLoadingMore(false);
     });
   };
+  const loadProcedures = (query: string) => {
+    if (!treatmentBilling) return;
+    const search = onSearchProcedureCodes ?? referenceClient?.searchProcedureCodes;
+    if (!search) return;
+    const normalized = query.trim().toUpperCase();
+    const request = ++procedureRequest.current;
+    if (!/^[A-Z0-9]{0,5}$/.test(normalized) || /^ML/.test(normalized)) { setProcedureResults([]); setProcedureLoading(false); return; }
+    setProcedureLoading(true); setProcedureError(null);
+    void search({ query: normalized, limit: 30, jurisdiction: bill.claim.injuryState === "NY" ? "NY" : "CA" }).then((page) => {
+      if (request === procedureRequest.current) setProcedureResults(page.results.map((item) => ({ code: item.code, description: "Treatment procedure · fee checked for service date" })));
+    }).catch(() => { if (request === procedureRequest.current) { setProcedureResults([]); setProcedureError("Treatment code search is unavailable. Try again."); } }).finally(() => { if (request === procedureRequest.current) setProcedureLoading(false); });
+  };
   const searchDiagnoses = (query: string) => loadDiagnoses(query);
   const diagnosisChoices = useMemo(() => mergeDiagnosisOptions([...diagnosisOptions, ...diagnosisResults]), [diagnosisOptions, diagnosisResults]);
   const updatePostalCode = (postalCode: string) => {
@@ -889,13 +994,74 @@ export function BillSubmissionForm({
     setPostalStatus("Looking up ZIP…"); void lookup(postalCode).then((place) => { if (!place) return setPostalStatus("ZIP not found"); setAddress({ city: place.city, state: place.state.toUpperCase() }); setPostalStatus(`${place.city}, ${place.state.toUpperCase()} filled from ZIP`); }).catch(() => setPostalStatus("ZIP lookup unavailable"));
   };
   const changeEvaluation = (type: BillSubmissionEvaluationType) => {
-    setEvaluationType(type); setBill((current) => ({ ...current, diagnoses: applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type), renderingProvider: { ...current.renderingProvider, isAme: type === "ame" || type === "psych_ame", isQme: type === "qme" || type === "psych_qme", ...((type === "psych_qme" || type === "psych_ame") && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(current.serviceLines, type) }));
+    setEvaluationType(type); setBill((current) => {
+      const remapped = remapBillSubmissionDiagnoses(current, current.billingMode === "professional" ? current.diagnoses ?? [] : applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type));
+      return { ...remapped, renderingProvider: { ...current.renderingProvider, isAme: type === "ame" || type === "psych_ame", isQme: type === "qme" || type === "psych_qme", ...((type === "psych_qme" || type === "psych_ame") && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(remapped.serviceLines, type) };
+    });
   };
-  const lineCharge = (line: BillSubmissionInput["serviceLines"][number]) => calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
-  const total = submittedLines(bill.serviceLines).reduce((sum, line) => sum + (lineCharge(line) ?? 0), 0);
+  const supportedFeeJurisdiction = (bill.claim.injuryState ?? "CA").trim().toUpperCase() === "CA";
+  const feeConfirmationKey = (line: BillSubmissionInput["serviceLines"][number]) => JSON.stringify({ date: parseBillSubmissionDate(line.serviceDate ?? bill.service.date) ?? "", location: bill.serviceLocation, provider: bill.renderingProvider });
+  const quoteInputs = bill.serviceLines.map((line, index) => {
+    if (!treatmentBilling || !line.code.trim() || isMedicalLegalCode(line.code)) return null;
+    const details = feeDetails[index];
+    let context: BillSubmissionFeeContext = {};
+    if (details?.confirmed && details.confirmationKey === feeConfirmationKey(line)) {
+      const placeOfService = bill.serviceLocation?.placeOfServiceCode ?? "";
+      if (/^992(?:0[2-5]|1[2-5])$/.test(line.code) && details.providerKind) context = { ...context, hasFeeAgreement: false, physicianContext: { providerKind: details.providerKind, placeOfService, incidentToPhysicianService: false, standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false } };
+      if (line.code === "97110" && details.minutes && details.totalMinutes) context = { ...context, hasFeeAgreement: false, therapyContext: { providerKind: "physical_therapist", personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, placeOfService, directOneOnOneMinutes: details.minutes, totalVisitMinutes: details.totalMinutes, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false } };
+    }
+    return billSubmissionFeeRequest(bill, line, context);
+  });
+  const quoteKeys = quoteInputs.map((input) => input ? JSON.stringify(input) : null);
+  const quoteBatch = JSON.stringify(quoteInputs);
+  const quoteFee = onQuoteFee ?? referenceClient?.quoteFee;
+  const [feeRetry, setFeeRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const inputs = JSON.parse(quoteBatch) as Array<BillFeeQuoteInput | null>;
+    const unique = new Map(inputs.filter((input): input is BillFeeQuoteInput => Boolean(input)).map((input) => [JSON.stringify(input), input]));
+    const timer = setTimeout(() => { for (const [key, input] of unique) {
+      if (!quoteFee || !input.dateOfService || !supportedFeeJurisdiction) continue;
+      void quoteFee(input).then((result) => { if (active) setFeeQuotes((current) => ({ ...current, [key]: result })); }).catch(() => { if (active) setFeeQuotes((current) => ({ ...current, [key]: { status: "error", reason: "Fee lookup is unavailable. Retry the fee check." } })); });
+    }
+    }, 200);
+    return () => { active = false; clearTimeout(timer); };
+  }, [quoteBatch, quoteFee, feeRetry, supportedFeeJurisdiction]);
+  const lineCharge = (line: BillSubmissionInput["serviceLines"][number], index: number) => {
+    if (treatmentBilling && line.code && !isMedicalLegalCode(line.code)) {
+      const key = quoteKeys[index]; const quote = key ? feeQuotes[key] : undefined;
+      return supportedFeeJurisdiction && quote?.status === "priced" ? quote.amountCents / 100 : undefined;
+    }
+    return calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
+  };
+  const feeDetailsFor = (line: BillSubmissionInput["serviceLines"][number], index: number): ReactNode => {
+    const key = quoteKeys[index];
+    if (!key) return null;
+    const quote = supportedFeeJurisdiction ? feeQuotes[key] : undefined;
+    const details = feeDetails[index] ?? {};
+    const update = (patch: Partial<FeeDetails>) => setFeeDetails((current) => ({ ...current, [index]: { ...current[index], ...patch } }));
+    const office = /^992(?:0[2-5]|1[2-5])$/.test(line.code);
+    const therapy = line.code === "97110";
+    return <details className="mbsf-fee-details"><summary>Fee schedule details{quote?.status === "priced" ? " · Verified" : ""}</summary>
+      {office ? <label className="mbsf-field"><span>Service performed by</span><select className="mbsf-input" aria-label={`Service performed by for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]>, confirmed: false })}><option value="">Select provider type…</option><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option><option value="other">Other</option></select></label> : null}
+      {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: Number(event.target.value), confirmed: false })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value), confirmed: false })} /></label></div> : null}
+      {office || therapy ? <label className="mbsf-fee-confirm"><input type="checkbox" checked={Boolean(details.confirmed && details.confirmationKey === feeConfirmationKey(line))} onChange={(event) => update({ confirmed: event.target.checked, confirmationKey: feeConfirmationKey(line) })} /><span>{office ? "I confirm this is a standalone visit, not incident to a physician service, with no global-period adjustment, HPSA bonus, or fee agreement." : "I confirm a physical therapist personally performed this service in one visit. All services for this date have been reviewed; there were no other services, assistant, hospital care, incident-to services, global-period adjustment, HPSA bonus, or fee agreement."}</span></label> : null}
+      <p className="mbsf-help" role="status">{!supportedFeeJurisdiction ? "This jurisdiction requires fee review before submission." : !quoteFee ? "Connect fee lookup to check this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to check the fee." : quote?.status === "priced" ? "Allowed amount verified for this service date and the details above." : quote?.reason ?? "Checking the fee schedule…"}</p>
+      {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
+    </details>;
+  };
+  const total = bill.serviceLines.reduce((sum, line, index) => sum + (lineHasContent(line) ? lineCharge(line, index) ?? 0 : 0), 0);
+
+  const pricedLines = bill.serviceLines.map((line, index) => { const charge = lineCharge(line, index); const next = { ...line }; if (charge == null && treatmentBilling && !isMedicalLegalCode(line.code)) delete next.charge; else if (charge != null) next.charge = charge; return next; }).filter(lineHasContent);
+  const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: pricedLines.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
+  const liveErrors = JSON.stringify(validateBillSubmission(clean).fieldErrors);
+  useEffect(() => {
+    if (!validationActive) return;
+    const next = JSON.parse(liveErrors) as Record<string, string>;
+    setErrors(missingAttachmentReportType ? { ...next, attachments: "Select a report type for every attachment." } : next);
+  }, [liveErrors, missingAttachmentReportType, validationActive]);
 
   async function submit(): Promise<void> {
-    const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: submittedLines(bill.serviceLines).map((line) => { const charge = lineCharge(line); return charge == null ? line : { ...line, charge }; }) };
     const validation = validateBillSubmission(clean);
     const fieldErrors = missingAttachmentReportType ? { ...validation.fieldErrors, attachments: "Select a report type for every attachment." } : validation.fieldErrors;
     setValidationActive(true); setErrors(fieldErrors); setFormError(null);
@@ -1056,9 +1222,9 @@ export function BillSubmissionForm({
       </Field> : null}
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
       <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required span error={errors.diagnoses}>
-        <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = (bill.diagnoses ?? []).includes(option.code); return <button className="mbsf-quick-pick" data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => ({ ...current, diagnoses: selected ? (current.diagnoses ?? []).filter((code) => code !== option.code) : [...new Set([...(current.diagnoses ?? []), option.code])] }))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>
-        <div className="mbsf-chips">{(bill.diagnoses ?? []).map((code) => { const option = [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisChoices].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}<button type="button" aria-label={`Remove ${code}`} onClick={() => setBill((c) => ({ ...c, diagnoses: (c.diagnoses ?? []).filter((item) => item !== code) }))}>×</button></span>; })}</div>
-        <ComboBox ariaLabel="Add diagnosis code" invalid={Boolean(errors.diagnoses)} disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={diagnosisChoices.filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => { if (diagnosisQuery !== "") loadDiagnoses(""); }} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((c) => ({ ...c, diagnoses: [...new Set([...(c.diagnoses ?? []), option.id])] }))} />
+        <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = (bill.diagnoses ?? []).includes(option.code); return <button className="mbsf-quick-pick" data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => remapBillSubmissionDiagnoses(current, selected ? (current.diagnoses ?? []).filter((code) => code !== option.code) : [...(current.diagnoses ?? []), option.code]))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>
+        <div className="mbsf-chips">{(bill.diagnoses ?? []).map((code) => { const option = [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisChoices].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}<button type="button" aria-label={`Remove ${code}`} onClick={() => setBill((c) => remapBillSubmissionDiagnoses(c, (c.diagnoses ?? []).filter((item) => item !== code)))}>×</button></span>; })}</div>
+        <ComboBox ariaLabel="Add diagnosis code" invalid={Boolean(errors.diagnoses)} disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={diagnosisChoices.filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => { if (diagnosisQuery !== "") loadDiagnoses(""); }} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((c) => remapBillSubmissionDiagnoses(c, [...(c.diagnoses ?? []), option.id]))} />
       </Field>
     </div></fieldset>;
 
@@ -1118,14 +1284,26 @@ export function BillSubmissionForm({
       <p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
       <div className="mbsf-segments" role="group" aria-label="Evaluation type">{([ ["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"], ["psych_ame", "Psych AME"] ] as const).map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
       <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
+      {procedureError ? <p className="mbsf-error" role="alert">{procedureError}</p> : null}
       <div className="mbsf-lines" data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span><span>Dx</span><span>Units<RequiredMark /></span><span>Allowed</span><span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
-          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
+          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id, ...(switched ? { modifiers: (line.modifiers ?? []).filter((value) => !["94", "95", "96"].includes(value.replace(/^-/, ""))) } : {}) }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={modifiers.filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
-          <div data-label="Dx"><div className="mbsf-dx">{(bill.diagnoses ?? []).length ? (bill.diagnoses ?? []).map((code, dxIndex) => { const pointer = dxIndex + 1; const active = (line.diagnosisPointers ?? []).includes(pointer); return <button type="button" key={code} className="mbsf-dx-chip" data-active={active} title={`${String.fromCharCode(64 + pointer)} — ${code}`} aria-pressed={active} aria-label={`Point line ${index + 1} at diagnosis ${code}`} onClick={() => setLine(index, { diagnosisPointers: active ? (line.diagnosisPointers ?? []).filter((item) => item !== pointer) : [...(line.diagnosisPointers ?? []), pointer].sort((left, right) => left - right) })}>{String.fromCharCode(64 + pointer)}</button>; }) : <small className="mbsf-help">Add diagnoses above</small>}</div></div>
+          <div data-label="Dx" data-field-path={`serviceLines.${index}.diagnosisPointers`} data-invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])}>
+            <div className="mbsf-line-diagnoses">{[0, 1, 2, 3].map((slot) => {
+              const pointer = line.diagnosisPointers?.[slot];
+              const selectedCode = pointer ? bill.diagnoses?.[pointer - 1] ?? "" : "";
+              const selectedCodes = (line.diagnosisPointers ?? []).map((item) => bill.diagnoses?.[item - 1]);
+              const options = mergeDiagnosisOptions([...(bill.diagnoses ?? []).map((code) => ({ code, description: diagnosisChoices.find((item) => item.code === code)?.description ?? "" })), ...diagnosisChoices])
+                .filter((item) => (!selectedCodes.includes(item.code) || item.code === selectedCode) && ((bill.diagnoses?.length ?? 0) < 12 || bill.diagnoses?.includes(item.code)));
+              return <ComboBox key={slot} ariaLabel={`Diagnosis ${slot + 1} for service line ${index + 1}`} disabled={locked} invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])} value={selectedCode} placeholder={`Dx ${slot + 1}`} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} options={[...(selectedCode ? [{ id: "", label: "Clear diagnosis" }] : []), ...options.map((item) => ({ id: item.code, label: item.code, detail: item.description }))]} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((current) => setBillSubmissionLineDiagnosis(current, index, slot, option.id))} />;
+            })}</div>
+            {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
+          </div>
           <div data-label="Units" data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
-          <div className="mbsf-money" data-label="Allowed">{lineCharge(line) == null ? "—" : lineCharge(line)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
-          <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => setBill((c) => ({ ...c, serviceLines: ensureTrailingBillSubmissionLine(c.serviceLines.filter((_, itemIndex) => itemIndex !== index)) }))}>×</button>
+          <div className="mbsf-money" data-label="Allowed" data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
+          <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
+          {feeDetailsFor(line, index)}
         </div>)}
         <div className="mbsf-total"><span>Total</span><span>{total.toLocaleString(undefined, { style: "currency", currency: "USD" })}</span></div>
       </div>{errors.serviceLines ? <p className="mbsf-error" role="alert">{errors.serviceLines}</p> : null}

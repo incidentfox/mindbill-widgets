@@ -129,6 +129,7 @@ export type {
   BillSubmissionDiagnosisOption,
   BillSubmissionDocumentType,
   BillSubmissionEvaluationType,
+  BillSubmissionFeeContext,
   BillSubmissionFormProps,
   BillSubmissionFormValue,
   BillSubmissionInput,
