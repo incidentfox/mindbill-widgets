@@ -146,12 +146,15 @@ curated workers-comp procedure and modifier catalog, medical-legal fee rules, di
 quick picks, and locked practice W-9 behavior. Pass optional catalog props only to add
 organization-specific choices.
 
-Each service line has four searchable ICD-10 dropdowns. Selecting a diagnosis adds it
-to the bill's diagnosis list and links only that line; removing or reordering bill
-diagnoses preserves the remaining links. Pass `treatmentBilling` to the same form to
-include treatment procedures in the existing procedure picker and obtain dated fee
-quotes through the browser session. Verified quotes supply the total line charge;
-unavailable rates and incomplete service details require review before submission.
+Diagnosis codes sit beside the service lines. By default, one searchable ICD-10
+multiselect applies up to four diagnoses to every line. Clear “Apply the same diagnosis
+codes to all service lines” to choose diagnoses independently in each row; the bill
+supports twelve unique codes. Switching modes preserves diagnosis links by code.
+Pass `treatmentBilling` to include treatment procedures in the existing procedure picker
+and obtain dated standard fee estimates through the browser session. The form displays
+the assumptions and requires applicable provider and therapy-minute inputs. Select
+“Requires adjustment” for a nonstandard case; unavailable rates and incomplete service
+details also require review before submission.
 See [procedure search and fee quotes](./docs/procedure-fees.md).
 
 When the biller submits, the form shows a delivery-method dialog by default: the

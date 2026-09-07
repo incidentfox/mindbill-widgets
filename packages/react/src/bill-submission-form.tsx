@@ -185,7 +185,19 @@ export type BillSubmissionFormValue = {
 
 export type BillSubmissionFeeContext = Omit<BillFeeQuoteInput, "code" | "dateOfService" | "units" | "modifiers" | "serviceZip" | "chargeCents">;
 
-type FeeDetails = { providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | ""; confirmed?: boolean; confirmationKey?: string; minutes?: number; totalMinutes?: number };
+type FeeDetails = { providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | "physical_therapist" | ""; basis?: "standard" | "adjustment"; minutes?: number; totalMinutes?: number };
+
+/** These are estimate assumptions, not attestations about clinical facts. */
+export function billSubmissionEstimateContext(code: string, placeOfService: string, details: FeeDetails = {}): BillSubmissionFeeContext {
+  if (details.basis === "adjustment") return {};
+  if (/^992(?:0[2-5]|1[2-5])$/.test(code) && details.providerKind && details.providerKind !== "physical_therapist") return {
+    hasFeeAgreement: false, physicianContext: { providerKind: details.providerKind, placeOfService, incidentToPhysicianService: false, standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false },
+  };
+  if (code === "97110" && (details.providerKind === "physical_therapist" || details.providerKind === "other") && details.minutes && details.totalMinutes) return {
+    hasFeeAgreement: false, therapyContext: { providerKind: details.providerKind, personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, placeOfService, directOneOnOneMinutes: details.minutes, totalVisitMinutes: details.totalMinutes, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false },
+  };
+  return {};
+}
 const isMedicalLegalCode = (code: string) => /^ML/i.test(code.trim());
 
 /** Context and service changes produce a different quote request; amounts are never reused across requests. */
@@ -490,11 +502,42 @@ export function setBillSubmissionLineDiagnosis(bill: BillSubmissionInput, lineIn
   }) };
 }
 
+/** Resolve pointers before rebuilding the bill-wide diagnosis catalog. */
+export function billSubmissionLineDiagnosisCodes(bill: BillSubmissionInput, index: number): string[] {
+  return (bill.serviceLines[index]?.diagnosisPointers ?? []).flatMap((pointer) => bill.diagnoses?.[pointer - 1] ? [bill.diagnoses[pointer - 1]!.trim().toUpperCase()] : []);
+}
+
+/** New forms share diagnoses; saved independent assignments retain their meaning. */
+export function billSubmissionUsesSharedDiagnoses(bill: BillSubmissionInput): boolean {
+  const codes = (bill.diagnoses ?? []).map((code) => code.trim().toUpperCase());
+  if (codes.length > 4) return false;
+  return bill.serviceLines.filter((line) => line.code.trim() && line.diagnosisPointers !== undefined)
+    .every((line) => JSON.stringify(line.diagnosisPointers?.map((pointer) => codes[pointer - 1])) === JSON.stringify(codes));
+}
+
+/** Rebuild pointers by code, rejecting selections outside claim and line limits. */
+export function setBillSubmissionDiagnosisAssignments(bill: BillSubmissionInput, assignments: string[][]): BillSubmissionInput {
+  const normalized = bill.serviceLines.map((_, index) => [...new Set((assignments[index] ?? []).map((code) => code.trim().toUpperCase()).filter(Boolean))]);
+  const selected = [...new Set(normalized.flat())];
+  if (selected.length > 12 || normalized.some((codes) => codes.length > 4)) return bill;
+  const diagnoses = [...new Set([...(bill.diagnoses ?? []).map((code) => code.trim().toUpperCase()).filter((code) => selected.includes(code)), ...selected])];
+  return { ...bill, diagnoses, serviceLines: bill.serviceLines.map((line, index) => ({ ...line, diagnosisPointers: normalized[index]!.map((code) => diagnoses.indexOf(code) + 1) })) };
+}
+
+export function setBillSubmissionSharedDiagnoses(bill: BillSubmissionInput, codes: string[]): BillSubmissionInput {
+  return setBillSubmissionDiagnosisAssignments(bill, bill.serviceLines.map(() => codes));
+}
+
+export function setBillSubmissionLineDiagnoses(bill: BillSubmissionInput, index: number, codes: string[]): BillSubmissionInput {
+  if (!bill.serviceLines[index]) return bill;
+  return setBillSubmissionDiagnosisAssignments(bill, bill.serviceLines.map((_, lineIndex) => lineIndex === index ? codes : billSubmissionLineDiagnosisCodes(bill, lineIndex)));
+}
+
 function cloneInitialBill(bill: BillSubmissionInput, treatmentBilling = false): BillSubmissionInput {
   const cloned = cloneBill(bill);
   if (treatmentBilling && cloned.serviceLines.some((line) => line.code.trim() && !isMedicalLegalCode(line.code))) cloned.billingMode = "professional";
   if (cloned.billingMode !== "professional") cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
-  return cloned;
+  return billSubmissionUsesSharedDiagnoses(cloned) ? setBillSubmissionSharedDiagnoses(cloned, cloned.diagnoses ?? []) : cloned;
 }
 
 function stableInitializationValue(value: unknown): unknown {
@@ -615,10 +658,10 @@ const css = `
 .mbsf-source-evidence{display:grid;gap:4px;color:var(--mb-muted);font-size:13px}.mbsf-source-evidence a{color:var(--mb-accent);font-weight:700}.mbsf-source-evidence q{color:var(--mb-text)}.mbsf-suggestions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--mb-muted);font-size:13px}.mbsf-suggestion{padding:5px 10px;border:1px solid color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));color:var(--mb-accent);font:inherit;font-weight:700;cursor:pointer}.mbsf-suggestion:hover,.mbsf-suggestion:focus{outline:2px solid color-mix(in srgb,var(--mb-accent) 25%,transparent)}.mbsf-claim-patterns{display:grid;gap:4px;margin-top:2px;font-size:13px}.mbsf-claim-patterns[data-state=match]{color:#087f5b}.mbsf-claim-patterns[data-state=warning]{color:#9a5200}.mbsf-claim-pattern-list{color:var(--mb-muted)}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
-.mbsf-lines{container:mbsf-service-lines / inline-size;min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;position:relative}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-fee-details[open]{display:grid;gap:12px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
+.mbsf-lines{min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{min-width:0;position:relative}.mbsf-diagnosis-select{min-width:0}.mbsf-diagnosis-select .mbsf-chip{max-width:100%;align-items:flex-start}.mbsf-diagnosis-select .mbsf-chip>span{min-width:0;overflow-wrap:anywhere}.mbsf-diagnosis-toggle{display:flex;align-items:flex-start;gap:10px;margin:18px 0;line-height:1.5}.mbsf-diagnosis-toggle input{margin-top:4px}.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) 100px 120px 42px}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{min-width:0;grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-fee-details details[open]{display:grid;gap:12px}.mbsf-fee-details>.mbsf-field{max-width:320px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
 .mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-type{width:min(360px,32vw);flex:0 1 360px}.mbsf-attach-type .mbsf-label{display:block;margin-bottom:6px;font-size:12px}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
-@container mbsf-service-lines (max-width:906px){.mbsf-line-diagnoses{grid-template-columns:repeat(4,minmax(0,1fr))}.mbsf-line-head{display:none}.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2),.mbsf-line>div:nth-child(3){grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}}
-@media(max-width:820px){.mbsf-line-diagnoses{grid-template-columns:repeat(4,minmax(0,1fr))}.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head{display:none}.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2),.mbsf-line>div:nth-child(3){grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-payer-option{align-items:flex-start}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start;flex-basis:calc(100% - 150px)}.mbsf-attach-type{width:100%;flex-basis:100%;order:3}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf.mbsf-lifecycle-correction .mbsf-actions{position:static;bottom:auto}.mbsf-submit{width:100%}}
+.mbsf-lines[data-stacked=true] .mbsf-line-head,.mbsf-lines[data-stacked=true][data-shared-diagnoses=true]>.mbsf-line-head{display:none}.mbsf-lines[data-stacked=true] .mbsf-line,.mbsf-lines[data-stacked=true][data-shared-diagnoses=true]>.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-lines[data-stacked=true] .mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-lines[data-stacked=true] .mbsf-line>div:nth-child(1),.mbsf-lines[data-stacked=true] .mbsf-line>div:nth-child(2),.mbsf-lines[data-stacked=true] .mbsf-line>.mbsf-line-diagnoses{grid-column:1/-1}.mbsf-lines[data-stacked=true] .mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-lines[data-stacked=true] .mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-lines[data-stacked=true] .mbsf-total{padding:16px 18px;gap:24px}
+@media(max-width:820px){.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{display:none}.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2),.mbsf-line>.mbsf-line-diagnoses{grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-payer-option{align-items:flex-start}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start;flex-basis:calc(100% - 150px)}.mbsf-attach-type{width:100%;flex-basis:100%;order:3}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf.mbsf-lifecycle-correction .mbsf-actions{position:static;bottom:auto}.mbsf-submit{width:100%}}
 `;
 
 function RequiredMark(): ReactElement { return <span className="mbsf-star"> *</span>; }
@@ -799,6 +842,8 @@ export function BillSubmissionForm({
   children,
 }: BillSubmissionFormProps): ReactElement {
   const [bill, setBill] = useState(() => cloneInitialBill(initialBill, treatmentBilling));
+  const [sharedDiagnoses, setSharedDiagnoses] = useState(() => billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling)));
+  const individualDiagnoses = useRef<string[][] | null>(null);
   const [providerEditing, setProviderEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
   const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
@@ -827,6 +872,18 @@ export function BillSubmissionForm({
   const [feeDetails, setFeeDetails] = useState<Record<number, FeeDetails>>({});
   const [feeQuotes, setFeeQuotes] = useState<Record<string, BillFeeQuote | { status: "error"; reason: string }>>({});
   const [postalStatus, setPostalStatus] = useState<string | null>(null); const [dragActive, setDragActive] = useState(false);
+  const serviceLinesRef = useRef<HTMLDivElement>(null);
+  const [stackedServiceLines, setStackedServiceLines] = useState(true);
+  useEffect(() => {
+    const element = serviceLinesRef.current;
+    if (!element) return;
+    const update = () => setStackedServiceLines(element.clientWidth <= 906);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const formRef = useRef<HTMLFormElement>(null); const fileInput = useRef<HTMLInputElement>(null);
   const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false); const payerRequest = useRef(0); const payerAppendPending = useRef(false);
   const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, [...(procedureOptions ?? []), ...procedureResults, ...(treatmentBilling ? [{code: "WC002", description: "Progress report"}, {code: "WC003", description: "Permanent and stationary report (PR-3)"}, {code: "WC004", description: "Permanent and stationary report (PR-4)"}] : [])]), [procedureOptions, procedureResults, treatmentBilling]);
@@ -858,6 +915,7 @@ export function BillSubmissionForm({
     if (previousInitializationKey.current === initializationKey) return;
     previousInitializationKey.current = initializationKey;
     setFeeDetails({}); setFeeQuotes({});
+    setSharedDiagnoses(billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling))); individualDiagnoses.current = null;
     setBill(cloneInitialBill(initialBill, treatmentBilling)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
     setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
@@ -912,7 +970,7 @@ export function BillSubmissionForm({
         return next;
       }));
       const populated = serviceLines.filter((line) => line.code.trim());
-      return { ...replaceBillSubmissionServiceLines(current, serviceLines), ...(treatmentBilling && populated.length ? { billingMode: populated.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
+      return { ...(sharedDiagnoses ? setBillSubmissionSharedDiagnoses(replaceBillSubmissionServiceLines(current, serviceLines), current.diagnoses ?? []) : replaceBillSubmissionServiceLines(current, serviceLines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
     });
   };
   const text = (value: string | null | undefined, onChange: (value: string) => void, options: Pick<React.InputHTMLAttributes<HTMLInputElement>, "placeholder" | "maxLength" | "type" | "inputMode"> = {}) => <input className="mbsf-input" disabled={locked} value={value ?? ""} onChange={(event) => onChange(event.target.value)} {...options} />;
@@ -995,23 +1053,17 @@ export function BillSubmissionForm({
     setPostalStatus("Looking up ZIP…"); void lookup(postalCode).then((place) => { if (!place) return setPostalStatus("ZIP not found"); setAddress({ city: place.city, state: place.state.toUpperCase() }); setPostalStatus(`${place.city}, ${place.state.toUpperCase()} filled from ZIP`); }).catch(() => setPostalStatus("ZIP lookup unavailable"));
   };
   const changeEvaluation = (type: BillSubmissionEvaluationType) => {
+    if (sharedDiagnoses) individualDiagnoses.current = null;
     setEvaluationType(type); setBill((current) => {
-      const remapped = remapBillSubmissionDiagnoses(current, current.billingMode === "professional" ? current.diagnoses ?? [] : applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type));
+      const nextDiagnoses = current.billingMode === "professional" ? current.diagnoses ?? [] : applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type);
+      const remapped = sharedDiagnoses ? setBillSubmissionSharedDiagnoses(current, nextDiagnoses) : remapBillSubmissionDiagnoses(current, nextDiagnoses);
       return { ...remapped, renderingProvider: { ...current.renderingProvider, isAme: type === "ame" || type === "psych_ame", isQme: type === "qme" || type === "psych_qme", ...((type === "psych_qme" || type === "psych_ame") && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(remapped.serviceLines, type) };
     });
   };
   const supportedFeeJurisdiction = (bill.claim.injuryState ?? "CA").trim().toUpperCase() === "CA";
-  const feeConfirmationKey = (line: BillSubmissionInput["serviceLines"][number]) => JSON.stringify({ date: parseBillSubmissionDate(line.serviceDate ?? bill.service.date) ?? "", location: bill.serviceLocation, provider: bill.renderingProvider });
   const quoteInputs = bill.serviceLines.map((line, index) => {
     if (!treatmentBilling || !line.code.trim() || isMedicalLegalCode(line.code)) return null;
-    const details = feeDetails[index];
-    let context: BillSubmissionFeeContext = {};
-    if (details?.confirmed && details.confirmationKey === feeConfirmationKey(line)) {
-      const placeOfService = bill.serviceLocation?.placeOfServiceCode ?? "";
-      if (/^992(?:0[2-5]|1[2-5])$/.test(line.code) && details.providerKind) context = { ...context, hasFeeAgreement: false, physicianContext: { providerKind: details.providerKind, placeOfService, incidentToPhysicianService: false, standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false } };
-      if (line.code === "97110" && details.minutes && details.totalMinutes) context = { ...context, hasFeeAgreement: false, therapyContext: { providerKind: "physical_therapist", personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, placeOfService, directOneOnOneMinutes: details.minutes, totalVisitMinutes: details.totalMinutes, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false } };
-    }
-    return billSubmissionFeeRequest(bill, line, context);
+    return billSubmissionFeeRequest(bill, line, billSubmissionEstimateContext(line.code, bill.serviceLocation?.placeOfServiceCode ?? "", feeDetails[index]));
   });
   const quoteKeys = quoteInputs.map((input) => input ? JSON.stringify(input) : null);
   const quoteBatch = JSON.stringify(quoteInputs);
@@ -1031,7 +1083,7 @@ export function BillSubmissionForm({
   const lineCharge = (line: BillSubmissionInput["serviceLines"][number], index: number) => {
     if (treatmentBilling && line.code && !isMedicalLegalCode(line.code)) {
       const key = quoteKeys[index]; const quote = key ? feeQuotes[key] : undefined;
-      return supportedFeeJurisdiction && quote?.status === "priced" ? quote.amountCents / 100 : undefined;
+      return supportedFeeJurisdiction && feeDetails[index]?.basis !== "adjustment" && quote?.status === "priced" ? quote.amountCents / 100 : undefined;
     }
     return calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
   };
@@ -1043,13 +1095,17 @@ export function BillSubmissionForm({
     const update = (patch: Partial<FeeDetails>) => setFeeDetails((current) => ({ ...current, [index]: { ...current[index], ...patch } }));
     const office = /^992(?:0[2-5]|1[2-5])$/.test(line.code);
     const therapy = line.code === "97110";
-    return <details className="mbsf-fee-details"><summary>Fee schedule details{quote?.status === "priced" ? " · Verified" : ""}</summary>
-      {office ? <label className="mbsf-field"><span>Service performed by</span><select className="mbsf-input" aria-label={`Service performed by for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]>, confirmed: false })}><option value="">Select provider type…</option><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option><option value="other">Other</option></select></label> : null}
-      {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: Number(event.target.value), confirmed: false })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value), confirmed: false })} /></label></div> : null}
-      {office || therapy ? <label className="mbsf-fee-confirm"><input type="checkbox" checked={Boolean(details.confirmed && details.confirmationKey === feeConfirmationKey(line))} onChange={(event) => update({ confirmed: event.target.checked, confirmationKey: feeConfirmationKey(line) })} /><span>{office ? "I confirm this is a standalone visit, not incident to a physician service, with no global-period adjustment, HPSA bonus, or fee agreement." : "I confirm a physical therapist personally performed this service in one visit. All services for this date have been reviewed; there were no other services, assistant, hospital care, incident-to services, global-period adjustment, HPSA bonus, or fee agreement."}</span></label> : null}
-      <p className="mbsf-help" role="status">{!supportedFeeJurisdiction ? "This jurisdiction requires fee review before submission." : !quoteFee ? "Connect fee lookup to check this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to check the fee." : quote?.status === "priced" ? "Allowed amount verified for this service date and the details above." : quote?.reason ?? "Checking the fee schedule…"}</p>
+    return <div className="mbsf-fee-details">
+      <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Standard visit estimate</option><option value="adjustment">Requires adjustment</option></select></label>
+      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or fee agreement. Choose Requires adjustment if any assumption does not apply." : therapy ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, HPSA bonus, or fee agreement. Choose Requires adjustment if any assumption does not apply." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service or fee agreement."}</p>
+      <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
+      {office || therapy ? <label className="mbsf-field"><span>Service performed by</span><select className="mbsf-input" aria-label={`Service performed by for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]> })}><option value="">Select provider type…</option>{office ? <><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option></> : <option value="physical_therapist">Physical therapist</option>}<option value="other">Other</option></select></label> : null}
+      {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: Number(event.target.value) })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label></div> : null}
+      </details>
+      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Standard fee estimate for this service date and the assumptions above." : quote?.reason ?? "Checking the fee schedule…"}</p>
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
-    </details>;
+    </div>;
+
   };
   const total = bill.serviceLines.reduce((sum, line, index) => sum + (lineHasContent(line) ? lineCharge(line, index) ?? 0 : 0), 0);
 
@@ -1200,7 +1256,7 @@ export function BillSubmissionForm({
 
   const claimSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Injury &amp; claim</legend><div className="mbsf-grid">
       <Field path="service.date" label="Date of service" required error={errors["service.date"]}><TextDateInput ariaLabel="Date of service" value={bill.service.date} disabled={locked} required onChange={(date) => setBill((c) => ({ ...c, service: { ...c.service, date } }))} /></Field>
-      <Field label="Treatment authorization # (optional)">{text(bill.service.authorizationNumber, (authorizationNumber) => setBill((c) => ({ ...c, service: { ...c.service, authorizationNumber } })), { placeholder: "Utilization-review authorization number" })}<small className="mbsf-help">Rides on the bill as CMS-1500 Box 23 / 837 REF*G1.</small></Field>
+      <Field label="Treatment authorization # (optional)">{text(bill.service.authorizationNumber, (authorizationNumber) => setBill((c) => ({ ...c, service: { ...c.service, authorizationNumber } })), { placeholder: "Utilization-review authorization number" })}<small className="mbsf-help">If the approval has no authorization number, leave this blank and attach the approval.</small></Field>
       <Field path="claim.dateOfInjury" label="Date of injury" required error={errors["claim.dateOfInjury"]}><TextDateInput ariaLabel="Date of injury" value={bill.claim.dateOfInjury} disabled={locked} required onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
       <Field path="claim.employer" label="Employer name" required error={errors["claim.employer"]}>{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
       <Field path="claim.claimNumber" label="Claim number" required error={errors["claim.claimNumber"]}>{text(bill.claim.claimNumber, (claimNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, claimNumber } })))}
@@ -1222,11 +1278,6 @@ export function BillSubmissionForm({
         {selectedSubpayor ? <div className="mbsf-payer-status" role="status"><strong>✓ Payer set:</strong> {selectedSubpayor.label}</div> : <small className="mbsf-help">{administrator.name} administers multiple payers. Choose the payer named on the claim or report so MindBill can route the bill correctly.</small>}
       </Field> : null}
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
-      <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required span error={errors.diagnoses}>
-        <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = (bill.diagnoses ?? []).includes(option.code); return <button className="mbsf-quick-pick" data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => remapBillSubmissionDiagnoses(current, selected ? (current.diagnoses ?? []).filter((code) => code !== option.code) : [...(current.diagnoses ?? []), option.code]))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>
-        <div className="mbsf-chips">{(bill.diagnoses ?? []).map((code) => { const option = [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisChoices].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}<button type="button" aria-label={`Remove ${code}`} onClick={() => setBill((c) => remapBillSubmissionDiagnoses(c, (c.diagnoses ?? []).filter((item) => item !== code)))}>×</button></span>; })}</div>
-        <ComboBox ariaLabel="Add diagnosis code" invalid={Boolean(errors.diagnoses)} disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={(bill.diagnoses?.length ?? 0) ? `${bill.diagnoses!.length} selected — add more…` : "Search ICD-10 codes…"} options={diagnosisChoices.filter((item) => !(bill.diagnoses ?? []).includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => { if (diagnosisQuery !== "") loadDiagnoses(""); }} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((c) => remapBillSubmissionDiagnoses(c, [...(c.diagnoses ?? []), option.id]))} />
-      </Field>
     </div></fieldset>;
 
   const compactProviders = profileDisplay === "compact";
@@ -1281,29 +1332,48 @@ export function BillSubmissionForm({
       <Field path="serviceLocation.address.postalCode" label="Service ZIP" required error={errors["serviceLocation.address.postalCode"]}>{text(bill.serviceLocation?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode } } })))}</Field>
     </div></details></fieldset>;
 
+  const diagnosisSelector = (codes: string[], onChange: (codes: string[]) => void, lineIndex?: number) => {
+    const invalid = Boolean(lineIndex === undefined ? errors.diagnoses : errors[`serviceLines.${lineIndex}.diagnosisPointers`]);
+    const available = mergeDiagnosisOptions([...(bill.diagnoses ?? []).map((code) => ({ code, description: diagnosisChoices.find((item) => item.code === code)?.description ?? "" })), ...diagnosisChoices]);
+    const canAdd = (code: string) => codes.length < 4 && (sharedDiagnoses || (bill.diagnoses?.length ?? 0) < 12 || Boolean(bill.diagnoses?.includes(code)));
+    return <div className="mbsf-diagnosis-select">
+      {lineIndex === undefined ? <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = codes.includes(option.code); return <button className="mbsf-quick-pick" disabled={locked || (!selected && !canAdd(option.code))} data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => onChange(selected ? codes.filter((code) => code !== option.code) : [...codes, option.code])}>{selected ? "✓" : "+"} {option.label}</button>; })}</div> : null}
+      <div className="mbsf-chips">{codes.map((code) => { const option = [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...available].find((item) => item.code === code); return <span className="mbsf-chip" key={code}><span><strong>{code}</strong>{option?.description ? ` ${option.description}` : ""}</span><button type="button" disabled={locked} aria-label={`Remove ${code}${lineIndex === undefined ? "" : ` from service line ${lineIndex + 1}`}`} onClick={() => onChange(codes.filter((item) => item !== code))}>×</button></span>; })}</div>
+      <ComboBox ariaLabel={lineIndex === undefined ? "Add diagnosis code" : `Diagnosis codes for service line ${lineIndex + 1}`} invalid={invalid} disabled={locked || codes.length >= 4} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={codes.length >= 4 ? "4 selected (maximum)" : codes.length ? `${codes.length} selected — add more…` : "Search ICD-10 codes…"} options={available.filter((item) => !codes.includes(item.code) && canAdd(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => onChange([...codes, option.id])} />
+    </div>;
+  };
+  const toggleSharedDiagnoses = (checked: boolean) => {
+    if (checked) {
+      individualDiagnoses.current = bill.serviceLines.map((_, index) => billSubmissionLineDiagnosisCodes(bill, index));
+      const codes = individualDiagnoses.current.find((selection) => selection.length) ?? (bill.diagnoses ?? []).slice(0, 4);
+      setBill(setBillSubmissionSharedDiagnoses(bill, codes));
+    } else if (individualDiagnoses.current) {
+      setBill(setBillSubmissionDiagnosisAssignments(bill, bill.serviceLines.map((_, index) => individualDiagnoses.current?.[index] ?? billSubmissionLineDiagnosisCodes(bill, index))));
+      individualDiagnoses.current = null;
+    }
+    setSharedDiagnoses(checked);
+  };
+
   const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Evaluation &amp; service lines</legend>
       <p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
       <div className="mbsf-segments" role="group" aria-label="Evaluation type">{([ ["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"], ["psych_ame", "Psych AME"] ] as const).map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
       <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
+      <label className="mbsf-diagnosis-toggle"><input type="checkbox" checked={sharedDiagnoses} onChange={(event) => toggleSharedDiagnoses(event.target.checked)} /><span>Apply the same diagnosis codes to all service lines</span></label>
+      {sharedDiagnoses ? <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required error={errors.diagnoses}>{diagnosisSelector(bill.diagnoses ?? [], (codes) => { individualDiagnoses.current = null; setBill((current) => setBillSubmissionSharedDiagnoses(current, codes)); })}</Field> : null}
+      <p className="mbsf-help">Choose up to 4 diagnosis codes per service line and 12 across the bill.</p>
+      {!sharedDiagnoses && errors.diagnoses ? <p className="mbsf-error" role="alert">{errors.diagnoses}</p> : null}
       {procedureError ? <p className="mbsf-error" role="alert">{procedureError}</p> : null}
-      <div className="mbsf-lines" data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span><span>Dx</span><span>Units<RequiredMark /></span><span>Allowed</span><span /> </div>
+      <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span>{!sharedDiagnoses ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span><span>Allowed</span><span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
           <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id, ...(switched ? { modifiers: (line.modifiers ?? []).filter((value) => !["94", "95", "96"].includes(value.replace(/^-/, ""))) } : {}) }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={modifiers.filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
-          <div data-label="Dx" data-field-path={`serviceLines.${index}.diagnosisPointers`} data-invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])}>
-            <div className="mbsf-line-diagnoses">{[0, 1, 2, 3].map((slot) => {
-              const pointer = line.diagnosisPointers?.[slot];
-              const selectedCode = pointer ? bill.diagnoses?.[pointer - 1] ?? "" : "";
-              const selectedCodes = (line.diagnosisPointers ?? []).map((item) => bill.diagnoses?.[item - 1]);
-              const options = mergeDiagnosisOptions([...(bill.diagnoses ?? []).map((code) => ({ code, description: diagnosisChoices.find((item) => item.code === code)?.description ?? "" })), ...diagnosisChoices])
-                .filter((item) => (!selectedCodes.includes(item.code) || item.code === selectedCode) && ((bill.diagnoses?.length ?? 0) < 12 || bill.diagnoses?.includes(item.code)));
-              return <ComboBox key={slot} ariaLabel={`Diagnosis ${slot + 1} for service line ${index + 1}`} disabled={locked} invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])} value={selectedCode} placeholder={`Dx ${slot + 1}`} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} options={[...(selectedCode ? [{ id: "", label: "Clear diagnosis" }] : []), ...options.map((item) => ({ id: item.code, label: item.code, detail: item.description }))]} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((current) => setBillSubmissionLineDiagnosis(current, index, slot, option.id))} />;
-            })}</div>
+          {!sharedDiagnoses ? <div className="mbsf-line-diagnoses" data-label="Diagnosis codes (ICD-10)" data-field-path={`serviceLines.${index}.diagnosisPointers`} data-invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])}>
+            {diagnosisSelector(billSubmissionLineDiagnosisCodes(bill, index), (codes) => setBill((current) => setBillSubmissionLineDiagnoses(current, index, codes)), index)}
             {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
-          </div>
+          </div> : null}
           <div data-label="Units" data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
           <div className="mbsf-money" data-label="Allowed" data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
-          <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
+          <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
           {feeDetailsFor(line, index)}
         </div>)}
         <div className="mbsf-total"><span>Total</span><span>{total.toLocaleString(undefined, { style: "currency", currency: "USD" })}</span></div>

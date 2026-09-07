@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  billSubmissionLineDiagnosisCodes,
+  billSubmissionUsesSharedDiagnoses,
+  setBillSubmissionDiagnosisAssignments,
+  setBillSubmissionSharedDiagnoses,
+  setBillSubmissionLineDiagnoses,
   remapBillSubmissionDiagnoses,
   setBillSubmissionLineDiagnosis,
   validateBillSubmission,
@@ -140,5 +145,46 @@ describe("service line ICD-10 assignments", () => {
     bill.serviceLines[0]!.diagnosisPointers = pointers;
 
     expect(validateBillSubmission(bill).fieldErrors["serviceLines.0.diagnosisPointers"]).toBeDefined();
+  });
+});
+
+
+describe("shared and individual diagnosis selections", () => {
+  it("defaults fresh medlegal and treatment forms to shared while preserving saved independent lines", () => {
+    for (const billingMode of ["professional", "med_legal"] as const) {
+      const bill = { ...syntheticBill(), billingMode };
+      expect(billSubmissionUsesSharedDiagnoses(bill)).toBe(false);
+      bill.serviceLines = bill.serviceLines.map((line) => { const fresh = { ...line }; delete fresh.diagnosisPointers; return fresh; });
+      expect(billSubmissionUsesSharedDiagnoses(bill)).toBe(true);
+      const shared = setBillSubmissionSharedDiagnoses(bill, ["M54.50", "M54.2"]);
+      expect(shared.serviceLines.map((line) => line.diagnosisPointers)).toEqual([[1, 2], [1, 2]]);
+      expect(billSubmissionUsesSharedDiagnoses(shared)).toBe(true);
+    }
+  });
+  it("removes from one multiselect without changing the diagnosis meaning on another line", () => {
+    const shared = setBillSubmissionSharedDiagnoses(syntheticBill(), ["M54.50", "M54.2"]);
+    const updated = setBillSubmissionLineDiagnoses(shared, 0, ["M54.2"]);
+    expect(billSubmissionLineDiagnosisCodes(updated, 0)).toEqual(["M54.2"]);
+    expect(billSubmissionLineDiagnosisCodes(updated, 1)).toEqual(["M54.50", "M54.2"]);
+    expect(updated.serviceLines[0]!.diagnosisPointers).toEqual([2]);
+    expect(shared.serviceLines[0]!.diagnosisPointers).toEqual([1, 2]);
+  });
+  it("restores saved independent selections by code after the shared catalog changes", () => {
+    const original = syntheticBill();
+    const saved = original.serviceLines.map((_, index) => billSubmissionLineDiagnosisCodes(original, index));
+    const shared = setBillSubmissionSharedDiagnoses(original, ["M25.561"]);
+    const restored = setBillSubmissionDiagnosisAssignments(shared, saved);
+    expect(restored.serviceLines.map((_, index) => billSubmissionLineDiagnosisCodes(restored, index))).toEqual(saved);
+    expect(restored.diagnoses).toEqual(["M54.50", "M54.2"]);
+  });
+  it("enforces four per line and twelve across the bill while permitting existing codes at the cap", () => {
+    const bill = syntheticBill();
+    expect(setBillSubmissionSharedDiagnoses(bill, ["A", "B", "C", "D", "E"])).toBe(bill);
+    bill.serviceLines = Array.from({ length: 4 }, () => ({ code: "ML201", units: 1 }));
+    const twelve = setBillSubmissionDiagnosisAssignments(bill, [["A", "B", "C", "D"], ["E", "F", "G", "H"], ["I", "J", "K", "L"], []]);
+    expect(twelve.diagnoses).toHaveLength(12);
+    expect(setBillSubmissionLineDiagnoses(twelve, 3, ["M"])).toBe(twelve);
+    expect(billSubmissionLineDiagnosisCodes(setBillSubmissionLineDiagnoses(twelve, 3, ["L"]), 3)).toEqual(["L"]);
+    expect(billSubmissionUsesSharedDiagnoses(twelve)).toBe(false);
   });
 });
