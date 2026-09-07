@@ -949,7 +949,7 @@ export type BrowserBillCreateInput = {
     };
   };
   service: { date: string; endDate?: string | null; authorizationNumber?: string | null };
-  billingProvider: { name: string; taxId: string; taxIdType?: "EIN" | "SSN"; npi: string; phone: string; address: BrowserBillAddress } | { savedProviderId: string } | { sourceBillId: string };
+  billingProvider: { id?: string; name: string; taxId: string; taxIdType?: "EIN" | "SSN"; npi: string; phone: string; address: BrowserBillAddress } | { savedProviderId: string } | { sourceBillId: string };
   renderingProvider: {
     name: string;
     specialty?: string;
@@ -970,6 +970,8 @@ export type BrowserBillCreateInput = {
     serviceDate?: string;
     serviceDateEnd?: string | null;
     diagnosisPointers?: number[];
+    /** Calculation context revalidated by the server before bill creation. */
+    feeContext?: BillFeeContext;
     /** Existing authorized RFA item linked to this service line. */
     rfaItemId?: string;
   }>;
@@ -1066,6 +1068,8 @@ export type BillFeeSource = {
 };
 
 export type BillFeeQuoteInput = {
+  billingProviderId?: string;
+  payerId?: string;
   code: string;
   dateOfService: string;
   chargeCents?: number;
@@ -1099,6 +1103,20 @@ export type BillFeeQuoteInput = {
     globalPeriodApplies: boolean;
     hpsaBonusEligible: boolean;
   };
+  catalogContext?: {
+    codingRequirementsSatisfied: boolean;
+    statusIAlternative?: "none" | "cpt" | "drug";
+    completeSurgicalPackage?: boolean;
+  };
+  prolongedServiceContext?: {
+    totalMinutes: number;
+    relatedEvaluationDate: string;
+    ongoingPatientManagement: boolean;
+    personallyPerformed: boolean;
+    timeCountedInOtherServices: boolean;
+    completeSameDayServices: boolean;
+    sameDayServices: Array<{ code: string; units: number }>;
+  };
   reportQualification?:
     | { kind: "psychiatric_report"; requestedBy: "wcab" | "administrative_director"; medicalLegalEvaluation: boolean; reportPayableUnderMedicalLegalSchedule: boolean }
     | { kind: "consultation_report"; requestedBy: "wcab" | "administrative_director" | "qme" | "ame"; medicalLegalEvaluation: boolean; reportPayableUnderMedicalLegalSchedule: boolean }
@@ -1106,13 +1124,16 @@ export type BillFeeQuoteInput = {
     | { kind: "duplicate_report"; requestedBy: "claims_administrator"; writtenRequest: boolean; relatedToBilling: boolean; initialRequiredCopy: boolean };
 };
 
+/** Authoritative service, provider, payer and location fields come from the submitted bill. */
+export type BillFeeContext = Omit<BillFeeQuoteInput, "code" | "dateOfService" | "units" | "modifiers" | "chargeCents" | "billingProviderId" | "payerId" | "serviceZip">;
+
 export type BillFeeQuote =
   | {
     status: "priced";
     /** Total for the service line in cents, already accounting for units. */
     amountCents: number;
     scheduleMaximumCents: number;
-    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs";
+    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs" | "payer_contract";
     provenance: BillFeeSource[];
     notes: string[];
   }

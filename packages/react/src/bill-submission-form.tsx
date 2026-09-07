@@ -7,6 +7,7 @@ import {
   createBillSubmissionClient,
   type BillDeliveryOptions,
   type BillFeeQuote,
+  type BillFeeContext,
   type BillFeeQuoteInput,
   type BillProcedureCodeSearchInput,
   type BillProcedureCodePage,
@@ -116,6 +117,8 @@ export type BillSubmissionInput = {
   };
   service: { date: string; endDate?: string | null; authorizationNumber?: string | null };
   billingProvider?: {
+    /** Saved MindBill billing provider identity used for contracted fee schedules. */
+    id?: string;
     name?: string; taxId?: string; npi?: string; phone?: string; address?: BillSubmissionAddress;
     taxIdType?: "EIN" | "SSN"; savedProviderId?: string; sourceBillId?: string; taxIdLast4?: string;
   };
@@ -128,6 +131,8 @@ export type BillSubmissionInput = {
   serviceLines: Array<{
     code: string; modifiers?: string[]; units?: number; serviceDate?: string;
     serviceDateEnd?: string | null; charge?: number; diagnosisPointers?: number[];
+    /** Context used for the displayed fee, revalidated when submitting. */
+    feeContext?: BillFeeContext;
     /** Authorized RFA item associated with this procedure. Cleared when its code changes. */
     rfaItemId?: string;
   }>;
@@ -145,7 +150,7 @@ export type CompleteBillSubmissionInput = Omit<
     claimsAdministrator: { id: string; name: string; payerId?: string };
   };
   billingProvider: {
-    name: string; taxId: string; taxIdType?: "EIN" | "SSN"; npi: string; phone: string; address: BillSubmissionAddress;
+    id?: string; name: string; taxId: string; taxIdType?: "EIN" | "SSN"; npi: string; phone: string; address: BillSubmissionAddress;
   } | { savedProviderId: string } | { sourceBillId: string };
   renderingProvider: NonNullable<BillSubmissionInput["renderingProvider"]> & {
     name: string; npi: string; taxonomy: string;
@@ -183,32 +188,88 @@ export type BillSubmissionFormValue = {
   uploads: BillSubmissionUpload[];
 };
 
-export type BillSubmissionFeeContext = Omit<BillFeeQuoteInput, "code" | "dateOfService" | "units" | "modifiers" | "serviceZip" | "chargeCents">;
+export type BillSubmissionFeeContext = BillFeeContext;
 
-type FeeDetails = { providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | "physical_therapist" | ""; basis?: "standard" | "adjustment"; minutes?: number; totalMinutes?: number };
+type FeeDetails = {
+  providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | "physical_therapist" | "" | undefined;
+  basis?: "standard" | "adjustment";
+  minutes?: number | undefined;
+  totalMinutes?: number | undefined;
+  relatedEvaluationDate?: string | undefined;
+  prolongedTimeBasis?: "documented" | "review" | "" | undefined;
+};
+const isProlongedCode = (code: string) => /^9935[89]$/.test(code.trim());
 
-/** These are estimate assumptions, not attestations about clinical facts. */
+/** Standard estimate assumptions; prolonged-service facts require an explicit documentation selection. */
 export function billSubmissionEstimateContext(code: string, placeOfService: string, details: FeeDetails = {}): BillSubmissionFeeContext {
   if (details.basis === "adjustment") return {};
-  if (/^992(?:0[2-5]|1[2-5])$/.test(code) && details.providerKind && details.providerKind !== "physical_therapist") return {
+  if (code !== "97110" && /^[A-Z0-9]{5}$/.test(code) && !/^ML/.test(code) && details.providerKind && details.providerKind !== "physical_therapist") return {
     hasFeeAgreement: false, physicianContext: { providerKind: details.providerKind, placeOfService, incidentToPhysicianService: false, standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false },
+    ...(isProlongedCode(code) && details.prolongedTimeBasis === "documented" && details.totalMinutes && parseBillSubmissionDate(details.relatedEvaluationDate ?? "") ? {
+      prolongedServiceContext: {
+        totalMinutes: details.totalMinutes, relatedEvaluationDate: parseBillSubmissionDate(details.relatedEvaluationDate!)!,
+        ongoingPatientManagement: true, personallyPerformed: true, timeCountedInOtherServices: false,
+        completeSameDayServices: true, sameDayServices: [],
+      },
+    } : {}),
   };
   if (code === "97110" && (details.providerKind === "physical_therapist" || details.providerKind === "other") && details.minutes && details.totalMinutes) return {
     hasFeeAgreement: false, therapyContext: { providerKind: details.providerKind, personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, placeOfService, directOneOnOneMinutes: details.minutes, totalVisitMinutes: details.totalMinutes, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false },
   };
   return {};
 }
+/** Rebuild edited fields so clearing an input cannot retain a previously priced context. */
+export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}): BillFeeContext {
+  if (details.basis === "adjustment") return {};
+  const estimated = billSubmissionEstimateContext(code, placeOfService, details);
+  const context = { ...estimated, ...saved };
+  delete context.physicianContext;
+  delete context.therapyContext;
+  delete context.prolongedServiceContext;
+  if (estimated.physicianContext) context.physicianContext = {
+    ...estimated.physicianContext, ...saved.physicianContext,
+    providerKind: estimated.physicianContext.providerKind, placeOfService,
+  };
+  if (estimated.therapyContext) context.therapyContext = {
+    ...estimated.therapyContext, ...saved.therapyContext,
+    providerKind: estimated.therapyContext.providerKind, placeOfService,
+    directOneOnOneMinutes: estimated.therapyContext.directOneOnOneMinutes,
+    totalVisitMinutes: estimated.therapyContext.totalVisitMinutes,
+  };
+  if (estimated.prolongedServiceContext) context.prolongedServiceContext = estimated.prolongedServiceContext;
+  return context;
+}
+
 const isMedicalLegalCode = (code: string) => /^ML/i.test(code.trim());
 
 /** Context and service changes produce a different quote request; amounts are never reused across requests. */
-export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSubmissionInput["serviceLines"][number], context: BillSubmissionFeeContext = {}): BillFeeQuoteInput {
+export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSubmissionInput["serviceLines"][number], context: BillSubmissionFeeContext = line.feeContext ?? {}): BillFeeQuoteInput {
   const dateOfService = parseBillSubmissionDate(line.serviceDate ?? bill.service.date) ?? "";
-  const otherSameDayServices = Boolean(dateOfService) && bill.serviceLines.filter((candidate) => candidate.code.trim() && parseBillSubmissionDate(candidate.serviceDate ?? bill.service.date) === dateOfService).length > 1;
+  const sameDayServices = bill.serviceLines.filter((candidate) => candidate.code.trim() && parseBillSubmissionDate(candidate.serviceDate ?? bill.service.date) === dateOfService);
+  const otherSameDayServices = Boolean(dateOfService) && sameDayServices.length > 1;
+  const billingProviderId = bill.billingProvider?.savedProviderId ?? bill.billingProvider?.id;
+  const payerId = bill.claim.claimsAdministrator?.id;
   return {
-    ...context,
+    ...billSubmissionQuoteContext(context as BillFeeQuoteInput),
     ...(otherSameDayServices && context.physicianContext ? { physicianContext: { ...context.physicianContext, standaloneService: false } } : {}),
     ...(otherSameDayServices && context.therapyContext ? { therapyContext: { ...context.therapyContext, otherSameDayServices: true } } : {}),
+    ...(context.prolongedServiceContext ? { prolongedServiceContext: { ...context.prolongedServiceContext, sameDayServices: sameDayServices.map((candidate) => ({ code: candidate.code.trim().toUpperCase(), units: candidate.units ?? 1 })) } } : {}),
+    ...(billingProviderId ? { billingProviderId } : {}), ...(payerId ? { payerId } : {}),
     code: line.code.trim().toUpperCase(), dateOfService, units: line.units ?? 1, modifiers: line.modifiers ?? [], serviceZip: bill.serviceLocation?.address?.postalCode ?? "",
+  };
+}
+
+/** Keep only calculation context; the server derives identities and service fields from the bill. */
+export function billSubmissionQuoteContext(input: BillFeeQuoteInput): BillFeeContext {
+  return {
+    ...(input.pages !== undefined ? { pages: input.pages } : {}),
+    ...(input.reportKind !== undefined ? { reportKind: input.reportKind } : {}),
+    ...(input.hasFeeAgreement !== undefined ? { hasFeeAgreement: input.hasFeeAgreement } : {}),
+    ...(input.physicianContext ? { physicianContext: input.physicianContext } : {}),
+    ...(input.therapyContext ? { therapyContext: input.therapyContext } : {}),
+    ...(input.reportQualification ? { reportQualification: input.reportQualification } : {}),
+    ...(input.catalogContext ? { catalogContext: input.catalogContext } : {}),
+    ...(input.prolongedServiceContext ? { prolongedServiceContext: input.prolongedServiceContext } : {}),
   };
 }
 
@@ -962,7 +1023,7 @@ export function BillSubmissionForm({
       const serviceLines = ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => {
         if (lineIndex !== index) return line;
         const next = { ...line, ...patch };
-        if (patch.code != null && patch.code !== line.code) delete next.rfaItemId;
+        if (patch.code != null && patch.code !== line.code) { delete next.rfaItemId; delete next.feeContext; }
         if (treatmentBilling && next.code && !isMedicalLegalCode(next.code)) { delete next.charge; return next; }
         const charge = calculateBillSubmissionAllowedAmount(next, procedures);
         if (charge != null) return { ...next, charge };
@@ -1061,9 +1122,25 @@ export function BillSubmissionForm({
     });
   };
   const supportedFeeJurisdiction = (bill.claim.injuryState ?? "CA").trim().toUpperCase() === "CA";
+  const prolongedLeader = (index: number) => bill.serviceLines.findIndex((candidate) => isProlongedCode(candidate.code) && parseBillSubmissionDate(candidate.serviceDate ?? bill.service.date) === parseBillSubmissionDate(bill.serviceLines[index]!.serviceDate ?? bill.service.date));
+  const detailsForLine = (index: number): FeeDetails => {
+    const line = bill.serviceLines[index]!;
+    const detailsIndex = isProlongedCode(line.code) ? prolongedLeader(index) : index;
+    const saved = bill.serviceLines[detailsIndex]?.feeContext;
+    const prolonged = saved?.prolongedServiceContext;
+    return feeDetails[detailsIndex] ?? {
+      providerKind: saved?.physicianContext?.providerKind ?? saved?.therapyContext?.providerKind,
+      minutes: saved?.therapyContext?.directOneOnOneMinutes,
+      totalMinutes: prolonged?.totalMinutes ?? saved?.therapyContext?.totalVisitMinutes,
+      relatedEvaluationDate: prolonged?.relatedEvaluationDate,
+      prolongedTimeBasis: prolonged?.ongoingPatientManagement && prolonged.personallyPerformed && !prolonged.timeCountedInOtherServices && prolonged.completeSameDayServices ? "documented" : "",
+    };
+  };
   const quoteInputs = bill.serviceLines.map((line, index) => {
     if (!treatmentBilling || !line.code.trim() || isMedicalLegalCode(line.code)) return null;
-    return billSubmissionFeeRequest(bill, line, billSubmissionEstimateContext(line.code, bill.serviceLocation?.placeOfServiceCode ?? "", feeDetails[index]));
+    const details = detailsForLine(index);
+    const context = billSubmissionCalculationContext(line.code, bill.serviceLocation?.placeOfServiceCode ?? "", details, line.feeContext);
+    return billSubmissionFeeRequest(bill, line, context);
   });
   const quoteKeys = quoteInputs.map((input) => input ? JSON.stringify(input) : null);
   const quoteBatch = JSON.stringify(quoteInputs);
@@ -1083,7 +1160,7 @@ export function BillSubmissionForm({
   const lineCharge = (line: BillSubmissionInput["serviceLines"][number], index: number) => {
     if (treatmentBilling && line.code && !isMedicalLegalCode(line.code)) {
       const key = quoteKeys[index]; const quote = key ? feeQuotes[key] : undefined;
-      return supportedFeeJurisdiction && feeDetails[index]?.basis !== "adjustment" && quote?.status === "priced" ? quote.amountCents / 100 : undefined;
+      return supportedFeeJurisdiction && detailsForLine(index).basis !== "adjustment" && quote?.status === "priced" ? quote.amountCents / 100 : undefined;
     }
     return calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
   };
@@ -1091,25 +1168,42 @@ export function BillSubmissionForm({
     const key = quoteKeys[index];
     if (!key) return null;
     const quote = supportedFeeJurisdiction ? feeQuotes[key] : undefined;
-    const details = feeDetails[index] ?? {};
-    const update = (patch: Partial<FeeDetails>) => setFeeDetails((current) => ({ ...current, [index]: { ...current[index], ...patch } }));
+    const details = detailsForLine(index);
+    const prolonged = isProlongedCode(line.code);
+    const detailsIndex = prolonged ? prolongedLeader(index) : index;
+    const update = (patch: Partial<FeeDetails>) => setFeeDetails((current) => ({ ...current, [detailsIndex]: { ...details, ...patch } }));
+    if (prolonged && detailsIndex !== index) return <p className="mbsf-help mbsf-fee-details">Uses the prolonged-service details on line {detailsIndex + 1}.{quote?.status !== "priced" ? ` ${quote?.reason ?? "Checking the fee schedule…"}` : ""}</p>;
     const office = /^992(?:0[2-5]|1[2-5])$/.test(line.code);
     const therapy = line.code === "97110";
     return <div className="mbsf-fee-details">
-      <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Standard visit estimate</option><option value="adjustment">Requires adjustment</option></select></label>
-      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or fee agreement. Choose Requires adjustment if any assumption does not apply." : therapy ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, HPSA bonus, or fee agreement. Choose Requires adjustment if any assumption does not apply." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service or fee agreement."}</p>
+      <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Fee schedule estimate</option><option value="adjustment">Requires adjustment</option></select></label>
+      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
+      {prolonged ? <div className="mbsf-grid" aria-label={`Prolonged-service details for line ${index + 1}`}>
+        <label className="mbsf-field"><span>Total prolonged minutes on this service date</span><input className="mbsf-input" aria-label={`Total prolonged minutes for line ${index + 1}`} type="number" min="30" max="1440" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label>
+        <label className="mbsf-field"><span>Related evaluation date</span><input className="mbsf-input" aria-label={`Related evaluation date for line ${index + 1}`} type="date" value={details.relatedEvaluationDate ?? ""} onChange={(event) => update({ relatedEvaluationDate: event.target.value })} /></label>
+        <label className="mbsf-field mbsf-span"><span>Documented time basis</span><select className="mbsf-input" aria-label={`Documented time basis for line ${index + 1}`} value={details.prolongedTimeBasis ?? ""} onChange={(event) => update({ prolongedTimeBasis: event.target.value as FeeDetails["prolongedTimeBasis"] })}><option value="">Select from the service documentation…</option><option value="documented">Qualifying prolonged care; time counted only here</option><option value="review">Other circumstances — review needed</option></select></label>
+        <p className="mbsf-help mbsf-span">Qualifying time was personally provided for ongoing patient care related to an evaluation on a different date, and is not counted toward another service. Include every service on this date in the bill. The same time details apply to 99358 and 99359; the fee check validates minutes and units together.</p>
+      </div> : null}
       <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
-      {office || therapy ? <label className="mbsf-field"><span>Service performed by</span><select className="mbsf-input" aria-label={`Service performed by for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]> })}><option value="">Select provider type…</option>{office ? <><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option></> : <option value="physical_therapist">Physical therapist</option>}<option value="other">Other</option></select></label> : null}
+      {<label className="mbsf-field"><span>Provider type</span><select className="mbsf-input" aria-label={`Provider type for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]> })}><option value="">Select provider type…</option>{!therapy ? <><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option></> : <option value="physical_therapist">Physical therapist</option>}<option value="other">Other</option></select></label>}
       {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: Number(event.target.value) })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label></div> : null}
       </details>
-      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Standard fee estimate for this service date and the assumptions above." : quote?.reason ?? "Checking the fee schedule…"}</p>
+      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Fee estimate for this service date and the details above." : quote?.reason ?? "Checking the fee schedule…"}</p>
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
     </div>;
 
   };
   const total = bill.serviceLines.reduce((sum, line, index) => sum + (lineHasContent(line) ? lineCharge(line, index) ?? 0 : 0), 0);
 
-  const pricedLines = bill.serviceLines.map((line, index) => { const charge = lineCharge(line, index); const next = { ...line }; if (charge == null && treatmentBilling && !isMedicalLegalCode(line.code)) delete next.charge; else if (charge != null) next.charge = charge; return next; }).filter(lineHasContent);
+  const pricedLines = bill.serviceLines.map((line, index) => {
+    const charge = lineCharge(line, index); const next = { ...line };
+    if (treatmentBilling && !isMedicalLegalCode(line.code)) {
+      delete next.feeContext;
+      if (charge == null) delete next.charge;
+      else { next.charge = charge; if (quoteInputs[index]) next.feeContext = billSubmissionQuoteContext(quoteInputs[index]!); }
+    } else if (charge != null) next.charge = charge;
+    return next;
+  }).filter(lineHasContent);
   const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: pricedLines.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
   const liveErrors = JSON.stringify(validateBillSubmission(clean).fieldErrors);
   useEffect(() => {

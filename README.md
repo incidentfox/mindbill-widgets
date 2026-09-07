@@ -403,3 +403,6 @@ The browser SDK and server integrations use the same business endpoints under `/
 `GET /partner/v2/bill-dashboard` provides the page-based list and totals used by the React dashboard. `GET /partner/v2/bills` remains the cursor-based list. Both support either credential; authentication does not select a different response shape. The SDK submits bills through `POST /partner/v2/bills`.
 
 Older `/partner/v2/browser/...` URLs remain compatibility aliases. Browser-session creation and credential management remain server-only. See [the API migration guide](docs/shared-api.md).
+
+
+Treatment fee estimates preserve the selected saved practice and payer so configured contracted rates can apply. Keep `serviceLines[].feeContext` when forwarding a `BillSubmissionForm` submission; the API revalidates its calculation against the current bill. Selecting 99358/99359 adds shared prolonged-service documentation inputs beside the existing service lines. See [procedure fees](docs/procedure-fees.md#practice-rates-and-verified-submission-context).
