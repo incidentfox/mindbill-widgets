@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   billSubmissionFeeRequest,
+  billSubmissionQuoteContext,
+  billSubmissionCalculationContext,
   billSubmissionEstimateContext,
   replaceBillSubmissionServiceLines,
   type BillSubmissionFeeContext,
@@ -193,5 +195,66 @@ describe("explicit estimate inputs", () => {
     expect(billSubmissionEstimateContext("99213", "11", { providerKind: "physician", basis: "adjustment" })).toEqual({});
     expect(billSubmissionEstimateContext("97110", "11", { providerKind: "physical_therapist", minutes: 30, totalMinutes: 30, basis: "adjustment" })).toEqual({});
     expect(billSubmissionEstimateContext("99213", "11", { providerKind: "physician" }).physicianContext).toMatchObject({ providerKind: "physician", standaloneService: true });
+  });
+});
+
+describe("practice rates and persisted fee context", () => {
+  it("uses provider and payer identities and invalidates quotes when they change", () => {
+    const bill = fixture();
+    bill.billingProvider = { id: "synthetic-provider" };
+    bill.claim.claimsAdministrator = { id: "synthetic-admin", name: "Synthetic administrator", payerId: "synthetic-payer" };
+    const request = billSubmissionFeeRequest(bill, bill.serviceLines[0]!);
+    expect(request).toMatchObject({ billingProviderId: "synthetic-provider", payerId: "synthetic-admin" });
+    bill.billingProvider.savedProviderId = "synthetic-saved-provider";
+    expect(billSubmissionFeeRequest(bill, bill.serviceLines[0]!).billingProviderId).toBe("synthetic-saved-provider");
+    delete bill.claim.claimsAdministrator!.payerId;
+    expect(billSubmissionFeeRequest(bill, bill.serviceLines[0]!).payerId).toBe("synthetic-admin");
+  });
+
+  it("persists only calculation context and requotes saved contexts against current service fields", () => {
+    const bill = fixture();
+    const context = billSubmissionQuoteContext({ ...billSubmissionFeeRequest(bill, bill.serviceLines[0]!, physician), billingProviderId: "synthetic-provider", payerId: "synthetic-payer", chargeCents: 100 });
+    expect(context).toEqual(physician);
+    bill.serviceLines[0]!.feeContext = context;
+    bill.serviceLines[0]!.units = 2;
+    expect(billSubmissionFeeRequest(bill, bill.serviceLines[0]!)).toMatchObject({ units: 2, physicianContext: physician.physicianContext });
+  });
+});
+
+describe("documented prolonged-service context", () => {
+  const details = { providerKind: "physician" as const, totalMinutes: 90, relatedEvaluationDate: "2026-08-23", prolongedTimeBasis: "documented" as const };
+  it("requires an explicit documentation selection and complete valid inputs", () => {
+    for (const patch of [{ prolongedTimeBasis: "" as const }, { prolongedTimeBasis: "review" as const }, { totalMinutes: 0 }, { relatedEvaluationDate: "invalid" }, { providerKind: "" as const }]) {
+      expect(billSubmissionEstimateContext("99358", "11", { ...details, ...patch }).prolongedServiceContext).toBeUndefined();
+    }
+    expect(billSubmissionEstimateContext("99358", "11", details).prolongedServiceContext).toMatchObject({ totalMinutes: 90, ongoingPatientManagement: true, personallyPerformed: true, timeCountedInOtherServices: false });
+    expect(billSubmissionEstimateContext("99213", "11", details).prolongedServiceContext).toBeUndefined();
+  });
+
+  it("derives the complete same-date procedure and unit list afresh for both lines", () => {
+    const bill = fixture();
+    bill.serviceLines = [{ code: "99358", units: 1 }, { code: "99359", units: 1 }, { code: "99213", serviceDate: "2026-08-23" }, { code: "" }];
+    const context = billSubmissionEstimateContext("99358", "11", details);
+    for (const line of bill.serviceLines.slice(0, 2)) {
+      expect(billSubmissionFeeRequest(bill, line, context).prolongedServiceContext?.sameDayServices).toEqual([{ code: "99358", units: 1 }, { code: "99359", units: 1 }]);
+    }
+    bill.serviceLines[1]!.units = 2;
+    bill.serviceLines.push({ code: "G2212", units: 1 });
+    expect(billSubmissionFeeRequest(bill, bill.serviceLines[0]!, context).prolongedServiceContext?.sameDayServices).toEqual([{ code: "99358", units: 1 }, { code: "99359", units: 2 }, { code: "G2212", units: 1 }]);
+    expect(context.prolongedServiceContext?.sameDayServices).toEqual([]);
+  });
+
+  it("clearing saved details removes stale context instead of keeping a previous fee", () => {
+    const saved = billSubmissionEstimateContext("99358", "11", details);
+    for (const patch of [{ totalMinutes: 0 }, { relatedEvaluationDate: "" }, { prolongedTimeBasis: "review" as const }, { providerKind: "" as const }]) {
+      expect(billSubmissionCalculationContext("99358", "11", { ...details, ...patch }, saved).prolongedServiceContext).toBeUndefined();
+    }
+    expect(billSubmissionCalculationContext("99358", "11", { ...details, basis: "adjustment" }, saved)).toEqual({});
+  });
+
+  it("preserves supplied nonstandard service facts while updating provider and place", () => {
+    const saved = { ...physician, hasFeeAgreement: true, physicianContext: { ...physician.physicianContext!, globalPeriodApplies: true } };
+    expect(billSubmissionCalculationContext("99213", "22", { providerKind: "nurse_practitioner" }, saved).hasFeeAgreement).toBe(true);
+    expect(billSubmissionCalculationContext("99213", "22", { providerKind: "nurse_practitioner" }, saved).physicianContext).toMatchObject({ providerKind: "nurse_practitioner", placeOfService: "22", globalPeriodApplies: true });
   });
 });

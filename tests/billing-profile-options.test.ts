@@ -22,14 +22,14 @@ describe("saved billing profile options", () => {
     expect(provider).toMatchObject({ savedProviderId: "bp-1", taxIdType: "SSN", taxIdLast4: "0000" });
     expect(provider).not.toHaveProperty("taxId");
   });
-  it("adapts active profiles into editable bill snapshots, not stored references", () => {
+  it("adapts active profiles into editable bill snapshots with provider identity for practice rates", () => {
     const options = organizationProfileOptions(profile);
     expect(options.renderingProviders).toHaveLength(1);
     expect(options.serviceLocations).toHaveLength(1);
     expect(options.renderingProviders?.[0]?.value).toEqual({ name: "Example Doctor", npi: "2222222222", isQme: true });
     expect(options.serviceLocations?.[0]?.label).toBe("Main");
     expect(options.serviceLocations?.[0]?.value.placeOfServiceCode).toBe("11");
-    expect(options.billingProviders?.[0]?.value).not.toHaveProperty("id");
+    expect(options.billingProviders?.[0]?.value.id).toBe("bp-1");
     expect(options.billingProviders?.[0]?.value.address).toEqual({ line1: "1 Example St", city: "", state: "", postalCode: "" });
   });
 

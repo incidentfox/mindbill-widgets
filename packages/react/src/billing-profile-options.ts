@@ -19,7 +19,7 @@ export function organizationProfileOptions(profile: OrganizationProfileData): Bi
   return {
     billingProviders: profile.billingProviders.map((provider) => ({
       id: provider.id, label: provider.name,
-      value: { name: provider.name,
+      value: { id: provider.id, name: provider.name,
         ...(provider.taxIdType === "SSN" ? { savedProviderId: provider.id, taxIdType: "SSN" as const, taxIdLast4: provider.taxIdLast4 ?? "" } : { taxId: provider.taxId ?? "", taxIdType: "EIN" as const }),
         npi: provider.npi, ...(provider.phone !== undefined ? { phone: provider.phone } : {}),
         address: { line1: provider.billingStreet ?? "", city: provider.billingCity ?? "", state: provider.billingState ?? "", postalCode: provider.billingZip ?? "" } },
