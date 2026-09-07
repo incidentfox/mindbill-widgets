@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   billSubmissionFeeRequest,
+  billSubmissionEstimateContext,
   replaceBillSubmissionServiceLines,
   type BillSubmissionFeeContext,
   type BillSubmissionInput,
@@ -179,5 +180,18 @@ describe("RFA authorization after editing service lines", () => {
     bill.service.authorizationNumber = "SYNTHETIC-EXPLICIT-AUTH";
     const updated = replaceBillSubmissionServiceLines(bill, [{ code: "99214" }, { code: "" }]);
     expect(updated.service.authorizationNumber).toBe("SYNTHETIC-EXPLICIT-AUTH");
+  });
+});
+
+
+describe("explicit estimate inputs", () => {
+  it("never assumes the therapy provider type", () => {
+    expect(billSubmissionEstimateContext("97110", "11", { minutes: 30, totalMinutes: 30 })).toEqual({});
+    expect(billSubmissionEstimateContext("97110", "11", { providerKind: "physical_therapist", minutes: 30, totalMinutes: 30 }).therapyContext).toMatchObject({ providerKind: "physical_therapist", directOneOnOneMinutes: 30 });
+  });
+  it("removes standard assumptions for adjustment review without inventing a fee agreement", () => {
+    expect(billSubmissionEstimateContext("99213", "11", { providerKind: "physician", basis: "adjustment" })).toEqual({});
+    expect(billSubmissionEstimateContext("97110", "11", { providerKind: "physical_therapist", minutes: 30, totalMinutes: 30, basis: "adjustment" })).toEqual({});
+    expect(billSubmissionEstimateContext("99213", "11", { providerKind: "physician" }).physicianContext).toMatchObject({ providerKind: "physician", standaloneService: true });
   });
 });

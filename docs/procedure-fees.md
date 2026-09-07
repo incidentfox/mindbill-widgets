@@ -16,11 +16,17 @@ service-line, attachment, and submission workflow:
 />
 ```
 
-Each line has four ICD-10 search dropdowns backed by the same diagnosis catalog.
+The service-line section has one shared ICD-10 multiselect by default. Clear
+“Apply the same diagnosis codes to all service lines” to use one multiselect in each
+row, for medical-legal and treatment bills alike. Each uses the existing diagnosis
+catalog. Untouched mode round trips restore independent selections; edits made in
+shared mode become the current selection when switching back.
 The bill supports twelve unique diagnoses and four unique diagnosis pointers per line.
 Treatment procedures use the existing procedure picker. The form quotes California
-fees for the service date and location, after the biller supplies required service
-facts in the line's fee details. Quotes for unsupported services, dates, or jurisdictions
+fees for the service date and location. Standard visit estimates display their
+assumptions; the biller supplies the applicable provider type and therapy minutes
+in the line's fee details. “Requires adjustment” clears the automatic amount and
+requires review before submission. Quotes for unsupported services, dates, or jurisdictions
 remain marked for review and cannot silently reuse an old charge. Current context
 controls cover office visits and therapeutic exercise; other services may need review.
 Medical-legal and treatment services require separate bills.
@@ -47,7 +53,7 @@ const catalog = await reference.searchProcedureCodes({
 
 Search uses `GET /partner/v2/procedure-codes`. The query is an optional procedure-code prefix of up to five alphanumeric characters. The limit defaults to 30 and is bounded to 1–100. Supported catalog jurisdictions are `CA` (default), `NY`, and `OWCP`. The result contains `results`, `total`, `limit`, `jurisdiction`, and `catalogAsOf`. `catalogAsOf` describes the catalog snapshot, not the effective date of a rate. A catalog entry does not guarantee a payable fee for a service date.
 
-`quoteFee(input: BillFeeQuoteInput): Promise<BillFeeQuote>` posts to `POST /partner/v2/fee-quotes` and unwraps its `data` result. Supply the procedure `code` and `dateOfService` (`YYYY-MM-DD`), plus the applicable verified service context. Optional inputs include `units`, `modifiers`, `chargeCents`, `serviceZip`, `hasFeeAgreement`, and report qualifications. Physician and therapy services have distinct context fields; the exported `BillFeeQuoteInput` type lists them. Do not infer attestations merely to obtain a price. Missing context or unavailable rates can require review.
+`quoteFee(input: BillFeeQuoteInput): Promise<BillFeeQuote>` posts to `POST /partner/v2/fee-quotes` and unwraps its `data` result. Supply the procedure `code` and `dateOfService` (`YYYY-MM-DD`), plus the applicable supplied calculation context. Optional inputs include `units`, `modifiers`, `chargeCents`, `serviceZip`, `hasFeeAgreement`, and report qualifications. Physician and therapy services have distinct context fields; the exported `BillFeeQuoteInput` type lists them. A priced estimate is not verification of clinical facts. Missing context or unavailable rates can require review.
 
 ```ts
 const quote = await reference.quoteFee({
@@ -55,7 +61,7 @@ const quote = await reference.quoteFee({
   dateOfService: "2026-08-24",
   units: 1,
   serviceZip: "95814",
-  // Add physicianContext only from verified service facts.
+  // Add physicianContext from applicable service facts.
 });
 
 if (quote.status === "priced") {
