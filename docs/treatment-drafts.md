@@ -43,6 +43,16 @@ quantities, teeth, surfaces, oral cavity, prosthesis notes, diagnosis codes,
 practice charges, and charge references. Provider identifiers come from the host
 and are preserved. Empty codes and prices can remain incomplete for review.
 
+Saving returns the complete content, including host-provided `attestations`,
+`adaForm`, `authorizationNumber`, `orthodontics`, and `missingTeeth`. Each retained
+service also keeps its `prosthesis` and `diagnosisPointers`, including after
+another service is removed. These optional fields are typed in
+`DentalDraftContentInput` and `DentalDraftLineInput`; the editor does not collect
+or verify them. Supply recorded consent and certification evidence from your host
+workflow, and validate the complete updated content on your server. Saving never
+creates a signature or authorization. Diagnosis pointers are one-based references
+to the claim diagnosis list; your server must revalidate them if that list changes.
+
 `chargeCents` is an **extended line charge**: four units with `chargeCents: 20000`
 means $200 total for that line. It is never multiplied by quantity again. A blank
 amount is `null` (unknown); zero, negative amounts, exponential notation, and

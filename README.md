@@ -10,7 +10,7 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `NotificationRecipientsSettings` lets practice administrators invite **any email address** to those alerts, with no console account required. Recipients remain off until the email owner confirms. See [recipient invitations](docs/notification-recipients.md) for the host-server adapter, consent, scope and retry contract.
 
-`DentalDraftEditor` and `RfaDraftForm` add host-managed dental and unsigned authorization preparation. See [treatment drafts](docs/treatment-drafts.md) for saving, charge semantics, and delivery boundaries.
+`DentalDraftEditor` and `RfaDraftForm` add host-managed dental and unsigned authorization preparation. Dental saves preserve host-supplied clinical details, recorded attestations, and service-specific diagnosis pointers. See [treatment drafts](docs/treatment-drafts.md) for saving, charge semantics, and delivery boundaries.
 
 ## Install
 

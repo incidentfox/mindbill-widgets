@@ -399,6 +399,6 @@ export type {
 } from "./billing-operations-client";
 
 export { DentalDraftEditor, dentalDraftChargeSummary, parseDentalCharge, validateDentalDraftContent } from "./dental-draft-editor";
-export type { DentalDraftContentInput, DentalDraftLineInput, DentalDraftEditorProps } from "./dental-draft-editor";
+export type { DentalDraftContentInput, DentalDraftLineInput, DentalDraftEditorProps, DentalAttestationsInput, DentalConsentInput, DentalAdaFormInput, DentalOrthodonticsInput, DentalProsthesisInput } from "./dental-draft-editor";
 export { RfaDraftForm, normalizeRfaDraft, validateRfaDraft } from "./rfa-draft-form";
 export type { RfaDraftInput, RfaDraftItemInput, RfaDraftFormProps } from "./rfa-draft-form";

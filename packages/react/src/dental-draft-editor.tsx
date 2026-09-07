@@ -2,15 +2,55 @@
 import { useState, type ReactElement } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
+/** Existing source records supplied by the host; saving does not sign or verify them. */
+export type DentalAttestationsInput = {
+  providerSignatureOnFile: boolean;
+  providerAcceptAssignment: "A" | "B" | "C";
+  benefitsAssignment: "Y" | "N" | "W";
+  releaseOfInformation: "I" | "Y";
+  evidenceReference: string;
+};
+export type DentalConsentInput = {
+  mode: "signature_on_file";
+  signerName: string;
+  signedDate: string;
+  evidenceReference: string;
+};
+export type DentalAdaFormInput = {
+  patientConsent?: DentalConsentInput;
+  directPaymentAuthorization?: DentalConsentInput;
+  providerCertification?: { printedName: string; signedDate: string; evidenceReference: string };
+  treatingLicenseNumber?: string;
+  treatmentLocation?: { line1: string; city: string; state: string; postalCode: string };
+  treatingPhone?: string;
+};
+export type DentalOrthodonticsInput = {
+  appliancePlacementDate: string;
+  totalMonths: number;
+  remainingMonths: number;
+};
+export type DentalProsthesisInput =
+  | { placement: "I" }
+  | { placement: "R"; priorPlacementDate: string };
+
 export type DentalDraftLineInput = {
   code: string | null; description: string | null; editionYear: number | null; serviceDate: string | null;
   quantity: number; /** Extended charge, already includes quantity. Null means unknown. */
   chargeCents: number | null; chargeReference: string | null; teeth: string[]; surfaces: string[];
   oralCavity: string | null; prosthesisNotes: string | null;
+  prosthesis?: DentalProsthesisInput;
+  /** One-based references to claim diagnosis codes; validated by the host API. */
+  diagnosisPointers?: number[];
 };
 export type DentalDraftContentInput = {
   renderingProviderId: string; billingProviderId?: string | null; diagnosisCodes: string[];
   notes: string | null; lines: DentalDraftLineInput[];
+  /** Host-managed clinical details are preserved when saving the full content. */
+  attestations?: DentalAttestationsInput;
+  adaForm?: DentalAdaFormInput;
+  authorizationNumber?: string;
+  orthodontics?: DentalOrthodonticsInput;
+  missingTeeth?: string[];
 };
 export type DentalDraftEditorProps = TreatmentDraftAppearance & {
   /** Use a different React key when switching drafts; edits remain local until Save. */
