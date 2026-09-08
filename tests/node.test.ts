@@ -4,6 +4,7 @@ import {
   compareMindBillEventSequence,
   MindBillClient,
   MindBillError,
+  type ServiceLine,
   verifyMindBillWebhookSignature,
 } from "../packages/node/src/index.js";
 
@@ -130,6 +131,31 @@ describe("@mindbill/node v2", () => {
       documents: [{ filename: "final-report.pdf", documentType: "final_report" }],
     });
     expect(created).toEqual(bill);
+  });
+
+  it("preserves administered drug dose, separate NDC quantity, and pricing context", async () => {
+    const line: ServiceLine = {
+      code: "J1100", units: 10, charge: 1.10, serviceDate: "2026-08-24", diagnosisPointers: [1],
+      drug: { ndcNumber: "00000000000", metricQuantity: "2.5", unitOfMeasure: "ML",
+        administered: { drugName: "Synthetic drug", administeredAmount: "10", doseUnit: "mg",
+          hcpcsCode: "J1100", amountPerHcpcsUnit: "1", amountPerNdcUnit: "4",
+          hcpcsUnitSource: "https://example.test/procedure", productLabelSource: "https://example.test/label",
+          unitDefinitionsVerified: true } },
+      feeContext: { padbContext: { providerKind: "physician", placeOfService: "11", productKind: "injectable",
+        bundledOrPackaged: false, codingRequirementsSatisfied: true, completeSameDayServices: true,
+        sameDayServices: [{ code: "J1100", units: 10 }] } },
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(bill, { status: 201 }));
+    const client = new MindBillClient({ apiKey: "mb_sandbox_synthetic", fetch: fetcher });
+    await client.createAndSubmitBill({ bill: {
+      patient: { firstName: "Alex", lastName: "Morgan", dateOfBirth: "1980-01-01", address: bill.patient.address },
+      claim: { claimNumber: "SYNTHETIC-1", employer: "Synthetic", dateOfInjury: "2026-08-01", claimsAdministrator: bill.claim.claimsAdministrator }, service: bill.service,
+      billingProvider: { name: "Synthetic Medical Group", taxId: "123456789", npi: "1234567890", phone: "9165550100", address: bill.patient.address },
+      renderingProvider: { name: "Synthetic Physician", npi: "1098765432", taxonomy: "2084P0800X" },
+      serviceLocation: { placeOfServiceCode: "11", address: bill.patient.address },
+      diagnoses: ["M25.512"], serviceLines: [line], billingMode: "professional",
+    }, submission: { route: "ebill" }, documents: [] }, "synthetic-drug-create");
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)).bill.serviceLines).toEqual([line]);
   });
 
   it("lists submitted bills by partner IDs", async () => {

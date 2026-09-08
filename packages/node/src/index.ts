@@ -84,6 +84,33 @@ export type ServiceLocationSnapshot = {
   placeOfServiceCode: string;
 };
 
+export type BilledDrug = {
+  ndcNumber: string;
+  metricQuantity: string;
+  unitOfMeasure: "UN" | "ML" | "GR";
+  administered?: {
+    drugName: string;
+    administeredAmount: string;
+    doseUnit: "mg" | "mcg" | "g" | "mL" | "units";
+    hcpcsCode: string;
+    amountPerHcpcsUnit: string;
+    amountPerNdcUnit: string;
+    hcpcsUnitSource: string;
+    productLabelSource: string;
+    unitDefinitionsVerified: true;
+  };
+};
+
+export type CaPadbContext = {
+  providerKind: "physician";
+  placeOfService: "11";
+  productKind: "injectable";
+  bundledOrPackaged: false;
+  codingRequirementsSatisfied: true;
+  completeSameDayServices: true;
+  sameDayServices: Array<{ code: string; units: number }>;
+};
+
 export type ServiceLine = {
   id?: string;
   code: string;
@@ -96,6 +123,8 @@ export type ServiceLine = {
   charge?: number;
   /** One-based pointers into `diagnoses`, matching CMS-1500 box 24E. */
   diagnosisPointers?: number[];
+  drug?: BilledDrug;
+  feeContext?: { padbContext?: CaPadbContext };
 };
 
 export type CreateBillRequest = {

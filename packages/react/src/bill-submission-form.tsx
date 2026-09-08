@@ -7,6 +7,7 @@ import {
   createBillSubmissionClient,
   type BillDeliveryOptions,
   type BillFeeQuote,
+  type BilledDrug,
   type BillFeeContext,
   type BillFeeQuoteInput,
   type BillProcedureCodeSearchInput,
@@ -24,6 +25,7 @@ import {
 } from "@mindbill/browser";
 
 import { isProfessionalComponentCandidate, professionalComponentCalculationContext, type ProfessionalComponentDetails } from "./professional-component-context";
+import { DrugLineFields, drugDetailsFromSaved, drugFieldsEnabled, drugRequestDetails, type DrugDetails } from "./bill-drug-context";
 import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } from "./bill-equipment-context";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
@@ -135,6 +137,7 @@ export type BillSubmissionInput = {
     serviceDateEnd?: string | null; charge?: number; diagnosisPointers?: number[];
     /** Context used for the displayed fee, revalidated when submitting. */
     feeContext?: BillFeeContext;
+    drug?: BilledDrug;
     /** Authorized RFA item associated with this procedure. Cleared when its code changes. */
     rfaItemId?: string;
   }>;
@@ -192,7 +195,7 @@ export type BillSubmissionFormValue = {
 
 export type BillSubmissionFeeContext = BillFeeContext;
 
-type FeeDetails = EquipmentDetails & ProfessionalComponentDetails & {
+type FeeDetails = EquipmentDetails & ProfessionalComponentDetails & DrugDetails & {
   providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | "physical_therapist" | "" | undefined;
   basis?: "standard" | "adjustment";
   minutes?: number | undefined;
@@ -225,12 +228,17 @@ export function billSubmissionCalculationContext(code: string, placeOfService: s
   if (details.basis === "adjustment") return {};
   const equipment = equipmentFields(code, modifiers);
   if (equipment.residence) return equipmentCalculationContext(code, modifiers, details);
+  if (drugFieldsEnabled(code, details)) {
+    const { padbContext } = drugRequestDetails(code, placeOfService, details);
+    return padbContext ? { padbContext } : {};
+  }
   const estimated = billSubmissionEstimateContext(code, placeOfService, details);
   const context = { ...estimated, ...saved };
   delete context.physicianContext;
   delete context.therapyContext;
   delete context.prolongedServiceContext;
   delete context.dmeposContext;
+  delete context.padbContext;
   if (estimated.physicianContext) context.physicianContext = {
     ...estimated.physicianContext, ...saved.physicianContext,
     providerKind: estimated.physicianContext.providerKind, placeOfService,
@@ -251,6 +259,12 @@ const isMedicalLegalCode = (code: string) => /^ML/i.test(code.trim());
 export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSubmissionInput["serviceLines"][number], context: BillSubmissionFeeContext = line.feeContext ?? {}): BillFeeQuoteInput {
   const dateOfService = parseBillSubmissionDate(line.serviceDate ?? bill.service.date) ?? "";
   const sameDayServices = bill.serviceLines.filter((candidate) => candidate.code.trim() && parseBillSubmissionDate(candidate.serviceDate ?? bill.service.date) === dateOfService);
+  const padbSameDayServices = bill.serviceLines.filter((candidate) => {
+    if (!candidate.code.trim()) return false;
+    const start = parseBillSubmissionDate(candidate.serviceDate ?? bill.service.date);
+    const end = candidate.serviceDateEnd ? parseBillSubmissionDate(candidate.serviceDateEnd) : start;
+    return !start || !end || (start <= dateOfService && dateOfService <= end);
+  });
   const otherSameDayServices = Boolean(dateOfService) && sameDayServices.length > 1;
   const billingProviderId = bill.billingProvider?.savedProviderId ?? bill.billingProvider?.id;
   const payerId = bill.claim.claimsAdministrator?.id;
@@ -259,6 +273,8 @@ export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSu
     ...(otherSameDayServices && context.physicianContext ? { physicianContext: { ...context.physicianContext, standaloneService: false } } : {}),
     ...(otherSameDayServices && context.therapyContext ? { therapyContext: { ...context.therapyContext, otherSameDayServices: true } } : {}),
     ...(context.prolongedServiceContext ? { prolongedServiceContext: { ...context.prolongedServiceContext, sameDayServices: sameDayServices.map((candidate) => ({ code: candidate.code.trim().toUpperCase(), units: candidate.units ?? 1 })) } } : {}),
+    ...(line.drug ? { drug: line.drug } : {}),
+    ...(context.padbContext ? { padbContext: { ...context.padbContext, sameDayServices: padbSameDayServices.map((candidate) => ({ code: candidate.code.trim().toUpperCase(), units: candidate.units ?? 1 })) } } : {}),
     ...(billingProviderId ? { billingProviderId } : {}), ...(payerId ? { payerId } : {}),
     code: line.code.trim().toUpperCase(), dateOfService, units: line.units ?? 1, modifiers: line.modifiers ?? [], serviceZip: bill.serviceLocation?.address?.postalCode ?? "",
   };
@@ -274,6 +290,7 @@ export function billSubmissionQuoteContext(input: BillFeeQuoteInput): BillFeeCon
     ...(input.therapyContext ? { therapyContext: input.therapyContext } : {}),
     ...(input.reportQualification ? { reportQualification: input.reportQualification } : {}),
     ...(input.professionalComponentContext ? { professionalComponentContext: input.professionalComponentContext } : {}),
+    ...(input.padbContext ? { padbContext: input.padbContext } : {}),
     ...(input.dmeposContext ? { dmeposContext: input.dmeposContext } : {}),
     ...(input.catalogContext ? { catalogContext: input.catalogContext } : {}),
     ...(input.prolongedServiceContext ? { prolongedServiceContext: input.prolongedServiceContext } : {}),
@@ -1034,7 +1051,7 @@ export function BillSubmissionForm({
       const serviceLines = ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => {
         if (lineIndex !== index) return line;
         const next = { ...line, ...patch };
-        if (patch.code != null && patch.code !== line.code) { delete next.rfaItemId; delete next.feeContext; }
+        if (patch.code != null && patch.code !== line.code) { delete next.rfaItemId; delete next.feeContext; delete next.drug; }
         if (treatmentBilling && next.code && !isMedicalLegalCode(next.code)) { delete next.charge; return next; }
         const charge = calculateBillSubmissionAllowedAmount(next, procedures);
         if (charge != null) return { ...next, charge };
@@ -1140,6 +1157,7 @@ export function BillSubmissionForm({
     const saved = bill.serviceLines[detailsIndex]?.feeContext;
     const prolonged = saved?.prolongedServiceContext;
     return feeDetails[detailsIndex] ?? {
+      ...drugDetailsFromSaved(line.drug, saved),
       interpretationLocation: saved?.professionalComponentContext?.interpretationLocation,
       professionalComponentBasis: saved?.catalogContext?.codingRequirementsSatisfied && saved.physicianContext?.standaloneService && saved.physicianContext.globalPeriodApplies === false && saved.physicianContext.hpsaBonusEligible === false && saved.physicianContext.incidentToPhysicianService !== true ? "standard" : "",
       residenceZip: saved?.dmeposContext?.residenceZip,
@@ -1158,7 +1176,11 @@ export function BillSubmissionForm({
     const baseContext = billSubmissionCalculationContext(line.code, bill.serviceLocation?.placeOfServiceCode ?? "", details, line.feeContext, line.modifiers);
     const component = isProfessionalComponentCandidate(line.code, line.modifiers) || professionalComponentCodes.includes(componentIdentity(line.code, line.modifiers));
     const context = details.basis === "adjustment" ? {} : professionalComponentCalculationContext(baseContext, details, component);
-    return billSubmissionFeeRequest(bill, line, context);
+    const currentLine = { ...line };
+    if (line.drug?.administered || drugFieldsEnabled(line.code, details) || details.drugEnabled !== undefined) delete currentLine.drug;
+    const drug = details.basis === "adjustment" ? undefined : drugRequestDetails(line.code, bill.serviceLocation?.placeOfServiceCode ?? "", details).drug;
+    if (drug) currentLine.drug = drug;
+    return billSubmissionFeeRequest(bill, currentLine, context);
   });
   const quoteKeys = quoteInputs.map((input) => input ? JSON.stringify(input) : null);
   const quoteBatch = JSON.stringify(quoteInputs);
@@ -1210,7 +1232,8 @@ export function BillSubmissionForm({
         {equipment.priorPayments ? <label className="mbsf-field"><span>Prior payments for this item ($)</span><input className="mbsf-input" aria-label={`Prior payments for line ${index + 1}`} type="number" min="0" step="0.01" value={details.priorPayments ?? ""} onChange={(event) => update({ priorPayments: event.target.value })} /></label> : null}
         <p className="mbsf-help mbsf-span">Use the injured worker’s residence ZIP to determine the rural rate.{equipment.rental ? " Count continuous rental months for this same equipment item." : ""}{equipment.priorPayments ? " Enter actual payments already made for this item, including rentals. Enter 0 only if there were no prior payments." : ""}</p>
       </div> : null}
-      {!equipment.residence ? <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
+      {!equipment.residence && !prolonged ? <DrugLineFields code={line.code} index={index} details={details} update={update} /> : null}
+      {!equipment.residence && !drugFieldsEnabled(line.code, details) ? <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
       {<label className="mbsf-field"><span>Provider type</span><select className="mbsf-input" aria-label={`Provider type for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]> })}><option value="">Select provider type…</option>{!therapy ? <><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option></> : <option value="physical_therapist">Physical therapist</option>}<option value="other">Other</option></select></label>}
       {component ? <div className="mbsf-grid" aria-label={`Interpretation details for line ${index + 1}`}>
         <label className="mbsf-field"><span>Interpretation location</span><select className="mbsf-input" aria-label={`Interpretation location for line ${index + 1}`} value={details.interpretationLocation ?? ""} onChange={(event) => update({ interpretationLocation: event.target.value as FeeDetails["interpretationLocation"] })}><option value="">Select interpretation location…</option><option value="same_as_patient_service">Same physical address as patient service</option><option value="different_from_patient_service">Different physical address</option></select></label>
@@ -1230,6 +1253,8 @@ export function BillSubmissionForm({
     const charge = lineCharge(line, index); const next = { ...line };
     if (treatmentBilling && !isMedicalLegalCode(line.code)) {
       delete next.feeContext;
+      if (next.drug?.administered || drugFieldsEnabled(line.code, detailsForLine(index)) || detailsForLine(index).drugEnabled !== undefined) delete next.drug;
+      if (quoteInputs[index]?.drug) next.drug = quoteInputs[index]!.drug!;
       if (charge == null) delete next.charge;
       else { next.charge = charge; if (quoteInputs[index]) next.feeContext = billSubmissionQuoteContext(quoteInputs[index]!); }
     } else if (charge != null) next.charge = charge;

@@ -972,6 +972,7 @@ export type BrowserBillCreateInput = {
     diagnosisPointers?: number[];
     /** Calculation context revalidated by the server before bill creation. */
     feeContext?: BillFeeContext;
+    drug?: BilledDrug;
     /** Existing authorized RFA item linked to this service line. */
     rfaItemId?: string;
   }>;
@@ -1067,7 +1068,37 @@ export type BillFeeSource = {
   effectiveThrough: string;
 };
 
+/** Drug identifiers and quantities printed on the professional claim. */
+export type BilledDrug = {
+  ndcNumber: string;
+  metricQuantity: string;
+  unitOfMeasure: "UN" | "ML" | "GR";
+  administered?: {
+    drugName: string;
+    administeredAmount: string;
+    doseUnit: "mg" | "mcg" | "g" | "mL" | "units";
+    hcpcsCode: string;
+    amountPerHcpcsUnit: string;
+    amountPerNdcUnit: string;
+    hcpcsUnitSource: string;
+    productLabelSource: string;
+    unitDefinitionsVerified: true;
+  };
+};
+
+export type CaPadbContext = {
+  providerKind: "physician";
+  placeOfService: "11";
+  productKind: "injectable";
+  bundledOrPackaged: false;
+  codingRequirementsSatisfied: true;
+  completeSameDayServices: true;
+  sameDayServices: Array<{ code: string; units: number }>;
+};
+
 export type BillFeeQuoteInput = {
+  drug?: BilledDrug;
+  padbContext?: CaPadbContext;
   billingProviderId?: string;
   payerId?: string;
   code: string;
@@ -1137,7 +1168,7 @@ export type BillFeeQuoteInput = {
 };
 
 /** Authoritative service, provider, payer and location fields come from the submitted bill. */
-export type BillFeeContext = Omit<BillFeeQuoteInput, "code" | "dateOfService" | "units" | "modifiers" | "chargeCents" | "billingProviderId" | "payerId" | "serviceZip">;
+export type BillFeeContext = Omit<BillFeeQuoteInput, "code" | "dateOfService" | "units" | "modifiers" | "chargeCents" | "billingProviderId" | "payerId" | "serviceZip" | "drug">;
 
 export type BillFeeQuote =
   | {
@@ -1145,7 +1176,7 @@ export type BillFeeQuote =
     /** Total for the service line in cents, already accounting for units. */
     amountCents: number;
     scheduleMaximumCents: number;
-    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs" | "payer_contract";
+    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs" | "ca_padb" | "payer_contract";
     provenance: BillFeeSource[];
     notes: string[];
   }

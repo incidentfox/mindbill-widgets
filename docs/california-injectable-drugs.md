@@ -1,0 +1,13 @@
+# California physician-administered injectable drugs
+
+The existing React `BillSubmissionForm` shows an injectable-drug disclosure in treatment line fee details. J codes open it automatically; other injectable procedure codes can select the same service type. This is an entry shortcut, not evidence that a code is payable.
+
+Enter the 11-digit NDC, product name, administered dose, dose unit, dose per procedure billing unit, dose per NDC quantity unit, NDC quantity and its unit. Both dose-per-unit values use the selected dose unit. Provide the procedure unit reference and product-label URLs, then select the documented circumstances. The current automatic calculation requires a physician-administered, separately payable office injection (place of service 11). Include all same-day services on the bill so the server can check administration/bundling context. Unsupported circumstances require review.
+
+Procedure billing units remain `serviceLines[].units`. Product quantity is independently stored in `serviceLines[].drug.metricQuantity` and `unitOfMeasure`. For example, a synthetic 10 mg dose may use 10 procedure units (1 mg per unit) and 2.5 mL of product (4 mg/mL). The backend validates both dose equations; the form does not guess a dose or a billing-unit definition from a price-table unit.
+
+The public browser and Node SDKs expose `BilledDrug` and `CaPadbContext`. Fee quotes accept `drug` and `padbContext`. Save the exact drug metadata as `serviceLines[].drug` and the quote context as `serviceLines[].feeContext.padbContext`, retaining `sameDayServices`. A successful California injectable quote has `basis: "ca_padb"` and its amount is already the total line amount in cents. Editing identifiers, dose evidence, context, or units invalidates the previous estimate until the server prices the new request.
+
+The backend uses reviewed California-adopted Medi-Cal Basic Rates less the California adjustment, by service date. A catalog hit is not a payable rate; unavailable dates, missing evidence, nonpositive reviewed amounts, mismatched units, and unsupported bundling remain review outcomes. This workflow does not import a complete product-label/HCPCS unit crosswalk. The reference fields currently require biller-verified source documentation.
+
+The drug claim contract carries NDC quantity separately from procedure units into the claim, and drug name/dose into supplemental information. Product and injection administration are separate service lines. This disclosure is part of the existing treatment form and does not change medical-legal billing or enable treatment billing for additional organizations.
