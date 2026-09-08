@@ -1,0 +1,14 @@
+FICTIONAL RECORD — SOFTWARE DEMONSTRATION ONLY
+
+Patient: Alex Morgan (synthetic-patient-001)
+Date: July 15, 2026
+Author: Dr. Jamie Example, Example Review Practice
+
+Interval history
+The fictional patient reports continued improvement and occasional discomfort with overhead tasks.
+
+Records reviewed
+The June 3 evaluation and June 24 therapy note are referenced. The sample documents do not include imaging or a final impairment determination.
+
+Review status
+Prepared for a fictional August 1 med-legal evaluation. This fixture is not a clinical report or medical advice.

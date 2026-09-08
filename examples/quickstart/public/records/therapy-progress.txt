@@ -1,0 +1,14 @@
+FICTIONAL RECORD — SOFTWARE DEMONSTRATION ONLY
+
+Patient: Alex Morgan (synthetic-patient-001)
+Date: June 24, 2026
+Author: Casey Example, Example Therapy
+
+Interval history
+The fictional patient describes improved comfort with activities below shoulder level, with continued difficulty reaching overhead.
+
+Progress
+The sample note records participation in three therapy sessions. It does not include standardized functional scores.
+
+Next review
+The fictional reviewer should reconcile the remaining functional limitations with the later follow-up note. This fixture is not medical advice.

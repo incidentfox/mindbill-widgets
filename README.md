@@ -388,7 +388,7 @@ For organizations with treatment billing enabled, the browser reference and life
 - [`@mindbill/react`](./packages/react)
 - [`@mindbill/angular`](./packages/angular)
 - [`@mindbill/embed`](./packages/embed)
-- [Runnable server example](./examples/quickstart)
+- [Medical review starter app](./examples/quickstart) — fictional records and summary, case billing, dashboard, and settings; runs without an API key.
 - [API reference](https://docs.mindbill.org/reference)
 - [OpenAPI](https://app.mindbill.org/partner-openapi.yaml)
 

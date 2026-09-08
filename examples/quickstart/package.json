@@ -1,17 +1,29 @@
 {
-  "name": "mindbill-nextjs-quickstart",
+  "name": "mindbill-medical-review-starter",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "dev": "next dev --webpack -p 3001",
+    "build": "next build --webpack",
+    "start": "next start -p 3001",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test lib/*.test.ts"
   },
   "dependencies": {
-    "@mindbill/node": "latest",
-    "@mindbill/react": "latest",
-    "next": "^15.5.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "@mindbill/node": "0.13.0",
+    "@mindbill/react": "0.57.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.17.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.2.7",
+    "typescript": "^5.9.2"
   }
 }
