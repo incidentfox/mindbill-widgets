@@ -1079,6 +1079,18 @@ export type BillFeeQuoteInput = {
   reportKind?: "progress" | "permanent_stationary_pr3" | "permanent_stationary_pr4";
   hasFeeAgreement?: boolean;
   serviceZip?: string;
+  /** Explicit physical interpretation location for a professional component. */
+  professionalComponentContext?: {
+    interpretationLocation: "same_as_patient_service" | "different_from_patient_service";
+  };
+  /** California equipment pricing uses worker residence, independently of service location. */
+  dmeposContext?: {
+    residenceZip: string;
+    /** Continuous rental month for this equipment item; only for applicable RR lines. */
+    rentalMonth?: number;
+    /** Actual prior payments for this item, including rentals; explicit zero means no prior payments. */
+    priorPaymentsCents?: number;
+  };
   /** Supply verified service facts; omitted context can require review. */
   physicianContext?: {
     providerKind: "physician" | "physician_assistant" | "nurse_practitioner" | "clinical_nurse_specialist" | "other";
