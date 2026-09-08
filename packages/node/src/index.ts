@@ -102,6 +102,17 @@ export type BilledDrug = {
   };
 };
 
+/** Documented facts for a single personally performed physician anesthesia service. */
+export type CaAnesthesiaContext = {
+  providerKind: "physician";
+  personallyPerformedAlone: true;
+  actualMinutes: number;
+  placeOfService: string;
+  completeSameDayServices: true;
+  otherSameDayServices: boolean;
+  codingRequirementsSatisfied: true;
+};
+
 export type CaPadbContext = {
   providerKind: "physician";
   placeOfService: "11";
@@ -125,7 +136,7 @@ export type ServiceLine = {
   /** One-based pointers into `diagnoses`, matching CMS-1500 box 24E. */
   diagnosisPointers?: number[];
   drug?: BilledDrug;
-  feeContext?: { padbContext?: CaPadbContext };
+  feeContext?: { padbContext?: CaPadbContext; anesthesiaContext?: CaAnesthesiaContext };
 };
 
 export type CreateBillRequest = {

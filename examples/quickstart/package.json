@@ -15,8 +15,8 @@
     "verify:browser": "node --experimental-strip-types scripts/verify-browser.mjs"
   },
   "dependencies": {
-    "@mindbill/node": "0.14.0",
-    "@mindbill/react": "0.59.0",
+    "@mindbill/node": "0.15.0",
+    "@mindbill/react": "0.60.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -1090,6 +1090,17 @@ export type BilledDrug = {
   };
 };
 
+/** Documented facts for a single personally performed physician anesthesia service. */
+export type CaAnesthesiaContext = {
+  providerKind: "physician";
+  personallyPerformedAlone: true;
+  actualMinutes: number;
+  placeOfService: string;
+  completeSameDayServices: true;
+  otherSameDayServices: boolean;
+  codingRequirementsSatisfied: true;
+};
+
 export type CaPadbContext = {
   providerKind: "physician";
   placeOfService: "11";
@@ -1103,6 +1114,7 @@ export type CaPadbContext = {
 export type BillFeeQuoteInput = {
   drug?: BilledDrug;
   padbContext?: CaPadbContext;
+  anesthesiaContext?: CaAnesthesiaContext;
   billingProviderId?: string;
   payerId?: string;
   code: string;
@@ -1180,7 +1192,8 @@ export type BillFeeQuote =
     /** Total for the service line in cents, already accounting for units. */
     amountCents: number;
     scheduleMaximumCents: number;
-    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs" | "ca_padb" | "payer_contract";
+    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs" | "ca_padb" | "ca_anesthesia" | "payer_contract";
+    anesthesia?: { actualMinutes: number; baseUnits: number; timeUnitsTenths: number; conversionFactorCents: number; locality: string };
     provenance: BillFeeSource[];
     notes: string[];
   }
