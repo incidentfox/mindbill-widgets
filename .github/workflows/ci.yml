@@ -26,6 +26,25 @@ jobs:
 
   medical-review-starter:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Verify exact locked SDK release artifacts
+        run: node scripts/check-quickstart-artifacts.mjs
+
+  # The reference PR must additionally pass a clean registry install before merge,
+  # after the SDK versions have been published. Keep checking it on main.
+  medical-review-starter-registry:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: examples/quickstart
