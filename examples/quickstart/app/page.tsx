@@ -1,2 +1,2 @@
-import { Billing } from "./Billing";
-export default function Page() { return <Billing />; }
+import { ReviewDeskApp } from "./ReviewDeskApp";
+export default function Page() { return <ReviewDeskApp />; }

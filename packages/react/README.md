@@ -398,3 +398,7 @@ including review type, rationale, and requested services. Both save through your
 host-server callback; saving does not transmit or authorize anything. See
 [treatment draft integration](../../docs/treatment-drafts.md) for input types,
 revision handling, charge semantics, and signing boundaries.
+
+### Stable creation keys
+
+`BillSubmissionForm` accepts an optional `idempotencyKey`. Generate and persist it on the host backend once per logical case bill, return it with the authorized case state, and reuse it across retries and tabs. The form forwards it to the browser SDK's submission request. The host must still enforce unique case associations and verify the returned bill; a key or recovery callback is not database concurrency control. See `examples/quickstart` for the complete flow.

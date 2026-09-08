@@ -1,6 +1,9 @@
 # Reusable billing profiles
 
-Use `BillingSettings` in your application's settings area to manage billing providers,
+Shared profiles are optional. By default, supply the billing provider, rendering provider,
+service location, and W-9 with each bill from authorized host records.
+
+Workspace administrators can use `BillingSettings` to manage shared billing providers,
 rendering providers, service locations/POS, and the practice W-9 in MindBill. Use
 `OrganizationOnboarding` for the step-by-step initial setup instead.
 
@@ -13,8 +16,8 @@ import { BillingSettings } from "@mindbill/react";
 />
 ```
 
-The settings endpoint must authenticate the user, check their organization-admin role,
-resolve the MindBill organization from trusted server-side tenancy, and mint an
+The settings endpoint must authenticate the user, check their workspace-admin role,
+and mint a separate unscoped
 exact-origin session with `organization:manage`. Do not give that permission to every
 bill-entry user. A hidden settings tab is not authorization. Permanent API keys stay
 on the server. See the [integration quickstart](https://docs.mindbill.org/learn/quickstart).
@@ -23,7 +26,9 @@ on the server. See the [integration quickstart](https://docs.mindbill.org/learn/
 
 Fetch a masked organization profile with `createOrganizationClient(...).getBillingProfile()`
 using an organization-wide `bills:create` session, or provide your own host-owned choices.
-This read-only route does not need `organization:manage` and rejects single-bill sessions.
+This read-only route does not need `organization:manage` and rejects customer-scoped
+and single-bill sessions. Customer integrations use their own authorized inline values
+or host-owned choices instead of fetching shared profiles.
 The adapter does not fetch profiles or broaden permissions.
 
 ```tsx

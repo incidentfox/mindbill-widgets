@@ -304,6 +304,8 @@ export function billSubmissionQuoteContext(input: BillFeeQuoteInput): BillFeeCon
 
 export type BillSubmissionFormProps = {
   initialBill: BillSubmissionInput;
+  /** Persist one host-generated key per logical bill. Reuse it across retries and tabs. */
+  idempotencyKey?: string;
   /** Host-owned choices or organizationProfileOptions(profile). Selection copies a snapshot into this bill only. */
   profileOptions?: BillSubmissionProfileOptions;
   /** Compact keeps provider fields available behind an edit disclosure; validation errors expand it. */
@@ -919,7 +921,7 @@ export function BillSubmissionAttachmentsSection(): ReactElement { return <BillS
 export function BillSubmissionActions(): ReactElement { return <BillSubmissionSection id="actions" />; }
 
 export function BillSubmissionForm({
-  initialBill, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
+  initialBill, idempotencyKey, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
   profileOptions, profileDisplay = "expanded",
   fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
@@ -1353,7 +1355,7 @@ export function BillSubmissionForm({
         bill: value.bill,
         ...(value.submission ? { submission: value.submission } : {}),
         documents,
-      });
+      }, idempotencyKey ? { idempotencyKey } : undefined);
       setRouteDialog(null);
       setRouteError(null);
       await onSubmitted?.(result);

@@ -19,14 +19,13 @@ npm install @mindbill/node @mindbill/react
 # Angular: npm install @mindbill/node @mindbill/angular
 ```
 
-The permanent API key stays on your server:
+The permanent workspace API key stays on your server. No organization ID is required for default workspace billing:
 
 ```ts
 import { MindBillClient } from "@mindbill/node";
 
 export const mindbill = new MindBillClient({
   apiKey: process.env.MINDBILL_API_KEY!,
-  organizationId: process.env.MINDBILL_ORG_ID,
 });
 ```
 
@@ -36,6 +35,7 @@ Collect and review every value and payer PDF in your application, then send the 
 
 ```ts
 const bill = await mindbill.createAndSubmitBill({
+  customerExternalId: authorizedCustomer.id, // Resolve from trusted host records.
   bill: {
     externalId: "evaluation_123",
     patient: {
@@ -197,7 +197,7 @@ walks the biller through the payer call — who to dial (payer contacts plus
 directory hours and Bill Review vendor), the submission receipt (submission
 and acknowledgement history rows), and the five reported-status outcomes with
 call details — and records the result on the bill history. The Second Review
-panel prefills an editable LC §4622 appeal reason and, when the lifecycle
+panel prefills an editable LC `4622 appeal reason and, when the lifecycle
 includes the denial EOR, shows the 90-day filing deadline. Bills with two or
 more submissions also render a selectable submissions ribbon (Original Bill,
 Second Review, Duplicate Bill, …) at the top of the React lifecycle view. Each
@@ -246,7 +246,7 @@ export class CaseBillingComponent {
 }
 ```
 
-The browser never receives the permanent API key. Add one authenticated route that maps your signed-in user to permissions and mints a short-lived, exact-origin session for your MindBill organization:
+The browser never receives the permanent API key. Add one authenticated route that maps your signed-in user to permissions and mints a short-lived, exact-origin session for the customer that your host application authorizes:
 
 ```ts
 // app/api/mindbill/session/route.ts
@@ -254,12 +254,17 @@ import { mindbill } from "@/lib/mindbill";
 
 export async function POST(request: Request) {
   const user = await requireUser(request);
+  const customer = await requireCustomerAccess(user); // Your existing authorization.
   const permissions = billingPermissionsFor(user.role);
+  const allowedOrigin = process.env.APP_ORIGIN;
+  if (!allowedOrigin || request.headers.get("origin") !== allowedOrigin)
+    return Response.json({ error: "Origin not allowed" }, { status: 403 });
 
   const session = await mindbill.createBrowserSession({
     subject: user.id,
-    allowedOrigin: new URL(request.url).origin,
+    allowedOrigin,
     permissions,
+    resource: { customerExternalId: customer.id },
     expiresIn: 900,
   });
 
@@ -267,9 +272,9 @@ export async function POST(request: Request) {
 }
 ```
 
-This route contains authorization, not billing business logic. The API key fixes the organization boundary; `subject` and `permissions` fix the user boundary. The component renews the session and calls MindBill directly to read and act on submitted bills.
+This route uses your existing authentication and customer-access functions. The API key owns the workspace; `resource.customerExternalId` restricts the browser to the authorized customer. `subject` is an audit identity, not an access boundary. For an existing case bill, send `{ customerExternalId, billId }`; both restrictions apply. MindBill stamps customer scope on creation and enforces it on collections, documents, and bill actions. Shared settings need a separate workspace-admin session with `organization:manage` and no resource restriction. Never issue that session to ordinary customer users.
 
-After `BillSubmissionForm` returns `billId`, render this component with that ID. For a compact read-only surface, use `ConnectedBillStatus` with the same session endpoint. For a custom interface, use `useBillLifecycle` or `useBillStatus`. Store the canonical `billId` for navigation and webhook correlation while retaining your `externalId` as the idempotency key. Signed webhooks remain the durable source of truth.
+After `BillSubmissionForm` returns `billId`, render this component with that ID. For a compact read-only surface, use `ConnectedBillStatus` with the same session endpoint. For a custom interface, use `useBillLifecycle` or `useBillStatus`. Store the canonical `billId` for navigation and webhook correlation while retaining `externalId` as the host case reference and a separate stable idempotency key for retries. Signed webhooks remain the durable source of truth.
 
 ## Server-side lifecycle calls
 

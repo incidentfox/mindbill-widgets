@@ -990,6 +990,9 @@ export type BrowserBillSubmissionDocument = {
 };
 
 export type BrowserBillSubmissionInput = BillActorInput & {
+  /** Usually omitted: MindBill stamps the customer from the server-issued session.
+   * If supplied, it must match the session customer restriction. */
+  customerExternalId?: string;
   bill: BrowserBillCreateInput;
   submission?: {
     route?: BillSubmissionRoute;
@@ -1004,6 +1007,7 @@ export type BrowserBillSubmissionInput = BillActorInput & {
 
 export type BrowserSubmittedBill = Record<string, unknown> & {
   id: string;
+  customerExternalId?: string | null;
   externalId?: string | null;
   state?: string;
 };
