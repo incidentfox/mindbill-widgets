@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@mindbill/node':
-        specifier: 0.14.0
-        version: 0.14.0
+        specifier: 0.15.0
+        version: 0.15.0
       '@mindbill/react':
-        specifier: 0.59.0
-        version: 0.59.0(react@19.2.8)
+        specifier: 0.60.0
+        version: 0.60.0(react@19.2.8)
       next:
         specifier: 16.3.4
         version: 16.3.4(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -188,18 +188,18 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@mindbill/browser@0.35.0':
-    resolution: {integrity: sha512-8drnvh14M18AA0hJV7lJ4DoKSH1Wq3pPwRbvmvRfq0LXgyJqIGVM8qW+bfa1OhZpilH+BBLn0mw6WYeb3PeLHQ==}
+  '@mindbill/browser@0.36.0':
+    resolution: {integrity: sha512-V9la2CDGGq/I30cRZwU+hJBo2xtfp5DX2RhtBDWHGKYoeaDrjUQDFMa6p0x3tVip2pVJ4GNsg2F7uLdNgnh09A==}
 
   '@mindbill/embed@0.6.0':
     resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==}
 
-  '@mindbill/node@0.14.0':
-    resolution: {integrity: sha512-tTOGRwBtwJzylLz2TkdVqA+LbqO2WNS+2jI6QlNcGgHgx4ULWX8E2HIX4Kdh2ybPjbE5FlSCsEpP8BG1quUFZw==}
+  '@mindbill/node@0.15.0':
+    resolution: {integrity: sha512-ieBq2sovH96q/KbEsu5L5e+5aUPHAysVqIPr4DmozwJqjQu5AEPikO7BsteEsERTB69L0gBLvY/fi6f4ED8UHw==}
     engines: {node: '>=20'}
 
-  '@mindbill/react@0.59.0':
-    resolution: {integrity: sha512-ODz1ehhUExPkL1xN0OfpdTkOW47cjA8jXoVx0D3nPW1+xs+q0nCaVWX22ZF4aRMOQIPz/eV2hAh+O09VmbQhnA==}
+  '@mindbill/react@0.60.0':
+    resolution: {integrity: sha512-jMtPG50+h4KSCq+5EGWSrPZgxTQZacp7NwvMQvawxIzgZ/jmZS98x/08nop8WXWgsh6u9gRpQhbNYc4A5vkU+w==}
     peerDependencies:
       react: '>=18'
 
@@ -487,15 +487,15 @@ snapshots:
   '@img/sharp-win32-x64@0.35.4':
     optional: true
 
-  '@mindbill/browser@0.35.0': {}
+  '@mindbill/browser@0.36.0': {}
 
   '@mindbill/embed@0.6.0': {}
 
-  '@mindbill/node@0.14.0': {}
+  '@mindbill/node@0.15.0': {}
 
-  '@mindbill/react@0.59.0(react@19.2.8)':
+  '@mindbill/react@0.60.0(react@19.2.8)':
     dependencies:
-      '@mindbill/browser': 0.35.0
+      '@mindbill/browser': 0.36.0
       '@mindbill/embed': 0.6.0
       react: 19.2.8
 
