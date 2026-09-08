@@ -1,0 +1,14 @@
+FICTIONAL RECORD — SOFTWARE DEMONSTRATION ONLY
+
+Patient: Alex Morgan (synthetic-patient-001)
+Date: June 3, 2026
+Author: Dr. Jamie Example, Example Review Practice
+
+History
+The fictional patient reports left shoulder discomfort after lifting a box at Example Workshop on June 1. Overhead reaching is described as uncomfortable.
+
+Examination
+The sample note describes limited active shoulder elevation and localized tenderness. No measurements or findings in this example represent a real examination.
+
+Plan documented in the sample
+A follow-up visit and physical therapy assessment are recorded. This fixture is not medical advice.
