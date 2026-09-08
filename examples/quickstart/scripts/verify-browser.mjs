@@ -24,7 +24,7 @@ for (const port of [3114, 4332]) {
   await new Promise(resolve => probe.close(resolve));
 }
 const temporary = await mkdtemp(join(tmpdir(), "review-desk-browser-"));
-const sessions = [], requests = [], created = [];
+const sessions = [], requests = [], created = [], upstreamFailures = [];
 const state = { lifecycle: null, input: null };
 let child, browser, page;
 let serverLog = "";
@@ -81,7 +81,7 @@ const mock = http.createServer(async (request, response) => {
     if (path === "/partner/v2/bill-dashboard") return send({ data: registry(state, url.searchParams) });
     if (path === "/partner/v2/bill-tasks") return send({ data: tasks(state) });
     throw new Error("Unexpected synthetic endpoint " + path);
-  } catch (error) { console.error(error); send({ error: error.message }, 500); }
+  } catch (error) { upstreamFailures.push(path + ": " + error.message); console.error(error); send({ error: error.message }, 500); }
 });
 try {
   mock.listen(4332, "127.0.0.1"); await once(mock, "listening");
@@ -142,6 +142,19 @@ try {
   assert.equal(await page.getByRole("heading", { name: "Create this case’s first bill" }).count(), 0);
   const database = JSON.parse(await readFile(join(temporary, ".data/host-database.json"), "utf8"));
   assert.equal(database.cases[0].billId, BILL_ID);
+  // The host's ID badge appears before the SDK fetch finishes. Verify the SDK itself.
+  await page.getByRole("heading", { name: "Bill #DEMO-001", exact: true }).waitFor();
+  await page.getByText("Claim TEST-2026-001", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Close bill", exact: true }).waitFor();
+  assert.equal(await page.getByText("Loading bill…", { exact: true }).count(), 0);
+  await page.getByRole("tab", { name: "Bill history", exact: true }).click();
+  await page.getByText("Demo submission", { exact: true }).waitFor();
+  await page.getByText("Created locally. No payer was contacted.", { exact: true }).waitFor();
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
+  await page.screenshot({ path: "/tmp/review-desk-bill-history.png", fullPage: true });
+  await page.getByRole("tab", { name: "Bill details", exact: true }).click();
+  await page.getByText("Example Review Practice", { exact: true }).first().waitFor();
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
   await page.screenshot({ path: "/tmp/review-desk-existing-bill.png", fullPage: true });
   await page.getByRole("button", { name: "Billing dashboard", exact: true }).click();
   await page.getByRole("heading", { name: "Billing dashboard", exact: true }).waitFor();
@@ -151,7 +164,9 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   assert.ok(sessions.some(session => session.permissions.includes("organization:manage") && !session.resource));
   assert.deepEqual(errors, []);
-  console.log("PASS: real production app login, source navigation, case-scoped SDK creation, PDF snapshots, stable idempotency header, missed callback recovery, saved association, lifecycle intersection, admin settings and responsive layout.");
+  assert.deepEqual(upstreamFailures, [], "every synthetic upstream endpoint completed successfully");
+  assert.ok(requests.includes("/partner/v2/bills/" + BILL_ID + "/lifecycle"));
+  console.log("PASS: real production app login, source navigation, case-scoped SDK creation, PDF snapshots, stable idempotency header, missed callback recovery, saved association, fully rendered lifecycle and history, lifecycle intersection, admin settings and responsive layout.");
 } catch (error) {
   console.error("Synthetic upstream requests:", requests, "Sessions:", sessions);
   console.error("Server log:", serverLog);
