@@ -17,6 +17,7 @@ export function isProfessionalComponentCandidate(code: string, modifiers: readon
 export function professionalComponentCalculationContext(context: BillFeeContext, details: ProfessionalComponentDetails, eligible: boolean): BillFeeContext {
   const next = { ...context };
   delete next.professionalComponentContext;
+  if (context.professionalComponentContext) delete next.catalogContext;
   if (!eligible) return next;
   delete next.catalogContext;
   if (details.interpretationLocation) next.professionalComponentContext = { interpretationLocation: details.interpretationLocation };

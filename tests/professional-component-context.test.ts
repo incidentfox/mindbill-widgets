@@ -34,5 +34,6 @@ describe("professional component calculation context", () => {
   it("removes professional interpretation facts when code or modifier no longer qualifies", () => {
     const next = professionalComponentCalculationContext(context, { interpretationLocation: "same_as_patient_service", professionalComponentBasis: "standard" }, false);
     expect(next.professionalComponentContext).toBeUndefined();
+    expect(next.catalogContext).toBeUndefined();
   });
 });
