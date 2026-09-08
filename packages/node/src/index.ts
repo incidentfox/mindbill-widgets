@@ -10,13 +10,14 @@ export const MINDBILL_BROWSER_PERMISSIONS = [
   "documents:read",
   "payers:read",
   "eors:read",
+  "organization:manage",
 ] as const;
 export type MindBillBrowserPermission = (typeof MINDBILL_BROWSER_PERMISSIONS)[number];
 
 export type MindBillClientOptions = {
   /** A server credential. Never expose this value to browser code. */
   apiKey: string;
-  /** Optional when the credential can access more than one customer organization. */
+  /** Optional explicit routing for existing practice connections. Omit for workspace billing. */
   organizationId?: string;
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
@@ -144,6 +145,7 @@ export type BillDocument = {
 
 export type Bill = {
   id: string;
+  customerExternalId?: string | null;
   externalId: string | null;
   state: string;
   billingMode: "med_legal" | "professional";
@@ -179,6 +181,7 @@ export type Bill = {
 
 export type BillPage = { data: Bill[]; nextCursor: string | null };
 export type ListBillsQuery = Partial<{
+  customerExternalId: string;
   cursor: string;
   limit: number;
   externalId: string;
@@ -235,6 +238,8 @@ export type SubmitBillRequest = {
   note?: string;
 };
 export type CreateAndSubmitBillRequest = {
+  /** Stable host customer reference, resolved by trusted backend authorization. */
+  customerExternalId?: string;
   bill: CreateBillRequest;
   submission?: SubmitBillRequest;
   documents?: SubmissionDocument[];
@@ -439,6 +444,12 @@ export type MindBillEvent = {
 export type EventPage = { events: MindBillEvent[]; nextCursor: string | null };
 export type WebhookDeliveryPage = { data: Record<string, unknown>[]; nextCursor: string | null };
 
+/** Customer scope permits creation/collections; bill scope restricts an existing bill.
+ * When both are supplied, both restrictions apply. */
+export type BrowserSessionResource =
+  | { customerExternalId: string; billId?: string }
+  | { customerExternalId?: string; billId: string };
+
 export type BrowserSessionRequest = {
   /** Stable ID for the signed-in user in your system. */
   subject: string;
@@ -446,8 +457,8 @@ export type BrowserSessionRequest = {
   allowedOrigin: string;
   /** Grant only the browser operations this user is allowed to perform. */
   permissions: MindBillBrowserPermission[];
-  /** Optional least-privilege restriction for a single existing bill. */
-  resource?: { billId: string };
+  /** Resolve from authenticated host customer/case records, never arbitrary browser input. */
+  resource?: BrowserSessionResource;
   expiresIn?: number;
 };
 export type BrowserSession = {
@@ -455,7 +466,7 @@ export type BrowserSession = {
   organizationId: string;
   subject: string;
   permissions: MindBillBrowserPermission[];
-  resource: { billId: string } | null;
+  resource: BrowserSessionResource | null;
   token: string;
   expiresAt: string;
 };
@@ -625,8 +636,20 @@ export class MindBillClient {
     const invalidPermission = input.permissions.find((permission) => !MINDBILL_BROWSER_PERMISSIONS.includes(permission));
     if (invalidPermission) throw new Error(`Unknown browser permission: ${invalidPermission}`);
     if (new Set(input.permissions).size !== input.permissions.length) throw new Error("permissions must not contain duplicates");
-    const billId = input.resource?.billId.trim();
-    if (input.resource && !billId) throw new Error("resource.billId is required when resource is provided");
+    const billId = input.resource?.billId?.trim();
+    const customerExternalId = input.resource?.customerExternalId?.trim();
+    if (input.resource) {
+      if (Object.keys(input.resource).some((key) => !["billId", "customerExternalId"].includes(key)))
+        throw new Error("resource accepts only billId and customerExternalId");
+      if (!billId && !customerExternalId)
+        throw new Error("resource requires customerExternalId or billId");
+      if (input.resource.billId !== undefined && (!billId || billId.length > 128))
+        throw new Error("resource.billId must contain 1 to 128 characters");
+      if (input.resource.customerExternalId !== undefined && (!customerExternalId || customerExternalId.length > 255))
+        throw new Error("resource.customerExternalId must contain 1 to 255 characters");
+      if (input.permissions.includes("organization:manage"))
+        throw new Error("Shared organization settings require a separate unscoped administrator session");
+    }
     if (billId && input.permissions.includes("bills:create")) {
       throw new Error("A bill-restricted session cannot include bills:create");
     }
@@ -639,7 +662,7 @@ export class MindBillClient {
       ...input,
       subject,
       allowedOrigin,
-      ...(billId ? { resource: { billId } } : {}),
+      ...(input.resource ? { resource: { ...(customerExternalId ? { customerExternalId } : {}), ...(billId ? { billId } : {}) } } : {}),
     });
   }
 }
