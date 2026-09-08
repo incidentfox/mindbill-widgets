@@ -1,7 +1,8 @@
 import type { BillSubmissionInput } from "@mindbill/react";
 
 // Hand-authored fictional data. This is not a real patient or a clinical assessment.
-export const CASE_ID = "synthetic-review-001";
+import { CASE_ID } from "./case-identity";
+export { CASE_ID } from "./case-identity";
 const address = { line1: "100 Example Avenue", city: "Pasadena", state: "CA", postalCode: "91101" };
 export const exampleBill: BillSubmissionInput = {
   externalId: CASE_ID,
@@ -13,7 +14,7 @@ export const exampleBill: BillSubmissionInput = {
   claim: {
     externalId: "synthetic-claim-001", claimNumber: "TEST-2026-001",
     employer: "Example Workshop", dateOfInjury: "2026-06-01", injuryState: "CA",
-    claimsAdministrator: { id: "synthetic-payer-001", name: "Example Claims Administrator" },
+    // Choose a canonical claims administrator from MindBill before submitting.
   },
   billingProvider: { name: "Example Review Practice", npi: "1234567893", taxId: "000000000", phone: "2025550100", address },
   renderingProvider: { name: "Dr. Jamie Example", npi: "1234567893", taxonomy: "208100000X", isQme: true },

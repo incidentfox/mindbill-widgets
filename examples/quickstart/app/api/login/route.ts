@@ -1,11 +1,10 @@
-import { appOrigin, checkOrigin, cookieName, failure, isSandbox, maxAge, noStore, required, RouteError, sameSecret, signSession } from "../../../lib/security";
+import { appOrigin, checkOrigin, cookieName, failure, maxAge, noStore, required, RouteError, sameSecret, signSession } from "../../../lib/security";
 export const runtime = "nodejs";
 // Single-process demo rate limit. Use your identity provider in production.
 let failures = 0;
 let windowEnds = 0;
 export async function POST(request: Request) {
   try {
-    if (!isSandbox()) throw new RouteError(404, "Sandbox integration is disabled.");
     checkOrigin(request);
     if (Date.now() > windowEnds) { failures = 0; windowEnds = Date.now() + 60_000; }
     if (failures >= 10) throw new RouteError(429, "Too many attempts. Try again in a minute.");
