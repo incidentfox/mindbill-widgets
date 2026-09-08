@@ -29,3 +29,5 @@ For a professional component, the same form asks for interpretation location and
 ```
 
 Location alone is insufficient: the server also validates physician, coding, same-day service, and adjustment facts. Clearing a confirmation or changing the procedure/modifier removes stale interpretation facts. A signed report belongs with the bill attachments; these fee inputs do not replace clinical documentation or authorization requirements.
+
+The default modifier dropdown includes 26, TC, NU, UE, RR, KH, KI, and KJ; applications do not need to supply `modifierOptions` to select these. The backend still validates each code/modifier combination.
