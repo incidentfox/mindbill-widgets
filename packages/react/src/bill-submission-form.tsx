@@ -25,6 +25,7 @@ import {
 } from "@mindbill/browser";
 
 import { isProfessionalComponentCandidate, professionalComponentCalculationContext, type ProfessionalComponentDetails } from "./professional-component-context";
+import { AnesthesiaLineFields, anesthesiaDetailsFromSaved, anesthesiaCalculationContext, isAnesthesiaCandidate, type AnesthesiaDetails } from "./bill-anesthesia-context";
 import { DrugLineFields, drugDetailsFromSaved, drugFieldsEnabled, drugRequestDetails, type DrugDetails } from "./bill-drug-context";
 import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } from "./bill-equipment-context";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
@@ -195,7 +196,7 @@ export type BillSubmissionFormValue = {
 
 export type BillSubmissionFeeContext = BillFeeContext;
 
-type FeeDetails = EquipmentDetails & ProfessionalComponentDetails & DrugDetails & {
+type FeeDetails = EquipmentDetails & ProfessionalComponentDetails & DrugDetails & AnesthesiaDetails & {
   providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | "physical_therapist" | "" | undefined;
   basis?: "standard" | "adjustment";
   minutes?: number | undefined;
@@ -226,6 +227,7 @@ export function billSubmissionEstimateContext(code: string, placeOfService: stri
 /** Rebuild edited fields so clearing an input cannot retain a previously priced context. */
 export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}, modifiers: readonly string[] = []): BillFeeContext {
   if (details.basis === "adjustment") return {};
+  if (isAnesthesiaCandidate(code)) return anesthesiaCalculationContext(placeOfService, details);
   const equipment = equipmentFields(code, modifiers);
   if (equipment.residence) return equipmentCalculationContext(code, modifiers, details);
   if (drugFieldsEnabled(code, details)) {
@@ -239,6 +241,7 @@ export function billSubmissionCalculationContext(code: string, placeOfService: s
   delete context.prolongedServiceContext;
   delete context.dmeposContext;
   delete context.padbContext;
+  delete context.anesthesiaContext;
   if (estimated.physicianContext) context.physicianContext = {
     ...estimated.physicianContext, ...saved.physicianContext,
     providerKind: estimated.physicianContext.providerKind, placeOfService,
@@ -273,6 +276,7 @@ export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSu
     ...(otherSameDayServices && context.physicianContext ? { physicianContext: { ...context.physicianContext, standaloneService: false } } : {}),
     ...(otherSameDayServices && context.therapyContext ? { therapyContext: { ...context.therapyContext, otherSameDayServices: true } } : {}),
     ...(context.prolongedServiceContext ? { prolongedServiceContext: { ...context.prolongedServiceContext, sameDayServices: sameDayServices.map((candidate) => ({ code: candidate.code.trim().toUpperCase(), units: candidate.units ?? 1 })) } } : {}),
+    ...(context.anesthesiaContext ? { anesthesiaContext: { ...context.anesthesiaContext, placeOfService: bill.serviceLocation?.placeOfServiceCode ?? "", otherSameDayServices: padbSameDayServices.length !== 1 || Boolean(line.serviceDateEnd && parseBillSubmissionDate(line.serviceDateEnd) !== dateOfService) } } : {}),
     ...(line.drug ? { drug: line.drug } : {}),
     ...(context.padbContext ? { padbContext: { ...context.padbContext, sameDayServices: padbSameDayServices.map((candidate) => ({ code: candidate.code.trim().toUpperCase(), units: candidate.units ?? 1 })) } } : {}),
     ...(billingProviderId ? { billingProviderId } : {}), ...(payerId ? { payerId } : {}),
@@ -291,6 +295,7 @@ export function billSubmissionQuoteContext(input: BillFeeQuoteInput): BillFeeCon
     ...(input.reportQualification ? { reportQualification: input.reportQualification } : {}),
     ...(input.professionalComponentContext ? { professionalComponentContext: input.professionalComponentContext } : {}),
     ...(input.padbContext ? { padbContext: input.padbContext } : {}),
+    ...(input.anesthesiaContext ? { anesthesiaContext: input.anesthesiaContext } : {}),
     ...(input.dmeposContext ? { dmeposContext: input.dmeposContext } : {}),
     ...(input.catalogContext ? { catalogContext: input.catalogContext } : {}),
     ...(input.prolongedServiceContext ? { prolongedServiceContext: input.prolongedServiceContext } : {}),
@@ -1158,6 +1163,7 @@ export function BillSubmissionForm({
     const prolonged = saved?.prolongedServiceContext;
     return feeDetails[detailsIndex] ?? {
       ...drugDetailsFromSaved(line.drug, saved),
+      ...anesthesiaDetailsFromSaved(saved),
       interpretationLocation: saved?.professionalComponentContext?.interpretationLocation,
       professionalComponentBasis: saved?.catalogContext?.codingRequirementsSatisfied && saved.physicianContext?.standaloneService && saved.physicianContext.globalPeriodApplies === false && saved.physicianContext.hpsaBonusEligible === false && saved.physicianContext.incidentToPhysicianService !== true ? "standard" : "",
       residenceZip: saved?.dmeposContext?.residenceZip,
@@ -1210,6 +1216,7 @@ export function BillSubmissionForm({
     const quote = supportedFeeJurisdiction ? feeQuotes[key] : undefined;
     const details = detailsForLine(index);
     const prolonged = isProlongedCode(line.code);
+    const anesthesia = isAnesthesiaCandidate(line.code);
     const detailsIndex = prolonged ? prolongedLeader(index) : index;
     const update = (patch: Partial<FeeDetails>) => setFeeDetails((current) => ({ ...current, [detailsIndex]: { ...details, ...patch } }));
     if (prolonged && detailsIndex !== index) return <p className="mbsf-help mbsf-fee-details">Uses the prolonged-service details on line {detailsIndex + 1}.{quote?.status !== "priced" ? ` ${quote?.reason ?? "Checking the fee schedule…"}` : ""}</p>;
@@ -1219,7 +1226,7 @@ export function BillSubmissionForm({
     const equipment = supportedFeeJurisdiction ? equipmentFields(line.code, line.modifiers) : { residence: false, rental: false, priorPayments: false };
     return <div className="mbsf-fee-details">
       <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Fee schedule estimate</option><option value="adjustment">Requires adjustment</option></select></label>
-      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
+      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : anesthesia ? "The fee uses documented anesthesia minutes and the service location. Contracted anesthesia rates require review of their rate basis." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
       {prolonged ? <div className="mbsf-grid" aria-label={`Prolonged-service details for line ${index + 1}`}>
         <label className="mbsf-field"><span>Total prolonged minutes on this service date</span><input className="mbsf-input" aria-label={`Total prolonged minutes for line ${index + 1}`} type="number" min="30" max="1440" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label>
         <label className="mbsf-field"><span>Related evaluation date</span><input className="mbsf-input" aria-label={`Related evaluation date for line ${index + 1}`} type="date" value={details.relatedEvaluationDate ?? ""} onChange={(event) => update({ relatedEvaluationDate: event.target.value })} /></label>
@@ -1232,8 +1239,9 @@ export function BillSubmissionForm({
         {equipment.priorPayments ? <label className="mbsf-field"><span>Prior payments for this item ($)</span><input className="mbsf-input" aria-label={`Prior payments for line ${index + 1}`} type="number" min="0" step="0.01" value={details.priorPayments ?? ""} onChange={(event) => update({ priorPayments: event.target.value })} /></label> : null}
         <p className="mbsf-help mbsf-span">Use the injured worker’s residence ZIP to determine the rural rate.{equipment.rental ? " Count continuous rental months for this same equipment item." : ""}{equipment.priorPayments ? " Enter actual payments already made for this item, including rentals. Enter 0 only if there were no prior payments." : ""}</p>
       </div> : null}
-      {!equipment.residence && !prolonged ? <DrugLineFields code={line.code} index={index} details={details} update={update} /> : null}
-      {!equipment.residence && !drugFieldsEnabled(line.code, details) ? <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
+      {anesthesia ? <AnesthesiaLineFields index={index} details={details} update={update} /> : null}
+      {!anesthesia && !equipment.residence && !prolonged ? <DrugLineFields code={line.code} index={index} details={details} update={update} /> : null}
+      {!anesthesia && !equipment.residence && !drugFieldsEnabled(line.code, details) ? <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
       {<label className="mbsf-field"><span>Provider type</span><select className="mbsf-input" aria-label={`Provider type for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]> })}><option value="">Select provider type…</option>{!therapy ? <><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option></> : <option value="physical_therapist">Physical therapist</option>}<option value="other">Other</option></select></label>}
       {component ? <div className="mbsf-grid" aria-label={`Interpretation details for line ${index + 1}`}>
         <label className="mbsf-field"><span>Interpretation location</span><select className="mbsf-input" aria-label={`Interpretation location for line ${index + 1}`} value={details.interpretationLocation ?? ""} onChange={(event) => update({ interpretationLocation: event.target.value as FeeDetails["interpretationLocation"] })}><option value="">Select interpretation location…</option><option value="same_as_patient_service">Same physical address as patient service</option><option value="different_from_patient_service">Different physical address</option></select></label>
@@ -1521,7 +1529,7 @@ export function BillSubmissionForm({
             {diagnosisSelector(billSubmissionLineDiagnosisCodes(bill, index), (codes) => setBill((current) => setBillSubmissionLineDiagnoses(current, index, codes)), index)}
             {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
           </div> : null}
-          <div data-label="Units" data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
+          <div data-label={treatmentBilling && isAnesthesiaCandidate(line.code) ? "Services" : "Units"} data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} max={treatmentBilling && isAnesthesiaCandidate(line.code) ? 1 : undefined} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
           <div className="mbsf-money" data-label="Allowed" data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
           <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
           {feeDetailsFor(line, index)}
