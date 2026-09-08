@@ -406,3 +406,5 @@ Older `/partner/v2/browser/...` URLs remain compatibility aliases. Browser-sessi
 
 
 Treatment fee estimates preserve the selected saved practice and payer so configured contracted rates can apply. Keep `serviceLines[].feeContext` when forwarding a `BillSubmissionForm` submission; the API revalidates its calculation against the current bill. Selecting 99358/99359 adds shared prolonged-service documentation inputs beside the existing service lines. See [procedure fees](docs/procedure-fees.md#practice-rates-and-verified-submission-context).
+
+California treatment service lines also support equipment residence/rental history and professional interpretation details in the existing shared form. These explicit facts are preserved in `serviceLines[].feeContext`; missing or unsupported facts remain subject to backend fee review. See [California equipment and interpretation details](docs/california-equipment.md).

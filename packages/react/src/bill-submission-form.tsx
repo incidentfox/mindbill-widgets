@@ -23,6 +23,8 @@ import {
   type BillReviewPayerSuggestion,
 } from "@mindbill/browser";
 
+import { isProfessionalComponentCandidate, professionalComponentCalculationContext, type ProfessionalComponentDetails } from "./professional-component-context";
+import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } from "./bill-equipment-context";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
@@ -190,7 +192,7 @@ export type BillSubmissionFormValue = {
 
 export type BillSubmissionFeeContext = BillFeeContext;
 
-type FeeDetails = {
+type FeeDetails = EquipmentDetails & ProfessionalComponentDetails & {
   providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | "physical_therapist" | "" | undefined;
   basis?: "standard" | "adjustment";
   minutes?: number | undefined;
@@ -219,13 +221,16 @@ export function billSubmissionEstimateContext(code: string, placeOfService: stri
   return {};
 }
 /** Rebuild edited fields so clearing an input cannot retain a previously priced context. */
-export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}): BillFeeContext {
+export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}, modifiers: readonly string[] = []): BillFeeContext {
   if (details.basis === "adjustment") return {};
+  const equipment = equipmentFields(code, modifiers);
+  if (equipment.residence) return equipmentCalculationContext(code, modifiers, details);
   const estimated = billSubmissionEstimateContext(code, placeOfService, details);
   const context = { ...estimated, ...saved };
   delete context.physicianContext;
   delete context.therapyContext;
   delete context.prolongedServiceContext;
+  delete context.dmeposContext;
   if (estimated.physicianContext) context.physicianContext = {
     ...estimated.physicianContext, ...saved.physicianContext,
     providerKind: estimated.physicianContext.providerKind, placeOfService,
@@ -268,6 +273,8 @@ export function billSubmissionQuoteContext(input: BillFeeQuoteInput): BillFeeCon
     ...(input.physicianContext ? { physicianContext: input.physicianContext } : {}),
     ...(input.therapyContext ? { therapyContext: input.therapyContext } : {}),
     ...(input.reportQualification ? { reportQualification: input.reportQualification } : {}),
+    ...(input.professionalComponentContext ? { professionalComponentContext: input.professionalComponentContext } : {}),
+    ...(input.dmeposContext ? { dmeposContext: input.dmeposContext } : {}),
     ...(input.catalogContext ? { catalogContext: input.catalogContext } : {}),
     ...(input.prolongedServiceContext ? { prolongedServiceContext: input.prolongedServiceContext } : {}),
   };
@@ -930,6 +937,8 @@ export function BillSubmissionForm({
   const [procedureLoading, setProcedureLoading] = useState(false);
   const [procedureError, setProcedureError] = useState<string | null>(null);
   const procedureRequest = useRef(0);
+  const [professionalComponentCodes, setProfessionalComponentCodes] = useState<string[]>([]);
+  const componentIdentity = (code: string, modifiers: readonly string[] = []) => JSON.stringify([code.trim().toUpperCase(), [...modifiers].sort()]);
   const [feeDetails, setFeeDetails] = useState<Record<number, FeeDetails>>({});
   const [feeQuotes, setFeeQuotes] = useState<Record<string, BillFeeQuote | { status: "error"; reason: string }>>({});
   const [postalStatus, setPostalStatus] = useState<string | null>(null); const [dragActive, setDragActive] = useState(false);
@@ -975,7 +984,7 @@ export function BillSubmissionForm({
   useEffect(() => {
     if (previousInitializationKey.current === initializationKey) return;
     previousInitializationKey.current = initializationKey;
-    setFeeDetails({}); setFeeQuotes({});
+    setFeeDetails({}); setFeeQuotes({}); setProfessionalComponentCodes([]);
     setSharedDiagnoses(billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling))); individualDiagnoses.current = null;
     setBill(cloneInitialBill(initialBill, treatmentBilling)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
     setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
@@ -1018,6 +1027,8 @@ export function BillSubmissionForm({
 
   const setAddress = (patch: Partial<BillSubmissionAddress>) => setBill((current) => ({ ...current, patient: { ...current.patient, address: { ...current.patient.address, ...patch } } }));
   const setLine = (index: number, patch: Partial<BillSubmissionInput["serviceLines"][number]>) => {
+    if (Object.hasOwn(patch, "code") || Object.hasOwn(patch, "modifiers")) setProfessionalComponentCodes([]);
+    if (Object.hasOwn(patch, "modifiers")) setFeeDetails((current) => ({ ...current, [index]: { ...detailsForLine(index), interpretationLocation: "", professionalComponentBasis: "" } }));
     if (Object.hasOwn(patch, "code")) setFeeDetails((current) => ({ ...current, [index]: {} }));
     setBill((current) => {
       const serviceLines = ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => {
@@ -1129,6 +1140,11 @@ export function BillSubmissionForm({
     const saved = bill.serviceLines[detailsIndex]?.feeContext;
     const prolonged = saved?.prolongedServiceContext;
     return feeDetails[detailsIndex] ?? {
+      interpretationLocation: saved?.professionalComponentContext?.interpretationLocation,
+      professionalComponentBasis: saved?.catalogContext?.codingRequirementsSatisfied && saved.physicianContext?.standaloneService && saved.physicianContext.globalPeriodApplies === false && saved.physicianContext.hpsaBonusEligible === false && saved.physicianContext.incidentToPhysicianService !== true ? "standard" : "",
+      residenceZip: saved?.dmeposContext?.residenceZip,
+      rentalMonth: saved?.dmeposContext?.rentalMonth?.toString(),
+      priorPayments: saved?.dmeposContext?.priorPaymentsCents !== undefined ? (saved.dmeposContext.priorPaymentsCents / 100).toFixed(2) : undefined,
       providerKind: saved?.physicianContext?.providerKind ?? saved?.therapyContext?.providerKind,
       minutes: saved?.therapyContext?.directOneOnOneMinutes,
       totalMinutes: prolonged?.totalMinutes ?? saved?.therapyContext?.totalVisitMinutes,
@@ -1139,7 +1155,9 @@ export function BillSubmissionForm({
   const quoteInputs = bill.serviceLines.map((line, index) => {
     if (!treatmentBilling || !line.code.trim() || isMedicalLegalCode(line.code)) return null;
     const details = detailsForLine(index);
-    const context = billSubmissionCalculationContext(line.code, bill.serviceLocation?.placeOfServiceCode ?? "", details, line.feeContext);
+    const baseContext = billSubmissionCalculationContext(line.code, bill.serviceLocation?.placeOfServiceCode ?? "", details, line.feeContext, line.modifiers);
+    const component = isProfessionalComponentCandidate(line.code, line.modifiers) || professionalComponentCodes.includes(componentIdentity(line.code, line.modifiers));
+    const context = details.basis === "adjustment" ? {} : professionalComponentCalculationContext(baseContext, details, component);
     return billSubmissionFeeRequest(bill, line, context);
   });
   const quoteKeys = quoteInputs.map((input) => input ? JSON.stringify(input) : null);
@@ -1152,7 +1170,7 @@ export function BillSubmissionForm({
     const unique = new Map(inputs.filter((input): input is BillFeeQuoteInput => Boolean(input)).map((input) => [JSON.stringify(input), input]));
     const timer = setTimeout(() => { for (const [key, input] of unique) {
       if (!quoteFee || !input.dateOfService || !supportedFeeJurisdiction) continue;
-      void quoteFee(input).then((result) => { if (active) setFeeQuotes((current) => ({ ...current, [key]: result })); }).catch(() => { if (active) setFeeQuotes((current) => ({ ...current, [key]: { status: "error", reason: "Fee lookup is unavailable. Retry the fee check." } })); });
+      void quoteFee(input).then((result) => { if (active) { setFeeQuotes((current) => ({ ...current, [key]: result })); if (isProfessionalComponentCandidate(input.code, input.modifiers, result)) { const identity = componentIdentity(input.code, input.modifiers); setProfessionalComponentCodes((current) => current.includes(identity) ? current : [...current, identity]); } } }).catch(() => { if (active) setFeeQuotes((current) => ({ ...current, [key]: { status: "error", reason: "Fee lookup is unavailable. Retry the fee check." } })); });
     }
     }, 200);
     return () => { active = false; clearTimeout(timer); };
@@ -1173,8 +1191,10 @@ export function BillSubmissionForm({
     const detailsIndex = prolonged ? prolongedLeader(index) : index;
     const update = (patch: Partial<FeeDetails>) => setFeeDetails((current) => ({ ...current, [detailsIndex]: { ...details, ...patch } }));
     if (prolonged && detailsIndex !== index) return <p className="mbsf-help mbsf-fee-details">Uses the prolonged-service details on line {detailsIndex + 1}.{quote?.status !== "priced" ? ` ${quote?.reason ?? "Checking the fee schedule…"}` : ""}</p>;
+    const component = supportedFeeJurisdiction && (isProfessionalComponentCandidate(line.code, line.modifiers, quote?.status === "error" ? undefined : quote) || professionalComponentCodes.includes(componentIdentity(line.code, line.modifiers)));
     const office = /^992(?:0[2-5]|1[2-5])$/.test(line.code);
     const therapy = line.code === "97110";
+    const equipment = supportedFeeJurisdiction ? equipmentFields(line.code, line.modifiers) : { residence: false, rental: false, priorPayments: false };
     return <div className="mbsf-fee-details">
       <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Fee schedule estimate</option><option value="adjustment">Requires adjustment</option></select></label>
       <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
@@ -1184,10 +1204,21 @@ export function BillSubmissionForm({
         <label className="mbsf-field mbsf-span"><span>Documented time basis</span><select className="mbsf-input" aria-label={`Documented time basis for line ${index + 1}`} value={details.prolongedTimeBasis ?? ""} onChange={(event) => update({ prolongedTimeBasis: event.target.value as FeeDetails["prolongedTimeBasis"] })}><option value="">Select from the service documentation…</option><option value="documented">Qualifying prolonged care; time counted only here</option><option value="review">Other circumstances — review needed</option></select></label>
         <p className="mbsf-help mbsf-span">Qualifying time was personally provided for ongoing patient care related to an evaluation on a different date, and is not counted toward another service. Include every service on this date in the bill. The same time details apply to 99358 and 99359; the fee check validates minutes and units together.</p>
       </div> : null}
-      <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
+      {equipment.residence ? <div className="mbsf-grid" aria-label={`Equipment details for line ${index + 1}`}>
+        <label className="mbsf-field"><span>Worker residence ZIP</span><input className="mbsf-input" aria-label={`Worker residence ZIP for line ${index + 1}`} inputMode="numeric" autoComplete="off" maxLength={10} value={details.residenceZip ?? ""} onChange={(event) => update({ residenceZip: event.target.value })} /></label>
+        {equipment.rental ? <label className="mbsf-field"><span>Continuous rental month</span><input className="mbsf-input" aria-label={`Continuous rental month for line ${index + 1}`} type="number" min="1" max="1000" step="1" value={details.rentalMonth ?? ""} onChange={(event) => update({ rentalMonth: event.target.value })} /></label> : null}
+        {equipment.priorPayments ? <label className="mbsf-field"><span>Prior payments for this item ($)</span><input className="mbsf-input" aria-label={`Prior payments for line ${index + 1}`} type="number" min="0" step="0.01" value={details.priorPayments ?? ""} onChange={(event) => update({ priorPayments: event.target.value })} /></label> : null}
+        <p className="mbsf-help mbsf-span">Use the injured worker’s residence ZIP to determine the rural rate.{equipment.rental ? " Count continuous rental months for this same equipment item." : ""}{equipment.priorPayments ? " Enter actual payments already made for this item, including rentals. Enter 0 only if there were no prior payments." : ""}</p>
+      </div> : null}
+      {!equipment.residence ? <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
       {<label className="mbsf-field"><span>Provider type</span><select className="mbsf-input" aria-label={`Provider type for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]> })}><option value="">Select provider type…</option>{!therapy ? <><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option></> : <option value="physical_therapist">Physical therapist</option>}<option value="other">Other</option></select></label>}
+      {component ? <div className="mbsf-grid" aria-label={`Interpretation details for line ${index + 1}`}>
+        <label className="mbsf-field"><span>Interpretation location</span><select className="mbsf-input" aria-label={`Interpretation location for line ${index + 1}`} value={details.interpretationLocation ?? ""} onChange={(event) => update({ interpretationLocation: event.target.value as FeeDetails["interpretationLocation"] })}><option value="">Select interpretation location…</option><option value="same_as_patient_service">Same physical address as patient service</option><option value="different_from_patient_service">Different physical address</option></select></label>
+        <label className="mbsf-field"><span>Interpretation circumstances</span><select className="mbsf-input" aria-label={`Interpretation circumstances for line ${index + 1}`} value={details.professionalComponentBasis ?? ""} onChange={(event) => update({ professionalComponentBasis: event.target.value as FeeDetails["professionalComponentBasis"] })}><option value="">Select documented circumstances…</option><option value="standard">Standard standalone physician interpretation</option><option value="review">Other circumstances — review needed</option></select></label>
+        <p className="mbsf-help mbsf-span">Standard means one physician interpretation on this date, documented coding requirements and signed report, with no other same-day services, incident-to service, global-period adjustment or HPSA bonus. Include the report with the bill. Different interpretation addresses require fee review.</p>
+      </div> : null}
       {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: Number(event.target.value) })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label></div> : null}
-      </details>
+      </details> : null}
       <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Fee estimate for this service date and the details above." : quote?.reason ?? "Checking the fee schedule…"}</p>
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
     </div>;
