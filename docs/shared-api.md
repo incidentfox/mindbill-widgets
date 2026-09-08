@@ -1,6 +1,6 @@
 # Shared API URLs
 
-The React components use the same `/partner/v2` business APIs as server integrations. The browser SDK still accepts only short-lived browser sessions; this change does not add an API-key option to browser clients. A session must match the exact requesting origin and carry the permission needed for each operation. Organization and bill restrictions still apply.
+The React components use the same `/partner/v2` business APIs as server integrations. The browser SDK still accepts only short-lived browser sessions; this change does not add an API-key option to browser clients. A session must match the exact requesting origin and carry the permission needed for each operation. Workspace, customer, and bill restrictions apply.
 
 | SDK operation | Canonical endpoint |
 | --- | --- |
@@ -12,6 +12,6 @@ The React components use the same `/partner/v2` business APIs as server integrat
 
 Other business URLs drop the `/browser` segment. The old URLs remain compatible for installed SDK versions. The dashboard retains its page/pageSize response; the cursor-based `GET /partner/v2/bills` retains its own contract, available with either authentication method.
 
-Mint sessions with `POST /partner/v2/browser-sessions` from your trusted server. Session issuance and key management do not accept browser tokens. Preserve host authentication, tenant mapping, role checks, and origin validation in your session endpoint.
+Mint sessions with `POST /partner/v2/browser-sessions` from your trusted server. Session issuance and key management do not accept browser tokens. Preserve host authentication, customer/case authorization, role checks, and origin validation in your session endpoint. Use one server workspace key; default requests need no organization ID. Set `resource.customerExternalId` from trusted host customer records for customer collections and creation. Add `resource.billId` for an existing case bill; both restrictions apply when both are present. A customer token cannot read shared organization profiles or edit shared settings.
 
-Deploy the unified API before publishing or consuming this SDK version. No application code changes are required when upgrading the browser clients.
+Deploy the unified API before publishing or consuming this SDK version. Existing explicit practice routing and bill-only tokens remain supported. Customer-scoped browser integrations should supply provider/location snapshots and W-9 attachments from authorized host data.
