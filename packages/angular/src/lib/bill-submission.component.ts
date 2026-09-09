@@ -228,7 +228,7 @@ async function blobToBase64(blob: Blob): Promise<string> {
         <div class="line-head" [class.shared]="sharedDiagnoses"><span>Procedure code *</span><span>Modifiers</span>@if (!sharedDiagnoses) { <span>Diagnosis codes</span> }<span>Units *</span><span>Allowed</span><span></span></div>
         @for (line of bill.serviceLines; track $index; let index = $index) { <div class="service-line" [class.shared]="sharedDiagnoses">
           <div class="cell"><span class="mobile-label">Procedure</span>
-            <mindbill-combo-box [ariaLabel]="'Procedure code ' + (index + 1)" [value]="line.code" placeholder="Search code or procedure description…" [options]="procedureComboOptions" [filterOptions]="!isTreatment" [loading]="procedureBusy" (opened)="searchProcedures('')" [createOption]="customProcedureOption" (queryChange)="searchProcedures($event)" (selected)="selectProcedure(index, $event)"/>
+            <mindbill-combo-box [ariaLabel]="'Procedure code ' + (index + 1)" [value]="line.code" placeholder="Search code or procedure description…" [options]="procedureComboOptions" [filterOptions]="false" [loading]="procedureBusy" (opened)="searchProcedures('')" [createOption]="customProcedureOption" (queryChange)="searchProcedures($event)" (selected)="selectProcedure(index, $event)"/>
             @if (procedureStatus) { <small role="status">{{ procedureStatus }}</small> }
             @if (line.code) { <small>{{ procedureDescription(line.code) || 'Custom CPT, HCPCS, or medical-legal code' }}</small> }
           </div>
@@ -438,7 +438,7 @@ export class MindBillBillSubmissionComponent implements OnChanges, DoCheck, OnDe
     }));
   }
   searchProcedures(query: string) {
-    if (!this.isTreatment || this.destroyed) return;
+    if (this.destroyed) return;
     clearTimeout(this.procedureTimer); const generation = ++this.procedureGeneration;
     this.procedureQuery = query; this.remoteProcedures = []; this.procedureBusy = true; this.procedureStatus = '';
     this.procedureTimer = setTimeout(async () => {
@@ -479,7 +479,7 @@ export class MindBillBillSubmissionComponent implements OnChanges, DoCheck, OnDe
 
   get procedureComboOptions(): MindBillComboOption[] {
     const tokens = this.procedureQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    const local = this.procedureOptions.filter(item => !this.isTreatment || tokens.every(token => `${item.code} ${item.description}`.toLowerCase().includes(token)));
+    const local = this.procedureOptions.filter(item => tokens.every(token => `${item.code} ${item.description}`.toLowerCase().includes(token)));
     const options = new Map<string, MindBillComboOption>();
     for (const item of [...local, ...this.remoteProcedures]) {
       const code = item.code.toUpperCase();

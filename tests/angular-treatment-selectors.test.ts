@@ -72,10 +72,10 @@ describe('Angular treatment service selectors', () => {
     component.selectServiceDiagnosis({ id: 'M25.530', label: 'M25.530' }, 3); expect(component.serviceDiagnosisCodes(3)).toEqual(['M25.530']);
     expect(component.bill.diagnoses).toHaveLength(12); component.ngOnDestroy();
   });
-  it('retains descriptions and remote token matches without dirtying a bill during search', async () => {
+  it.each(['professional', 'med_legal'] as const)('retains descriptions and remote token matches in %s mode without dirtying a bill', async (billingMode) => {
     const reference = { searchProcedureCodes: vi.fn(async () => ({ results: [{ code: '99999', description: 'Office/outpatient established patient visit' }] })), searchDiagnosisCodes: vi.fn(async () => [{ code: 'M25.531', description: 'Pain in right wrist' }]) };
     vi.spyOn(browser, 'createBillReferenceClient').mockReturnValue(reference as unknown as browser.BillReferenceClient);
-    const component = form(), changes = vi.fn(); component.billChange.subscribe(changes);
+    const component = form(), changes = vi.fn(); component.initialBill = { ...syntheticBill(), billingMode }; component.ngOnChanges({ initialBill: new SimpleChange(null, component.initialBill, false) }); component.billChange.subscribe(changes);
     component.searchProcedures('office visit'); component.queryServiceDiagnoses('right wrist'); await vi.advanceTimersByTimeAsync(180);
     expect(component.procedureComboOptions).toContainEqual({ id: '99999', label: '99999', detail: 'Office/outpatient established patient visit' });
     expect(component.procedureComboOptions.some(option => option.id === 'ML200')).toBe(false);
