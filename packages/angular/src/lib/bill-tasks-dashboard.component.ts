@@ -38,7 +38,7 @@ import {
             @for (bucket of buckets; track bucket.id; let bucketIndex = $index) {
               <span class="pill" [style.background]="pillBackground(bucketIndex)" [style.color]="pillColor(bucketIndex)">{{ bucket.label }}</span>
             }
-            <span class="colhead">Task Total</span>
+            <span class="colhead">{{ totalLabel }}</span>
           </div>
           @if (section.empty) {
             <p class="empty">{{ emptyLabel }}</p>
@@ -117,6 +117,7 @@ export class MindBillBillTasksDashboardComponent {
   @Input() heading = "";
   @Input() grandTotalLabel = "Bill Tasks Total";
   @Input() emptyLabel = "No Tasks";
+  @Input() totalLabel = "Task Total";
   @Input() appearance: MindBillAngularAppearance = { preset: "mindbill" };
   @Output() cellSelected = new EventEmitter<MindBillBillTasksCell>();
 
