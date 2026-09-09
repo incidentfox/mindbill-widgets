@@ -28,16 +28,21 @@ come from verified host records. Backend authorization remains authoritative.
    invalidates old signing evidence.
 3. `uploadDocument` attaches a PDF to the current revision. Clinical support is
    required for a sendable packet.
-4. `signingPreview` takes `diagnosisDescriptions` keyed by **RFA item ID** and an
-   optional saved `billingProviderId`. Download and review its `previewDocumentId`
+4. Confirm the authorization office using the directory or verified case records.
+   `signingPreview` takes `diagnosisDescriptions` keyed by **RFA item ID**, an
+   optional saved `billingProviderId`, and optional `authorizationContact` containing
+   known contact name, structured address, phone, fax, and email. Use the selected
+   authorization destination; never substitute a bill-review fax or unrelated
+   mailing address. Unknown fields remain blank. This contact is bound to the
+   exact signing snapshot. Download and review its `previewDocumentId`
    with `downloadDocument`. A preview is not a signed form.
 5. A separately authorized physician/delegate confirms the preview and calls
    `sign` using the returned snapshot ID, hash, rendering-provider ID, explicit
    physician authorization, and actor reference. Never fabricate authorization.
 6. Select the current signed `rfa_form` and clinical support IDs, then call
    `downloadPacket`. At least two distinct documents are required.
-7. Use the authorization directory, not the bill-review fax. Select the relevant
-   office or a confirmed adjuster destination explicitly. Directory selection
+7. Confirm delivery uses the authorization office reviewed in the signed packet.
+   Directory selection
    does not send anything. An email address is not a fax destination.
 8. `recordTransmission` records actual external delivery/receipt evidence. It
    requires a provider message ID or proof document for sent/delivered/received

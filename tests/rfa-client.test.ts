@@ -4,6 +4,15 @@ const draft:RfaDraftInput={claimId:'claim-synthetic',patientId:'patient-syntheti
 const session={token:'mbes_synthetic',apiBaseUrl:'https://api.example.test'};
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
 describe('RFA browser workflow client',()=>{
+  it('passes only explicitly supplied authorization contact with the signing preview',async()=>{
+    const fetcher=vi.fn().mockResolvedValue(json({data:{id:'snapshot-synthetic'}}));
+    const client=createRfaWorkflowClient({getSession:async()=>session,fetch:fetcher});
+    const authorizationContact={contactName:'Synthetic handling office',phone:'555-555-0100',fax:'+14155550100',address:{line1:'100 Example Street',city:'Sacramento',state:'CA',postalCode:'95814'}};
+    await client.signingPreview('rfa-synthetic',{diagnosisDescriptions:{'item-synthetic':'Wrist pain'},authorizationContact});
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body).authorizationContact).toEqual(authorizationContact);
+    await client.signingPreview('rfa-synthetic',{diagnosisDescriptions:{'item-synthetic':'Wrist pain'}});
+    expect(JSON.parse(fetcher.mock.calls[1]![1].body)).not.toHaveProperty('authorizationContact');
+  });
   it('coalesces origin-bound session minting and preserves list cursor',async()=>{
     const fetcher=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{void init;return String(input)==='/api/rfa-session'?json(session):String(input).includes('?')?json({data:[],nextCursor:'opaque-next'}):json({data:{id:'rfa-synthetic'}});});
     const client=createRfaWorkflowClient({sessionEndpoint:'/api/rfa-session',fetch:fetcher});

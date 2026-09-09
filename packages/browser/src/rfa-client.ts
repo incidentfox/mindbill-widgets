@@ -46,7 +46,13 @@ export type RfaRecord = Omit<{ [K in keyof RfaDraftInput]: RfaDraftInput[K] | nu
   events:{id:string;type:string;occurredAt:string}[];
 };
 export type RfaSigningPreview = { id:string; contentHash:string; contentRevision:number; renderingProviderId:string; previewDocumentId:string; expiresAt:string };
-export type RfaFormInput = { diagnosisDescriptions:Record<string,string>; billingProviderId?:string };
+/** Confirmed request-specific contact. Never substitute a bill-review destination. */
+export type RfaAuthorizationContact = {
+  contactName?:string;
+  address?:{line1:string;city?:string;state?:string;postalCode?:string};
+  phone?:string;fax?:string;email?:string;
+};
+export type RfaFormInput = { diagnosisDescriptions:Record<string,string>; billingProviderId?:string; authorizationContact?:RfaAuthorizationContact };
 export type RfaSignInput = { snapshotId:string; contentHash:string; renderingProviderId:string; physicianAuthorized:true; actorReference:string };
 export type RfaRequestOptions = { idempotencyKey?:string };
 export type RfaListInput = { claimId?:string; renderingProviderId?:string; status?:RfaStatus; createdFrom?:string; createdTo?:string; cursor?:string; limit?:number };
