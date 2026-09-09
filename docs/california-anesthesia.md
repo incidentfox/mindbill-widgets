@@ -1,6 +1,6 @@
 # California anesthesia
 
-The existing treatment `BillSubmissionForm` opens anesthesia details for candidate anesthesia procedure codes. Enter the actual elapsed anesthesia minutes and select the documented circumstances. Keep the service quantity at **1** and use modifier **AA** for a physician who personally performed the entire case alone. The existing shared or per-line diagnosis selector continues to apply.
+The existing treatment `BillSubmissionForm` opens anesthesia details for candidate anesthesia procedure codes. Enter the actual elapsed anesthesia minutes and select the documented circumstances. Keep the service quantity at **1** and select modifier **AA** from the default modifier dropdown for a physician who personally performed the entire case alone. The existing shared or per-line diagnosis selector continues to apply.
 
 The current automatic calculation supports one qualifying case, documented coding and timing requirements, and a complete bill containing every same-day service. Supported places of service are 11, 19, 21, 22, 23 and 24. The form derives the place of service and checks for additional or overlapping service lines. Missing details, other providers or circumstances, additional same-day services, date ranges, and special obstetric or burn services require review. A code appearing in the dropdown does not establish a payable fee.
 
