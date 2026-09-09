@@ -68,7 +68,7 @@ any organization claims-administrator identity in `initialDraft.claimsAdminId`.
 
 The server session route must authenticate the caller and case, allow the exact browser
 origin, and grant only the required organization-wide scopes: `rfas:read`, `rfas:create`,
-`rfas:edit`, `rfas:sign`, `rfas:act`, `payers:read` for directory lookup, and
+`rfas:edit`, `rfas:sign`, `rfas:act`, `payers:read` for directory/diagnosis lookup, `bills:read` for procedure lookup, and
 `documents:read` for PDF downloads. The organization must have `treatmentBilling` enabled. Bill-scoped
 and customer-external-ID-scoped sessions cannot use this RFA workflow. Do not expose
 organization-wide sessions to callers who should not have organization-wide RFA access.
@@ -168,3 +168,20 @@ verified. Editing contact details or choosing a different authorization office r
 explicitly confirming those details again, even when a fax or email route is selected. Any contact or destination change clears the existing preview
 and signing consent. In-flight preview responses and PDF downloads are discarded
 if that contact changes, so the user reviews and signs the exact current contact.
+
+
+## Searchable codes and external links
+
+RFA diagnosis and procedure controls are searchable comboboxes. The connected component
+uses authenticated reference lookups by default. Both the connected and standalone draft
+components accept `searchDiagnoses` and `searchProcedures` callbacks with the signature
+`(query: string) => Promise<{ code: string; description?: string }[]>` for host catalogs.
+The standalone form requires these callbacks for remote search. Searches are debounced;
+stale responses are discarded. Typing a search does not change the saved code or mark
+the draft dirty. Selecting a result edits the code and preserves the clinician's existing
+service description. A syntactically valid custom code remains available when absent
+from the catalog; server validation still applies.
+
+Set `[showExternalLinks]="false"` on the connected component to hide its branding and
+directory-source links throughout the nested workflow. The standalone draft and
+authorization-destination components accept the same option. The default is `true`.

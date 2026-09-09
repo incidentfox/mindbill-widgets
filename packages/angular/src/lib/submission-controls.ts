@@ -69,6 +69,8 @@ export class MindBillComboBoxComponent {
   @Input() loadingMore = false;
   @Input() invalid = false;
   @Input() preserveValueOnOpen = false;
+  /** Disable when options have already been filtered by a remote search. */
+  @Input() filterOptions = true;
   @Input() ariaLabel = "";
   @Input() createOption?: (query: string) => MindBillComboOption | null;
   @Output() opened = new EventEmitter<void>();
@@ -82,7 +84,7 @@ export class MindBillComboBoxComponent {
 
   get visible(): MindBillComboOption[] {
     const q = this.query.trim().toLowerCase();
-    const matches = q
+    const matches = this.filterOptions && q
       ? this.options.filter((option) => `${option.id} ${option.label} ${option.detail ?? ""}`.toLowerCase().includes(q))
       : this.options;
     const custom = this.createOption?.(this.query) ?? null;

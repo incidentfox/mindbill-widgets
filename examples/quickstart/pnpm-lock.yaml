@@ -192,7 +192,7 @@ packages:
     os: [win32]
 
   '@mindbill/browser@0.38.0':
-    resolution: {integrity: sha512-bNv+DAsr9e4SSQ0pqQRQ+EAI44AeUsOUciYjM8ySPama6cLJGo9SgIm3Lk0gSrVs7YxRnyjMire4KT8IHHTcRg==}
+    resolution: {integrity: sha512-8VPFwSZ5fgETStzK05IC4ftFv1NXNh1h20Yx7s7tuLbXYlUPJJqAKQRgTBq836thbPJy5Q6dWj5tjxzmPC47Bw==}
 
   '@mindbill/embed@0.6.0':
     resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==, tarball: https://registry.npmjs.org/@mindbill/embed/-/embed-0.6.0.tgz}

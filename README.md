@@ -429,3 +429,5 @@ and can connect the existing React draft/destination controls. See
 [connected RFA workflow](docs/rfa-connected.md) for session permissions, signing,
 PDFs, explicit destination selection, recorded evidence, and authorized treatment
 billing. Saving, signing, delivery, and decisions are separate explicit actions.
+
+Angular connected RFA supports searchable diagnosis/procedure catalogs, host lookup callbacks, and `showExternalLinks` for host-controlled attribution links. See [the Angular workflow guide](docs/angular-rfa-workflow.md#searchable-codes-and-external-links) for scopes and behavior.

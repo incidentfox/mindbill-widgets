@@ -10,7 +10,7 @@ import { treatmentDraftKey } from "./submission-treatment";
   template: `<section class="rfa-destination" [ngStyle]="theme" aria-label="RFA authorization destination">
     <h3>Authorization destination</h3>
     <p role="status">{{ guidance }}</p>
-    @if (sourceUrl) { <p class="source"><a [href]="sourceUrl" target="_blank" rel="noopener noreferrer">Directory source</a> @if (directory?.authorizationSource?.observedAt) { · Observed {{ directory?.authorizationSource?.observedAt }} }</p> }
+    @if (showExternalLinks && sourceUrl) { <p class="source"><a [href]="sourceUrl" target="_blank" rel="noopener noreferrer">Directory source</a> @if (directory?.authorizationSource?.observedAt) { · Observed {{ directory?.authorizationSource?.observedAt }} }</p> }
     <fieldset [disabled]="disabled || loading"><legend>Confirm where this request should go</legend>
       @for (option of options; track $index; let index = $index) {
         <label class="choice"><input type="radio" [name]="radioName" [checked]="choice === '' + index" (change)="choose('' + index)" />
@@ -33,6 +33,7 @@ export class MindBillRfaAuthorizationDestinationComponent implements OnChanges {
   @Input({ required: true }) contextKey = "";
   @Input() directory: BillClaimsAdministratorDirectory | null = null;
   @Input() loading = false;
+  @Input() showExternalLinks = true;
   @Input() error: string | null = null;
   @Input() disabled = false;
   @Input() appearance?: MindBillAngularAppearance;

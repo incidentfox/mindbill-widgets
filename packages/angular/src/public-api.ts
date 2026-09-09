@@ -60,3 +60,5 @@ export * from "./lib/rfa-workflow-state";
 export * from "./lib/connected-billing-workspace.component";
 export * from "./lib/billing-operations";
 export type { RfaWorkflowClient, RfaRecord, RfaItem, RfaDocument, RfaSigningPreview, RfaAuthorizationDestinationOption, RfaAuthorizationContact } from "@mindbill/browser";
+
+export type { MindBillRfaCodeSearch, MindBillRfaCodeOption } from "./lib/rfa-code-lookup";

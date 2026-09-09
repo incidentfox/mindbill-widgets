@@ -7,15 +7,15 @@
   @if (showList && records.length) { <label>Saved requests<select [value]="record?.id ?? ''" (change)="select($any($event.target).value)" [disabled]="blocked || dirty"><option value="" disabled>Select a request</option>@for (item of records; track item.id) { <option [value]="item.id">{{ item.externalId || item.id }} · {{ item.status }} · revision {{ item.contentRevision }}</option> }</select></label> }
   @if (dirty) { <p>Unsaved changes. Save the draft before preparing its preview or using lifecycle actions. Reload discards these edits.</p> }
   @if (record) {
-    <section class="summary"><h3>{{ record.employeeName }} · {{ record.status }}</h3><p>Request {{ record.id }} · revision {{ record.contentRevision }}</p>
+    <section class="summary"><h3>{{ record.employeeName }} · {{ statusLabel }}</h3><p>Revision {{ record.contentRevision }}</p>
       @if (record.signedAt) { <p>Signed {{ record.signedAt | date:'medium' }}</p> }
-      @if (record.readiness.missing.length) { <p>Still needed: {{ record.readiness.missing.join(', ') }}</p> }
-      <ul>@for (item of record.items; track item.id) { <li><strong>{{ item.procedureCode }} {{ item.serviceDescription }}</strong> · {{ item.outcome }} @if (item.authorizationNumber) { · Authorization {{ item.authorizationNumber }} }<small>Item {{ item.id }}</small></li> }</ul>
+      @if (record.readiness.missing.length) { <p>Still needed: @for (missing of record.readiness.missing; track missing; let last = $last) { {{ readinessLabel(missing) }}{{last ? '' : ', '}} }</p> }
+      <ul>@for (item of record.items; track item.id) { <li><strong>{{ item.procedureCode }} {{ item.serviceDescription }}</strong> · {{ item.outcome }} @if (item.authorizationNumber) { · Authorization {{ item.authorizationNumber }} }</li> }</ul>
     </section>
   }
-  @if (draft && editable) { <mindbill-rfa-draft-form [initialDraft]="draft" [onSave]="saveDraft" [appearance]="appearance" [disabled]="blocked" (dirtyChange)="draftChanged($event)" /> }
+  @if (draft && editable) { <mindbill-rfa-draft-form [searchDiagnoses]="searchDiagnoses" [searchProcedures]="searchProcedures" [showExternalLinks]="showExternalLinks" [initialDraft]="draft" [onSave]="saveDraft" [appearance]="appearance" [disabled]="blocked" (dirtyChange)="draftChanged($event)" /> }
   @if (record) {
-    <mindbill-rfa-authorization-destination [contextKey]="contextKey + ':' + record.id" [directory]="directory" [loading]="directoryLoading" [error]="directoryError" [disabled]="blocked" [appearance]="appearance" (destinationChange)="setDestination($event)" />
+    <mindbill-rfa-authorization-destination [showExternalLinks]="showExternalLinks" [contextKey]="contextKey + ':' + record.id" [directory]="directory" [loading]="directoryLoading" [error]="directoryError" [disabled]="blocked" [appearance]="appearance" (destinationChange)="setDestination($event)" />
     <details open><summary>Supporting documents and packet</summary><fieldset [disabled]="blocked || dirty">
       @if (sourceDocuments.length) { <section aria-label="Available case documents"><h4>Available case documents</h4>
         @for (source of sourceDocuments; track source.id) { <div class="source-document"><span>{{ source.label }} <small>{{ source.filename }}</small></span><button type="button" (click)="attachSource(source)">Attach</button></div> }
@@ -69,5 +69,5 @@
     }
     @if (record.transmissions.length || record.events.length) { <details><summary>Request history</summary><ul>@for (event of record.transmissions; track event.id) { <li>{{ event.occurredAt | date:'medium' }} · {{ event.direction }} {{ event.channel }} · {{ event.status }}</li> }@for (event of record.events; track event.id) { <li>{{ event.occurredAt | date:'medium' }} · {{ event.type }}</li> }</ul></details> }
   }
-  <footer><a href="https://mindbill.org" target="_blank" rel="noopener noreferrer">Powered by MindBill</a></footer>
+  @if (showExternalLinks) { <footer><a href="https://mindbill.org" target="_blank" rel="noopener noreferrer">Powered by MindBill</a></footer> }
 </section>

@@ -1,8 +1,9 @@
 import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnDestroy, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { createRfaWorkflowClient, type RfaWorkflowClient, type RfaDraftInput, type RfaRecord, type RfaSigningPreview, type RfaDocumentType, type BillLifecycleSessionProvider, type BillClaimsAdministratorDirectory, type RfaAuthorizationDestinationOption, type RfaDecisionItemInput, type RfaTransmissionInput, type RfaAuthorizationContact } from '@mindbill/browser';
+import { createBillReferenceClient, createRfaWorkflowClient, type BillReferenceClient, type RfaWorkflowClient, type RfaDraftInput, type RfaRecord, type RfaSigningPreview, type RfaDocumentType, type BillLifecycleSessionProvider, type BillClaimsAdministratorDirectory, type RfaAuthorizationDestinationOption, type RfaDecisionItemInput, type RfaTransmissionInput, type RfaAuthorizationContact } from '@mindbill/browser';
 import { RfaDraftFormComponent } from './rfa-draft-form.component';
+import type { MindBillRfaCodeSearch } from './rfa-code-lookup';
 import { MindBillRfaAuthorizationDestinationComponent } from './rfa-authorization-destination.component';
 import { mindBillAngularAppearanceStyle, type MindBillAngularAppearance } from './appearance';
 import { treatmentDraftKey } from './submission-treatment';
@@ -37,6 +38,9 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
   @Input() actorReference = '';
   @Input() billingProviderId?: string;
   @Input() showList = true;
+  @Input() searchDiagnoses: MindBillRfaCodeSearch = query => this.referenceClient().searchDiagnosisCodes(query, 60);
+  @Input() searchProcedures: MindBillRfaCodeSearch = async query => (await this.referenceClient().searchProcedureCodes({ query, limit: 100, jurisdiction: 'CA' })).results;
+  @Input() showExternalLinks = true;
   @Input() sourceDocuments: MindBillRfaSourceDocument[] = [];
   @Input() appearance?: MindBillAngularAppearance;
   @Output() changed = new EventEmitter<RfaRecord | null>();
@@ -58,9 +62,12 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
   transmissionDirection: 'outbound' | 'inbound' = 'outbound'; transmissionChannel: RfaTransmissionInput['channel'] = 'fax';
   transmissionStatus: RfaTransmissionInput['status'] = 'sent'; occurredAt = ''; receivedAt = ''; providerMessageId = ''; proofDocumentId = '';
   decidedAt = ''; responseDocumentId = ''; imrDocumentId = ''; decisions: DecisionRow[] = [];
+  private reference: BillReferenceClient | undefined;
   private workflow!: RfaWorkflowClient; private generation = 0; private inputKey = ''; private previousClient: RfaWorkflowClient | undefined;
   private previousSession: BillLifecycleSessionProvider | undefined; private createKey = '';
   private readonly detector = inject(ChangeDetectorRef);
+  get statusLabel() { return this.record?.signedAt && this.record.readiness.ready && this.record.status === 'draft' ? 'Ready to send' : this.record?.status.replace(/_/g, ' ') ?? ''; }
+  readinessLabel(value: string) { const labels: Record<string,string> = {signedAt:'Physician signature','documents.rfa_form':'Signed RFA form','documents.clinical_substantiation':'Clinical supporting report'}; return labels[value] ?? value.replace(/_/g, ' ').replace(/\./g, ' '); }
   get theme() { return mindBillAngularAppearanceStyle(this.appearance); }
   get editable() { return !this.record || canEditRfa(this.record); }
   get blocked() { return this.loading || this.busy || this.reconcileRequired; }
@@ -73,11 +80,14 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
     const key = treatmentDraftKey({ context: this.contextKey, draft: this.initialDraft, id: this.rfaId, endpoint: this.sessionEndpoint, base: this.apiBaseUrl, injuryState: this.injuryState, payer: this.claimsAdministratorId, createKey: this.createIdempotencyKey, actor: this.actorReference, billingProvider: this.billingProviderId });
     if (key === this.inputKey && this.client === this.previousClient && this.getSession === this.previousSession) return;
     this.inputKey = key; this.previousClient = this.client; this.previousSession = this.getSession;
-    this.workflow?.clearSession(); this.generation++; this.reset();
+    this.workflow?.clearSession(); this.reference?.clearSession(); this.reference = undefined; this.generation++; this.reset();
     this.workflow = this.client ?? createRfaWorkflowClient({ sessionEndpoint: this.sessionEndpoint, ...(this.getSession ? { getSession: this.getSession } : {}), ...(this.apiBaseUrl ? { apiBaseUrl: this.apiBaseUrl } : {}) });
     this.createKey = this.createIdempotencyKey ?? globalThis.crypto.randomUUID(); void this.reload();
   }
-  ngOnDestroy() { this.generation++; this.workflow?.clearSession(); this.clearPreview(); }
+  ngOnDestroy() { this.generation++; this.workflow?.clearSession(); this.reference?.clearSession(); this.clearPreview(); }
+  private referenceClient(): BillReferenceClient {
+    return this.reference ??= createBillReferenceClient({ sessionEndpoint: this.sessionEndpoint, ...(this.getSession ? { getSession: this.getSession } : {}), ...(this.apiBaseUrl ? { apiBaseUrl: this.apiBaseUrl } : {}) });
+  }
   private reset() { this.record = null; this.records = []; this.draft = null; this.directory = null; this.destination = null; this.directoryError = null; this.dirty = false; this.busy = false; this.error = ''; this.notice = ''; this.reconcileRequired = false; this.clearPreview(); this.clearEvidence(); this.resetContact(); }
   private clearEvidence() { this.file = null; this.selectedDocuments = {}; this.occurredAt = ''; this.receivedAt = ''; this.providerMessageId = ''; this.proofDocumentId = ''; this.decidedAt = ''; this.responseDocumentId = ''; this.imrDocumentId = ''; this.decisions = []; }
   invalidatePreview() { this.clearPreview(); }

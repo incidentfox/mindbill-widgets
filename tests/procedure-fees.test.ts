@@ -15,6 +15,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("browser procedure catalog", () => {
+  it("preserves catalog descriptions for searchable procedure choices", async () => {
+    const client = createBillReferenceClient({
+      getSession: async () => ({ token: "synthetic_session" }),
+      fetch: async () => jsonResponse({ ...catalog, results: [{ code: "99213", description: "Established patient office visit", amount: 100 }] }),
+    });
+    await expect(client.searchProcedureCodes({ query: "office visit" })).resolves.toMatchObject({ results: [{ code: "99213", description: "Established patient office visit" }] });
+  });
   it("uses the canonical search route and a short-lived session before a bill exists", async () => {
     const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer synthetic_browser_session");
