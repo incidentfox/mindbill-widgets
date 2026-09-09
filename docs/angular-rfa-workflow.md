@@ -163,8 +163,8 @@ phone, fax, and email fields. Unknown fields can remain blank. A verified postal
 contact does not require a fax.
 
 When `claimsAdministratorId` is supplied, preparing the preview requires a selected
-authorization route or a verified contact. Host-provided contact data is treated as
-verified; manually changed contact data requires an explicit confirmation when no
-route is selected. Any contact or destination change clears the existing preview
+authorization route or a verified contact. Host-provided contact data is initially treated as
+verified. Editing contact details or choosing a different authorization office requires
+explicitly confirming those details again, even when a fax or email route is selected. Any contact or destination change clears the existing preview
 and signing consent. In-flight preview responses and PDF downloads are discarded
 if that contact changes, so the user reviews and signs the exact current contact.

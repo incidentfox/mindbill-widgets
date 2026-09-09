@@ -120,14 +120,14 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
     catch { if (generation === this.generation) this.directoryError = 'Could not load authorization contacts.'; }
     finally { if (generation === this.generation) { this.directoryLoading = false; this.detector.markForCheck(); } }
   }
-  setDestination(value: RfaAuthorizationDestinationOption | null) { this.clearPreview(); this.destination = value; if (value) this.transmissionChannel = value.method; this.destinationChange.emit(value); }
+  setDestination(value: RfaAuthorizationDestinationOption | null) { if (this.hasContactFields && treatmentDraftKey(this.destination) !== treatmentDraftKey(value)) this.contactConfirmed = false; this.clearPreview(); this.destination = value; if (value) this.transmissionChannel = value.method; this.destinationChange.emit(value); }
   private resetContact() {
     const contact = this.authorizationContact;
     this.contactFields = { contactName: contact?.contactName ?? '', line1: contact?.address?.line1 ?? '', city: contact?.address?.city ?? '', state: contact?.address?.state ?? '', postalCode: contact?.address?.postalCode ?? '', phone: contact?.phone ?? '', fax: contact?.fax ?? '', email: contact?.email ?? '' };
     this.contactConfirmed = this.hasContactFields;
   }
   get hasContactFields() { return Object.values(this.contactFields).some(value => !!value.trim()); }
-  get previewContactMissing() { return !!this.claimsAdministratorId && !this.destination && !(this.contactConfirmed && this.hasContactFields); }
+  get previewContactMissing() { return (this.hasContactFields && !this.contactConfirmed) || (!!this.claimsAdministratorId && !this.destination && !(this.contactConfirmed && this.hasContactFields)); }
   setContactField(field: keyof AuthorizationContactFields, value: string) { this.contactFields[field] = value; this.contactConfirmed = false; this.clearPreview(); }
   confirmContact(confirmed: boolean) { this.contactConfirmed = confirmed; this.clearPreview(); }
   get previewAuthorizationContact(): RfaAuthorizationContact | undefined {

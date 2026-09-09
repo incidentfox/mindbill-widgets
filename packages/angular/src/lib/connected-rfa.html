@@ -40,7 +40,7 @@
         <label>Verified fax (optional)<input type="tel" [ngModel]="destination?.method === 'fax' ? destination!.destination : contactFields.fax" (ngModelChange)="setContactField('fax', $event)" maxlength="30" [readonly]="destination?.method === 'fax'" [placeholder]="destination?.method === 'fax' ? destination!.destination : ''" /></label>
         <label>Verified email (optional)<input type="email" [ngModel]="destination?.method === 'email' ? destination!.destination : contactFields.email" (ngModelChange)="setContactField('email', $event)" maxlength="254" [readonly]="destination?.method === 'email'" [placeholder]="destination?.method === 'email' ? destination!.destination : ''" /></label>
       </div>
-      @if (!destination && hasContactFields) { <label class="check"><input type="checkbox" [ngModel]="contactConfirmed" (ngModelChange)="confirmContact($event)" /> I verified this authorization contact for the current case.</label> }
+      @if (hasContactFields) { <label class="check"><input type="checkbox" [ngModel]="contactConfirmed" (ngModelChange)="confirmContact($event)" /> I verified these contact details for the current case and authorization office.</label> }
       @if (previewContactMissing) { <p role="status">Choose an authorization office above, or enter and confirm the verified case contact before preparing the preview.</p> }
       <p>Describe each diagnosis for the physician's signing preview.</p>
       @for (item of record.items; track item.id) { <label>{{ item.diagnosisCode }} · {{ item.serviceDescription }}<input [(ngModel)]="diagnosisDescriptions[item.id]" (ngModelChange)="invalidatePreview()" maxlength="500" /></label> }

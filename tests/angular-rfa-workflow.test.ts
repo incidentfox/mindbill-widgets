@@ -110,7 +110,7 @@ describe('native Angular RFA workflow', () => {
     const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow;
     component.authorizationContact = { contactName: 'Synthetic claims office', address: { line1: '100 Example Street', city: 'Example City', state: 'CA', postalCode: '90001' } };
     component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain';
-    component.setDestination({ method: 'fax', destination: '+14155550100', label: 'Synthetic authorization office', phone: '+14155550101' });
+    component.setDestination({ method: 'fax', destination: '+14155550100', label: 'Synthetic authorization office', phone: '+14155550101' }); component.confirmContact(true);
     await component.preparePreview();
     expect(workflow.signingPreview).toHaveBeenCalledWith('rfa_synthetic', expect.objectContaining({ authorizationContact: { contactName: 'Synthetic claims office', address: { line1: '100 Example Street', city: 'Example City', state: 'CA', postalCode: '90001' }, fax: '+14155550100', phone: '+14155550101' } }), expect.any(Object));
     component.ngOnDestroy();
@@ -155,6 +155,19 @@ describe('native Angular RFA workflow', () => {
     const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain'; component.setDestination({ method: 'fax', destination: '+14155550100', label: 'First synthetic office' });
     const pending = component.preparePreview(); await settle(); component.setDestination({ method: 'fax', destination: '+14155550101', label: 'Second synthetic office' }); complete(new Blob(['%PDF synthetic'])); await pending;
     expect(component.preview).toBeNull(); expect(component.previewUrl).toBeNull(); expect(component.previewReviewed).toBe(false); expect(component.reconcileRequired).toBe(false);
+  });
+
+  it('requires reconfirming manual contact edits and a new office even with a selected destination', async () => {
+    const workflow = client({ signingPreview: vi.fn() });
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain';
+    component.setDestination({ method: 'fax', destination: '+14155550100', label: 'First synthetic office' });
+    component.setContactField('line1', '100 Example Street');
+    await component.preparePreview(); expect(workflow.signingPreview).not.toHaveBeenCalled(); expect(component.previewContactMissing).toBe(true);
+    component.confirmContact(true); expect(component.previewContactMissing).toBe(false);
+    component.setContactField('contactName', 'Synthetic adjuster'); expect(component.previewContactMissing).toBe(true);
+    component.confirmContact(true); component.setDestination({ method: 'fax', destination: '+14155550101', label: 'Second synthetic office' });
+    expect(component.contactConfirmed).toBe(false); expect(component.previewContactMissing).toBe(true);
+    await component.preparePreview(); expect(workflow.signingPreview).not.toHaveBeenCalled();
   });
 
 });
