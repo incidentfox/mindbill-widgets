@@ -136,3 +136,35 @@ Each entry has an explicit **Attach** button. The SDK does not fetch or upload t
 files automatically. It checks that the case is unchanged after loading the bytes,
 then uploads against the saved request's current revision. The regular PDF file
 picker remains available. No document fixtures or synthetic defaults ship in the SDK.
+
+## Claims administrator contact on the signing form
+
+The explicit authorization destination is included in the signing-preview payload:
+its fax or email, office label when no contact name is provided, and directory phone
+when available. The selected route overrides the corresponding manually entered
+fax/email field. A telephone number never becomes a fax number.
+
+Use `[authorizationContact]` to provide verified case-specific contact information:
+
+```ts
+import type { RfaAuthorizationContact } from '@mindbill/angular';
+
+const authorizationContact: RfaAuthorizationContact = {
+  contactName: 'Synthetic authorization office',
+  address: { line1: '100 Example Street', city: 'Example City', state: 'CA', postalCode: '90001' },
+  phone: '+14155550100',
+};
+```
+
+These values must come from verified host records for the current case and office.
+The SDK does not copy a billing-review address or invent an address from a selected
+fax. Under **Review and sign**, users can enter optional contact, postal address,
+phone, fax, and email fields. Unknown fields can remain blank. A verified postal
+contact does not require a fax.
+
+When `claimsAdministratorId` is supplied, preparing the preview requires a selected
+authorization route or a verified contact. Host-provided contact data is treated as
+verified; manually changed contact data requires an explicit confirmation when no
+route is selected. Any contact or destination change clears the existing preview
+and signing consent. In-flight preview responses and PDF downloads are discarded
+if that contact changes, so the user reviews and signs the exact current contact.

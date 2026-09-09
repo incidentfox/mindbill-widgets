@@ -27,9 +27,24 @@
     @for (document of currentDocuments; track document.id) { <label class="check"><input type="checkbox" [(ngModel)]="selectedDocuments[document.id]" /> {{ document.filename }} · {{ document.documentType }}</label> }
     <button type="button" (click)="packet()" [disabled]="!record.signedAt">Download selected signed packet</button><p>Download prepares a PDF. It does not send a fax or email.</p></fieldset></details>
     @if (editable) { <details><summary>Review and sign</summary><fieldset [disabled]="blocked || dirty">
+      <h4>Claims administrator contact for this request</h4>
+      <p>The selected authorization destination is included in the PDF. Add only contact details verified for this case and office. Leave unknown fields blank; a fax is not required for a postal contact.</p>
+      @if (destination) { <p>Selected {{ destination.method }}: {{ destination.destination }} @if (destination.phone) { · Phone: {{ destination.phone }} }</p> }
+      <div class="grid">
+        <label>Contact or office name<input [ngModel]="contactFields.contactName" (ngModelChange)="setContactField('contactName', $event)" maxlength="200" /></label>
+        <label>Phone<input type="tel" [ngModel]="destination?.phone ?? contactFields.phone" [readonly]="!!destination?.phone" (ngModelChange)="setContactField('phone', $event)" maxlength="30" /></label>
+        <label>Verified street address<input [ngModel]="contactFields.line1" (ngModelChange)="setContactField('line1', $event)" maxlength="200" /></label>
+        <label>City<input [ngModel]="contactFields.city" (ngModelChange)="setContactField('city', $event)" maxlength="100" /></label>
+        <label>State<input [ngModel]="contactFields.state" (ngModelChange)="setContactField('state', $event)" maxlength="2" /></label>
+        <label>ZIP / postal code<input [ngModel]="contactFields.postalCode" (ngModelChange)="setContactField('postalCode', $event)" maxlength="20" /></label>
+        <label>Verified fax (optional)<input type="tel" [ngModel]="destination?.method === 'fax' ? destination!.destination : contactFields.fax" (ngModelChange)="setContactField('fax', $event)" maxlength="30" [readonly]="destination?.method === 'fax'" [placeholder]="destination?.method === 'fax' ? destination!.destination : ''" /></label>
+        <label>Verified email (optional)<input type="email" [ngModel]="destination?.method === 'email' ? destination!.destination : contactFields.email" (ngModelChange)="setContactField('email', $event)" maxlength="254" [readonly]="destination?.method === 'email'" [placeholder]="destination?.method === 'email' ? destination!.destination : ''" /></label>
+      </div>
+      @if (!destination && hasContactFields) { <label class="check"><input type="checkbox" [ngModel]="contactConfirmed" (ngModelChange)="confirmContact($event)" /> I verified this authorization contact for the current case.</label> }
+      @if (previewContactMissing) { <p role="status">Choose an authorization office above, or enter and confirm the verified case contact before preparing the preview.</p> }
       <p>Describe each diagnosis for the physician's signing preview.</p>
       @for (item of record.items; track item.id) { <label>{{ item.diagnosisCode }} · {{ item.serviceDescription }}<input [(ngModel)]="diagnosisDescriptions[item.id]" (ngModelChange)="invalidatePreview()" maxlength="500" /></label> }
-      <button type="button" (click)="preparePreview()">Prepare signing preview</button>
+      <button type="button" (click)="preparePreview()" [disabled]="previewContactMissing">Prepare signing preview</button>
       @if (previewUrl) { <p><a [href]="previewUrl" target="_blank" rel="noopener">Open exact signing preview (PDF)</a></p><label class="check"><input type="checkbox" [(ngModel)]="previewReviewed" /> I reviewed this exact preview and am authorized by the rendering physician to sign this request.</label><button type="button" (click)="sign()" [disabled]="!canSign">Sign reviewed request</button> }
       @if (!actorReference) { <p>Your application must identify the authorized signing actor before signing is available.</p> }
     </fieldset></details> }

@@ -104,4 +104,57 @@ describe('native Angular RFA workflow', () => {
     expect(workflow.uploadDocument).not.toHaveBeenCalled(); expect(component.record).toBeNull(); expect(component.reconcileRequired).toBe(false);
   });
 
+  it('puts the confirmed authorization office route and verified address into the signing preview', async () => {
+    const preview: RfaSigningPreview = { id: 'preview_synthetic', contentHash: 'hash_synthetic', contentRevision: 1, renderingProviderId: draft.renderingProviderId, previewDocumentId: 'doc_synthetic', expiresAt: '2099-01-01T00:00:00Z' };
+    const workflow = client({ signingPreview: vi.fn(async () => preview), downloadDocument: vi.fn(async () => new Blob(['%PDF synthetic'])) });
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow;
+    component.authorizationContact = { contactName: 'Synthetic claims office', address: { line1: '100 Example Street', city: 'Example City', state: 'CA', postalCode: '90001' } };
+    component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain';
+    component.setDestination({ method: 'fax', destination: '+14155550100', label: 'Synthetic authorization office', phone: '+14155550101' });
+    await component.preparePreview();
+    expect(workflow.signingPreview).toHaveBeenCalledWith('rfa_synthetic', expect.objectContaining({ authorizationContact: { contactName: 'Synthetic claims office', address: { line1: '100 Example Street', city: 'Example City', state: 'CA', postalCode: '90001' }, fax: '+14155550100', phone: '+14155550101' } }), expect.any(Object));
+    component.ngOnDestroy();
+  });
+  it('supports a host-verified postal contact without inventing a fax or directory address', async () => {
+    const workflow = client({ signingPreview: vi.fn().mockRejectedValue(new Error('stop after payload')) });
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.claimsAdministratorId = 'payer_synthetic';
+    component.authorizationContact = { contactName: 'Synthetic postal office', address: { line1: '100 Example Street' } }; component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain';
+    await component.preparePreview();
+    expect(workflow.signingPreview).toHaveBeenCalledWith('rfa_synthetic', expect.objectContaining({ authorizationContact: component.authorizationContact }), expect.any(Object));
+    expect(component.previewAuthorizationContact).not.toHaveProperty('fax');
+    expect(component.previewAuthorizationContact?.address).toEqual({ line1: '100 Example Street' });
+  });
+  it('requires an explicit route or verified manual contact when a directory payer is supplied', async () => {
+    const workflow = client({ signingPreview: vi.fn() });
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.claimsAdministratorId = 'payer_synthetic'; component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain';
+    await component.preparePreview(); expect(workflow.signingPreview).not.toHaveBeenCalled(); expect(component.error).toMatch(/Choose an authorization office/);
+    component.setContactField('email', 'authorization@example.test'); expect(component.previewContactMissing).toBe(true);
+    component.confirmContact(true); expect(component.previewContactMissing).toBe(false);
+    component.setContactField('email', 'new-office@example.test'); expect(component.previewContactMissing).toBe(true);
+  });
+  it('clears the exact preview and review consent when its contact or selected office changes', () => {
+    const component = instance(() => new MindBillConnectedRfaComponent());
+    const preview: RfaSigningPreview = { id: 'preview_synthetic', contentHash: 'hash_synthetic', contentRevision: 1, renderingProviderId: draft.renderingProviderId, previewDocumentId: 'doc_synthetic', expiresAt: '2099-01-01T00:00:00Z' };
+    component.preview = preview; component.previewReviewed = true;
+    component.setDestination({ method: 'email', destination: 'authorization@example.test', label: 'Synthetic office' });
+    expect(component.preview).toBeNull(); expect(component.previewReviewed).toBe(false); expect(component.previewAuthorizationContact?.email).toBe('authorization@example.test'); expect(component.previewAuthorizationContact).not.toHaveProperty('fax');
+    component.preview = preview; component.previewReviewed = true; component.setContactField('line1', '200 Example Street'); expect(component.preview).toBeNull(); expect(component.previewReviewed).toBe(false);
+    component.preview = preview; component.previewReviewed = true; component.setDestination(null); expect(component.preview).toBeNull(); expect(component.previewReviewed).toBe(false); expect(component.previewAuthorizationContact).not.toHaveProperty('email');
+  });
+  it('discards an in-flight preview when the host changes verified contact details', async () => {
+    let complete!: (preview: RfaSigningPreview) => void;
+    const workflow = client({ signingPreview: vi.fn(() => new Promise<RfaSigningPreview>(resolve => { complete = resolve; })), downloadDocument: vi.fn() });
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.authorizationContact = { phone: '+14155550100' }; component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain';
+    const pending = component.preparePreview(); component.authorizationContact = { phone: '+14155550101' }; component.ngOnChanges();
+    complete({ id: 'preview_synthetic', contentHash: 'hash_synthetic', contentRevision: 1, renderingProviderId: draft.renderingProviderId, previewDocumentId: 'doc_synthetic', expiresAt: '2099-01-01T00:00:00Z' }); await pending;
+    expect(workflow.downloadDocument).not.toHaveBeenCalled(); expect(component.preview).toBeNull(); expect(component.previewReviewed).toBe(false); expect(component.reconcileRequired).toBe(false);
+  });
+  it('discards downloaded preview bytes when the selected office changes during download', async () => {
+    let complete!: (blob: Blob) => void;
+    const workflow = client({ signingPreview: vi.fn(async () => ({ id: 'preview_synthetic', contentHash: 'hash_synthetic', contentRevision: 1, renderingProviderId: draft.renderingProviderId, previewDocumentId: 'doc_synthetic', expiresAt: '2099-01-01T00:00:00Z' })), downloadDocument: vi.fn(() => new Promise<Blob>(resolve => { complete = resolve; })) });
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.ngOnChanges(); await settle(); component.record = record(); component.diagnosisDescriptions['item_synthetic'] = 'Wrist pain'; component.setDestination({ method: 'fax', destination: '+14155550100', label: 'First synthetic office' });
+    const pending = component.preparePreview(); await settle(); component.setDestination({ method: 'fax', destination: '+14155550101', label: 'Second synthetic office' }); complete(new Blob(['%PDF synthetic'])); await pending;
+    expect(component.preview).toBeNull(); expect(component.previewUrl).toBeNull(); expect(component.previewReviewed).toBe(false); expect(component.reconcileRequired).toBe(false);
+  });
+
 });

@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnDestroy, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { createRfaWorkflowClient, type RfaWorkflowClient, type RfaDraftInput, type RfaRecord, type RfaSigningPreview, type RfaDocumentType, type BillLifecycleSessionProvider, type BillClaimsAdministratorDirectory, type RfaAuthorizationDestinationOption, type RfaDecisionItemInput, type RfaTransmissionInput } from '@mindbill/browser';
+import { createRfaWorkflowClient, type RfaWorkflowClient, type RfaDraftInput, type RfaRecord, type RfaSigningPreview, type RfaDocumentType, type BillLifecycleSessionProvider, type BillClaimsAdministratorDirectory, type RfaAuthorizationDestinationOption, type RfaDecisionItemInput, type RfaTransmissionInput, type RfaAuthorizationContact } from '@mindbill/browser';
 import { RfaDraftFormComponent } from './rfa-draft-form.component';
 import { MindBillRfaAuthorizationDestinationComponent } from './rfa-authorization-destination.component';
 import { mindBillAngularAppearanceStyle, type MindBillAngularAppearance } from './appearance';
@@ -17,6 +17,8 @@ export type MindBillRfaSourceDocument = {
   loadBlob: () => Promise<Blob>;
 };
 
+type AuthorizationContactFields = { contactName: string; line1: string; city: string; state: string; postalCode: string; phone: string; fax: string; email: string };
+
 type DecisionRow = { itemId: string; description: string; outcome: '' | RfaDecisionItemInput['outcome']; authorizationNumber: string; decisionReason: string; reviewerName: string; reviewerPhone: string; authorizedProcedureCode: string; authorizedQuantity: number | null; authorizedUnits: number | null; effectiveFrom: string; effectiveTo: string };
 /** Connected native Angular RFA workflow. Every write is an explicit, separate action. */
 @Component({ selector: 'mindbill-connected-rfa', standalone: true, imports: [CommonModule, FormsModule, RfaDraftFormComponent, MindBillRfaAuthorizationDestinationComponent], templateUrl: './connected-rfa.html', styleUrls: ['./connected-rfa.css'] })
@@ -31,6 +33,7 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
   @Input() client?: RfaWorkflowClient;
   @Input() injuryState = 'CA';
   @Input() claimsAdministratorId?: string;
+  @Input() authorizationContact?: RfaAuthorizationContact;
   @Input() actorReference = '';
   @Input() billingProviderId?: string;
   @Input() showList = true;
@@ -46,6 +49,10 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
   destination: RfaAuthorizationDestinationOption | null = null;
   loading = false; busy = false; error = ''; notice = ''; dirty = false; reconcileRequired = false;
   preview: RfaSigningPreview | null = null; previewUrl: string | null = null; previewReviewed = false;
+  contactFields: AuthorizationContactFields = { contactName: '', line1: '', city: '', state: '', postalCode: '', phone: '', fax: '', email: '' };
+  contactConfirmed = false;
+  private contactInputKey = '';
+  private previewGeneration = 0;
   diagnosisDescriptions: Record<string, string> = {};
   documentType: RfaDocumentType = 'clinical_report'; file: File | null = null; selectedDocuments: Record<string, boolean> = {};
   transmissionDirection: 'outbound' | 'inbound' = 'outbound'; transmissionChannel: RfaTransmissionInput['channel'] = 'fax';
@@ -61,6 +68,8 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
   get canSign() { return !!this.record && this.editable && !this.dirty && !this.blocked && !!this.preview && this.preview.contentRevision === this.record.contentRevision && this.preview.renderingProviderId === this.record.renderingProviderId && Date.parse(this.preview.expiresAt) > Date.now() && this.previewReviewed && !!this.actorReference.trim(); }
   ngOnChanges() {
     if (!this.initialDraft) return;
+    const contactKey = treatmentDraftKey(this.authorizationContact ?? null);
+    if (contactKey !== this.contactInputKey) { this.contactInputKey = contactKey; this.resetContact(); this.clearPreview(); }
     const key = treatmentDraftKey({ context: this.contextKey, draft: this.initialDraft, id: this.rfaId, endpoint: this.sessionEndpoint, base: this.apiBaseUrl, injuryState: this.injuryState, payer: this.claimsAdministratorId, createKey: this.createIdempotencyKey, actor: this.actorReference, billingProvider: this.billingProviderId });
     if (key === this.inputKey && this.client === this.previousClient && this.getSession === this.previousSession) return;
     this.inputKey = key; this.previousClient = this.client; this.previousSession = this.getSession;
@@ -69,10 +78,10 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
     this.createKey = this.createIdempotencyKey ?? globalThis.crypto.randomUUID(); void this.reload();
   }
   ngOnDestroy() { this.generation++; this.workflow?.clearSession(); this.clearPreview(); }
-  private reset() { this.record = null; this.records = []; this.draft = null; this.directory = null; this.destination = null; this.directoryError = null; this.dirty = false; this.busy = false; this.error = ''; this.notice = ''; this.reconcileRequired = false; this.clearPreview(); this.clearEvidence(); }
+  private reset() { this.record = null; this.records = []; this.draft = null; this.directory = null; this.destination = null; this.directoryError = null; this.dirty = false; this.busy = false; this.error = ''; this.notice = ''; this.reconcileRequired = false; this.clearPreview(); this.clearEvidence(); this.resetContact(); }
   private clearEvidence() { this.file = null; this.selectedDocuments = {}; this.occurredAt = ''; this.receivedAt = ''; this.providerMessageId = ''; this.proofDocumentId = ''; this.decidedAt = ''; this.responseDocumentId = ''; this.imrDocumentId = ''; this.decisions = []; }
   invalidatePreview() { this.clearPreview(); }
-  private clearPreview() { if (this.previewUrl) URL.revokeObjectURL(this.previewUrl); this.previewUrl = null; this.preview = null; this.previewReviewed = false; }
+  private clearPreview() { this.previewGeneration++; if (this.previewUrl) URL.revokeObjectURL(this.previewUrl); this.previewUrl = null; this.preview = null; this.previewReviewed = false; }
   draftChanged(dirty: boolean) { this.dirty = dirty; if (dirty) this.clearPreview(); }
   async reload() {
     if (this.busy) return;
@@ -111,7 +120,32 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
     catch { if (generation === this.generation) this.directoryError = 'Could not load authorization contacts.'; }
     finally { if (generation === this.generation) { this.directoryLoading = false; this.detector.markForCheck(); } }
   }
-  setDestination(value: RfaAuthorizationDestinationOption | null) { this.destination = value; if (value) this.transmissionChannel = value.method; this.destinationChange.emit(value); }
+  setDestination(value: RfaAuthorizationDestinationOption | null) { this.clearPreview(); this.destination = value; if (value) this.transmissionChannel = value.method; this.destinationChange.emit(value); }
+  private resetContact() {
+    const contact = this.authorizationContact;
+    this.contactFields = { contactName: contact?.contactName ?? '', line1: contact?.address?.line1 ?? '', city: contact?.address?.city ?? '', state: contact?.address?.state ?? '', postalCode: contact?.address?.postalCode ?? '', phone: contact?.phone ?? '', fax: contact?.fax ?? '', email: contact?.email ?? '' };
+    this.contactConfirmed = this.hasContactFields;
+  }
+  get hasContactFields() { return Object.values(this.contactFields).some(value => !!value.trim()); }
+  get previewContactMissing() { return !!this.claimsAdministratorId && !this.destination && !(this.contactConfirmed && this.hasContactFields); }
+  setContactField(field: keyof AuthorizationContactFields, value: string) { this.contactFields[field] = value; this.contactConfirmed = false; this.clearPreview(); }
+  confirmContact(confirmed: boolean) { this.contactConfirmed = confirmed; this.clearPreview(); }
+  get previewAuthorizationContact(): RfaAuthorizationContact | undefined {
+    const fields = this.contactFields;
+    const contact: RfaAuthorizationContact = {};
+    for (const key of ['contactName', 'phone', 'fax', 'email'] as const) if (fields[key].trim()) contact[key] = fields[key].trim();
+    if (fields.line1.trim()) {
+      contact.address = { line1: fields.line1.trim() };
+      for (const key of ['city', 'state', 'postalCode'] as const) if (fields[key].trim()) contact.address[key] = fields[key].trim();
+    }
+    // A selected authorization route wins over a separately entered fax/email value.
+    if (this.destination) {
+      contact[this.destination.method] = this.destination.destination;
+      if (this.destination.phone) contact.phone = this.destination.phone;
+      if (!contact.contactName) contact.contactName = this.destination.label;
+    }
+    return Object.keys(contact).length ? contact : undefined;
+  }
   private fail(error: unknown) { this.error = error instanceof Error ? error.message : 'The request could not be completed.'; this.rfaError.emit(error instanceof Error ? error : new Error(this.error)); }
   private async mutation(action: () => Promise<RfaRecord>, message: string): Promise<RfaRecord> {
     if (this.blocked) throw new Error('Reload the current request before another change.');
@@ -126,16 +160,20 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
   };
   async preparePreview() {
     const record = this.record; if (!record || this.blocked || this.dirty || !this.editable) return;
+    if (this.previewContactMissing) { this.error = 'Choose an authorization office above, or enter and confirm the verified case contact before preparing the preview.'; return; }
+    if (!this.contactFields.line1.trim() && [this.contactFields.city, this.contactFields.state, this.contactFields.postalCode].some(value => value.trim())) { this.error = 'Enter the verified street address, or clear the incomplete postal address.'; return; }
     if (record.items.some(item => !this.diagnosisDescriptions[item.id]?.trim())) { this.error = 'Enter a diagnosis description for every requested service.'; return; }
     const generation = this.generation; this.busy = true; this.error = ''; this.clearPreview();
+    const previewGeneration = this.previewGeneration;
+    const authorizationContact = this.previewAuthorizationContact;
     try {
-      const preview = await this.workflow.signingPreview(record.id, { diagnosisDescriptions: { ...this.diagnosisDescriptions }, ...(this.billingProviderId ? { billingProviderId: this.billingProviderId } : {}) }, { idempotencyKey: crypto.randomUUID() });
-      if (generation !== this.generation) return;
+      const preview = await this.workflow.signingPreview(record.id, { diagnosisDescriptions: { ...this.diagnosisDescriptions }, ...(this.billingProviderId ? { billingProviderId: this.billingProviderId } : {}), ...(authorizationContact ? { authorizationContact } : {}) }, { idempotencyKey: crypto.randomUUID() });
+      if (generation !== this.generation || previewGeneration !== this.previewGeneration) return;
       const pdf = await this.workflow.downloadDocument(record.id, preview.previewDocumentId);
-      if (generation !== this.generation) return;
+      if (generation !== this.generation || previewGeneration !== this.previewGeneration) return;
       if (preview.contentRevision !== record.contentRevision) throw new Error('The request changed. Reload before preparing a preview.');
       this.preview = preview; this.previewUrl = URL.createObjectURL(pdf);
-    } catch (error) { if (generation === this.generation) { this.reconcileRequired = true; this.fail(error); } }
+    } catch (error) { if (generation === this.generation && previewGeneration === this.previewGeneration) { this.reconcileRequired = true; this.fail(error); } }
     finally { if (generation === this.generation) { this.busy = false; this.detector.markForCheck(); } }
   }
   async sign() {

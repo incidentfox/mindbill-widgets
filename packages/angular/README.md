@@ -257,3 +257,9 @@ selected-bill lifecycle through `sessionEndpoint` or `getSession`. It emits
 `billSelected` and `billingError`; enable `showCreateBill` or `showPostPayment` to
 emit host-owned `createBill` / `postPayment` navigation actions. The corresponding
 native connected report components can also be imported individually.
+
+The connected RFA signing preview includes the explicitly selected authorization
+fax/email and phone. Optional `[authorizationContact]` supplies verified case contact
+and postal details; the native review form can also collect them. Contact changes
+invalidate the preview and signing confirmation. Unknown addresses are left blank,
+and postal contacts do not require a fax. See the Angular RFA workflow guide above.
