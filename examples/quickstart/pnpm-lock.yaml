@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@mindbill/browser': 0.38.0
+
 importers:
 
   .:
@@ -188,11 +191,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@mindbill/browser@0.37.0':
-    resolution: {integrity: sha512-wGzIO0i6OzANGPnY1KUFlru8lYNiBuXdENHy/SOsMR0xYeShTmxFg37gGRwRTSwK4LFo9v9M4ztTeL+PEuq7BA==}
+  '@mindbill/browser@0.38.0':
+    resolution: {integrity: sha512-8VPFwSZ5fgETStzK05IC4ftFv1NXNh1h20Yx7s7tuLbXYlUPJJqAKQRgTBq836thbPJy5Q6dWj5tjxzmPC47Bw==}
 
   '@mindbill/embed@0.6.0':
-    resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==}
+    resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==, tarball: https://registry.npmjs.org/@mindbill/embed/-/embed-0.6.0.tgz}
 
   '@mindbill/node@0.15.0':
     resolution: {integrity: sha512-ieBq2sovH96q/KbEsu5L5e+5aUPHAysVqIPr4DmozwJqjQu5AEPikO7BsteEsERTB69L0gBLvY/fi6f4ED8UHw==}
@@ -487,7 +490,7 @@ snapshots:
   '@img/sharp-win32-x64@0.35.4':
     optional: true
 
-  '@mindbill/browser@0.37.0': {}
+  '@mindbill/browser@0.38.0': {}
 
   '@mindbill/embed@0.6.0': {}
 
@@ -495,7 +498,7 @@ snapshots:
 
   '@mindbill/react@0.61.0(react@19.2.8)':
     dependencies:
-      '@mindbill/browser': 0.37.0
+      '@mindbill/browser': 0.38.0
       '@mindbill/embed': 0.6.0
       react: 19.2.8
 

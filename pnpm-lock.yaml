@@ -11,6 +11,9 @@ importers:
       '@angular/common':
         specifier: ^21.2.4
         version: 21.2.22(@angular/core@21.2.22(@angular/compiler@21.2.22)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@angular/compiler':
+        specifier: ^21.2.22
+        version: 21.2.22
       '@angular/compiler-cli':
         specifier: ^21.2.4
         version: 21.2.22(@angular/compiler@21.2.22)(typescript@5.9.3)
@@ -81,8 +84,8 @@ importers:
         specifier: '>=18 <22'
         version: 21.2.22(@angular/common@21.2.22(@angular/core@21.2.22(@angular/compiler@21.2.22)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.2.22(@angular/compiler@21.2.22)(rxjs@7.8.2))(@angular/platform-browser@21.2.22(@angular/common@21.2.22(@angular/core@21.2.22(@angular/compiler@21.2.22)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.2.22(@angular/compiler@21.2.22)(rxjs@7.8.2)))(rxjs@7.8.2)
       '@mindbill/browser':
-        specifier: ^0.30.0
-        version: 0.30.0
+        specifier: workspace:^
+        version: link:../browser
       rxjs:
         specifier: '>=7.8 <9'
         version: 7.8.2
@@ -100,7 +103,7 @@ importers:
     dependencies:
       '@mindbill/browser':
         specifier: ^0.37.0
-        version: link:../browser
+        version: 0.37.0
       '@mindbill/embed':
         specifier: workspace:^
         version: link:../embed
@@ -622,8 +625,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@mindbill/browser@0.30.0':
-    resolution: {integrity: sha512-V52M85AsrPOjeQIi1USmnMhZ7ZDvEadW5zHnbRid4bEW3+blpqWSIHEQr0kv7Zai4Myu0K/iw/kX4NaHv9t6/w==}
+  '@mindbill/browser@0.37.0':
+    resolution: {integrity: sha512-wGzIO0i6OzANGPnY1KUFlru8lYNiBuXdENHy/SOsMR0xYeShTmxFg37gGRwRTSwK4LFo9v9M4ztTeL+PEuq7BA==}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -2518,7 +2521,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@mindbill/browser@0.30.0': {}
+  '@mindbill/browser@0.37.0': {}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true

@@ -1,11 +1,13 @@
+import { FeeDetails, billSubmissionCalculationContext, billSubmissionFeeRequest, billSubmissionQuoteContext, billSubmissionUsesSharedDiagnoses, billSubmissionLineDiagnosisCodes, setBillSubmissionDiagnosisAssignments, setBillSubmissionLineDiagnoses, setBillSubmissionSharedDiagnoses, treatmentDraftKey, isMedicalLegalCode, isProlongedCode } from "./submission-treatment";
 import { CommonModule } from "@angular/common";
-import { ChangeDetectorRef, Component, EventEmitter, HostListener, inject, Input, OnChanges, Output, SimpleChanges } from "@angular/core";
+import { ChangeDetectorRef, Component, EventEmitter, HostListener, inject, Input, OnChanges, DoCheck, OnDestroy, Output, SimpleChanges } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import {
   createBillReferenceClient,
   createBillSubmissionClient,
   defaultBillReviewPayerOption,
   type BillDiagnosisCode,
+  type BillFeeQuote,
   type BillLifecycleSessionProvider,
   type BillReviewPayer,
   type BillReviewPayerOption,
@@ -149,6 +151,15 @@ async function blobToBase64(blob: Blob): Promise<string> {
     <form class="mbs" [ngStyle]="themeStyle" (submit)="submit($event)" novalidate>
       <div class="intro"><div><h2>{{ heading }}</h2><p>{{ description }}</p></div><span><b>*</b> Required</span></div>
 
+      <ng-template #diagnosisSelector let-index="index">
+        <div class="diagnosis-select">
+          @if (index === undefined) { <div class="quick">@for (item of quickDiagnoses; track item.code) { <button type="button" [class.on]="hasDiagnosis(item.code)" [disabled]="submitting || (!hasDiagnosis(item.code) && !canAddServiceDiagnosis(item.code))" (click)="toggleDiagnosis(item)">{{ hasDiagnosis(item.code) ? '✓' : '+' }} {{ item.label }}</button> }</div> }
+          <div class="chips">@for (code of serviceDiagnosisCodes(index); track code) { <button type="button" [disabled]="submitting" [attr.aria-label]="'Remove ' + code + (index === undefined ? '' : ' from service line ' + (index + 1))" (click)="removeServiceDiagnosis(code, index)"><strong>{{ code }}</strong> {{ diagnosisDescription(code) }} ×</button> }</div>
+          <mindbill-combo-box [ariaLabel]="index === undefined ? 'Add diagnosis code' : 'Diagnosis codes for service line ' + (index + 1)" value="" [placeholder]="serviceDiagnosisCodes(index).length >= 4 ? '4 selected (maximum)' : 'Search ICD-10 code or description…'" [disabled]="submitting || serviceDiagnosisCodes(index).length >= 4" [loading]="diagnosisBusy" [options]="serviceDiagnosisOptions(index)" [filterOptions]="false" (opened)="queryServiceDiagnoses('')" (queryChange)="queryServiceDiagnoses($event)" (endReached)="searchDiagnoses(false)" (selected)="selectServiceDiagnosis($event, index)" />
+          @if (diagnosisStatus) { <small role="status">{{ diagnosisStatus }}</small> }
+        </div>
+      </ng-template>
+
       <fieldset id="mbs-patient"><legend>Patient</legend><div class="grid">
         <label [class.invalid]="bad('patient.firstName')">First name <b>*</b><input name="firstName" [(ngModel)]="bill.patient.firstName"></label>
         <label [class.invalid]="bad('patient.lastName')">Last name <b>*</b><input name="lastName" [(ngModel)]="bill.patient.lastName"></label>
@@ -180,13 +191,6 @@ async function blobToBase64(blob: Blob): Promise<string> {
           </div>
         }
         <label class="wide">Injury description (optional)<input name="description" [(ngModel)]="bill.claim.description"></label>
-        <div class="wide diagnosis" [class.invalid]="bad('diagnoses')"><label>Diagnosis codes (ICD-10) <b>*</b></label>
-          <div class="quick">@for (item of quickDiagnoses; track item.code) { <button type="button" [class.on]="hasDiagnosis(item.code)" (click)="toggleDiagnosis(item)">{{ hasDiagnosis(item.code) ? '✓' : '+' }} {{ item.label }}</button> }</div>
-          @if (bill.diagnoses.length) { <div class="chips">@for (code of bill.diagnoses; track code) { <button type="button" (click)="removeDiagnosis(code)"><strong>{{ code }}</strong> ×</button> }</div> }
-          <input name="diagnosisQuery" [(ngModel)]="diagnosisQuery" (focus)="searchDiagnoses(true)" (input)="searchDiagnoses(true)" placeholder="Search ICD-10 codes…" autocomplete="off">
-          @if (diagnosisBusy && !diagnosisResults.length) { <small>Searching ICD-10 directory…</small> }
-          @if (diagnosisResults.length) { <div class="options diagnoses" (scroll)="diagnosisScrolled($event)">@for (item of diagnosisResults; track item.code) { <button type="button" (click)="addDiagnosis(item)"><strong>{{ item.code }}</strong><span>{{ item.description }}</span></button> }</div> }
-        </div>
       </div></fieldset>
 
       <fieldset id="mbs-provider"><legend>Providers &amp; place of service</legend><div class="grid">
@@ -220,30 +224,33 @@ async function blobToBase64(blob: Blob): Promise<string> {
       </div></fieldset>
 
       <fieldset id="mbs-lines" [class.invalid-set]="bad('serviceLines')"><legend>Service lines</legend>
-        <div class="line-head"><span>Procedure code *</span><span>Modifiers</span><span>Dx</span><span>Units *</span><span>Allowed</span><span></span></div>
-        @for (line of bill.serviceLines; track $index; let index = $index) { <div class="service-line">
+        <label class="checkbox-label"><input type="checkbox" name="sharedDiagnoses" [ngModel]="sharedDiagnoses" (ngModelChange)="setSharedDiagnoses($event)" /> Use the same diagnoses for all services (up to four)</label><div class="shared-diagnoses">@if (sharedDiagnoses) { <label>Diagnosis codes (ICD-10) <b>*</b></label><ng-container [ngTemplateOutlet]="diagnosisSelector" /> }</div>
+        <div class="line-head" [class.shared]="sharedDiagnoses"><span>Procedure code *</span><span>Modifiers</span>@if (!sharedDiagnoses) { <span>Diagnosis codes</span> }<span>Units *</span><span>Allowed</span><span></span></div>
+        @for (line of bill.serviceLines; track $index; let index = $index) { <div class="service-line" [class.shared]="sharedDiagnoses">
           <div class="cell"><span class="mobile-label">Procedure</span>
-            <mindbill-combo-box [ariaLabel]="'Procedure code ' + (index + 1)" [value]="line.code" placeholder="Search or enter code…" [options]="procedureComboOptions" [createOption]="customProcedureOption" (selected)="selectProcedure(index, $event)"/>
+            <mindbill-combo-box [ariaLabel]="'Procedure code ' + (index + 1)" [value]="line.code" placeholder="Search code or procedure description…" [options]="procedureComboOptions" [filterOptions]="false" [loading]="procedureBusy" (opened)="searchProcedures('')" [createOption]="customProcedureOption" (queryChange)="searchProcedures($event)" (selected)="selectProcedure(index, $event)"/>
+            @if (procedureStatus) { <small role="status">{{ procedureStatus }}</small> }
             @if (line.code) { <small>{{ procedureDescription(line.code) || 'Custom CPT, HCPCS, or medical-legal code' }}</small> }
           </div>
           <div class="cell"><span class="mobile-label">Modifiers</span>
             @if (line.modifiers?.length) { <div class="chips">@for (modifier of line.modifiers; track modifier) { <button type="button" (click)="removeModifier(index, modifier)" [attr.aria-label]="'Remove modifier ' + modifier">−{{ modifier }} ×</button> }</div> }
             <mindbill-combo-box [ariaLabel]="'Modifiers ' + (index + 1)" value="" [placeholder]="line.modifiers?.length ? line.modifiers!.length + ' modifier' + (line.modifiers!.length === 1 ? '' : 's') : 'Add modifiers…'" [options]="modifierComboOptions(line)" (selected)="addModifier(index, $event)"/>
           </div>
-          <div class="cell"><span class="mobile-label">Dx pointers</span>
-            <div class="dx">
-              @if (bill.diagnoses.length) {
-                @for (code of bill.diagnoses; track code; let dxIndex = $index) {
-                  <button type="button" [class.on]="hasDiagnosisPointer(line, dxIndex + 1)" [title]="dxLetter(dxIndex + 1) + ' — ' + code" [attr.aria-pressed]="hasDiagnosisPointer(line, dxIndex + 1)" [attr.aria-label]="'Point line ' + (index + 1) + ' at diagnosis ' + code" (click)="toggleDiagnosisPointer(index, dxIndex + 1)">{{ dxLetter(dxIndex + 1) }}</button>
-                }
-              } @else { <small>Add diagnoses above</small> }
-            </div>
-          </div>
+          @if (!sharedDiagnoses) { <div class="cell"><span class="mobile-label">Diagnosis codes</span><ng-container [ngTemplateOutlet]="diagnosisSelector" [ngTemplateOutletContext]="{ index: index }" /></div> }
           <label><span class="mobile-label">Units</span><input [name]="'units'+index" type="number" min="1" [(ngModel)]="line.units"></label>
           <strong>{{ allowed(line) == null ? '—' : (allowed(line) | currency) }}</strong>
           <button class="remove" type="button" (click)="removeLine(index)" aria-label="Remove service line">×</button>
+        </div>
+        @if (isTreatment && line.code && !medicalLegal(line.code)) { <div class="grid fee-context">
+          <p class="wide">{{ feeAssumptions(line.code) }}</p>
+          <label>Fee basis<select [name]="'basis'+index" [(ngModel)]="details(index).basis"><option value="standard">Standard calculation</option><option value="adjustment">Other circumstances — review required</option></select></label>
+          <label>Rendering provider type<select [name]="'providerKind'+index" [(ngModel)]="details(index).providerKind"><option value="">Select provider type</option><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option><option value="physical_therapist">Physical therapist</option><option value="other">Other</option></select></label>
+          @if (line.code === '97110') { <label>Direct one-on-one minutes<input type="number" min="1" [name]="'minutes'+index" [(ngModel)]="details(index).minutes" /></label><label>Total visit minutes<input type="number" min="1" [name]="'visitMinutes'+index" [(ngModel)]="details(index).totalMinutes" /></label> }
+          @if (prolonged(line.code) && prolongedLeader(index) === index) { <label>Total prolonged-service minutes (this date)<input type="number" min="1" [name]="'prolongedMinutes'+index" [(ngModel)]="details(index).totalMinutes" /></label><label>Related evaluation date<input type="date" [name]="'evaluationDate'+index" [(ngModel)]="details(index).relatedEvaluationDate" /></label><label>Documented time basis<select [name]="'timeBasis'+index" [(ngModel)]="details(index).prolongedTimeBasis"><option value="">Select documentation basis</option><option value="documented">Personally performed, ongoing management, time not counted elsewhere</option><option value="review">Other circumstances — review required</option></select></label> }
+          <p class="wide" role="status">{{ feeStatus(index) }} @if (prolonged(line.code) && prolongedLeader(index) !== index) { <span>Uses the prolonged-service time entered for the first service on this date.</span> } @if (feeFailed(index)) { <button type="button" (click)="retryFees()">Retry fee calculation</button> }</p>
         </div> }
-        <div class="total"><span>Total</span><strong>{{ totalAllowed | currency }}</strong></div>
+        }
+        <div class="total"><span>Total</span><strong>{{ totalIncomplete ? 'Incomplete' : (totalAllowed | currency) }}</strong></div>
       </fieldset>
 
       <fieldset><legend>Attachments</legend>
@@ -257,12 +264,15 @@ async function blobToBase64(blob: Blob): Promise<string> {
     </form>
   `,
   styles: [`
-    :host{display:block}.mbs{--danger:#c83c3c;font-family:var(--font);color:var(--t)}*{box-sizing:border-box}.intro{display:flex;justify-content:space-between;align-items:start;margin:0 0 24px}.intro h2{margin:0;font-size:24px;font-weight:600}.intro p{margin:6px 0 0;color:var(--m)}.intro>span{color:var(--m);font-size:13px}.mbs b{color:inherit}.intro b,label>b,.lookup>label>b,.diagnosis>label>b,.cell>label>b{color:var(--danger)}fieldset{border:1px solid var(--b);border-radius:var(--r);margin:0 0 22px;padding:24px 26px 26px;background:var(--s)}legend{padding:0 10px;font-size:18px;font-weight:700}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px 28px}.wide{grid-column:1/-1}h3{margin:4px 0 -4px;padding-top:12px;border-top:1px solid var(--b);font-size:16px}h3:first-child{border:0;padding-top:0}label,.lookup,.diagnosis{display:grid;gap:8px;font-size:14px;font-weight:700}.grid>label{display:flex;flex-wrap:wrap;align-content:start;align-items:center;column-gap:4px;row-gap:8px}.grid>label>input,.grid>label>select,.grid>label>small,.grid>label>mindbill-date-input{flex:0 0 100%}.grid>div.wide{display:grid;gap:8px;font-size:14px;font-weight:700}input,select{width:100%;min-height:46px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}input:focus,select:focus{outline:3px solid color-mix(in srgb,var(--a) 22%,transparent);border-color:var(--a)}.invalid input,.invalid select,.invalid-set{border-color:var(--danger)!important;background:color-mix(in srgb,var(--danger) 4%,var(--s))}.invalid>label{color:var(--danger)}small{color:var(--m);font-weight:450}.selected{color:#238655}.options{position:relative;z-index:4;max-height:300px;overflow:auto;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);box-shadow:0 14px 35px #172b3730}.options button{display:grid;width:100%;gap:3px;border:0;border-bottom:1px solid var(--b);background:var(--s);padding:12px 14px;text-align:left;color:var(--t);cursor:pointer}.options button:hover{background:color-mix(in srgb,var(--a) 7%,var(--s))}.options span{color:var(--m);font-size:12px}.quick,.chips{display:flex;flex-wrap:wrap;gap:8px}.quick button,.chips button{border:1px solid var(--b);border-radius:999px;background:var(--s);padding:7px 11px;color:var(--t);font:inherit;font-size:13px;cursor:pointer}.quick .on{border-color:var(--a);color:var(--a);background:color-mix(in srgb,var(--a) 8%,var(--s))}.chips button{border-color:color-mix(in srgb,var(--a) 40%,var(--b));background:color-mix(in srgb,var(--a) 7%,var(--s));font-weight:700}.dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.dx button{width:30px;height:30px;border:1px solid var(--b);border-radius:8px;background:var(--s);color:var(--m);font:inherit;font-size:13px;font-weight:750;cursor:pointer;padding:0}.dx button.on{border-color:var(--a);background:color-mix(in srgb,var(--a) 10%,var(--s));color:var(--a)}.line-head,.service-line{display:grid;grid-template-columns:1.5fr 1.35fr .8fr .5fr .7fr 36px;gap:14px;align-items:start}.line-head{padding:0 0 9px;color:var(--m);font-size:12px;font-weight:700}.service-line{border-top:1px solid var(--b);padding:12px 0}.service-line label,.service-line .cell{display:grid;gap:6px;font-size:14px;font-weight:700}.service-line strong{text-align:right;padding-top:12px}.remove{border:0;background:transparent;color:var(--m);font-size:25px;cursor:pointer}.mobile-label{display:none}.total{display:flex;justify-content:flex-end;gap:36px;border-top:1px solid var(--b);padding-top:14px;font-size:17px}.attachment{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid var(--b);border-radius:var(--cr);margin-bottom:10px;padding:14px 16px}.attachment.locked{border-color:#9fd6b4;background:#f3fcf6}.attachment>div:first-child{display:grid;gap:4px}.attachment span{color:var(--m);font-size:13px}.attachment-actions{display:flex;gap:8px}.attachment button{border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:8px 12px;color:var(--t);font-weight:700;cursor:pointer}.dropzone{position:relative;display:grid;min-height:170px;place-content:center;gap:8px;border:2px dashed color-mix(in srgb,var(--m) 60%,transparent);border-radius:var(--cr);text-align:center;cursor:pointer;transition:border-color .15s,background .15s}.dropzone.drag-active{border-color:var(--a);background:color-mix(in srgb,var(--a) 8%,var(--s))}.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer}.dropzone span{color:var(--m);font-weight:450}.drop-overlay{position:fixed;inset:0;z-index:60;display:grid;place-content:center;background:color-mix(in srgb,var(--a) 14%,#ffffffd9);pointer-events:none}.drop-overlay div{display:grid;gap:6px;border:2px dashed var(--a);border-radius:var(--r);background:var(--s);padding:34px 44px;text-align:center;box-shadow:0 24px 60px #172b3740}.drop-overlay strong{font-size:19px}.drop-overlay span{color:var(--m)}.error{margin:0 0 14px;border-left:4px solid var(--danger);border-radius:var(--cr);background:color-mix(in srgb,var(--danger) 10%,var(--s));padding:14px;color:var(--danger)}.submit-row{position:sticky;bottom:0;z-index:3;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--b);border-radius:var(--r);background:color-mix(in srgb,var(--s) 96%,transparent);box-shadow:0 -8px 24px #172b3718;padding:14px 18px}.submit-row>span{color:#43835f}.submit-row button{min-width:190px;border:0;border-radius:var(--cr);background:var(--a);color:var(--ac);padding:12px 24px;font:inherit;font-weight:800;cursor:pointer}.submit-row button:disabled{opacity:.6;cursor:wait}
-    @media(max-width:760px){fieldset{padding:18px 16px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.intro{display:grid;gap:10px}.line-head{display:none}.service-line{grid-template-columns:1fr 1fr}.service-line>*{grid-column:1/-1}.service-line label:nth-child(3){grid-column:1}.service-line>strong{grid-column:2;grid-row:3;text-align:left}.service-line>.remove{grid-column:1/-1}.mobile-label{display:block;color:var(--m);font-size:12px}.attachment{align-items:flex-start}.attachment-actions{align-items:center}.submit-row>span{display:none}.submit-row button{width:100%}}
+    :host{display:block}.mbs{--danger:#c83c3c;font-family:var(--font);color:var(--t)}*{box-sizing:border-box}.intro{display:flex;justify-content:space-between;align-items:start;margin:0 0 24px}.intro h2{margin:0;font-size:24px;font-weight:600}.intro p{margin:6px 0 0;color:var(--m)}.intro>span{color:var(--m);font-size:13px}.mbs b{color:inherit}.intro b,label>b,.lookup>label>b,.diagnosis>label>b,.cell>label>b{color:var(--danger)}fieldset{border:1px solid var(--b);border-radius:var(--r);margin:0 0 22px;padding:24px 26px 26px;background:var(--s)}legend{padding:0 10px;font-size:18px;font-weight:700}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px 28px}.wide{grid-column:1/-1}h3{margin:4px 0 -4px;padding-top:12px;border-top:1px solid var(--b);font-size:16px}h3:first-child{border:0;padding-top:0}label,.lookup,.diagnosis{display:grid;gap:8px;font-size:14px;font-weight:700}.grid>label{display:flex;flex-wrap:wrap;align-content:start;align-items:center;column-gap:4px;row-gap:8px}.grid>label>input,.grid>label>select,.grid>label>small,.grid>label>mindbill-date-input{flex:0 0 100%}.grid>div.wide{display:grid;gap:8px;font-size:14px;font-weight:700}input,select{width:100%;min-height:46px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}.checkbox-label{display:flex;align-items:center;gap:8px}.checkbox-label input{width:18px;height:18px;min-height:18px;margin:0;flex:0 0 18px;padding:0}.service-line>*{min-width:0}input:focus,select:focus{outline:3px solid color-mix(in srgb,var(--a) 22%,transparent);border-color:var(--a)}.invalid input,.invalid select,.invalid-set{border-color:var(--danger)!important;background:color-mix(in srgb,var(--danger) 4%,var(--s))}.invalid>label{color:var(--danger)}small{color:var(--m);font-weight:450}.selected{color:#238655}.options{position:relative;z-index:4;max-height:300px;overflow:auto;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);box-shadow:0 14px 35px #172b3730}.options button{display:grid;width:100%;gap:3px;border:0;border-bottom:1px solid var(--b);background:var(--s);padding:12px 14px;text-align:left;color:var(--t);cursor:pointer}.options button:hover{background:color-mix(in srgb,var(--a) 7%,var(--s))}.options span{color:var(--m);font-size:12px}.quick,.chips{display:flex;flex-wrap:wrap;gap:8px}.quick button,.chips button{border:1px solid var(--b);border-radius:999px;background:var(--s);padding:7px 11px;color:var(--t);font:inherit;font-size:13px;cursor:pointer}.quick .on{border-color:var(--a);color:var(--a);background:color-mix(in srgb,var(--a) 8%,var(--s))}.chips button{border-color:color-mix(in srgb,var(--a) 40%,var(--b));background:color-mix(in srgb,var(--a) 7%,var(--s));font-weight:700}.line-head,.service-line{display:grid;grid-template-columns:1.5fr 1.35fr .8fr .5fr .7fr 36px;gap:14px;align-items:start}.line-head{padding:0 0 9px;color:var(--m);font-size:12px;font-weight:700}.service-line{border-top:1px solid var(--b);padding:12px 0}.service-line label,.service-line .cell{display:grid;gap:6px;font-size:14px;font-weight:700}.service-line strong{text-align:right;padding-top:12px}.remove{border:0;background:transparent;color:var(--m);font-size:25px;cursor:pointer}.mobile-label{display:none}.total{display:flex;justify-content:flex-end;gap:36px;border-top:1px solid var(--b);padding-top:14px;font-size:17px}.attachment{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid var(--b);border-radius:var(--cr);margin-bottom:10px;padding:14px 16px}.attachment.locked{border-color:#9fd6b4;background:#f3fcf6}.attachment>div:first-child{display:grid;gap:4px}.attachment span{color:var(--m);font-size:13px}.attachment-actions{display:flex;gap:8px}.attachment button{border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:8px 12px;color:var(--t);font-weight:700;cursor:pointer}.dropzone{position:relative;display:grid;min-height:170px;place-content:center;gap:8px;border:2px dashed color-mix(in srgb,var(--m) 60%,transparent);border-radius:var(--cr);text-align:center;cursor:pointer;transition:border-color .15s,background .15s}.dropzone.drag-active{border-color:var(--a);background:color-mix(in srgb,var(--a) 8%,var(--s))}.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer}.dropzone span{color:var(--m);font-weight:450}.drop-overlay{position:fixed;inset:0;z-index:60;display:grid;place-content:center;background:color-mix(in srgb,var(--a) 14%,#ffffffd9);pointer-events:none}.drop-overlay div{display:grid;gap:6px;border:2px dashed var(--a);border-radius:var(--r);background:var(--s);padding:34px 44px;text-align:center;box-shadow:0 24px 60px #172b3740}.drop-overlay strong{font-size:19px}.drop-overlay span{color:var(--m)}.error{margin:0 0 14px;border-left:4px solid var(--danger);border-radius:var(--cr);background:color-mix(in srgb,var(--danger) 10%,var(--s));padding:14px;color:var(--danger)}.submit-row{position:sticky;bottom:0;z-index:3;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--b);border-radius:var(--r);background:color-mix(in srgb,var(--s) 96%,transparent);box-shadow:0 -8px 24px #172b3718;padding:14px 18px}.submit-row>span{color:#43835f}.submit-row button{min-width:190px;border:0;border-radius:var(--cr);background:var(--a);color:var(--ac);padding:12px 24px;font:inherit;font-weight:800;cursor:pointer}.submit-row button:disabled{opacity:.6;cursor:wait}
+    .diagnosis-select{display:grid;gap:8px}.diagnosis-select .chips button{text-align:left;white-space:normal}.shared-diagnoses{margin:18px 0}.shared-diagnoses>label{margin-bottom:8px}.line-head.shared,.service-line.shared{grid-template-columns:1.6fr 1.35fr .5fr .7fr 36px}.line-head:not(.shared),.service-line:not(.shared){grid-template-columns:1.4fr 1fr 1.5fr .5fr .7fr 36px}
+    @media(max-width:760px){fieldset{padding:18px 16px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.intro{display:grid;gap:10px}.line-head{display:none}.service-line.shared,.service-line:not(.shared){grid-template-columns:1fr 1fr}.service-line>*{grid-column:1/-1}.service-line label:nth-child(3){grid-column:1}.service-line>strong{grid-column:2;grid-row:3;text-align:left}.service-line>.remove{grid-column:1/-1}.mobile-label{display:block;color:var(--m);font-size:12px}.attachment{align-items:flex-start}.attachment-actions{align-items:center}.submit-row>span{display:none}.submit-row button{width:100%}}
   `],
 })
-export class MindBillBillSubmissionComponent implements OnChanges {
+export class MindBillBillSubmissionComponent implements OnChanges, DoCheck, OnDestroy {
+  @Input() treatmentBilling = false;
   @Input() initialBill!: BrowserBillCreateInput;
+  @Input() idempotencyKey?: string;
   @Input() attachments: MindBillSubmissionAttachment[] = [];
   @Input() appearance: MindBillAngularAppearance = { preset: "mindbill" };
   @Input() sessionEndpoint = "/api/mindbill/session";
@@ -307,6 +317,10 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   diagnosisResults: BillDiagnosisCode[] = [];
   diagnosisOffset = 0;
   diagnosisBusy = false;
+  diagnosisStatus = '';
+  private diagnosisTimer?: ReturnType<typeof setTimeout>;
+  private diagnosisGeneration = 0;
+  private diagnosisDescriptions = new Map<string, string>();
   submitting = false;
   errorMessage = "";
   postalStatus = "";
@@ -326,9 +340,23 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   private postalTimer?: ReturnType<typeof setTimeout>;
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes["initialBill"] && this.initialBill) {
+    if (changes["initialBill"] || changes["sessionEndpoint"] || changes["getSession"] || changes["apiBaseUrl"]) {
+      ++this.procedureGeneration; ++this.diagnosisGeneration;
+      clearTimeout(this.procedureTimer); clearTimeout(this.diagnosisTimer);
+      this.remoteProcedures = []; this.procedureQuery = ''; this.procedureStatus = ''; this.procedureBusy = false;
+      this.diagnosisQuery = ''; this.diagnosisResults = []; this.diagnosisBusy = false; this.diagnosisStatus = '';
+    }
+    if (changes["initialBill"] && this.initialBill && treatmentDraftKey(this.initialBill) !== this.initialKey) {
+      this.initialKey = treatmentDraftKey(this.initialBill);
+      this.feeDetails = [];
+      this.independentDiagnoses = [];
+      this.lastFeeKey = "";
+      this.quotes.clear();
+      this.quoteErrors.clear();
       this.bill = deepCopyBill(this.initialBill);
       if (!this.bill.serviceLines.length) this.bill.serviceLines = [{ code: "", units: 1 }];
+      this.sharedDiagnoses = billSubmissionUsesSharedDiagnoses(this.bill);
+      if (this.sharedDiagnoses) this.bill = setBillSubmissionSharedDiagnoses(this.bill, this.bill.diagnoses);
       this.ensureTrailingLine();
       this.payerQuery = this.bill.claim.claimsAdministrator.name ?? "";
       this.subpayorOptions = [];
@@ -337,6 +365,106 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     if (changes["attachments"]) this.workingAttachments = this.attachments.map((item) => ({ ...item }));
     if (changes["attentionFields"]) this.attentionFieldSet = new Set(this.attentionFields);
   }
+
+  private initialKey = "";
+  private feeDetails: FeeDetails[] = [];
+  private quotes = new Map<string, BillFeeQuote>();
+  private quoteErrors = new Set<string>();
+  private quotePending = new Set<string>();
+  private quoteTimer?: ReturnType<typeof setTimeout>;
+  private procedureTimer?: ReturnType<typeof setTimeout>;
+  private procedureGeneration = 0;
+  private destroyed = false;
+  private lastFeeKey = "";
+  private independentDiagnoses: string[][] = [];
+  remoteProcedures: { code: string; description?: string }[] = [];
+  private procedureDescriptions = new Map<string, string>();
+  procedureQuery = '';
+  procedureBusy = false;
+  procedureStatus = "";
+  sharedDiagnoses = true;
+  readonly medicalLegal = isMedicalLegalCode;
+  readonly prolonged = isProlongedCode;
+  feeAssumptions(code: string): string {
+    const assumptions = code === "97110"
+      ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, or HPSA bonus."
+      : /^992\d{2}$/.test(code)
+        ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, or HPSA bonus."
+        : "Estimate uses the service date and the circumstances entered below.";
+    return `${assumptions} Saved practice rates apply when available. Choose Other circumstances if an assumption does not apply or an unrecorded fee agreement applies.`;
+  }
+  get isTreatment() { return this.treatmentBilling || this.bill.billingMode === "professional"; }
+  details(index: number): FeeDetails {
+    if (!this.feeDetails[index]) { const context = this.bill.serviceLines[index]?.feeContext; this.feeDetails[index] = { basis: "standard", providerKind: context?.therapyContext?.providerKind ?? context?.physicianContext?.providerKind ?? "", minutes: context?.therapyContext?.directOneOnOneMinutes, totalMinutes: context?.prolongedServiceContext?.totalMinutes ?? context?.therapyContext?.totalVisitMinutes, relatedEvaluationDate: context?.prolongedServiceContext?.relatedEvaluationDate, prolongedTimeBasis: context?.prolongedServiceContext?.ongoingPatientManagement && context.prolongedServiceContext.personallyPerformed && !context.prolongedServiceContext.timeCountedInOtherServices && context.prolongedServiceContext.completeSameDayServices ? "documented" : "" }; }
+    return this.feeDetails[index]!;
+  }
+  prolongedLeader(index: number) {
+    const line = this.bill.serviceLines[index]!;
+    const date = parseMindBillSubmissionDate(line.serviceDate ?? this.bill.service.date);
+    const leader = this.bill.serviceLines.findIndex(candidate => isProlongedCode(candidate.code) && parseMindBillSubmissionDate(candidate.serviceDate ?? this.bill.service.date) === date);
+    return leader < 0 ? index : leader;
+  }
+  private feeRequest(index: number) {
+    const line = this.bill.serviceLines[index]!;
+    let details = this.details(index);
+    if (isProlongedCode(line.code)) {
+      const shared = this.details(this.prolongedLeader(index));
+      details = { ...details, totalMinutes: shared.totalMinutes, relatedEvaluationDate: shared.relatedEvaluationDate, prolongedTimeBasis: shared.prolongedTimeBasis };
+    }
+    return billSubmissionFeeRequest(this.bill, line, billSubmissionCalculationContext(line.code, this.bill.serviceLocation.placeOfServiceCode, details, line.feeContext));
+  }
+  private quoteKey(index: number) { return index < 0 ? "" : treatmentDraftKey([this.feeRequest(index), this.bill.serviceLocation.address.state.trim().toUpperCase(), this.details(index).basis]); }
+  get totalIncomplete() { return this.isTreatment && this.bill.serviceLines.some(line => line.code.trim() && this.allowed(line) === null); }
+  feeFailed(index: number) { return this.quoteErrors.has(this.quoteKey(index)); }
+  retryFees() { this.quoteErrors.clear(); void this.refreshFees(); }
+  feeStatus(index: number) { if (this.bill.serviceLocation.address.state.trim().toUpperCase() !== "CA") return "Automatic fee calculation is currently available for California services."; if (this.details(index).basis === "adjustment") return "These circumstances require fee review before submission."; const key = this.quoteKey(index); const quote = this.quotes.get(key); if (quote?.status === "priced") return `Calculated fee: ${(quote.amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} · ${quote.basis === "payer_contract" ? "Saved practice rate" : "California fee schedule"}`; if (quote) return quote.reason; return this.quoteErrors.has(key) ? "Fee calculation unavailable. Check fee details and try again." : "Calculating fee…"; }
+  ngDoCheck() {
+    if (!this.isTreatment || !this.bill.serviceLines) return;
+    const key = treatmentDraftKey([this.bill.serviceLines.map((line, i) => line.code && !isMedicalLegalCode(line.code) ? this.quoteKey(i) : null), this.bill.serviceLocation.address.state]);
+    if (key === this.lastFeeKey) return;
+    this.lastFeeKey = key; clearTimeout(this.quoteTimer);
+    this.quoteTimer = setTimeout(() => void this.refreshFees(), 200);
+  }
+  private async refreshFees() {
+    await Promise.all(this.bill.serviceLines.map(async (line, index) => {
+      if (!line.code || isMedicalLegalCode(line.code)) return;
+      const request = this.feeRequest(index); const key = this.quoteKey(index);
+      if (this.quotes.has(key) || this.quotePending.has(key)) return;
+      if (this.bill.serviceLocation.address.state.trim().toUpperCase() !== "CA" || this.details(index).basis === "adjustment") { this.quoteErrors.add(key); this.changeDetector.markForCheck(); return; }
+      this.quotePending.add(key);
+      try { const quote = await this.referenceClient().quoteFee(request); if (!this.destroyed) { this.quotes.set(key, quote); this.quoteErrors.delete(key); } }
+      catch { this.quoteErrors.add(key); }
+      finally { this.quotePending.delete(key); if (!this.destroyed) this.changeDetector.markForCheck(); }
+    }));
+  }
+  searchProcedures(query: string) {
+    if (this.destroyed) return;
+    clearTimeout(this.procedureTimer); const generation = ++this.procedureGeneration;
+    this.procedureQuery = query; this.remoteProcedures = []; this.procedureBusy = true; this.procedureStatus = '';
+    this.procedureTimer = setTimeout(async () => {
+      try {
+        const page = await this.referenceClient().searchProcedureCodes({ query, limit: 60 });
+        if (this.destroyed || generation !== this.procedureGeneration) return;
+        this.remoteProcedures = page.results;
+        for (const item of page.results) if (item.description) this.procedureDescriptions.set(item.code.toUpperCase(), item.description);
+        this.procedureStatus = this.procedureComboOptions.length ? '' : 'No matching procedures. You can enter a custom code.';
+      } catch { if (!this.destroyed && generation === this.procedureGeneration) this.procedureStatus = 'Procedure search unavailable. You can enter a code.'; }
+      finally { if (!this.destroyed && generation === this.procedureGeneration) { this.procedureBusy = false; this.changeDetector.markForCheck(); } }
+    }, 180);
+  }
+  setSharedDiagnoses(shared: boolean) {
+    if (shared === this.sharedDiagnoses) return;
+    if (shared) {
+      this.independentDiagnoses = this.bill.serviceLines.map((_, index) => billSubmissionLineDiagnosisCodes(this.bill, index));
+      const codes = this.independentDiagnoses.find(selection => selection.length) ?? this.bill.diagnoses.slice(0, 4);
+      this.bill = setBillSubmissionSharedDiagnoses(this.bill, codes);
+    } else if (this.independentDiagnoses.length) {
+      this.bill = setBillSubmissionDiagnosisAssignments(this.bill, this.bill.serviceLines.map((_, index) => this.independentDiagnoses[index] ?? billSubmissionLineDiagnosisCodes(this.bill, index)));
+      this.independentDiagnoses = [];
+    }
+    this.sharedDiagnoses = shared; this.billChange.emit(this.bill);
+  }
+  ngOnDestroy() { this.destroyed = true; ++this.procedureGeneration; ++this.diagnosisGeneration; clearTimeout(this.diagnosisTimer); clearTimeout(this.quoteTimer); clearTimeout(this.procedureTimer); clearTimeout(this.searchTimer); clearTimeout(this.postalTimer); }
 
   get themeStyle(): Record<string, string> {
     const base = THEME[this.appearance.preset ?? "mindbill"] ?? THEME["mindbill"]!;
@@ -350,7 +478,14 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   }
 
   get procedureComboOptions(): MindBillComboOption[] {
-    return this.procedureOptions.map((item) => ({ id: item.code, label: item.code, detail: item.description }));
+    const tokens = this.procedureQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const local = this.procedureOptions.filter(item => tokens.every(token => `${item.code} ${item.description}`.toLowerCase().includes(token)));
+    const options = new Map<string, MindBillComboOption>();
+    for (const item of [...local, ...this.remoteProcedures]) {
+      const code = item.code.toUpperCase();
+      options.set(code, { id: code, label: code, detail: item.description || this.procedureDescription(code) });
+    }
+    return [...options.values()];
   }
 
   get taxonomyComboOptions(): MindBillComboOption[] {
@@ -447,19 +582,46 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     this.billChange.emit(this.bill);
   }
 
+  queryServiceDiagnoses(query: string): void { this.diagnosisQuery = query; this.searchDiagnoses(true); }
   searchDiagnoses(reset: boolean): void {
-    if (this.diagnosisBusy) return;
+    if (this.destroyed || (!reset && this.diagnosisBusy)) return;
     if (reset) { this.diagnosisOffset = 0; this.diagnosisResults = []; }
-    clearTimeout(this.searchTimer);
-    this.searchTimer = setTimeout(async () => {
-      this.diagnosisBusy = true;
+    clearTimeout(this.diagnosisTimer);
+    const generation = ++this.diagnosisGeneration, query = this.diagnosisQuery, offset = this.diagnosisOffset;
+    this.diagnosisBusy = true; this.diagnosisStatus = '';
+    this.diagnosisTimer = setTimeout(async () => {
       try {
-        const results = await this.referenceClient().searchDiagnosisCodes(this.diagnosisQuery, 60, this.diagnosisOffset);
+        const results = await this.referenceClient().searchDiagnosisCodes(query, 60, offset);
+        if (this.destroyed || generation !== this.diagnosisGeneration) return;
         this.diagnosisResults = reset ? results : [...this.diagnosisResults, ...results];
         this.diagnosisOffset = this.diagnosisResults.length;
-      } catch { if (reset) this.diagnosisResults = []; }
-      finally { this.diagnosisBusy = false; this.changeDetector.markForCheck(); }
+        for (const item of results) this.diagnosisDescriptions.set(item.code, item.description);
+      } catch { if (!this.destroyed && generation === this.diagnosisGeneration) this.diagnosisStatus = 'Diagnosis search unavailable. Try again.'; }
+      finally { if (!this.destroyed && generation === this.diagnosisGeneration) { this.diagnosisBusy = false; this.changeDetector.markForCheck(); } }
     }, reset ? 160 : 0);
+  }
+  serviceDiagnosisCodes(index?: number): string[] { return index === undefined ? this.bill.diagnoses : billSubmissionLineDiagnosisCodes(this.bill, index); }
+  diagnosisDescription(code: string): string { return this.diagnosisDescriptions.get(code) ?? this.quickDiagnoses.find(item => item.code === code)?.description ?? ''; }
+  canAddServiceDiagnosis(code: string, index?: number): boolean { const codes = this.serviceDiagnosisCodes(index); return !codes.includes(code) && codes.length < 4 && (index === undefined || this.bill.diagnoses.length < 12 || this.bill.diagnoses.includes(code)); }
+  serviceDiagnosisOptions(index?: number): MindBillComboOption[] {
+    const tokens = this.diagnosisQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const local = [...this.bill.diagnoses.map(code => ({ code, description: this.diagnosisDescription(code) })), ...this.quickDiagnoses]
+      .filter(item => tokens.every(token => `${item.code} ${item.description}`.toLowerCase().includes(token)));
+    const options = new Map<string, MindBillComboOption>();
+    for (const item of [...local, ...this.diagnosisResults]) if (this.canAddServiceDiagnosis(item.code, index)) options.set(item.code, { id: item.code, label: item.code, detail: item.description });
+    return [...options.values()];
+  }
+  selectServiceDiagnosis(option: MindBillComboOption, index?: number): void {
+    if (this.submitting || !this.canAddServiceDiagnosis(option.id, index)) return;
+    if (option.detail) this.diagnosisDescriptions.set(option.id, option.detail);
+    this.setServiceDiagnoses([...this.serviceDiagnosisCodes(index), option.id], index);
+    this.queryServiceDiagnoses('');
+  }
+  removeServiceDiagnosis(code: string, index?: number): void { if (!this.submitting) this.setServiceDiagnoses(this.serviceDiagnosisCodes(index).filter(item => item !== code), index); }
+  private setServiceDiagnoses(codes: string[], index?: number): void {
+    if (index === undefined) { this.independentDiagnoses = []; this.bill = setBillSubmissionSharedDiagnoses(this.bill, codes); }
+    else this.bill = setBillSubmissionLineDiagnoses(this.bill, index, codes);
+    this.invalidFields.delete('diagnoses'); this.billChange.emit(this.bill);
   }
 
   diagnosisScrolled(event: Event): void {
@@ -472,17 +634,20 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     if (this.hasDiagnosis(item.code)) this.removeDiagnosis(item.code);
     else this.addDiagnosis(item);
   }
-  addDiagnosis(item: BillDiagnosisCode): void { if (!this.hasDiagnosis(item.code)) this.bill.diagnoses.push(item.code); this.diagnosisQuery = ""; this.diagnosisResults = []; this.invalidFields.delete("diagnoses"); this.billChange.emit(this.bill); }
-  removeDiagnosis(code: string): void { this.bill.diagnoses = this.bill.diagnoses.filter((item) => item !== code); this.billChange.emit(this.bill); }
+  addDiagnosis(item: BillDiagnosisCode): void { this.selectServiceDiagnosis({ id: item.code, label: item.code, detail: item.description }); }
+  removeDiagnosis(code: string): void { this.removeServiceDiagnosis(code); }
+
 
   ensureTrailingLine(): void {
     const last = this.bill.serviceLines.at(-1);
-    if (!last || last.code.trim()) this.bill.serviceLines.push({ code: "", units: 1 });
+    if (!last || last.code.trim()) this.bill.serviceLines.push({ code: "", units: 1, ...(this.sharedDiagnoses ? { diagnosisPointers: this.bill.diagnoses.map((_, i) => i + 1) } : {}) });
     this.billChange.emit(this.bill);
   }
-  removeLine(index: number): void { this.bill.serviceLines.splice(index, 1); if (!this.bill.serviceLines.length) this.bill.serviceLines.push({ code: "", units: 1 }); this.ensureTrailingLine(); }
+  removeLine(index: number): void { this.independentDiagnoses.splice(index, 1); this.feeDetails.splice(index, 1); const hadRfa = this.bill.serviceLines.some(line => line.rfaItemId); this.bill.serviceLines.splice(index, 1); if (hadRfa && !this.bill.serviceLines.some(line => line.rfaItemId)) this.bill.service.authorizationNumber = null; if (!this.bill.serviceLines.length) this.bill.serviceLines.push({ code: "", units: 1 }); this.ensureTrailingLine(); }
   selectProcedure(index: number, option: MindBillComboOption): void {
-    this.bill.serviceLines[index]!.code = option.id;
+    const line = this.bill.serviceLines[index]!;
+    if (line.code !== option.id) { const hadRfa = Boolean(line.rfaItemId); delete line.charge; delete line.feeContext; delete line.rfaItemId; this.feeDetails[index] = { basis: "standard" }; if (hadRfa && !this.bill.serviceLines.some(item => item.rfaItemId)) this.bill.service.authorizationNumber = null; }
+    line.code = option.id;
     this.invalidFields.delete("serviceLines");
     this.ensureTrailingLine();
   }
@@ -496,17 +661,6 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     line.modifiers = (line.modifiers ?? []).filter((item) => item !== modifier);
     this.billChange.emit(this.bill);
   }
-  dxLetter(pointer: number): string { return String.fromCharCode(64 + pointer); }
-  hasDiagnosisPointer(line: BrowserBillCreateInput["serviceLines"][number], pointer: number): boolean {
-    return (line.diagnosisPointers ?? []).includes(pointer);
-  }
-  toggleDiagnosisPointer(index: number, pointer: number): void {
-    const line = this.bill.serviceLines[index]!;
-    line.diagnosisPointers = this.hasDiagnosisPointer(line, pointer)
-      ? (line.diagnosisPointers ?? []).filter((item) => item !== pointer)
-      : [...(line.diagnosisPointers ?? []), pointer].sort((left, right) => left - right);
-    this.billChange.emit(this.bill);
-  }
   setAuthorizationNumber(value: string): void {
     this.bill.service.authorizationNumber = value.trim() ? value : null;
     this.billChange.emit(this.bill);
@@ -516,8 +670,8 @@ export class MindBillBillSubmissionComponent implements OnChanges {
     this.invalidFields.delete("renderingProvider.taxonomy");
     this.billChange.emit(this.bill);
   }
-  procedureDescription(code: string): string { return this.procedureOptions.find((item) => item.code.toLowerCase() === code.trim().toLowerCase())?.description ?? ""; }
-  allowed(line: BrowserBillCreateInput["serviceLines"][number]): number | null { const base = this.procedureOptions.find((item) => item.code.toLowerCase() === line.code.trim().toLowerCase())?.allowedAmount; return base == null ? (line.charge ?? null) : Math.round(base * Math.max(1, line.units ?? 1) * 100) / 100; }
+  procedureDescription(code: string): string { return this.procedureDescriptions.get(code.trim().toUpperCase()) ?? this.procedureOptions.find((item) => item.code.toLowerCase() === code.trim().toLowerCase())?.description ?? ""; }
+  allowed(line: BrowserBillCreateInput["serviceLines"][number]): number | null { if (this.isTreatment && line.code && !isMedicalLegalCode(line.code)) { const index = this.bill.serviceLines.indexOf(line); const quote = this.quotes.get(this.quoteKey(index)); return quote?.status === "priced" ? quote.amountCents / 100 : null; } const base = this.procedureOptions.find((item) => item.code.toLowerCase() === line.code.trim().toLowerCase())?.allowedAmount; return base == null ? (line.charge ?? null) : Math.round(base * Math.max(1, line.units ?? 1) * 100) / 100; }
   get totalAllowed(): number { return this.bill.serviceLines.reduce((sum, line) => sum + (this.allowed(line) ?? 0), 0); }
 
   @HostListener("window:dragover", ["$event"])
@@ -593,6 +747,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       setTimeout(() => document.querySelector(".mbs .invalid,.mbs .invalid-set")?.scrollIntoView({ behavior: "smooth", block: "center" }));
       return false;
     }
+    if (this.isTreatment && this.bill.serviceLines.some((line, index) => line.code.trim() && (!Number.isFinite(line.units ?? 1) || (line.units ?? 1) <= 0 || !line.diagnosisPointers?.length || line.diagnosisPointers.length > 4 || line.diagnosisPointers.some(pointer => !Number.isInteger(pointer) || pointer < 1 || pointer > this.bill.diagnoses.length) || (!isMedicalLegalCode(line.code) && this.quotes.get(this.quoteKey(index))?.status !== "priced")))) { this.errorMessage = "Check service diagnoses, units, and fee details. Every treatment service needs a current priced fee before submitting."; return false; }
     return true;
   }
 
@@ -621,6 +776,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
 
   async submit(event: Event): Promise<void> {
     event.preventDefault();
+    if (this.submitting) return;
     this.errorMessage = "";
     if (!this.validate()) return;
     this.submitting = true;
@@ -629,16 +785,15 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       bill.patient.dateOfBirth = parseMindBillSubmissionDate(bill.patient.dateOfBirth ?? "") ?? bill.patient.dateOfBirth;
       bill.service.date = parseMindBillSubmissionDate(bill.service.date ?? "") ?? bill.service.date;
       bill.claim.dateOfInjury = parseMindBillSubmissionDate(bill.claim.dateOfInjury ?? "") ?? bill.claim.dateOfInjury;
-      bill.serviceLines = bill.serviceLines
-        .filter((line) => line.code.trim())
-        .map((line) => {
-          const charge = line.charge ?? this.allowed(line);
-          return charge == null ? line : { ...line, charge };
-        });
+      bill.serviceLines = this.bill.serviceLines.flatMap((line, index) => {
+        if (!line.code.trim()) return [];
+        const charge = this.isTreatment && !isMedicalLegalCode(line.code) ? this.allowed(line) : line.charge ?? this.allowed(line);
+        return [{ ...structuredClone(line), ...(charge == null ? {} : { charge }), ...(this.isTreatment && !isMedicalLegalCode(line.code) ? { feeContext: billSubmissionQuoteContext(this.feeRequest(index)) } : {}) }];
+      });
       const input: BrowserBillSubmissionInput = { bill, documents: await this.submissionDocuments() };
       const result = this.submitter
         ? await this.submitter(input)
-        : await createBillSubmissionClient({ sessionEndpoint: this.sessionEndpoint, ...(this.getSession ? { getSession: this.getSession } : {}), ...(this.apiBaseUrl ? { apiBaseUrl: this.apiBaseUrl } : {}) }).submitBill(input);
+        : await createBillSubmissionClient({ sessionEndpoint: this.sessionEndpoint, ...(this.getSession ? { getSession: this.getSession } : {}), ...(this.apiBaseUrl ? { apiBaseUrl: this.apiBaseUrl } : {}) }).submitBill(input, this.idempotencyKey ? { idempotencyKey: this.idempotencyKey } : undefined);
       this.submitted.emit(result);
     } catch (value) {
       const error = value instanceof Error ? value : new Error("The bill could not be submitted.");

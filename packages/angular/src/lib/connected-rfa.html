@@ -1,0 +1,73 @@
+<section class="mbrfa" [ngStyle]="theme">
+  <header><div><h2>Request for authorization</h2><p>Prepare, review, and track requested treatment.</p></div><button type="button" (click)="reload()" [disabled]="busy || loading">Reload saved request</button></header>
+  @if (loading) { <p role="status">Loading requests…</p> }
+  @if (error) { <p role="alert" class="error">{{ error }}</p> }
+  @if (reconcileRequired) { <p role="alert">Reload to confirm the saved state before another change.</p> }
+  @if (notice) { <p role="status">{{ notice }}</p> }
+  @if (showList && records.length) { <label>Saved requests<select [value]="record?.id ?? ''" (change)="select($any($event.target).value)" [disabled]="blocked || dirty"><option value="" disabled>Select a request</option>@for (item of records; track item.id) { <option [value]="item.id">{{ item.externalId || item.id }} · {{ item.status }} · revision {{ item.contentRevision }}</option> }</select></label> }
+  @if (dirty) { <p>Unsaved changes. Save the draft before preparing its preview or using lifecycle actions. Reload discards these edits.</p> }
+  @if (record) {
+    <section class="summary"><h3>{{ record.employeeName }} · {{ statusLabel }}</h3><p>Revision {{ record.contentRevision }}</p>
+      @if (record.signedAt) { <p>Signed {{ record.signedAt | date:'medium' }}</p> }
+      @if (record.readiness.missing.length) { <p>Still needed: @for (missing of record.readiness.missing; track missing; let last = $last) { {{ readinessLabel(missing) }}{{last ? '' : ', '}} }</p> }
+      <ul>@for (item of record.items; track item.id) { <li><strong>{{ item.procedureCode }} {{ item.serviceDescription }}</strong> · {{ item.outcome }} @if (item.authorizationNumber) { · Authorization {{ item.authorizationNumber }} }</li> }</ul>
+    </section>
+  }
+  @if (draft && editable) { <mindbill-rfa-draft-form [searchDiagnoses]="searchDiagnoses" [searchProcedures]="searchProcedures" [showExternalLinks]="showExternalLinks" [initialDraft]="draft" [onSave]="saveDraft" [appearance]="appearance" [disabled]="blocked" (dirtyChange)="draftChanged($event)" /> }
+  @if (record) {
+    <mindbill-rfa-authorization-destination [showExternalLinks]="showExternalLinks" [contextKey]="contextKey + ':' + record.id" [directory]="directory" [loading]="directoryLoading" [error]="directoryError" [disabled]="blocked" [appearance]="appearance" (destinationChange)="setDestination($event)" />
+    <details open><summary>Supporting documents and packet</summary><fieldset [disabled]="blocked || dirty">
+      @if (sourceDocuments.length) { <section aria-label="Available case documents"><h4>Available case documents</h4>
+        @for (source of sourceDocuments; track source.id) { <div class="source-document"><span>{{ source.label }} <small>{{ source.filename }}</small></span><button type="button" (click)="attachSource(source)">Attach</button></div> }
+      </section> }
+      <div class="grid">
+      <label>PDF document<input type="file" accept="application/pdf,.pdf" (change)="chooseFile($event)" /></label>
+      <label>Document type<select [(ngModel)]="documentType"><option value="clinical_report">Clinical report</option><option value="supporting_record">Supporting record</option><option value="ur_response">UR response</option><option value="imr_form">IMR form</option><option value="other">Delivery evidence / other</option></select></label>
+    </div><button type="button" (click)="upload()" [disabled]="!file">Upload document</button>
+    @for (document of currentDocuments; track document.id) { <label class="check"><input type="checkbox" [(ngModel)]="selectedDocuments[document.id]" /> {{ document.filename }} · {{ document.documentType }}</label> }
+    <button type="button" (click)="packet()" [disabled]="!record.signedAt">Download selected signed packet</button><p>Download prepares a PDF. It does not send a fax or email.</p></fieldset></details>
+    @if (editable) { <details><summary>Review and sign</summary><fieldset [disabled]="blocked || dirty">
+      <h4>Claims administrator contact for this request</h4>
+      <p>The selected authorization destination is included in the PDF. Add only contact details verified for this case and office. Leave unknown fields blank; a fax is not required for a postal contact.</p>
+      @if (destination) { <p>Selected {{ destination.method }}: {{ destination.destination }} @if (destination.phone) { · Phone: {{ destination.phone }} }</p> }
+      <div class="grid">
+        <label>Contact or office name<input [ngModel]="contactFields.contactName" (ngModelChange)="setContactField('contactName', $event)" maxlength="200" /></label>
+        <label>Phone<input type="tel" [ngModel]="destination?.phone ?? contactFields.phone" [readonly]="!!destination?.phone" (ngModelChange)="setContactField('phone', $event)" maxlength="30" /></label>
+        <label>Verified street address<input [ngModel]="contactFields.line1" (ngModelChange)="setContactField('line1', $event)" maxlength="200" /></label>
+        <label>City<input [ngModel]="contactFields.city" (ngModelChange)="setContactField('city', $event)" maxlength="100" /></label>
+        <label>State<input [ngModel]="contactFields.state" (ngModelChange)="setContactField('state', $event)" maxlength="2" /></label>
+        <label>ZIP / postal code<input [ngModel]="contactFields.postalCode" (ngModelChange)="setContactField('postalCode', $event)" maxlength="20" /></label>
+        <label>Verified fax (optional)<input type="tel" [ngModel]="destination?.method === 'fax' ? destination!.destination : contactFields.fax" (ngModelChange)="setContactField('fax', $event)" maxlength="30" [readonly]="destination?.method === 'fax'" [placeholder]="destination?.method === 'fax' ? destination!.destination : ''" /></label>
+        <label>Verified email (optional)<input type="email" [ngModel]="destination?.method === 'email' ? destination!.destination : contactFields.email" (ngModelChange)="setContactField('email', $event)" maxlength="254" [readonly]="destination?.method === 'email'" [placeholder]="destination?.method === 'email' ? destination!.destination : ''" /></label>
+      </div>
+      @if (hasContactFields) { <label class="check"><input type="checkbox" [ngModel]="contactConfirmed" (ngModelChange)="confirmContact($event)" /> I verified these contact details for the current case and authorization office.</label> }
+      @if (previewContactMissing) { <p role="status">Choose an authorization office above, or enter and confirm the verified case contact before preparing the preview.</p> }
+      <p>Describe each diagnosis for the physician's signing preview.</p>
+      @for (item of record.items; track item.id) { <label>{{ item.diagnosisCode }} · {{ item.serviceDescription }}<input [(ngModel)]="diagnosisDescriptions[item.id]" (ngModelChange)="invalidatePreview()" maxlength="500" /></label> }
+      <button type="button" (click)="preparePreview()" [disabled]="previewContactMissing">Prepare signing preview</button>
+      @if (previewUrl) { <p><a [href]="previewUrl" target="_blank" rel="noopener">Open exact signing preview (PDF)</a></p><label class="check"><input type="checkbox" [(ngModel)]="previewReviewed" /> I reviewed this exact preview and am authorized by the rendering physician to sign this request.</label><button type="button" (click)="sign()" [disabled]="!canSign">Sign reviewed request</button> }
+      @if (!actorReference) { <p>Your application must identify the authorized signing actor before signing is available.</p> }
+    </fieldset></details> }
+    @if (record.signedAt) {
+      <details><summary>Record external delivery or receipt</summary><p>Use actual evidence from your delivery service. This records an event; it does not send the packet.</p><fieldset [disabled]="blocked || dirty"><div class="grid">
+        <label>Direction<select [(ngModel)]="transmissionDirection"><option value="outbound">Outbound delivery</option><option value="inbound">Inbound receipt</option></select></label>
+        <label>Channel<select [(ngModel)]="transmissionChannel"><option value="fax">Fax</option><option value="email">Email</option></select></label>
+        <label>Event status<select [(ngModel)]="transmissionStatus"><option value="queued">Queued</option><option value="sent">Sent</option><option value="delivered">Delivered</option><option value="received">Received</option><option value="failed">Failed</option></select></label>
+        <label>Actual event time<input type="datetime-local" [(ngModel)]="occurredAt" /></label>
+        @if (transmissionStatus === 'received') { <label>Actual receipt time<input type="datetime-local" [(ngModel)]="receivedAt" /></label> }
+        <label>External delivery reference<input [(ngModel)]="providerMessageId" maxlength="255" /></label>
+        <label>Proof document<select [(ngModel)]="proofDocumentId"><option value="">Select evidence</option>@for (doc of record.documents; track doc.id) { <option [value]="doc.id">{{ doc.filename }}</option> }</select></label>
+      </div><p>Confirmed destination: {{ destination?.destination || 'Select an authorization destination above for outbound delivery.' }}</p><button type="button" (click)="recordTransmission()">Record external event</button></fieldset></details>
+      <details><summary>Record decisions from a UR response</summary><p>Enter each item's actual outcome from the received response. This does not approve treatment on behalf of the reviewer.</p><fieldset [disabled]="blocked || dirty"><div class="grid">
+        <label>Decision time<input type="datetime-local" [(ngModel)]="decidedAt" /></label>
+        <label>UR response document<select [(ngModel)]="responseDocumentId"><option value="">Select response</option>@for (doc of record.documents; track doc.id) { @if (doc.documentType === 'ur_response') { <option [value]="doc.id">{{ doc.filename }}</option> } }</select></label>
+        <label>IMR document (modified / denied)<select [(ngModel)]="imrDocumentId"><option value="">Select IMR form</option>@for (doc of record.documents; track doc.id) { @if (doc.documentType === 'imr_form') { <option [value]="doc.id">{{ doc.filename }}</option> } }</select></label>
+      </div>@for (item of decisions; track item.itemId) { <section><h4>{{ item.description }}</h4><div class="grid"><label>Outcome<select [(ngModel)]="item.outcome"><option value="">Leave unchanged</option><option value="approved">Approved</option><option value="modified">Modified</option><option value="denied">Denied</option></select></label>
+      @if (item.outcome && item.outcome !== 'denied') { <label>Authorization number<input [(ngModel)]="item.authorizationNumber" /></label><label>Authorized procedure (if specified)<input [(ngModel)]="item.authorizedProcedureCode" /></label><label>Authorized quantity (if specified)<input type="number" min="0.001" step="any" [(ngModel)]="item.authorizedQuantity" /></label><label>Authorized units (if specified)<input type="number" min="1" step="1" [(ngModel)]="item.authorizedUnits" /></label><label>Authorization start (if specified)<input type="date" [(ngModel)]="item.effectiveFrom" /></label><label>Authorization end (if specified)<input type="date" [(ngModel)]="item.effectiveTo" /></label> }
+      @if (item.outcome === 'modified' || item.outcome === 'denied') { <label>Decision reason<input [(ngModel)]="item.decisionReason" /></label><label>Reviewer name<input [(ngModel)]="item.reviewerName" /></label><label>Reviewer phone<input type="tel" [(ngModel)]="item.reviewerPhone" /></label> }
+      </div></section> }<button type="button" (click)="recordDecision()">Record documented item decisions</button></fieldset></details>
+    }
+    @if (record.transmissions.length || record.events.length) { <details><summary>Request history</summary><ul>@for (event of record.transmissions; track event.id) { <li>{{ event.occurredAt | date:'medium' }} · {{ event.direction }} {{ event.channel }} · {{ event.status }}</li> }@for (event of record.events; track event.id) { <li>{{ event.occurredAt | date:'medium' }} · {{ event.type }}</li> }</ul></details> }
+  }
+  @if (showExternalLinks) { <footer><a href="https://mindbill.org" target="_blank" rel="noopener noreferrer">Powered by MindBill</a></footer> }
+</section>

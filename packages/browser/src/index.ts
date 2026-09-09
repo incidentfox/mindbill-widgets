@@ -1,3 +1,5 @@
+export * from "./billing-operations-client";
+export * from "./rfa-client";
 export { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance } from "./rfa-directory";
 export type { RfaAuthorizationDestinationOption } from "./rfa-directory";
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
@@ -1065,7 +1067,7 @@ export type BillProcedureCodeSearchInput = {
 
 /** Catalog membership does not imply that a fee is available for a service date. */
 export type BillProcedureCodePage = {
-  results: Array<{ code: string }>;
+  results: Array<{ code: string; description?: string }>;
   total: number;
   limit: number;
   jurisdiction: "CA" | "NY" | "OWCP";
@@ -1655,7 +1657,7 @@ export function createBillLifecycleClient({
       throw new Error("Procedure-code search returned an invalid response.");
     }
     return {
-      results: body.results.flatMap((entry) => entry && typeof entry.code === "string" && entry.code.trim() ? [{ code: entry.code }] : []),
+      results: body.results.flatMap((entry) => entry && typeof entry.code === "string" && entry.code.trim() ? [{ code: entry.code, ...(typeof entry.description === "string" ? { description: entry.description } : {}) }] : []),
       total: body.total,
       limit: body.limit,
       jurisdiction: body.jurisdiction!,

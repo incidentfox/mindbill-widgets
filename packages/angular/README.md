@@ -200,3 +200,66 @@ Each emitted cell carries `{ sectionId, rowId, bucketId, refs, count }`, where `
 ```
 
 The session must be minted with the optional `organization:manage` permission. Each step saves independently through idempotent upserts that never delete records created elsewhere; the review step mirrors MindBill's onboarding checklist.
+
+
+## Treatment billing and unsigned drafts
+
+Set `[treatmentBilling]="true"` on `mindbill-bill-submission`, or supply a
+professional `initialBill.billingMode`. Procedure search, California fee quotes,
+saved practice rates, provider types, therapy minutes, and documented prolonged
+services use the same browser-session APIs as React. Charges come from a current
+server quote; changing a service date, code, units, modifiers, provider, payer,
+location, or calculation context invalidates its old amount. Incomplete or
+review-required fees prevent submission. Shared diagnoses apply up to four codes
+to all services; turn that option off to assign diagnoses per line.
+
+Import `MindBillDentalDraftEditorComponent` and `MindBillRfaDraftFormComponent`
+into your standalone Angular component for dental and authorization preparation:
+
+```html
+<mindbill-dental-draft-editor
+  [initialContent]="dentalContent"
+  [onSave]="saveDentalDraft"
+  (saved)="onDentalSaved($event)"
+/>
+<mindbill-rfa-draft-form
+  [initialDraft]="rfaDraft"
+  [onSave]="saveRfaDraft"
+  (saved)="onRfaSaved($event)"
+/>
+```
+
+The host supplies async callbacks (use arrow functions to retain `this`) that
+persist unsigned drafts through its authenticated server. These editors do not
+make network requests, sign, submit, or deliver documents. Equivalent initial
+objects preserve local edits; supply changed initial content or recreate the
+component when switching records. See [draft contracts and examples](../../docs/treatment-drafts.md#angular)
+for charge semantics, preserved fields, and save requirements.
+
+## Connected authorization workflow
+
+`MindBillConnectedRfaComponent` (`mindbill-connected-rfa`) connects unsigned draft
+creation, supporting documents, signing preview and explicit signature, authorization
+directory selection, packet download, and externally evidenced lifecycle events using
+short-lived browser sessions. `MindBillRfaAuthorizationDestinationComponent` is available
+separately. See [the Angular RFA workflow guide](../../docs/angular-rfa-workflow.md) for
+session scopes, saved identity requirements, optimistic concurrency, and treatment linkage.
+
+`MindBillBillSubmissionComponent` accepts `idempotencyKey` for a logical bill submission.
+`MindBillConnectedRfaComponent` accepts `createIdempotencyKey` for a logical request.
+Neither component should be given a permanent API key.
+
+## Connected billing workspace
+
+`MindBillConnectedBillingWorkspaceComponent` (`mindbill-connected-billing-workspace`)
+loads bill tasks, bill search, procedure reports, productivity, payment review, and
+selected-bill lifecycle through `sessionEndpoint` or `getSession`. It emits
+`billSelected` and `billingError`; enable `showCreateBill` or `showPostPayment` to
+emit host-owned `createBill` / `postPayment` navigation actions. The corresponding
+native connected report components can also be imported individually.
+
+The connected RFA signing preview includes the explicitly selected authorization
+fax/email and phone. Optional `[authorizationContact]` supplies verified case contact
+and postal details; the native review form can also collect them. Contact changes
+invalidate the preview and signing confirmation. Unknown addresses are left blank,
+and postal contacts do not require a fax. See the Angular RFA workflow guide above.

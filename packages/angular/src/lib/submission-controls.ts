@@ -46,9 +46,9 @@ export type MindBillComboOption = { id: string; label: string; detail?: string }
     </div>
   `,
   styles: [`
-    :host{display:block}
+    :host{display:block;min-width:0}
     .combo{position:relative}
-    input{width:100%;min-height:46px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}
+    input{box-sizing:border-box;min-width:0;width:100%;min-height:46px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}
     input:focus{outline:3px solid color-mix(in srgb,var(--a) 22%,transparent);border-color:var(--a)}
     input[aria-invalid="true"]{border-color:#c83c3c}
     .menu{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;max-height:320px;overflow:auto;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);box-shadow:0 14px 35px #172b3730}
@@ -69,6 +69,8 @@ export class MindBillComboBoxComponent {
   @Input() loadingMore = false;
   @Input() invalid = false;
   @Input() preserveValueOnOpen = false;
+  /** Disable when options have already been filtered by a remote search. */
+  @Input() filterOptions = true;
   @Input() ariaLabel = "";
   @Input() createOption?: (query: string) => MindBillComboOption | null;
   @Output() opened = new EventEmitter<void>();
@@ -82,7 +84,7 @@ export class MindBillComboBoxComponent {
 
   get visible(): MindBillComboOption[] {
     const q = this.query.trim().toLowerCase();
-    const matches = q
+    const matches = this.filterOptions && q
       ? this.options.filter((option) => `${option.id} ${option.label} ${option.detail ?? ""}`.toLowerCase().includes(q))
       : this.options;
     const custom = this.createOption?.(this.query) ?? null;
@@ -149,8 +151,8 @@ export class MindBillComboBoxComponent {
     @if (invalid) { <small>Use MM/DD/YYYY</small> }
   `,
   styles: [`
-    :host{display:block}
-    input{width:100%;min-height:46px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}
+    :host{display:block;min-width:0}
+    input{box-sizing:border-box;min-width:0;width:100%;min-height:46px;border:1px solid var(--b);border-radius:var(--cr);background:var(--s);padding:10px 12px;color:var(--t);font:inherit;font-weight:450}
     input:focus{outline:3px solid color-mix(in srgb,var(--a) 22%,transparent);border-color:var(--a)}
     input[aria-invalid="true"]{border-color:#c83c3c}
     small{display:block;margin-top:6px;color:#c83c3c;font-weight:450}
