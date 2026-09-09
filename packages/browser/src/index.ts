@@ -1,3 +1,5 @@
+export { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance } from "./rfa-directory";
+export type { RfaAuthorizationDestinationOption } from "./rfa-directory";
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
 export const DEFAULT_SESSION_ENDPOINT = "/api/mindbill/session";
 export { parseSecondReviewCorrection, type CorrectionDraft } from "./second-review-corrections";
@@ -515,6 +517,8 @@ export type BillLifecycleDelivery = {
 };
 
 export type BillClaimsAdministratorContact = {
+  location?: string | null;
+  method?: "fax" | "email";
   name?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -572,7 +576,11 @@ export type BillReviewPayerListInput = {
   offset?: number;
 };
 
+export type BillClaimsAdministratorAuthorizationStatus = "central_fax" | "central_email" | "claim_handling_location_routes" | "adjuster_specific_required" | "daisybill_unverified" | "profile_not_published";
+
 export type BillClaimsAdministratorDirectory = {
+  authorizationStatus?: BillClaimsAdministratorAuthorizationStatus;
+  authorizationSource?: { url: string; observedAt: string };
   id?: string;
   name?: string;
   type?: string | null;

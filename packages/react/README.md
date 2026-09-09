@@ -402,3 +402,9 @@ revision handling, charge semantics, and signing boundaries.
 ### Stable creation keys
 
 `BillSubmissionForm` accepts an optional `idempotencyKey`. Generate and persist it on the host backend once per logical case bill, return it with the authorized case state, and reuse it across retries and tabs. The form forwards it to the browser SDK's submission request. The host must still enforce unique case associations and verify the returned bill; a key or recovery callback is not database concurrency control. See `examples/quickstart` for the complete flow.
+
+## Authorization destinations
+
+`RfaAuthorizationDestination` provides an explicit office/contact choice for an RFA using claims-administrator directory data. Fax and email are separate options; missing or withdrawn profiles allow a fax confirmed with the handling adjuster. The host owns signing, destination confirmation, and delivery.
+
+See the [RFA directory guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/rfa-directory.md) for the `contextKey`, loading/error, and `onChange` contract.
