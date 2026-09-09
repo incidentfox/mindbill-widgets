@@ -1,3 +1,5 @@
+export * from "./billing-operations-client";
+export * from "./rfa-client";
 export { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance } from "./rfa-directory";
 export type { RfaAuthorizationDestinationOption } from "./rfa-directory";
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";

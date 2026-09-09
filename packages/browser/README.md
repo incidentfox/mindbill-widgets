@@ -174,3 +174,11 @@ See the [10-minute quickstart](https://docs.mindbill.org/quickstart).
 Claims-administrator directory responses include optional authorization status, source observation, and separate fax/email/telephone fields. `rfaAuthorizationDestinations(directory)` returns eligible choices without automatically selecting a destination; `normalizeRfaFax(value)` validates manual fax input.
 
 See the [RFA directory guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/rfa-directory.md) for classification and unavailable-route handling.
+
+## Treatment authorization
+
+`createRfaWorkflowClient` connects RFA drafts, revision-aware edits, document
+uploads, signing previews, explicit signing, packet downloads, external delivery
+records, and item decisions to the public API using origin-bound browser sessions.
+See [the connected RFA guide](../../docs/rfa-connected.md) for permissions,
+recovery, and the separate signing/delivery/authorization steps.
