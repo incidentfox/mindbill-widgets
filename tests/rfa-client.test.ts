@@ -5,7 +5,7 @@ const session={token:'mbes_synthetic',apiBaseUrl:'https://api.example.test'};
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
 describe('RFA browser workflow client',()=>{
   it('passes only explicitly supplied authorization contact with the signing preview',async()=>{
-    const fetcher=vi.fn().mockResolvedValue(json({data:{id:'snapshot-synthetic'}}));
+    const fetcher=vi.fn().mockImplementation(async()=>json({data:{id:'snapshot-synthetic'}}));
     const client=createRfaWorkflowClient({getSession:async()=>session,fetch:fetcher});
     const authorizationContact={contactName:'Synthetic handling office',phone:'555-555-0100',fax:'+14155550100',address:{line1:'100 Example Street',city:'Sacramento',state:'CA',postalCode:'95814'}};
     await client.signingPreview('rfa-synthetic',{diagnosisDescriptions:{'item-synthetic':'Wrist pain'},authorizationContact});
