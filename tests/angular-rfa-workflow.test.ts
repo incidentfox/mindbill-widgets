@@ -83,4 +83,25 @@ describe('native Angular RFA workflow', () => {
     expect(workflow.downloadDocument).not.toHaveBeenCalled(); expect(component.preview).toBeNull();
   });
 
+  it('loads and attaches a host document only on an explicit action using the current revision', async () => {
+    const workflow = client({ list: vi.fn(async () => ({ data: [record({ contentRevision: 4 })], nextCursor: null })), uploadDocument: vi.fn(async () => record({ contentRevision: 4 })) });
+    const pdf = new Blob(['%PDF-1.4 synthetic fixture'], { type: 'application/pdf' });
+    const source = { id: 'source_synthetic', label: 'Case report', filename: 'report.pdf', documentType: 'clinical_report' as const, loadBlob: vi.fn(async () => pdf) };
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.sourceDocuments = [source]; component.ngOnChanges(); await settle();
+    expect(source.loadBlob).not.toHaveBeenCalled(); expect(workflow.uploadDocument).not.toHaveBeenCalled();
+    await component.attachSource(source);
+    expect(source.loadBlob).toHaveBeenCalledTimes(1);
+    expect(workflow.uploadDocument).toHaveBeenCalledWith('rfa_synthetic', { file: pdf, filename: 'report.pdf', documentType: 'clinical_report', contentRevision: 4 }, expect.objectContaining({ idempotencyKey: expect.any(String) }));
+  });
+  it('never uploads a host document after switching cases while its bytes load', async () => {
+    let complete!: (blob: Blob) => void;
+    const workflow = client({ uploadDocument: vi.fn() });
+    const source = { id: 'source_synthetic', label: 'Case report', filename: 'report.pdf', documentType: 'clinical_report' as const, loadBlob: vi.fn(() => new Promise<Blob>(resolve => { complete = resolve; })) };
+    const component = instance(() => new MindBillConnectedRfaComponent()); component.initialDraft = draft; component.client = workflow; component.sourceDocuments = [source]; component.ngOnChanges(); await settle(); component.record = record();
+    const pending = component.attachSource(source);
+    component.initialDraft = { ...draft, claimId: 'claim_other' }; component.ngOnChanges(); await settle();
+    complete(new Blob(['%PDF-1.4 synthetic fixture'])); await pending;
+    expect(workflow.uploadDocument).not.toHaveBeenCalled(); expect(component.record).toBeNull(); expect(component.reconcileRequired).toBe(false);
+  });
+
 });

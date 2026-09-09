@@ -16,7 +16,11 @@
   @if (draft && editable) { <mindbill-rfa-draft-form [initialDraft]="draft" [onSave]="saveDraft" [appearance]="appearance" [disabled]="blocked" (dirtyChange)="draftChanged($event)" /> }
   @if (record) {
     <mindbill-rfa-authorization-destination [contextKey]="contextKey + ':' + record.id" [directory]="directory" [loading]="directoryLoading" [error]="directoryError" [disabled]="blocked" [appearance]="appearance" (destinationChange)="setDestination($event)" />
-    <details open><summary>Supporting documents and packet</summary><fieldset [disabled]="blocked || dirty"><div class="grid">
+    <details open><summary>Supporting documents and packet</summary><fieldset [disabled]="blocked || dirty">
+      @if (sourceDocuments.length) { <section aria-label="Available case documents"><h4>Available case documents</h4>
+        @for (source of sourceDocuments; track source.id) { <div class="source-document"><span>{{ source.label }} <small>{{ source.filename }}</small></span><button type="button" (click)="attachSource(source)">Attach</button></div> }
+      </section> }
+      <div class="grid">
       <label>PDF document<input type="file" accept="application/pdf,.pdf" (change)="chooseFile($event)" /></label>
       <label>Document type<select [(ngModel)]="documentType"><option value="clinical_report">Clinical report</option><option value="supporting_record">Supporting record</option><option value="ur_response">UR response</option><option value="imr_form">IMR form</option><option value="other">Delivery evidence / other</option></select></label>
     </div><button type="button" (click)="upload()" [disabled]="!file">Upload document</button>

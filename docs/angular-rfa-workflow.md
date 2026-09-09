@@ -114,3 +114,25 @@ emits `saved`, `saveError`, and `dirtyChange`. It never signs or delivers a requ
 Native treatment and workspace foundations reuse the existing Angular parity work
 (commits `76918a6` and `c7847a5`, Software Factory) and the connected workspace integration
 branch. React is not a runtime dependency of these Angular components.
+
+## Attach documents already held by the host
+
+Pass `sourceDocuments: MindBillRfaSourceDocument[]` to offer existing case PDFs:
+
+```ts
+const sourceDocuments = [{
+  id: 'clinical_report_synthetic', label: 'Clinical report',
+  filename: 'clinical-report.pdf', documentType: 'clinical_report' as const,
+  loadBlob: async () => {
+    const response = await fetch('/api/cases/case_synthetic/clinical-report');
+    if (!response.ok) throw new Error('The case document could not be loaded.');
+    return response.blob();
+  },
+}];
+```
+
+The host must authenticate and authorize that document endpoint for the current case.
+Each entry has an explicit **Attach** button. The SDK does not fetch or upload these
+files automatically. It checks that the case is unchanged after loading the bytes,
+then uploads against the saved request's current revision. The regular PDF file
+picker remains available. No document fixtures or synthetic defaults ship in the SDK.
