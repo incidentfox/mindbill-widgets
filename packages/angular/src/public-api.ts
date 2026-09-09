@@ -49,3 +49,14 @@ export type {
   ReportBillStatusOption,
   SendDuplicateBillInput,
 } from "@mindbill/browser";
+export { DentalDraftEditorComponent, DentalDraftEditorComponent as MindBillDentalDraftEditorComponent } from "./lib/dental-draft-editor.component";
+export { RfaDraftFormComponent, RfaDraftFormComponent as MindBillRfaDraftFormComponent } from "./lib/rfa-draft-form.component";
+export type { DentalDraftContentInput, DentalDraftLineInput, DentalAdaFormInput, DentalAttestationsInput, DentalConsentInput, DentalOrthodonticsInput, DentalProsthesisInput, RfaDraftInput, RfaDraftItemInput } from "./lib/treatment-drafts";
+export { dentalDraftChargeSummary, parseDentalCharge, validateDentalDraftContent, normalizeRfaDraft, validateRfaDraft } from "./lib/treatment-drafts";
+
+export * from "./lib/rfa-authorization-destination.component";
+export * from "./lib/connected-rfa.component";
+export * from "./lib/rfa-workflow-state";
+export * from "./lib/connected-billing-workspace.component";
+export * from "./lib/billing-operations";
+export type { RfaWorkflowClient, RfaRecord, RfaItem, RfaDocument, RfaSigningPreview, RfaAuthorizationDestinationOption } from "@mindbill/browser";
