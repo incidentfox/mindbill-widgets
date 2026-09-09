@@ -26,7 +26,6 @@ import { normalizeRfaDraft, RfaDraftInput, validateRfaDraft } from "./treatment-
       <div><label>Diagnosis (ICD-10)</label><mindbill-combo-box [ariaLabel]="'Diagnosis ' + (i + 1)" [value]="item.diagnosisCode" placeholder="Search code or diagnosis description…" [options]="lookup(item, 'diagnosis').options" [loading]="lookup(item, 'diagnosis').loading" [disabled]="disabled || busy" [filterOptions]="false" [createOption]="customDiagnosis" (opened)="searchCode(item, 'diagnosis', '')" (queryChange)="searchCode(item, 'diagnosis', $event)" (selected)="selectCode(item, 'diagnosis', $event)" />
         @if (lookup(item, 'diagnosis').error) { <small role="status">{{ lookup(item, 'diagnosis').error }}</small> }</div>
       <div><label>Procedure (CPT / HCPCS)</label><mindbill-combo-box [ariaLabel]="'Procedure ' + (i + 1)" [value]="item.procedureCode ?? ''" placeholder="Search code or procedure description…" [options]="lookup(item, 'procedure').options" [loading]="lookup(item, 'procedure').loading" [disabled]="disabled || busy" [filterOptions]="false" [createOption]="customProcedure" (opened)="searchCode(item, 'procedure', '')" (queryChange)="searchCode(item, 'procedure', $event)" (selected)="selectCode(item, 'procedure', $event)" />
-        @if (item.procedureCode) { <button type="button" (click)="clearProcedure(item)">Clear procedure</button> }
         @if (lookup(item, 'procedure').error) { <small role="status">{{ lookup(item, 'procedure').error }}</small> }</div>
       <label>Quantity<input type="number" [name]="'quantity'+i" [ngModel]="item.quantity" (ngModelChange)="setNumber(i, 'quantity', $event)" min="0.001" max="100000" step="any" /></label>
       <label>Units<input type="number" [name]="'units'+i" [ngModel]="item.units" (ngModelChange)="setNumber(i, 'units', $event)" min="1" max="100000" step="1" /></label>
@@ -99,7 +98,6 @@ export class RfaDraftFormComponent implements OnChanges, OnDestroy {
     }
     this.changed();
   }
-  clearProcedure(item: RfaDraftInput['items'][number]) { if (!this.disabled && !this.busy && this.draft?.items.includes(item) && item.procedureCode) { delete item.procedureCode; this.lookup(item, 'procedure').cancel(); this.changed(); } }
   removeItem(index: number) {
     const item = this.draft?.items[index];
     if (!this.disabled && !this.busy && this.draft && item && this.draft.items.length > 1) {

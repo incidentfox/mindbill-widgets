@@ -185,3 +185,5 @@ from the catalog; server validation still applies.
 Set `[showExternalLinks]="false"` on the connected component to hide its branding and
 directory-source links throughout the nested workflow. The standalone draft and
 authorization-destination components accept the same option. The default is `true`.
+
+Bill submission uses the same diagnosis selection pattern as React: a shared searchable selection or independent code/description chips per service line. Switching shared mode preserves independent assignments until the shared selection is changed. The SDK retains numeric pointers in the API payload while presenting actual diagnosis codes to users. Procedure menus show and search reference descriptions when available; imported fee amounts remain separate from authoritative fee quotes.
