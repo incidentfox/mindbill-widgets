@@ -419,3 +419,5 @@ Physician-administered injectable drug details are available inside the existing
 California anesthesia service lines collect actual elapsed minutes separately from the service quantity. The existing form supports documented physician-alone cases with modifier AA available in the default modifier dropdown, preserves the diagnosis selector, and requires a new estimate when the timing or circumstances change. See [California anesthesia](docs/california-anesthesia.md).
 
 Fee quote response validation and `BillFeeQuoteBasis` cover California reports, physician and therapy RBRVS, CLFS, simple dispensed drugs, DMEPOS, PADB, anesthesia, and practice contracts. Use browser 0.36.1 / React 0.60.2 or later for these fee families. See [procedure fees](docs/procedure-fees.md).
+
+RFA authorization routing: `RfaAuthorizationDestination` shows explicit office/fax/email choices from the claims-administrator directory. It does not sign or send requests. See [RFA directory integration](docs/rfa-directory.md) for lookup, status, and host delivery responsibilities.

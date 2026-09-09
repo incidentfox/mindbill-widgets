@@ -168,3 +168,9 @@ sections and first-seen-ordered rows with per-cell counts, click-through bill
 refs, and section/grand totals. Sections render even when empty.
 
 See the [10-minute quickstart](https://docs.mindbill.org/quickstart).
+
+## RFA directory routing
+
+Claims-administrator directory responses include optional authorization status, source observation, and separate fax/email/telephone fields. `rfaAuthorizationDestinations(directory)` returns eligible choices without automatically selecting a destination; `normalizeRfaFax(value)` validates manual fax input.
+
+See the [RFA directory guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/rfa-directory.md) for classification and unavailable-route handling.
