@@ -8,6 +8,15 @@ import { mindBillAngularAppearanceStyle, type MindBillAngularAppearance } from '
 import { treatmentDraftKey } from './submission-treatment';
 import { canEditRfa, rfaRecordDraft, rfaEditInput, validateRfaDecision, validateRfaTransmission } from './rfa-workflow-state';
 
+/** A host-authorized case document. Bytes are loaded only after an explicit Attach action. */
+export type MindBillRfaSourceDocument = {
+  id: string;
+  label: string;
+  filename: string;
+  documentType: RfaDocumentType;
+  loadBlob: () => Promise<Blob>;
+};
+
 type DecisionRow = { itemId: string; description: string; outcome: '' | RfaDecisionItemInput['outcome']; authorizationNumber: string; decisionReason: string; reviewerName: string; reviewerPhone: string; authorizedProcedureCode: string; authorizedQuantity: number | null; authorizedUnits: number | null; effectiveFrom: string; effectiveTo: string };
 /** Connected native Angular RFA workflow. Every write is an explicit, separate action. */
 @Component({ selector: 'mindbill-connected-rfa', standalone: true, imports: [CommonModule, FormsModule, RfaDraftFormComponent, MindBillRfaAuthorizationDestinationComponent], templateUrl: './connected-rfa.html', styleUrls: ['./connected-rfa.css'] })
@@ -25,6 +34,7 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
   @Input() actorReference = '';
   @Input() billingProviderId?: string;
   @Input() showList = true;
+  @Input() sourceDocuments: MindBillRfaSourceDocument[] = [];
   @Input() appearance?: MindBillAngularAppearance;
   @Output() changed = new EventEmitter<RfaRecord | null>();
   @Output() saved = new EventEmitter<RfaRecord>();
@@ -132,6 +142,18 @@ export class MindBillConnectedRfaComponent implements OnChanges, OnDestroy {
     if (!this.canSign || !this.record || !this.preview) return;
     const record = this.record, preview = this.preview;
     try { await this.mutation(() => this.workflow.sign(record.id, { snapshotId: preview.id, contentHash: preview.contentHash, renderingProviderId: preview.renderingProviderId, physicianAuthorized: true, actorReference: this.actorReference }, { idempotencyKey: crypto.randomUUID() }), 'Request signed. No delivery was initiated.'); } catch { /* surfaced by mutation */ }
+  }
+  async attachSource(source: MindBillRfaSourceDocument) {
+    if (!this.record || this.blocked || this.dirty) return;
+    const record = this.record, generation = this.generation, workflow = this.workflow;
+    try {
+      await this.mutation(async () => {
+        const file = await source.loadBlob();
+        if (generation !== this.generation) throw new Error('The case changed before the document was attached.');
+        if (file.size < 1 || file.size > 25 * 1024 * 1024 || !source.filename.toLowerCase().endsWith('.pdf')) throw new Error('Choose a PDF between 1 byte and 25 MB.');
+        return workflow.uploadDocument(record.id, { file, filename: source.filename, documentType: source.documentType, contentRevision: record.contentRevision }, { idempotencyKey: crypto.randomUUID() });
+      }, 'Case document attached.');
+    } catch { /* surfaced by mutation; stale case results are discarded */ }
   }
   chooseFile(event: Event) { this.file = (event.target as HTMLInputElement).files?.[0] ?? null; }
   async upload() {
