@@ -417,3 +417,5 @@ The default modifier dropdown includes professional/technical components (26/TC)
 Physician-administered injectable drug details are available inside the existing treatment service lines. The form keeps procedure billing units separate from NDC quantity and requires documented unit definitions and separately payable office-injection circumstances before requesting a fee. See [California injectable drugs](docs/california-injectable-drugs.md).
 
 California anesthesia service lines collect actual elapsed minutes separately from the service quantity. The existing form supports documented physician-alone cases with modifier AA available in the default modifier dropdown, preserves the diagnosis selector, and requires a new estimate when the timing or circumstances change. See [California anesthesia](docs/california-anesthesia.md).
+
+Fee quote response validation and `BillFeeQuoteBasis` cover California reports, physician and therapy RBRVS, CLFS, simple dispensed drugs, DMEPOS, PADB, anesthesia, and practice contracts. Use browser 0.36.1 / React 0.60.2 or later for these fee families. See [procedure fees](docs/procedure-fees.md).

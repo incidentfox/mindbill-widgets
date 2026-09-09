@@ -1186,13 +1186,20 @@ export type BillFeeQuoteInput = {
 /** Authoritative service, provider, payer and location fields come from the submitted bill. */
 export type BillFeeContext = Omit<BillFeeQuoteInput, "code" | "dateOfService" | "units" | "modifiers" | "chargeCents" | "billingProviderId" | "payerId" | "serviceZip" | "drug">;
 
+/** Fee families returned by the California and practice-contract quote endpoint. */
+export const BILL_FEE_QUOTE_BASES = [
+  "ca_report", "ca_physician_rbrvs", "ca_therapy_rbrvs", "ca_clfs",
+  "ca_simple_dispensed_drug", "ca_dmepos", "ca_padb", "ca_anesthesia", "payer_contract",
+] as const;
+export type BillFeeQuoteBasis = typeof BILL_FEE_QUOTE_BASES[number];
+
 export type BillFeeQuote =
   | {
     status: "priced";
     /** Total for the service line in cents, already accounting for units. */
     amountCents: number;
     scheduleMaximumCents: number;
-    basis: "ca_report" | "ca_physician_rbrvs" | "ca_therapy_rbrvs" | "ca_padb" | "ca_anesthesia" | "payer_contract";
+    basis: BillFeeQuoteBasis;
     anesthesia?: { actualMinutes: number; baseUnits: number; timeUnitsTenths: number; conversionFactorCents: number; locality: string };
     provenance: BillFeeSource[];
     notes: string[];
@@ -1659,7 +1666,7 @@ export function createBillLifecycleClient({
     const quote = body.data;
     if (!quote || !Array.isArray(quote.provenance)) throw new Error("Fee quote returned an invalid response.");
     if (quote.status === "priced") {
-      if (!Number.isSafeInteger(quote.amountCents) || quote.amountCents < 0 || !Number.isSafeInteger(quote.scheduleMaximumCents) || quote.scheduleMaximumCents < 0 || !["ca_report", "ca_physician_rbrvs", "ca_therapy_rbrvs"].includes(quote.basis) || !Array.isArray(quote.notes) || quote.notes.some((note) => typeof note !== "string")) throw new Error("Fee quote returned an invalid response.");
+      if (!Number.isSafeInteger(quote.amountCents) || quote.amountCents < 0 || !Number.isSafeInteger(quote.scheduleMaximumCents) || quote.scheduleMaximumCents < 0 || !BILL_FEE_QUOTE_BASES.includes(quote.basis) || !Array.isArray(quote.notes) || quote.notes.some((note) => typeof note !== "string")) throw new Error("Fee quote returned an invalid response.");
     } else if ((quote.status !== "requires_review" && quote.status !== "not_separately_payable") || typeof quote.reason !== "string") {
       throw new Error("Fee quote returned an invalid response.");
     }

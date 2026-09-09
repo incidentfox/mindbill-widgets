@@ -121,6 +121,9 @@ describe("browser fee quotes", () => {
   });
 
   it.each([
+    { ...priced, basis: "unknown_fee_family" },
+    { ...priced, scheduleMaximumCents: -1 },
+    { ...priced, notes: [123] },
     { ...priced, amountCents: null },
     { ...priced, amountCents: -1 },
     { ...priced, amountCents: 1.2 },
