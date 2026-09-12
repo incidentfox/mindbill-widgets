@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { billAgingBucket, type BillAgingBucketId, type BillingDashboardBill } from "./billing-dashboard";
+import { acceptedNoResponseLabel } from "./bill-status-label";
 
 export type BillStatusAgingCell = {
   state: string;
@@ -55,6 +56,7 @@ const DEFAULT_STATE_ORDER = [
   "sent",
   "submitted",
   "accepted",
+  "accepted_no_response",
   "processed",
   "paid",
   "underpaid",
@@ -68,7 +70,7 @@ const DEFAULT_STATE_ORDER = [
 ];
 
 const money = (value: number) => Number(value || 0).toLocaleString(undefined, { style: "currency", currency: "USD" });
-const stateLabel = (state: string) => state.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const stateLabel = (state: string) => acceptedNoResponseLabel(state) ?? state.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 const emptyCell = (state: string, bucket: BillAgingBucketId | "total"): BillStatusAgingCell => ({ state, bucket, count: 0, balance: 0, bills: [] });
 

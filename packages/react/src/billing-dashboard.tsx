@@ -4,6 +4,7 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useMemo, useState } from "react";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { acceptedNoResponseLabel } from "./bill-status-label";
 
 export type BillingDashboardBill = {
   id: string;
@@ -94,7 +95,7 @@ const css = `
 
 const terminalStates = new Set(["closed", "voided", "cancelled"]);
 const money = (value: number) => Number(value || 0).toLocaleString(undefined, { style: "currency", currency: "USD" });
-const stateLabel = (state: string) => state.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const stateLabel = (state: string) => acceptedNoResponseLabel(state) ?? state.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export function billAgingDays(bill: BillingDashboardBill, now = new Date()): number {
   if (Number.isFinite(bill.agingDays)) return Math.max(0, Math.floor(bill.agingDays!));

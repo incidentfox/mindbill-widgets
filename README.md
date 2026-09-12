@@ -276,6 +276,8 @@ This route uses your existing authentication and customer-access functions. The 
 
 After `BillSubmissionForm` returns `billId`, render this component with that ID. For a compact read-only surface, use `ConnectedBillStatus` with the same session endpoint. For a custom interface, use `useBillLifecycle` or `useBillStatus`. Store the canonical `billId` for navigation and webhook correlation while retaining `externalId` as the host case reference and a separate stable idempotency key for retries. Signed webhooks remain the durable source of truth.
 
+The server's `accepted_no_response` status means the applicable response deadline has passed without a recorded payer response. It stays at the **Accepted** progress stage and displays **Accepted – No Response**. Lifecycle and status responses can carry the coarse `state: "accepted"` with `nativeStatus: "accepted_no_response"`; connected React components preserve that detail. When rendering `BillStatusSummary` directly, pass both `status={state}` and `nativeStatus`. A later processed or closed state takes precedence over stale native detail. Dashboard and status-aging matrix inputs use `state: "accepted_no_response"` to retain the separate status row. Bill age alone does not determine whether a payer response is overdue; the server owns deadline classification.
+
 ## Server-side lifecycle calls
 
 The same bill ID is used for every operation:

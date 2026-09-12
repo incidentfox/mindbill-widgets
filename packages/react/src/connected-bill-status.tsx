@@ -376,6 +376,7 @@ export function ConnectedBillStatus({
   if (!status.data) return null;
   return <BillStatusSummary
     status={status.data.state}
+    nativeStatus={status.data.nativeStatus}
     submittedAt={status.data.submittedAt}
     agingDays={status.data.agingDays}
     updatedAt={status.data.updatedAt}

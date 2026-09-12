@@ -1028,6 +1028,7 @@ describe("bill lifecycle surfaces", () => {
   it("maps native lifecycle states into the compact progress rail", () => {
     expect(billLifecycleStage("submitted")).toBe("submitted");
     expect(billLifecycleStage("accepted")).toBe("accepted");
+    expect(billLifecycleStage("accepted_no_response")).toBe("accepted");
     expect(billLifecycleStage("rejected")).toBe("submitted");
     expect(billLifecycleStage("second_review")).toBe("submitted");
     expect(billLifecycleStage("processed")).toBe("processed");
@@ -1099,6 +1100,21 @@ describe("bill lifecycle surfaces", () => {
     expect(billLifecycleDisplayLabel("submitted", "SENT")).toBe("Sent");
     expect(billLifecycleDisplayLabel("second_review", "appealing")).toBe("Second Review sent");
     expect(billLifecycleDisplayLabel("partially_paid")).toBe("Partially paid");
+  });
+
+  it("preserves overdue native status only while a bill remains accepted", () => {
+    expect(billLifecycleDisplayLabel("accepted", "accepted_no_response")).toBe("Accepted – No Response");
+    expect(billLifecycleDisplayLabel("accepted_no_response")).toBe("Accepted – No Response");
+    expect(billLifecycleDisplayLabel("ACCEPTED", "ACCEPTED_NO_RESPONSE")).toBe("Accepted – No Response");
+    expect(billLifecycleDisplayLabel("accepted", "accepted")).toBe("Accepted");
+    expect(billLifecycleDisplayLabel("processed", "accepted_no_response")).toBe("Processed");
+    expect(billLifecycleDisplayLabel("closed", "accepted_no_response")).toBe("Closed");
+    expect(billLifecycleProgressSteps("accepted_no_response")).toEqual([
+      { id: "submitted", label: "Sent", status: "complete" },
+      { id: "accepted", label: "Accepted", status: "current" },
+      { id: "processed", label: "Processed", status: "upcoming" },
+      { id: "closed", label: "Closed", status: "upcoming" },
+    ]);
   });
 
   it("keeps static history rows selectable and wires authenticated document previews", () => {

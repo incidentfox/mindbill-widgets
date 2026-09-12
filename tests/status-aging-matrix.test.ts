@@ -30,6 +30,20 @@ const fixtures = [
 ];
 
 describe("React status × aging matrix", () => {
+  it("keeps overdue response bills next to accepted with a distinct label", () => {
+    const bills = [
+      bill({ id: "synthetic_closed", state: "closed" }),
+      bill({ id: "synthetic_overdue", state: "accepted_no_response", agingDays: 70 }),
+      bill({ id: "synthetic_accepted", state: "accepted", agingDays: 70 }),
+      bill({ id: "synthetic_processed", state: "processed" }),
+    ];
+    const matrix = buildBillStatusAgingMatrix(bills);
+    expect(matrix.rows.map((row) => row.state)).toEqual(["accepted", "accepted_no_response", "processed", "closed"]);
+    expect(matrix.rows[1]!.label).toBe("Accepted – No Response");
+    expect(matrix.rows[1]!.total.bills.map((bill) => bill.id)).toEqual(["synthetic_overdue"]);
+    expect(buildBillStatusAgingCsv(bills)).toContain('"Accepted – No Response","0","0","1","0","1"');
+  });
+
   it("buckets bills by lifecycle state and aging days with totals", () => {
     const matrix = buildBillStatusAgingMatrix(fixtures);
     expect(matrix.rows.map((row) => row.state)).toEqual([
