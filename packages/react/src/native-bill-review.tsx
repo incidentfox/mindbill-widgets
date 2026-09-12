@@ -3,6 +3,7 @@
 import { sanitizeBillReviewSaveInput } from "@mindbill/browser";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
+import { acceptedNoResponseLabel } from "./bill-status-label";
 import type { CSSProperties, FormEvent, KeyboardEvent, ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -1086,6 +1087,8 @@ export function BillReviewForm({
 
 export type BillStatusSummaryProps = {
   status: string;
+  /** Detailed server status, preserved when the canonical status is accepted. */
+  nativeStatus?: string;
   submittedAt?: string | null;
   agingDays?: number | null;
   updatedAt?: string | null;
@@ -1106,11 +1109,11 @@ export type BillStatusAction = {
   disabled?: boolean;
 };
 
-export function BillStatusSummary({ status, submittedAt, agingDays, updatedAt, totalCharge, totalPaid, balanceDue, actions = [], className, style, appearance }: BillStatusSummaryProps): ReactElement {
+export function BillStatusSummary({ status, nativeStatus, submittedAt, agingDays, updatedAt, totalCharge, totalPaid, balanceDue, actions = [], className, style, appearance }: BillStatusSummaryProps): ReactElement {
   return <section className={["mb-native-status", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{NATIVE_BILL_REVIEW_STYLES}</style>
     <style>{NATIVE_THEME_OVERRIDE_STYLES}</style>
-    <div className="mb-native-status-copy"><span className="mb-native-eyebrow">Bill status</span><h3>{status.replaceAll("_", " ")}</h3><p>{submittedAt ? `Submitted ${new Date(submittedAt).toLocaleDateString()}` : "Not submitted"}{agingDays == null ? "" : ` · ${agingDays} day${agingDays === 1 ? "" : "s"} old`}{updatedAt ? ` · Updated ${new Date(updatedAt).toLocaleDateString()}` : ""}</p></div>
+    <div className="mb-native-status-copy"><span className="mb-native-eyebrow">Bill status</span><h3>{acceptedNoResponseLabel(status, nativeStatus) ?? status.replaceAll("_", " ")}</h3><p>{submittedAt ? `Submitted ${new Date(submittedAt).toLocaleDateString()}` : "Not submitted"}{agingDays == null ? "" : ` · ${agingDays} day${agingDays === 1 ? "" : "s"} old`}{updatedAt ? ` · Updated ${new Date(updatedAt).toLocaleDateString()}` : ""}</p></div>
     <dl><div><dt>Charged</dt><dd>{money(totalCharge)}</dd></div><div><dt>Paid</dt><dd>{money(totalPaid)}</dd></div><div><dt>Balance</dt><dd>{money(balanceDue)}</dd></div></dl>
     {actions.length ? <div className="mb-native-status-actions">{actions.map((action) => <button key={action.id} type="button" className={`mb-native-button ${action.primary ? "primary" : "secondary"}`} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>)}</div> : null}
   </section>;

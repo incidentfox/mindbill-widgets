@@ -13,6 +13,7 @@ import type {
 } from "@mindbill/browser";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
+import { acceptedNoResponseLabel } from "./bill-status-label";
 
 type SurfaceProps = {
   appearance?: MindBillReactAppearance;
@@ -270,6 +271,7 @@ export function billLifecycleStage(state: string): BillLifecycleStage {
   const value = state.toLowerCase();
   if (value.includes("closed") || value.includes("written_off")) return "closed";
   if (value.includes("second_review") || value.includes("appeal") || value.includes("reject")) return "submitted";
+  if (value === "accepted_no_response") return "accepted";
   if (value.includes("processed") || value.includes("paid") || value.includes("denied") || value.includes("partial") || value.includes("response") || value.includes("ibr") || value.includes("lien")) return "processed";
   if (value.includes("accepted")) return "accepted";
   return "submitted";
@@ -323,6 +325,8 @@ export function billLifecycleProgressSteps(state: string, options?: BillLifecycl
 /** Returns the end-user label for a canonical lifecycle state. */
 export function billLifecycleDisplayLabel(state: string, nativeStatus?: string): string {
   const value = state.toLowerCase();
+  const noResponseLabel = acceptedNoResponseLabel(state, nativeStatus);
+  if (noResponseLabel) return noResponseLabel;
   if (value === "submitted") return "Sent";
   if (value === "second_review") return "Second Review sent";
   if (value === "rejected") return "Rejected";
