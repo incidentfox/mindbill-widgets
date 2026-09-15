@@ -1,3 +1,5 @@
+import type { ClaimForm, BillFormData, BillItemFormData, BilledDrug } from "../../browser/src/claim-forms";
+export type * from "../../browser/src/claim-forms";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const MINDBILL_API_BASE_URL = "https://app.mindbill.org";
@@ -85,22 +87,7 @@ export type ServiceLocationSnapshot = {
   placeOfServiceCode: string;
 };
 
-export type BilledDrug = {
-  ndcNumber: string;
-  metricQuantity: string;
-  unitOfMeasure: "UN" | "ML" | "GR";
-  administered?: {
-    drugName: string;
-    administeredAmount: string;
-    doseUnit: "mg" | "mcg" | "g" | "mL" | "units";
-    hcpcsCode: string;
-    amountPerHcpcsUnit: string;
-    amountPerNdcUnit: string;
-    hcpcsUnitSource: string;
-    productLabelSource: string;
-    unitDefinitionsVerified: true;
-  };
-};
+
 
 /** Documented facts for a single personally performed physician anesthesia service. */
 export type CaAnesthesiaContext = {
@@ -136,6 +123,7 @@ export type ServiceLine = {
   /** One-based pointers into `diagnoses`, matching CMS-1500 box 24E. */
   diagnosisPointers?: number[];
   drug?: BilledDrug;
+  formData?: BillItemFormData;
   feeContext?: { padbContext?: CaPadbContext; anesthesiaContext?: CaAnesthesiaContext };
 };
 
@@ -143,6 +131,8 @@ export type CreateBillRequest = {
   /** Stable report, case, or work-item ID in your system. */
   externalId?: string;
   billingMode?: "med_legal" | "professional";
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   patient: PatientSnapshot;
   claim: ClaimSnapshot;
   service: {
@@ -189,6 +179,8 @@ export type Bill = {
   externalId: string | null;
   state: string;
   billingMode: "med_legal" | "professional";
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   billNumber: number | null;
   patient: {
     firstName: string;

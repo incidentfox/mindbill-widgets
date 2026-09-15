@@ -1,3 +1,5 @@
+import type { ClaimForm, BillFormData, BillItemFormData, BilledDrug } from "./claim-forms";
+export * from "./claim-forms";
 export { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance } from "./rfa-directory";
 export type { RfaAuthorizationDestinationOption } from "./rfa-directory";
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
@@ -22,7 +24,7 @@ export type BillReviewBillingProvider = {
   taxIdConfigured?: boolean;
   taxIdLast4?: string;
   npi: string;
-  billType: "Professional" | "Institutional";
+  billType: "Professional" | "Institutional" | "Dental" | "Pharmacy";
   phone?: string;
   billingStreet?: string;
   billingCity?: string;
@@ -69,6 +71,8 @@ export type BillReviewLineItem = {
   serviceDate?: string | null;
   serviceDateEnd?: string | null;
   diagnosisPointers?: number[];
+  formData?: BillItemFormData;
+  drug?: BilledDrug;
 };
 
 export type BillReviewAttachment = {
@@ -179,6 +183,8 @@ export type BillReviewData = {
     status: string;
     transmissionState?: string;
     billingMode: "med_legal" | "professional";
+    claimForm?: ClaimForm;
+    formData?: BillFormData;
     dos: string;
     dosEnd?: string | null;
     authorizationNumber?: string | null;
@@ -226,6 +232,7 @@ export type BillReviewData = {
 };
 
 export type BillReviewSaveInput = {
+  formData?: BillFormData;
   claimsAdminId: string;
   /** The chosen payer (subpayor) when the claims administrator requires payer selection. */
   payerId?: string;
@@ -258,6 +265,8 @@ export type BillReviewSaveInput = {
     serviceDate?: string | null;
     serviceDateEnd?: string | null;
     diagnosisPointers?: number[];
+    formData?: BillItemFormData;
+    drug?: BilledDrug;
   }>;
 };
 
@@ -281,6 +290,7 @@ export function sanitizeBillReviewSaveInput(
 ): BillReviewSaveInput {
   return {
     claimsAdminId: input.claimsAdminId,
+    ...(input.formData !== undefined ? { formData: input.formData } : {}),
     ...(input.payerId !== undefined ? { payerId: input.payerId } : {}),
     ...(input.patientOverrides ? {
       patientOverrides: pickDefined(input.patientOverrides, [
@@ -319,7 +329,7 @@ export function sanitizeBillReviewSaveInput(
     } : {}),
     lineItems: input.lineItems.map((line) => pickDefined(line, [
       "id", "code", "modifiers", "units", "charge", "serviceDate",
-      "serviceDateEnd", "diagnosisPointers",
+      "serviceDateEnd", "diagnosisPointers", "formData", "drug",
     ]) as BillReviewSaveInput["lineItems"][number]),
   };
 }
@@ -928,6 +938,8 @@ export type BrowserBillAddress = {
 export type BrowserBillCreateInput = {
   externalId?: string;
   billingMode?: "med_legal" | "professional";
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   patient: {
     id?: string;
     externalId?: string;
@@ -978,6 +990,7 @@ export type BrowserBillCreateInput = {
     serviceDate?: string;
     serviceDateEnd?: string | null;
     diagnosisPointers?: number[];
+    formData?: BillItemFormData;
     /** Calculation context revalidated by the server before bill creation. */
     feeContext?: BillFeeContext;
     drug?: BilledDrug;
@@ -1081,22 +1094,7 @@ export type BillFeeSource = {
 };
 
 /** Drug identifiers and quantities printed on the professional claim. */
-export type BilledDrug = {
-  ndcNumber: string;
-  metricQuantity: string;
-  unitOfMeasure: "UN" | "ML" | "GR";
-  administered?: {
-    drugName: string;
-    administeredAmount: string;
-    doseUnit: "mg" | "mcg" | "g" | "mL" | "units";
-    hcpcsCode: string;
-    amountPerHcpcsUnit: string;
-    amountPerNdcUnit: string;
-    hcpcsUnitSource: string;
-    productLabelSource: string;
-    unitDefinitionsVerified: true;
-  };
-};
+
 
 /** Documented facts for a single personally performed physician anesthesia service. */
 export type CaAnesthesiaContext = {
@@ -1859,7 +1857,7 @@ export type OrganizationBillingProviderInput = {
   taxIdType?: "EIN" | "SSN";
   /** Read-only metadata; omit taxId on updates to preserve a saved SSN. */
   taxIdLast4?: string; taxIdConfigured?: boolean;
-  billType?: "Professional" | "Institutional"; phone?: string;
+  billType?: "Professional" | "Institutional" | "Dental" | "Pharmacy"; phone?: string;
   billingStreet?: string; billingCity?: string; billingState?: string; billingZip?: string;
 };
 

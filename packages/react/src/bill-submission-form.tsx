@@ -3,11 +3,15 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CLAIM_FORM_LABELS,
   createBillReferenceClient,
   createBillSubmissionClient,
   type BillDeliveryOptions,
   type BillFeeQuote,
   type BilledDrug,
+  type ClaimForm,
+  type BillFormData,
+  type BillItemFormData,
   type BillFeeContext,
   type BillFeeQuoteInput,
   type BillProcedureCodeSearchInput,
@@ -100,6 +104,8 @@ export type BillSubmissionTaxonomyOption = { code: string; description: string }
 export type BillSubmissionPostalPlace = { city: string; state: string };
 
 export type BillSubmissionInput = {
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   externalId?: string;
   billingMode?: "med_legal" | "professional";
   patient: {
@@ -139,6 +145,7 @@ export type BillSubmissionInput = {
     /** Context used for the displayed fee, revalidated when submitting. */
     feeContext?: BillFeeContext;
     drug?: BilledDrug;
+    formData?: BillItemFormData;
     /** Authorized RFA item associated with this procedure. Cleared when its code changes. */
     rfaItemId?: string;
   }>;
@@ -482,7 +489,7 @@ function blankLine(): BillSubmissionInput["serviceLines"][number] {
   return { code: "", modifiers: [], units: 1 };
 }
 function lineHasContent(line: BillSubmissionInput["serviceLines"][number]): boolean {
-  return Boolean(line.code.trim() || line.modifiers?.length || line.charge != null);
+  return Boolean(line.code.trim() || line.modifiers?.length || line.charge != null || line.formData || line.drug);
 }
 export function ensureTrailingBillSubmissionLine(
   lines: BillSubmissionInput["serviceLines"],
@@ -627,6 +634,7 @@ export function setBillSubmissionLineDiagnoses(bill: BillSubmissionInput, index:
 
 function cloneInitialBill(bill: BillSubmissionInput, treatmentBilling = false): BillSubmissionInput {
   const cloned = cloneBill(bill);
+  if (cloned.claimForm && cloned.claimForm !== "cms1500") cloned.billingMode = "professional";
   if (treatmentBilling && cloned.serviceLines.some((line) => line.code.trim() && !isMedicalLegalCode(line.code))) cloned.billingMode = "professional";
   if (cloned.billingMode !== "professional") cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
   return billSubmissionUsesSharedDiagnoses(cloned) ? setBillSubmissionSharedDiagnoses(cloned, cloned.diagnoses ?? []) : cloned;
@@ -675,6 +683,7 @@ function cloneBill(bill: BillSubmissionInput): BillSubmissionInput {
 }
 export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissionValidation {
   const errors: Record<string, string> = {};
+  const professionalForm = !bill.claimForm || bill.claimForm === "cms1500";
   const required = (path: string, value: unknown, message: string) => { if (typeof value !== "string" || !value.trim()) errors[path] = message; };
   required("patient.firstName", bill.patient.firstName, "Enter the patient's first name.");
   required("patient.lastName", bill.patient.lastName, "Enter the patient's last name.");
@@ -698,6 +707,7 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("billingProvider.address.state", bill.billingProvider?.address?.state, "Enter the billing provider 2-letter state code.");
   required("billingProvider.address.postalCode", bill.billingProvider?.address?.postalCode, "Enter the billing provider ZIP code.");
   }
+  if (professionalForm) {
   required("renderingProvider.name", bill.renderingProvider?.name, "Enter the rendering provider name.");
   required("renderingProvider.npi", bill.renderingProvider?.npi, "Enter the rendering provider NPI.");
   required("renderingProvider.taxonomy", bill.renderingProvider?.taxonomy, "Enter the rendering provider taxonomy code.");
@@ -706,8 +716,9 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("serviceLocation.address.city", bill.serviceLocation?.address?.city, "Enter the service facility city.");
   required("serviceLocation.address.state", bill.serviceLocation?.address?.state, "Enter the service facility 2-letter state code.");
   required("serviceLocation.address.postalCode", bill.serviceLocation?.address?.postalCode, "Enter the service facility ZIP code.");
-  if ((bill.diagnoses?.length ?? 0) > 12) errors.diagnoses = "Select no more than 12 claim diagnoses.";
-  if (!(bill.diagnoses ?? []).some((code) => code.trim())) {
+  }
+  if (professionalForm && (bill.diagnoses?.length ?? 0) > 12) errors.diagnoses = "Select no more than 12 claim diagnoses.";
+  if (professionalForm && !(bill.diagnoses ?? []).some((code) => code.trim())) {
     errors.diagnoses = "Select at least one ICD-10 diagnosis code.";
   }
   if (bill.claim.claimsAdministrator?.name && !bill.claim.claimsAdministrator.id) {
@@ -731,11 +742,12 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   if (lines.some((line) => isMedicalLegalCode(line.code)) && lines.some((line) => line.code && !isMedicalLegalCode(line.code))) errors.serviceLines = "Submit medical-legal and treatment services on separate bills.";
   if (!lines.length) errors.serviceLines = "Add at least one service line";
   lines.forEach((line, index) => {
-    required(`serviceLines.${index}.code`, line.code, "Select a procedure code.");
+    if (professionalForm || bill.claimForm === "ada") required(`serviceLines.${index}.code`, line.code, "Select a procedure code.");
     const pointers = line.diagnosisPointers ?? [];
-    if (pointers.length > 4 || new Set(pointers).size !== pointers.length || pointers.some((pointer) => !Number.isInteger(pointer) || pointer < 1 || pointer > (bill.diagnoses?.length ?? 0)) || (bill.billingMode === "professional" && !pointers.length)) errors[`serviceLines.${index}.diagnosisPointers`] = "Select up to four diagnoses for this service line.";
-    if (!Number.isInteger(line.units) || (line.units ?? 0) < 1) errors[`serviceLines.${index}.units`] = "Enter at least 1 unit";
-    if (bill.billingMode === "professional" && (!Number.isFinite(line.charge) || (line.charge ?? 0) <= 0)) errors[`serviceLines.${index}.charge`] = "Enter the billed charge";
+    if (pointers.length > 4 || new Set(pointers).size !== pointers.length || pointers.some((pointer) => !Number.isInteger(pointer) || pointer < 1 || pointer > (bill.diagnoses?.length ?? 0)) || (professionalForm && bill.billingMode === "professional" && !pointers.length)) errors[`serviceLines.${index}.diagnosisPointers`] = "Select up to four diagnoses for this service line.";
+    if (!Number.isFinite(line.units) || (line.units ?? 0) <= 0) errors[`serviceLines.${index}.units`] = professionalForm ? "Enter at least 1 unit" : "Enter a positive quantity";
+    else if (professionalForm && !Number.isInteger(line.units)) errors[`serviceLines.${index}.units`] = "Enter a whole number of units";
+    if ((!professionalForm || bill.billingMode === "professional") && (!Number.isFinite(line.charge) || (line.charge ?? 0) <= 0)) errors[`serviceLines.${index}.charge`] = "Enter the billed charge";
   });
   return { valid: Object.keys(errors).length === 0, fieldErrors: errors };
 }
@@ -925,7 +937,7 @@ export function BillSubmissionForm({
   profileOptions, profileDisplay = "expanded",
   fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, treatmentBilling: professionalTreatmentFees = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -933,6 +945,9 @@ export function BillSubmissionForm({
   attentionFields = [], attentionMessage,
   children,
 }: BillSubmissionFormProps): ReactElement {
+  // Professional fee quotes cannot price dental, institutional, or pharmacy services.
+  const specialtyForm = Boolean(initialBill.claimForm && initialBill.claimForm !== "cms1500");
+  const treatmentBilling = professionalTreatmentFees && (!initialBill.claimForm || initialBill.claimForm === "cms1500");
   const [bill, setBill] = useState(() => cloneInitialBill(initialBill, treatmentBilling));
   const [sharedDiagnoses, setSharedDiagnoses] = useState(() => billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling)));
   const individualDiagnoses = useRef<string[][] | null>(null);
@@ -1206,6 +1221,7 @@ export function BillSubmissionForm({
     return () => { active = false; clearTimeout(timer); };
   }, [quoteBatch, quoteFee, feeRetry, supportedFeeJurisdiction]);
   const lineCharge = (line: BillSubmissionInput["serviceLines"][number], index: number) => {
+    if (specialtyForm) return Number.isFinite(line.charge) ? Number(line.charge) : undefined;
     if (treatmentBilling && line.code && !isMedicalLegalCode(line.code)) {
       const key = quoteKeys[index]; const quote = key ? feeQuotes[key] : undefined;
       return supportedFeeJurisdiction && detailsForLine(index).basis !== "adjustment" && quote?.status === "priced" ? quote.amountCents / 100 : undefined;
@@ -1480,16 +1496,16 @@ export function BillSubmissionForm({
       <Field path="billingProvider.address.postalCode" label="Billing ZIP" required error={errors["billingProvider.address.postalCode"]}>{text(bill.billingProvider?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: c.billingProvider?.address?.state ?? "", postalCode } } })))}</Field>
       </fieldset>
       <h4 className="mbsf-subhead">Rendering provider</h4>
-      <Field path="renderingProvider.name" label="Rendering provider name" required error={errors["renderingProvider.name"]}>{text(bill.renderingProvider?.name, (name) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, name } })))}</Field>
-      <Field path="renderingProvider.npi" label="Rendering provider NPI" required error={errors["renderingProvider.npi"]}>{text(bill.renderingProvider?.npi, (npi) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>
-      <Field path="renderingProvider.taxonomy" label="Rendering taxonomy" required error={errors["renderingProvider.taxonomy"]}><ComboBox ariaLabel="Rendering taxonomy" invalid={Boolean(errors["renderingProvider.taxonomy"])} disabled={locked} preserveValueOnOpen value={bill.renderingProvider?.taxonomy ?? ""} placeholder="Search specialty name or taxonomy code…" options={taxonomies.map((item) => ({ id: item.code, label: item.description, detail: item.code }))} createOption={(query) => { const code = query.trim().toUpperCase(); return /^[A-Z0-9]{10}$/.test(code) ? { id: code, label: code, detail: "Use this taxonomy code" } : null; }} onSelect={(option) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, taxonomy: option.id } }))} /><small className="mbsf-help">Search by specialty name or 10-character taxonomy code.</small></Field>
+      <Field path="renderingProvider.name" label="Rendering provider name" required={!specialtyForm} error={errors["renderingProvider.name"]}>{text(bill.renderingProvider?.name, (name) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, name } })))}</Field>
+      <Field path="renderingProvider.npi" label="Rendering provider NPI" required={!specialtyForm} error={errors["renderingProvider.npi"]}>{text(bill.renderingProvider?.npi, (npi) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>
+      <Field path="renderingProvider.taxonomy" label="Rendering taxonomy" required={!specialtyForm} error={errors["renderingProvider.taxonomy"]}><ComboBox ariaLabel="Rendering taxonomy" invalid={Boolean(errors["renderingProvider.taxonomy"])} disabled={locked} preserveValueOnOpen value={bill.renderingProvider?.taxonomy ?? ""} placeholder="Search specialty name or taxonomy code…" options={taxonomies.map((item) => ({ id: item.code, label: item.description, detail: item.code }))} createOption={(query) => { const code = query.trim().toUpperCase(); return /^[A-Z0-9]{10}$/.test(code) ? { id: code, label: code, detail: "Use this taxonomy code" } : null; }} onSelect={(option) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, taxonomy: option.id } }))} /><small className="mbsf-help">Search by specialty name or 10-character taxonomy code.</small></Field>
       <h4 className="mbsf-subhead">Service facility</h4>
-      <Field path="serviceLocation.placeOfServiceCode" label="Place of service code" required error={errors["serviceLocation.placeOfServiceCode"]}>{text(bill.serviceLocation?.placeOfServiceCode, (placeOfServiceCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, placeOfServiceCode } })), { inputMode: "numeric", maxLength: 2, placeholder: "11" })}</Field>
-      <Field path="serviceLocation.address.line1" label="Service address line 1" required span error={errors["serviceLocation.address.line1"]}>{text(bill.serviceLocation?.address?.line1, (line1) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1, line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
+      <Field path="serviceLocation.placeOfServiceCode" label="Place of service code" required={!specialtyForm} error={errors["serviceLocation.placeOfServiceCode"]}>{text(bill.serviceLocation?.placeOfServiceCode, (placeOfServiceCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, placeOfServiceCode } })), { inputMode: "numeric", maxLength: 2, placeholder: "11" })}</Field>
+      <Field path="serviceLocation.address.line1" label="Service address line 1" required={!specialtyForm} span error={errors["serviceLocation.address.line1"]}>{text(bill.serviceLocation?.address?.line1, (line1) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1, line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
       <Field label="Service address line 2 (optional)" span>{text(bill.serviceLocation?.address?.line2, (line2) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2, city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
-      <Field path="serviceLocation.address.city" label="Service city" required error={errors["serviceLocation.address.city"]}>{text(bill.serviceLocation?.address?.city, (city) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city, state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
-      <Field path="serviceLocation.address.state" label="Service state" required error={errors["serviceLocation.address.state"]}>{text(bill.serviceLocation?.address?.state, (state) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
-      <Field path="serviceLocation.address.postalCode" label="Service ZIP" required error={errors["serviceLocation.address.postalCode"]}>{text(bill.serviceLocation?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode } } })))}</Field>
+      <Field path="serviceLocation.address.city" label="Service city" required={!specialtyForm} error={errors["serviceLocation.address.city"]}>{text(bill.serviceLocation?.address?.city, (city) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city, state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
+      <Field path="serviceLocation.address.state" label="Service state" required={!specialtyForm} error={errors["serviceLocation.address.state"]}>{text(bill.serviceLocation?.address?.state, (state) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
+      <Field path="serviceLocation.address.postalCode" label="Service ZIP" required={!specialtyForm} error={errors["serviceLocation.address.postalCode"]}>{text(bill.serviceLocation?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode } } })))}</Field>
     </div></details></fieldset>;
 
   const diagnosisSelector = (codes: string[], onChange: (codes: string[]) => void, lineIndex?: number) => {
@@ -1514,25 +1530,25 @@ export function BillSubmissionForm({
     setSharedDiagnoses(checked);
   };
 
-  const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Evaluation &amp; service lines</legend>
-      <p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
+  const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">{specialtyForm ? CLAIM_FORM_LABELS[initialBill.claimForm!] : "Evaluation & service lines"}</legend>
+      {!specialtyForm ? <><p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
       <div className="mbsf-segments" role="group" aria-label="Evaluation type">{([ ["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"], ["psych_ame", "Psych AME"] ] as const).map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
-      <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p>
+      <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p></> : null}
       <label className="mbsf-diagnosis-toggle"><input type="checkbox" checked={sharedDiagnoses} onChange={(event) => toggleSharedDiagnoses(event.target.checked)} /><span>Apply the same diagnosis codes to all service lines</span></label>
-      {sharedDiagnoses ? <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required error={errors.diagnoses}>{diagnosisSelector(bill.diagnoses ?? [], (codes) => { individualDiagnoses.current = null; setBill((current) => setBillSubmissionSharedDiagnoses(current, codes)); })}</Field> : null}
+      {sharedDiagnoses ? <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required={!specialtyForm} error={errors.diagnoses}>{diagnosisSelector(bill.diagnoses ?? [], (codes) => { individualDiagnoses.current = null; setBill((current) => setBillSubmissionSharedDiagnoses(current, codes)); })}</Field> : null}
       <p className="mbsf-help">Choose up to 4 diagnosis codes per service line and 12 across the bill.</p>
       {!sharedDiagnoses && errors.diagnoses ? <p className="mbsf-error" role="alert">{errors.diagnoses}</p> : null}
       {procedureError ? <p className="mbsf-error" role="alert">{procedureError}</p> : null}
-      <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span>{!sharedDiagnoses ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span><span>Allowed</span><span /> </div>
+      <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code{!specialtyForm || initialBill.claimForm === "ada" ? <RequiredMark /> : null}</span><span>Modifiers</span>{!sharedDiagnoses ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span><span>{specialtyForm ? "Billed charge" : "Allowed"}</span><span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
-          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id, ...(switched ? { modifiers: (line.modifiers ?? []).filter((value) => !["94", "95", "96"].includes(value.replace(/^-/, ""))) } : {}) }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
+          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={specialtyForm ? (query) => { const code = query.trim().toUpperCase(); return /^[A-Z0-9-]{1,20}$/.test(code) ? { id: code, label: code, detail: "Use this billing code" } : null; } : customProcedureOption} onSelect={(option) => { if (specialtyForm) { setLine(index, { code: option.id }); return; } const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id, ...(switched ? { modifiers: (line.modifiers ?? []).filter((value) => !["94", "95", "96"].includes(value.replace(/^-/, ""))) } : {}) }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? (specialtyForm ? "Custom billing code" : "Custom CPT, HCPCS, or medical-legal code")}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={modifiers.filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
           {!sharedDiagnoses ? <div className="mbsf-line-diagnoses" data-label="Diagnosis codes (ICD-10)" data-field-path={`serviceLines.${index}.diagnosisPointers`} data-invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])}>
             {diagnosisSelector(billSubmissionLineDiagnosisCodes(bill, index), (codes) => setBill((current) => setBillSubmissionLineDiagnoses(current, index, codes)), index)}
             {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
           </div> : null}
-          <div data-label={treatmentBilling && isAnesthesiaCandidate(line.code) ? "Services" : "Units"} data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} max={treatmentBilling && isAnesthesiaCandidate(line.code) ? 1 : undefined} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
-          <div className="mbsf-money" data-label="Allowed" data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
+          <div data-label={treatmentBilling && isAnesthesiaCandidate(line.code) ? "Services" : "Units"} data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={specialtyForm ? 0.001 : 1} step={specialtyForm ? "any" : 1} max={treatmentBilling && isAnesthesiaCandidate(line.code) ? 1 : undefined} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
+          <div className="mbsf-money" data-label={specialtyForm ? "Billed charge" : "Allowed"} data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{specialtyForm ? <input className="mbsf-input" aria-label={`Billed charge ${index + 1}`} type="number" min="0" step="0.01" value={line.charge ?? ""} onChange={(event) => setLine(index, { charge: Number(event.target.value) })} /> : lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
           <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
           {feeDetailsFor(line, index)}
         </div>)}

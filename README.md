@@ -423,3 +423,7 @@ California anesthesia service lines collect actual elapsed minutes separately fr
 Fee quote response validation and `BillFeeQuoteBasis` cover California reports, physician and therapy RBRVS, CLFS, simple dispensed drugs, DMEPOS, PADB, anesthesia, and practice contracts. Use browser 0.36.1 / React 0.60.2 or later for these fee families. See [procedure fees](docs/procedure-fees.md).
 
 RFA authorization routing: `RfaAuthorizationDestination` shows explicit office/fax/email choices from the claims-administrator directory. It does not sign or send requests. See [RFA directory integration](docs/rfa-directory.md) for lookup, status, and host delivery responsibilities.
+
+### Specialty bill forms
+
+The upcoming browser 0.38.0, Node 0.16.0 and React 0.62.0 releases add typed UB-04, dental and pharmacy data, including compound ingredients, and preserve that data through review and corrections. See [specialty bill capture and release requirements](docs/specialty-billing.md). The SDK does not enable a server-side submission route or certify clearinghouse acceptance.

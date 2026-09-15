@@ -527,7 +527,7 @@ function CorrectionVerificationContact({ delivery }: { delivery: BillLifecycleDa
   </aside>;
 }
 
-function correctionBill(data: BillLifecycleData): BillSubmissionInput {
+export function correctionBill(data: BillLifecycleData): BillSubmissionInput {
   const billing = data.bill.billingSnapshot?.billingProvider;
   const rendering = data.bill.billingSnapshot?.renderingProvider;
   const location = data.bill.billingSnapshot?.placeOfService;
@@ -536,6 +536,8 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
   const lastName = data.patient.lastName || nameParts.slice(1).join(" ") || "";
   return {
     billingMode: data.bill.billingMode,
+    ...(data.bill.claimForm ? { claimForm: data.bill.claimForm } : {}),
+    ...(data.bill.formData ? { formData: data.bill.formData } : {}),
     patient: {
       firstName,
       ...(data.patient.middleName ? { middleName: data.patient.middleName } : {}),
@@ -597,6 +599,8 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
       ?? [...(data.injury.diagnosisCodes || [])],
     serviceLines: data.bill.lineItems.map((line) => ({
       code: line.code,
+      ...(line.formData ? { formData: line.formData } : {}),
+      ...(line.drug ? { drug: line.drug } : {}),
       modifiers: [...line.modifiers],
       units: line.units,
       charge: line.charge,

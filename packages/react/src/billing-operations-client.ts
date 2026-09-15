@@ -1,6 +1,7 @@
 import {
   DEFAULT_API_BASE_URL,
   DEFAULT_SESSION_ENDPOINT,
+  type ClaimForm,
   type BillLifecycleSession,
   type BillLifecycleSessionProvider,
   type BillTasksDashboardData,
@@ -46,6 +47,7 @@ export type BillRegistryStatus = {
 };
 
 export type BillRegistryItem = {
+  claimForm?: ClaimForm;
   id: string;
   billNumber: string;
   externalId: string | null;
