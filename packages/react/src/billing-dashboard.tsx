@@ -2,11 +2,13 @@
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { CLAIM_FORM_LABELS, type ClaimForm } from "@mindbill/browser";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { acceptedNoResponseLabel } from "./bill-status-label";
 
 export type BillingDashboardBill = {
+  claimForm?: ClaimForm;
   id: string;
   billNumber?: string | number;
   externalId?: string;
@@ -137,7 +139,7 @@ function Shell({ appearance, className = "", style, children }: BillingComponent
 
 function BillIdentity({ bill }: { bill: BillingDashboardBill }): ReactElement {
   const label = bill.billNumber == null ? bill.externalId ?? "Bill" : `Bill #${bill.billNumber}`;
-  const content = <><span className="mbdash-primary">{label}</span><span className="mbdash-secondary">{[bill.patientName, bill.claimNumber ? `Claim ${bill.claimNumber}` : null].filter(Boolean).join(" · ")}</span></>;
+  const content = <><span className="mbdash-primary">{label}</span>{bill.claimForm ? <span className="mbdash-secondary">{CLAIM_FORM_LABELS[bill.claimForm]}</span> : null}<span className="mbdash-secondary">{[bill.patientName, bill.claimNumber ? `Claim ${bill.claimNumber}` : null].filter(Boolean).join(" · ")}</span></>;
   return bill.href ? <a href={bill.href} className="mbdash-primary">{content}</a> : <>{content}</>;
 }
 

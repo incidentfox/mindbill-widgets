@@ -406,3 +406,6 @@ export type { RfaDraftInput, RfaDraftItemInput, RfaDraftFormProps } from "./rfa-
 export { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 export type { RfaAuthorizationDestinationProps } from "./rfa-authorization-destination";
 export type { BillClaimsAdministratorAuthorizationStatus, RfaAuthorizationDestinationOption } from "@mindbill/browser";
+
+export { CLAIM_FORM_LABELS } from "@mindbill/browser";
+export type { ClaimForm, BillFormData, BillItemFormData, InstitutionalFormData, DentalFormData, PharmacyFormData, PharmacyCompound, CompoundIngredient, BilledDrug, ClaimProvider, ClaimDiagnosis } from "@mindbill/browser";

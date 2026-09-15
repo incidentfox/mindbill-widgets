@@ -12,6 +12,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { CLAIM_FORM_LABELS } from "@mindbill/browser";
 import type { BillTasksDashboardCell } from "./bill-tasks-dashboard";
 import { BillTasksDashboard } from "./bill-tasks-dashboard";
 import { ConnectedBillLifecycle } from "./connected-bill-lifecycle";
@@ -174,7 +175,7 @@ function BillSearchContent({
       {loading ? <div className="mbow-state" role="status">Loading bills…</div> : error ? <div className="mbow-state mbow-error" role="alert">{error.message} <button className="mbow-button" type="button" onClick={() => void load()}>Retry</button></div> : result?.items.length === 0 ? <div className="mbow-state">No bills match these filters.</div> : <table className="mbow-table">
         <thead><tr><th>Bill</th><th>Patient</th><th>DOS</th><th>Codes</th><th>Claims administrator</th><th>Status</th><th>Submitted / A/R age</th><th className="mbow-money">Balance due</th></tr></thead>
         <tbody>{result?.items.map((bill) => <tr key={bill.id} className={onSelectBill ? "clickable" : ""} onClick={() => onSelectBill?.(bill)}>
-          <td className="mbow-strong">#{bill.billNumber}</td><td>{bill.patientName}</td><td>{shortDate(bill.dateOfService)}</td><td>{bill.procedureCodes.join(", ") || "—"}</td><td>{bill.claimsAdministrator || "—"}</td><td><span className={`mbow-badge ${bill.status.tone ?? ""}`}>{bill.status.label}</span></td><td>{shortDate(bill.submittedAt)}<div className="mbow-muted">{bill.arAgeDays == null ? "—" : `${bill.arAgeDays} days`}</div></td><td className="mbow-money mbow-strong">{money(bill.balanceDue)}</td>
+          <td className="mbow-strong">#{bill.billNumber}<div className="mbow-muted">{CLAIM_FORM_LABELS[bill.claimForm ?? "cms1500"]}</div></td><td>{bill.patientName}</td><td>{shortDate(bill.dateOfService)}</td><td>{bill.procedureCodes.join(", ") || "—"}</td><td>{bill.claimsAdministrator || "—"}</td><td><span className={`mbow-badge ${bill.status.tone ?? ""}`}>{bill.status.label}</span></td><td>{shortDate(bill.submittedAt)}<div className="mbow-muted">{bill.arAgeDays == null ? "—" : `${bill.arAgeDays} days`}</div></td><td className="mbow-money mbow-strong">{money(bill.balanceDue)}</td>
         </tr>)}</tbody>
       </table>}
       {result && !loading && !error ? <div className="mbow-pager"><span>Showing {result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1}–{Math.min(result.page * result.pageSize, result.total)} of {result.total}</span><span><button className="mbow-button" type="button" disabled={result.page <= 1} onClick={() => update({ page: result.page - 1 })}>Previous</button> {result.page} / {pageCount} <button className="mbow-button" type="button" disabled={result.page >= pageCount} onClick={() => update({ page: result.page + 1 })}>Next</button></span></div> : null}
