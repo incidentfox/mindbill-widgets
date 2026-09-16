@@ -1,5 +1,9 @@
 "use client";
 
+export { FeeScheduleCalculator } from "./fee-schedule-calculator";
+export type { FeeScheduleCalculatorProps } from "./fee-schedule-calculator";
+export type { CaClaimFeeQuoteInput, CaClaimFeeQuoteResult } from "@mindbill/browser";
+
 export { BillCourtesyCopyForm } from "./bill-courtesy-copy-form";
 export type { BillCourtesyCopyFormProps, CourtesyCopyRecipientOption } from "./bill-courtesy-copy-form";
 export type { BillFeeContext, BillCourtesyCopyInput, BillCourtesyCopyPreview, BillCourtesyCopyResult, BillTeamNote } from "@mindbill/browser";
