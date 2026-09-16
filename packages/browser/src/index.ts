@@ -33,6 +33,8 @@ export type BillReviewBillingProvider = {
 };
 
 export type BillReviewClinician = {
+  /** Canonical opaque provider ID, when available. */
+  id?: string;
   name: string;
   specialty: string;
   npi: string;
@@ -197,6 +199,8 @@ export type BillReviewData = {
     balanceDue: number;
   };
   patient: {
+    /** Canonical opaque patient ID, when available. */
+    id?: string;
     name: string;
     firstName?: string;
     middleName?: string;
@@ -2192,18 +2196,27 @@ export type RfaCreateDraftInput = {
     quantity?: number; units?: number; frequency?: string; duration?: string; requestedFrom?: string; requestedTo?: string; metadata?: Record<string, unknown> }>;
   metadata?: Record<string, unknown>;
 };
+/** Full replacement of editable request content; retained service rows keep their IDs. */
+export type RfaUpdateDraftInput = Omit<RfaCreateDraftInput, "externalId" | "claimId" | "patientId" | "renderingProviderId" | "items"> & {
+  expectedRevision: number;
+  items: Array<Omit<RfaCreateDraftInput["items"][number], "externalId"> & { id?: string }>;
+};
 export type RfaRecord = {
   contentRevision: number; id: string; claimId: string; patientId: string; renderingProviderId: string; claimsAdminId: string | null;
   employeeName: string; providerName: string; claimNumber: string | null; status: string;
+  requestType?: RfaCreateDraftInput["requestType"];
+  placeOfServiceCode?: string | null; providerNpi?: string | null; providerPhone?: string | null; providerFax?: string | null;
+  dateOfInjury?: string | null; rationale?: string | null; materialChange?: string | null; metadata?: Record<string, unknown>;
   reviewType: string; expedited: boolean; createdAt: string | null; updatedAt: string | null;
   signedAt: string | null; submittedAt: string | null; receivedAt: string | null;
   decisionDueAt: string | null; decisionDeadlineBasis: string | null;
   incompleteReason: string | null; deferredReason: string | null; closedReason: string | null;
   readiness: { ready: boolean; missing: string[] };
   items: Array<{ id: string; diagnosisCode: string; serviceDescription: string; procedureCode: string | null;
+    frequency?: string | null; duration?: string | null; requestedFrom?: string | null; requestedTo?: string | null; metadata?: Record<string, unknown>;
     outcome: string; quantity: number | null; units: number | null; authorizationNumber: string | null; decisionReason: string | null }>;
   documents: Array<{ id: string; documentType: string; filename: string; contentUrl: string; contentRevision: number | null; createdAt: string | null }>;
-  transmissions: Array<{ id: string; direction: string; channel: string; status: string; destination: string | null;
+  transmissions: Array<{ id: string; purpose?: string; direction: string; channel: string; status: string; destination: string | null;
     occurredAt: string | null; receivedAt: string | null; proofDocumentId: string | null; providerMessageId: string | null }>;
   informationRequests: Array<{ id: string; requestText: string; requestedAt: string | null; dueAt: string | null; respondedAt: string | null }>;
   events: Array<{ id: string; type: string; occurredAt: string | null }>;
@@ -2214,11 +2227,12 @@ export type RfaSigningPreviewInput = { billingProviderId?: string; diagnosisDesc
 export type RfaSigningPreview = { id: string; contentHash: string; contentRevision: number; renderingProviderId: string; previewDocumentId: string; expiresAt: string };
 export type RfaSignInput = { snapshotId: string; contentHash: string; renderingProviderId: string; physicianAuthorized: true; actorReference: string };
 export type RfaFaxInput = { to: string; documentIds: string[]; nonBusinessDates?: string[] };
-export type RfaUploadDocumentInput = { file: File; documentType: "clinical_report" | "supporting_record" | "ur_response" | "other"; contentRevision: number };
+export type RfaUploadDocumentInput = { file: File; documentType: "clinical_report" | "supporting_record" | "ur_response" | "imr_form" | "other"; contentRevision: number };
 export type RfaClient = {
   list: (query?: RfaListQuery) => Promise<RfaListResult>;
   get: (rfaId: string) => Promise<RfaRecord>;
   createDraft: (draft: RfaCreateDraftInput, idempotencyKey: string) => Promise<RfaRecord>;
+  updateDraft: (rfaId: string, draft: RfaUpdateDraftInput, idempotencyKey: string) => Promise<RfaRecord>;
   getDocument: (rfaId: string, documentId: string) => Promise<Blob>;
   uploadDocument: (rfaId: string, input: RfaUploadDocumentInput, idempotencyKey: string) => Promise<RfaRecord>;
   prepareSigning: (rfaId: string, input: RfaSigningPreviewInput, idempotencyKey: string) => Promise<RfaSigningPreview>;
@@ -2278,7 +2292,15 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     createDraft: (draft, idempotencyKey) => {
       if (!idempotencyKey.trim()) return Promise.reject(new Error("An idempotency key is required."));
       const unsigned = { ...draft } as RfaCreateDraftInput & { signedAt?: unknown }; delete unsigned.signedAt;
+      unsigned.items = draft.items.map(item => { const copy = { ...item } as typeof item & { id?: unknown }; delete copy.id; return copy; });
       return record("", { method: "POST", headers: { "idempotency-key": idempotencyKey }, body: JSON.stringify(unsigned) });
+    },
+    updateDraft: (id, draft, key) => {
+      if (!Number.isInteger(draft.expectedRevision) || draft.expectedRevision < 1) return Promise.reject(new Error("A positive expected content revision is required."));
+      const body = { ...draft } as RfaUpdateDraftInput & Record<string, unknown>;
+      for (const field of ["externalId", "claimId", "patientId", "renderingProviderId", "signedAt"]) delete body[field];
+      body.items = draft.items.map(item => { const copy = { ...item } as typeof item & { externalId?: unknown }; delete copy.externalId; return copy; });
+      return record(path(id, "draft"), { ...mutation(body, key), method: "PATCH" });
     },
     uploadDocument: (id, input, key) => {
       if (!key.trim()) return Promise.reject(new Error("An idempotency key is required."));
@@ -2301,3 +2323,5 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     getDocument: async (id, documentId) => (await request(`/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`)).blob(),
   };
 }
+
+export * from "./rfa-lifecycle";

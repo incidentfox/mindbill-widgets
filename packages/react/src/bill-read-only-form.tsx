@@ -7,12 +7,23 @@ import type {
   BillClaimsAdministratorPattern,
   BillLifecycleDelivery,
   BillReviewAttachment,
+  BillReviewClinician,
   HistoricalBillReviewData,
 } from "@mindbill/browser";
+import { BillDetailLayout, BillDetailSection, type BillDetailValidationIssue } from "./bill-detail-layout";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
 
-export type BillReadOnlyFormProps = {
+export type BillDetailSectionKey = "patient" | "claim" | "providers" | "services" | "attachments";
+
+export type BillDetailNavigationProps = {
+  onPatientClick?: (patient: HistoricalBillReviewData["patient"]) => void;
+  onRenderingProviderClick?: (provider: BillReviewClinician) => void;
+  onClaimsAdministratorClick?: (administrator: { id?: string; name: string }) => void;
+};
+
+export type BillReadOnlyFormProps = BillDetailNavigationProps & {
+  validationIssues?: Partial<Record<BillDetailSectionKey, readonly BillDetailValidationIssue[]>>;
   data: HistoricalBillReviewData & { delivery?: BillLifecycleDelivery };
   appearance?: MindBillReactAppearance;
   className?: string;
@@ -64,7 +75,7 @@ function PatternTable({ patterns }: { patterns: readonly BillClaimsAdministrator
   return <div className="mb-read-directory-table-wrap"><table className="mb-read-directory-table"><thead><tr><th>Status</th><th>Length</th><th>Pattern</th><th>Example</th></tr></thead><tbody>{patterns.map((entry, index) => <tr key={`${entry.pattern}-${index}`}><td>{entry.matches === true ? <span className="mb-read-match is-match">✓ Matches this claim</span> : entry.matches === false ? <span className="mb-read-match is-warning">Review format</span> : "Advisory"}</td><td>{entry.length ?? "—"}</td><td>{entry.pattern}</td><td>{entry.example || "—"}</td></tr>)}</tbody></table></div>;
 }
 
-export function BillReadOnlyForm({ data, appearance, className, style, onOpenAttachment }: BillReadOnlyFormProps): ReactElement {
+export function BillReadOnlyForm({ data, appearance, className, style, onOpenAttachment, validationIssues, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick }: BillReadOnlyFormProps): ReactElement {
   const [payerOpen, setPayerOpen] = useState(false);
   const [payerTab, setPayerTab] = useState<PayerTab>("main");
   const { bill, patient, injury } = data;
@@ -78,6 +89,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
   const patientAddress = [address?.line1, address?.city, address?.state, address?.postalCode].filter(Boolean).join(", ");
   const billingAddress = provider ? [provider.billingStreet, provider.billingCity, provider.billingState, provider.billingZip].filter(Boolean).join(", ") : "";
   const locationAddress = location ? [location.street, location.city, location.state, location.zip].filter(Boolean).join(", ") : "";
+  const payerId = injury.claimsAdminId || data.delivery?.directory?.id;
   const payerName = data.delivery?.payerName || injury.claimsAdminName || "—";
   const contacts = data.delivery?.contacts;
   const directory = data.delivery?.directory;
@@ -102,47 +114,48 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
 
   return <section className={["mb-readonly-bill", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)} aria-label="Bill details">
     <style>{READ_ONLY_STYLES}</style>
-    <header className="mb-readonly-heading"><h2>Bill details</h2><strong>{money(bill.totalCharge)}</strong></header>
+    <BillDetailLayout header={<h2 style={{ margin: 0 }}>Bill details</h2>} actions={<strong>{money(bill.totalCharge)}</strong>}>
 
-    <section className="mb-read-card"><h3>Patient</h3><dl className="mb-read-grid">
-      <Value label="Name">{patient.name || [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(" ")}</Value>
+    <BillDetailSection title="Patient" validationIssues={validationIssues?.patient ?? []}><dl className="mb-read-grid">
+      <Value label="Name">{onPatientClick ? <button type="button" className="mb-read-payer" onClick={() => onPatientClick(patient)}>{patient.name || [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(" ") || "Patient"}</button> : patient.name || [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(" ")}</Value>
       <Value label="Date of birth">{date(patient.dob)}</Value>
       <Value label="Phone">{patient.phone}</Value>
       <Value label="Address" wide>{patientAddress}</Value>
-    </dl></section>
+    </dl></BillDetailSection>
 
-    <section className="mb-read-card"><h3>Claim &amp; injury</h3><dl className="mb-read-grid">
+    <BillDetailSection title="Claim & injury" validationIssues={validationIssues?.claim ?? []}><dl className="mb-read-grid">
       <Value label="Claim number">{injury.claimNumber}</Value>
       <Value label="WCAB / ADJ number">{injury.adjNumber}</Value>
-      <Value label="Claims administrator"><button type="button" className="mb-read-payer" onClick={() => { setPayerTab("main"); setPayerOpen(true); }}>{payerName}</button></Value>
+      <Value label="Claims administrator">{onClaimsAdministratorClick ? <><button type="button" className="mb-read-payer" onClick={() => onClaimsAdministratorClick({ ...(payerId ? { id: payerId } : {}), name: payerName })}>{payerName}</button>{" · "}</> : null}<button type="button" className="mb-read-payer" onClick={() => { setPayerTab("main"); setPayerOpen(true); }}>{onClaimsAdministratorClick ? "Contact details" : payerName}</button></Value>
       <Value label="Employer">{injury.employer}</Value>
       <Value label="Date of injury">{date(injury.doi)}</Value>
       <Value label="Date of service">{bill.dosEnd ? `${date(bill.dos)} – ${date(bill.dosEnd)}` : date(bill.dos)}</Value>
       <Value label="Injury description" wide>{injury.injuryDescription}</Value>
-    </dl>{diagnoses.length ? <div className="mb-read-diagnoses" aria-label="Diagnoses">{diagnoses.map((diagnosis) => <div key={diagnosis.code}><strong>{diagnosis.code}</strong>{diagnosis.description ? <span>{diagnosis.description}</span> : null}</div>)}</div> : null}</section>
+    </dl>{diagnoses.length ? <div className="mb-read-diagnoses" aria-label="Diagnoses">{diagnoses.map((diagnosis) => <div key={diagnosis.code}><strong>{diagnosis.code}</strong>{diagnosis.description ? <span>{diagnosis.description}</span> : null}</div>)}</div> : null}</BillDetailSection>
 
-    <section className="mb-read-card"><h3>Providers &amp; location</h3><dl className="mb-read-grid">
+    <BillDetailSection title="Providers & location" validationIssues={validationIssues?.providers ?? []}><dl className="mb-read-grid">
       <Value label="Billing provider">{provider?.name}</Value>
       <Value label="Billing NPI">{provider?.npi}</Value>
       <Value label="Billing tax ID">{provider?.taxId}</Value>
       <Value label="Billing phone">{provider?.phone}</Value>
       <Value label="Billing address" wide>{billingAddress}</Value>
-      <Value label="Rendering provider">{clinician?.name}</Value>
+      <Value label="Rendering provider">{clinician && onRenderingProviderClick ? <button type="button" className="mb-read-payer" onClick={() => onRenderingProviderClick(clinician)}>{clinician.name}</button> : clinician?.name}</Value>
       <Value label="Rendering NPI">{clinician?.npi}</Value>
       <Value label="Rendering taxonomy">{clinician?.taxonomy}</Value>
       <Value label="Place of service code">{location?.posCode}</Value>
       <Value label="Service address" wide>{locationAddress}</Value>
-    </dl></section>
+    </dl></BillDetailSection>
 
-    <section className="mb-read-card"><h3>Service lines</h3><div className="mb-read-lines" role="table" aria-label="Service lines">
+    <BillDetailSection title="Service lines" validationIssues={validationIssues?.services ?? []}><div className="mb-read-lines" role="table" aria-label="Service lines">
       <div className="mb-read-line-header" role="row"><span>Procedure</span><span>Modifiers</span><span>Units</span><span>Charge</span></div>
       {bill.lineItems.map((line, index) => <div className="mb-read-line" role="row" key={line.id ?? `${line.code}-${index}`}>
         <strong>{line.code}</strong><div className="mb-read-chips">{line.modifiers.length ? line.modifiers.map((modifier) => <span key={modifier}>{modifier}</span>) : "—"}</div><span>{line.units}</span><strong>{money(line.charge)}</strong>
       </div>)}
       <div className="mb-read-total"><span>Paid {money(bill.totalPaid)}</span><strong>Balance {money(bill.balanceDue)}</strong></div>
-    </div></section>
+    </div></BillDetailSection>
 
-    <section className="mb-read-card"><h3>Attachments</h3>{bill.attachments.length ? <ul className="mb-read-documents">{bill.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.filename}</strong><span>{attachment.description || attachment.documentType.replace(/_/g, " ")}</span></div>{onOpenAttachment ? <button type="button" onClick={() => void onOpenAttachment(attachment)}>Preview</button> : null}</li>)}</ul> : <p className="mb-read-empty">No attachments.</p>}</section>
+    <BillDetailSection title="Attachments" validationIssues={validationIssues?.attachments ?? []}>{bill.attachments.length ? <ul className="mb-read-documents">{bill.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.filename}</strong><span>{attachment.description || attachment.documentType.replace(/_/g, " ")}</span></div>{onOpenAttachment ? <button type="button" onClick={() => void onOpenAttachment(attachment)}>Preview</button> : null}</li>)}</ul> : <p className="mb-read-empty">No attachments.</p>}</BillDetailSection>
+    </BillDetailLayout>
     {payerOpen ? <div className="mb-read-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPayerOpen(false); }}><section className="mb-read-dialog" role="dialog" aria-modal="true" aria-labelledby="mb-read-payer-title"><header><div><h3 id="mb-read-payer-title">{payerName}</h3><span>Claims administrator</span></div><button type="button" aria-label="Close claims administrator details" onClick={() => setPayerOpen(false)}>×</button></header>
       <label className="mb-read-dialog-mobile-nav"><span>Information section</span><select aria-label="Claims administrator information section" value={payerTab} onChange={(event) => setPayerTab(event.target.value as PayerTab)}>{PAYER_TABS.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></label>
       <div className="mb-read-dialog-tabs" role="tablist" aria-label="Claims administrator information">

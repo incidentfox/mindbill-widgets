@@ -28,3 +28,16 @@ it("returns authenticated PDF bytes and preserves fax recipient and packet selec
  await client.sendFax("rfa_synthetic",{to:"+18005550100",documentIds:["form_synthetic","clinical_synthetic"]},"send_synthetic");
  expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({to:"+18005550100",documentIds:["form_synthetic","clinical_synthetic"]});
 });
+it("replaces drafts with the exact expected revision and stable item IDs across an authentication retry", async () => {
+ const fetcher=vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({}, {status:401})).mockResolvedValueOnce(Response.json({data:{id:"rfa_synthetic",contentRevision:4}}));
+ const client=createRfaClient({getSession:async()=>({token:"synthetic_token"}),fetch:fetcher});
+ const draft={expectedRevision:3,employeeName:"Synthetic patient",providerName:"Synthetic provider",items:[{id:"item_synthetic",externalId:"strip",diagnosisCode:"M54.5",serviceDescription:"Synthetic service",metadata:{host:"retained"}}],claimId:"immutable",signedAt:"must_not_sign"};
+ await client.updateDraft("synthetic/id",draft,"edit_key");
+ const calls=fetcher.mock.calls; expect(calls).toHaveLength(2);
+ expect(String(calls[0]?.[0])).toContain("synthetic%2Fid/draft"); expect(calls[0]?.[1]?.method).toBe("PATCH");
+ expect(calls[0]?.[1]?.body).toBe(calls[1]?.[1]?.body);
+ const body=JSON.parse(String(calls[0]?.[1]?.body));expect(body.expectedRevision).toBe(3);expect(body.items[0].id).toBe("item_synthetic");expect(body.items[0].metadata).toEqual({host:"retained"});
+ expect(body).not.toHaveProperty("claimId");expect(body).not.toHaveProperty("signedAt");expect(body.items[0]).not.toHaveProperty("externalId");
+ for(const call of calls)expect(new Headers(call[1]?.headers).get("idempotency-key")).toBe("edit_key");
+ await expect(client.updateDraft("rfa",{...draft,expectedRevision:0},"bad")).rejects.toThrow("revision");expect(fetcher).toHaveBeenCalledTimes(2);
+});

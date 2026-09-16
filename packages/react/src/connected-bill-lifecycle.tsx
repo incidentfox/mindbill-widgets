@@ -42,7 +42,7 @@ import {
   BillLifecycleProgress,
   BillRejectionNotice,
 } from "./bill-lifecycle-surfaces";
-import { BillReadOnlyForm } from "./bill-read-only-form";
+import { BillReadOnlyForm, type BillReadOnlyFormProps, type BillDetailNavigationProps } from "./bill-read-only-form";
 import {
   BILL_SUBMISSION_DOCUMENT_TYPES,
   BillSubmissionForm,
@@ -363,7 +363,8 @@ export function useBillLifecycle({
   };
 }
 
-export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
+export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & BillDetailNavigationProps & {
+  validationIssues?: BillReadOnlyFormProps["validationIssues"];
   billingSettings?: BillSubmissionFormProps["billingSettings"];
   appearance?: MindBillReactAppearance;
   /** Case-scoped suggestions; recipients must still be selected and confirmed. */
@@ -650,7 +651,7 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
 }
 
 export function ConnectedBillLifecycle({
-  billingSettings, appearance, actorName, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+  billingSettings, appearance, actorName, validationIssues, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -878,7 +879,7 @@ export function ConnectedBillLifecycle({
       {showSandboxControls ? <section className="mb-lifecycle-simulator" aria-label="Sandbox lifecycle simulator"><div><span>Sandbox demo controls</span><h3>Simulate the next payer response</h3><p>This changes sandbox data only. The host receives the result through the same lifecycle API and components partners use.</p></div>{simulations.length ? <div className="mb-lifecycle-simulator-actions">{simulations.map((scenario) => <button type="button" key={scenario.id} disabled={lifecycle.isMutating} onClick={() => void complete(`${scenario.label} simulated.`, () => lifecycle.simulateSandbox({ scenario: scenario.id }))}><strong>{scenario.label}</strong><span>{scenario.detail}</span></button>)}</div> : <p className="mb-lifecycle-simulator-idle">No simulated payer transition is needed at this stage. Use the bill action below to continue.</p>}</section> : null}
 
       {historical ? <p className="mb-lifecycle-card">{selectedDetail?.source === "submission_snapshot" ? "Saved as submitted. This previous submission is read-only; payment balances and current actions are shown on the current bill." : displayedData ? "Historical bill record. An exact as-submitted snapshot was not recorded for this older attempt; these are the stored bill values, not a guaranteed copy of the original packet." : "Detailed values were not saved for this historical submission. Select the current submission to see the current bill. We will not substitute current data for this older attempt."}</p> : null}
-      {displayedData ? <BillReadOnlyForm key={activeSubmissionId} data={displayedData} {...(!historical ? { onOpenAttachment: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} /> : null}
+      {displayedData ? <BillReadOnlyForm key={activeSubmissionId} data={displayedData} {...(validationIssues ? { validationIssues } : {})} {...(onPatientClick ? { onPatientClick } : {})} {...(onRenderingProviderClick ? { onRenderingProviderClick } : {})} {...(onClaimsAdministratorClick ? { onClaimsAdministratorClick } : {})} {...(!historical ? { onOpenAttachment: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} /> : null}
       {selectedAttempt ? <section className="mb-lifecycle-card" aria-label="Retained submission files"><h3>Retained submission files</h3><p>Exact files saved for this submission. These downloads do not include a regenerated current bill or a later EOR.</p>{selectedDetail?.artifacts?.length ? selectedDetail.artifacts.map((artifact) => <button type="button" className="mb-lifecycle-button secondary" key={artifact.id} onClick={() => void lifecycle.downloadSubmissionArtifact(selectedAttempt.id, artifact.id, artifact.label).catch(() => undefined)}>Download {artifact.kind === "submitted_edi" ? "submitted EDI" : "submitted attachment"}: {artifact.label}</button>) : <p>No retained files are available for this submission.</p>}</section> : null}
       {!historical ? <section className="mb-lifecycle-notes" aria-label="Bill notes">
         <header><div><h3>Team notes</h3><p>Shared with your workspace’s billing team. Never sent to the payer.</p></div><span>{billNotes.length}</span></header>

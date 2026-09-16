@@ -14,7 +14,9 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `FeeScheduleCalculator` provides multi-line California fee estimates with modifiers, provider and service context, claim edits, calculation details, and regulation sources. See [claim fee calculator](docs/claim-fee-calculator.md) for sessions, inputs, and review outcomes.
 
-`RfaDashboard` provides connected authorization tracking, clinical PDF uploads, physician-authorized signing preview, assembled packet review with cover sheet, directory/manual recipient selection, and delivery history. See [RFA dashboard](docs/rfa-dashboard.md) for server scopes, signer setup, and sandbox behavior.
+`RfaDashboard` provides connected authorization tracking, revision-safe draft editing, clinical PDF uploads, physician-authorized signing preview, assembled packet review with cover sheet, directory/manual recipient selection, delivery history, and recording receipt and utilization review outcomes. See [RFA dashboard](docs/rfa-dashboard.md) for server scopes, signer setup, and sandbox behavior.
+
+`BillDetailLayout` and `BillDetailSection` share responsive detail presentation across embedded and native pages. `BillReadOnlyForm` supports per-section errors and warnings plus optional patient, provider, and claims administrator navigation callbacks. See [shared bill details](docs/bill-details.md).
 
 React 0.62 loads saved provider/location choices automatically for organization-wide bill creation. Administrator-only `billingSettings` opens reusable practice setup from bill creation and correction. See [saved profiles](docs/saved-profiles.md). Component styles are injected; no stylesheet import is required.
 
@@ -442,9 +444,9 @@ readiness. Hide it with `showSettings={false}` or supply a dedicated authorized
 for session authorization, callbacks, and integration examples.
 
 
-React 0.65.0 extends Settings with custom claims administrators and existing MindBill
+React 0.66.0 extends Settings with custom claims administrators and existing MindBill
 team roles. Organization identity is collapsed under Organization details; billing
 providers stay first. Team access requires explicit `team:manage` delegation and never
-changes partner application roles. Browser 0.40.0 exposes directory CRUD and team
+changes partner application roles. Browser 0.41.0 exposes directory CRUD and team
 read/update methods; Node 0.16.0 accepts the restricted team permission. See
 [organization administration](docs/saved-profiles.md#organization-administration-react-065).
