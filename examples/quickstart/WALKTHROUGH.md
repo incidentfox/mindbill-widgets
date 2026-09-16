@@ -46,6 +46,6 @@ MindBill also reserves customer/externalId before dispatch so different browser 
 
 ## 6. Show the other billing surfaces
 
-Open **Billing dashboard** for workspace bills and **Settings** for optional reusable provider/location details. Their small components live in `app/billing/`. Both routes require the local host administrator; settings gets the separate `organization:manage` session. Customer case sessions never receive that permission.
+Open **Billing dashboard** for workspace bills and its **Settings** tab for providers, locations, W-9, custom claims administrators, and existing MindBill team roles. Their small components live in `app/billing/`. Both routes require the local host administrator; the dashboard passes `billingSettings={{ getSession: getSettingsSession }}` for a separate `organization:manage` and `team:manage` session. The backend API key needs explicit `orgs:team:write` scope. Customer case sessions never receive these permissions.
 
 The app shell, record viewer, login form, and integration components are in separate files so each file explains one responsibility. Implementation notes belong here, outside the product UI.

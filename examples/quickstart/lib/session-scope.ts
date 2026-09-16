@@ -32,5 +32,5 @@ export async function sessionScope(
   if (body.caseId !== undefined || !["billing", "settings"].includes(String(body.surface)))
     throw new RouteError(400, "Unknown billing surface.");
   if (!user.administrator) throw new RouteError(403, "Workspace administrator access required.");
-  return { permissions: body.surface === "settings" ? ["organization:manage"] : billingPermissions.filter((p) => p !== "bills:create") };
+  return { permissions: body.surface === "settings" ? ["organization:manage", "team:manage"] : billingPermissions.filter((p) => p !== "bills:create") };
 }

@@ -40,7 +40,7 @@ Start with [WALKTHROUGH.md](./WALKTHROUGH.md).
 | `lib/mock-database.ts` | Backend JSON database with transactions and uniqueness constraints |
 | `lib/case.ts` / `lib/documents.ts` | Synthetic case, per-bill provider snapshots, and PDFs |
 
-Shared billing settings and the all-workspace dashboard are separate administrator surfaces. They receive separate unscoped tokens; the case token cannot read shared billing profiles or manage workspace settings.
+Shared billing settings and the all-workspace dashboard are separate administrator surfaces. The dashboard’s default Settings tab uses `billingSettings={{ getSession: getSettingsSession }}` to request a separate administrator session. Settings sessions grant `organization:manage` and `team:manage`; the server API key must explicitly include `orgs:team:write` for team access. Case and ordinary dashboard sessions receive neither permission. Team controls manage existing MindBill accounts; they do not invite or provision host users. Pass `showSettings={false}` to hide the tab.
 
 ## Case identity, recovery, and concurrency
 

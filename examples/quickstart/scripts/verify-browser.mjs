@@ -32,7 +32,7 @@ const mock = http.createServer(async (request, response) => {
   const url = new URL(request.url, upstream), path = url.pathname;
   let bytes = ""; for await (const chunk of request) bytes += chunk;
   const body = bytes ? JSON.parse(bytes) : {};
-  const send = (value, status = 200) => { response.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Headers": "authorization,content-type,idempotency-key,x-mindbill-environment", "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS" }); response.end(JSON.stringify(value)); };
+  const send = (value, status = 200) => { response.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Headers": "authorization,content-type,idempotency-key,x-mindbill-environment", "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS" }); response.end(JSON.stringify(value)); };
   try {
     if (request.method === "OPTIONS") return send({});
     requests.push(path);
@@ -45,7 +45,15 @@ const mock = http.createServer(async (request, response) => {
     const serverKey = request.headers.authorization === "Bearer mbp_sandbox_synthetic_acceptance";
     const scope = serverKey ? null : JSON.parse(Buffer.from(request.headers.authorization?.slice(7) || "", "base64url").toString());
     if (path.startsWith("/partner/v2/organization")) {
-      assert.equal(scope?.resource, undefined, "case-scoped tokens must never fetch shared profiles");
+      // Production denies shared profiles to case tokens; the form then uses
+      // inline provider fields without exposing another customer's settings.
+      if (scope?.resource) return send({ error: { code: "forbidden", message: "Organization access requires an organization-wide session." } }, 403);
+      if (path === "/partner/v2/organization/team") {
+        assert.ok(scope.permissions.includes("team:manage"));
+        return send({ data: { members: [], roles: [], capabilities: { canManage: true, canAdd: false }, identityDomain: "mindbill" } });
+      }
+      if (path === "/partner/v2/organization/claims-administrators") return send({ data: [] });
+      assert.ok(scope.permissions.includes("organization:manage"));
       return send({ data: initialProfile() });
     }
     if (path === "/partner/v2/claims-administrators") return send({ results: [PAYER], total: 1 });
@@ -158,11 +166,18 @@ try {
   await page.screenshot({ path: "/tmp/review-desk-existing-bill.png", fullPage: true });
   await page.getByRole("button", { name: "Billing dashboard", exact: true }).click();
   await page.getByRole("heading", { name: "Billing dashboard", exact: true }).waitFor();
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Billing profiles", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Claims administrators", exact: true }).click();
+  await page.getByLabel("Administrator name").waitFor();
+  await page.getByRole("button", { name: "Team", exact: true }).click();
+  await page.getByRole("heading", { name: "Team", exact: true }).waitFor();
+  await page.screenshot({ path: "/tmp/review-desk-dashboard-settings.png", fullPage: true });
   await page.getByRole("button", { name: "Settings", exact: true }).first().click();
-  await page.getByRole("heading", { name: "Shared billing profile", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Shared billing settings", exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 1000 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-  assert.ok(sessions.some(session => session.permissions.includes("organization:manage") && !session.resource));
+  assert.ok(sessions.some(session => session.permissions.includes("organization:manage") && session.permissions.includes("team:manage") && !session.resource));
   assert.deepEqual(errors, []);
   assert.deepEqual(upstreamFailures, [], "every synthetic upstream endpoint completed successfully");
   assert.ok(requests.includes("/partner/v2/bills/" + BILL_ID + "/lifecycle"));
