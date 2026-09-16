@@ -28,6 +28,7 @@ export type OrganizationOnboardingProps = {
   sessionEndpoint?: string;
   getSession?: BillLifecycleSessionProvider;
   apiBaseUrl?: string;
+  fetch?: typeof globalThis.fetch;
   heading?: ReactNode;
   description?: ReactNode;
   /** "onboarding" renders a stepper; "settings" stacks every section for editing. */
@@ -100,6 +101,7 @@ export function OrganizationOnboarding({
   sessionEndpoint = "/api/mindbill/session",
   getSession,
   apiBaseUrl,
+  fetch: fetchOverride,
   heading = "Billing setup",
   description = "Practice identity, locations, and the W-9 — saved once, used on every bill.",
   variant = "onboarding",
@@ -111,10 +113,11 @@ export function OrganizationOnboarding({
     () =>
       createOrganizationClient({
         sessionEndpoint,
+        ...(fetchOverride ? { fetch: fetchOverride } : {}),
         ...(getSession ? { getSession } : {}),
         ...(apiBaseUrl ? { apiBaseUrl } : {}),
       }),
-    [sessionEndpoint, getSession, apiBaseUrl],
+    [sessionEndpoint, getSession, apiBaseUrl, fetchOverride],
   );
 
   const [profile, setProfile] = useState<OrganizationProfileData | null>(null);
@@ -129,47 +132,60 @@ export function OrganizationOnboarding({
   const [error, setError] = useState<string | null>(null);
   const [savedStep, setSavedStep] = useState<Record<string, boolean>>({});
   const completedFired = useRef(false);
+  const callbacks = useRef({ onCompleted, onError });
+  callbacks.current = { onCompleted, onError };
+  const activeClient = useRef(client);
+  activeClient.current = client;
+  const [loadedClient, setLoadedClient] = useState<OrganizationClient | null>(null);
+  const [retry, setRetry] = useState(0);
 
   const adoptProfile = useCallback((next: OrganizationProfileData) => {
     setProfile(next);
-    setIdentity((current) => ({
-      name: next.practiceIdentity.name ?? current.name,
-      legalName: next.practiceIdentity.legalName ?? current.legalName,
+    setIdentity({
+      name: next.practiceIdentity.name ?? "",
+      legalName: next.practiceIdentity.legalName ?? "",
       taxId: next.practiceIdentity.taxId ?? "",
       taxIdType: next.practiceIdentity.taxIdType ?? "EIN",
       taxIdLast4: next.practiceIdentity.taxIdLast4 ?? "",
       taxIdConfigured: next.practiceIdentity.taxIdConfigured ?? false,
-      npi: next.practiceIdentity.npi ?? current.npi,
-      phone: next.practiceIdentity.phone ?? current.phone,
-      email: next.practiceIdentity.email ?? current.email,
-    }));
-    if (next.billingProviders[0]) setProvider({ billType: "Professional", ...next.billingProviders[0] });
-    if (next.renderingProviders?.[0]) setRendering({ ...next.renderingProviders[0] });
-    if (next.locations.length) setLocations(next.locations.map((item) => ({ ...item })));
+      npi: next.practiceIdentity.npi ?? "",
+      phone: next.practiceIdentity.phone ?? "",
+      email: next.practiceIdentity.email ?? "",
+    });
+    setProvider({ name: "", taxId: "", npi: "", billType: "Professional", ...next.billingProviders[0] });
+    setRendering(next.renderingProviders?.[0] ? { ...next.renderingProviders[0] } : blankRendering());
+    setLocations(next.locations.length ? next.locations.map((item) => ({ ...item })) : [blankLocation()]);
     if (next.onboarding.complete && !completedFired.current) {
       completedFired.current = true;
-      onCompleted?.(next);
+      callbacks.current.onCompleted?.(next);
     }
-  }, [onCompleted]);
+  }, []);
 
   useEffect(() => {
     let alive = true;
+    completedFired.current = false;
+    setLoadedClient(null);
+    setLoadError(null);
+    setSavedStep({});
+    setSaving(false);
+    setError(null);
     client.getOrganization()
-      .then((next) => { if (alive) { setLoadError(null); adoptProfile(next); } })
+      .then((next) => { if (alive) { setLoadError(null); adoptProfile(next); setLoadedClient(client); } })
       .catch((caught) => {
         if (!alive) return;
         const failure = caught instanceof Error ? caught : new Error("The organization could not be loaded.");
         setLoadError(failure.message);
-        onError?.(failure);
+        callbacks.current.onError?.(failure);
       });
     return () => { alive = false; };
-  }, [client, adoptProfile, onError]);
+  }, [client, adoptProfile, retry]);
 
   const run = async (work: () => Promise<OrganizationProfileData>, stepId: StepId) => {
     setSaving(true);
     setError(null);
     try {
       const next = await work();
+      if (activeClient.current !== client) return;
       adoptProfile(next);
       setSavedStep((current) => ({ ...current, [stepId]: true }));
       onSaved?.(next);
@@ -179,11 +195,12 @@ export function OrganizationOnboarding({
         if (nextStep) setStep(nextStep);
       }
     } catch (caught) {
+      if (activeClient.current !== client) return;
       const failure = caught instanceof Error ? caught : new Error("Saving failed.");
       setError(failure.message);
       onError?.(failure);
     } finally {
-      setSaving(false);
+      if (activeClient.current === client) setSaving(false);
     }
   };
 
@@ -200,14 +217,16 @@ export function OrganizationOnboarding({
     setSaving(true);
     try {
       const next = await client.saveW9({ filename: file.name, contentBase64: await fileToBase64(file) });
+      if (activeClient.current !== client) return;
       adoptProfile(next);
       setSavedStep((current) => ({ ...current, w9: true }));
       onSaved?.(next);
       if (variant === "onboarding") setStep("review");
     } catch (error) {
+      if (activeClient.current !== client) return;
       onError?.(error instanceof Error ? error : new Error("The W-9 could not be saved."));
       throw error;
-    } finally { setSaving(false); }
+    } finally { if (activeClient.current === client) setSaving(false); }
   };
 
   const field = (label: string, value: string, onChange: (value: string) => void, span = false, placeholder = "") => (
@@ -312,8 +331,8 @@ export function OrganizationOnboarding({
       <style>{css}</style>
       <div className="mbob-card">
         <div className="mbob-head"><div><h2>{heading}</h2><p className="mbob-copy">{description}</p></div></div>
-        {loadError ? <div className="mbob-error" role="alert">{loadError}</div> : null}
-        {variant === "onboarding" ? (
+        {loadError ? <div className="mbob-error" role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Retry</button></div> : null}
+        {loadedClient !== client ? (!loadError ? <p role="status">Loading billing settings…</p> : null) : variant === "onboarding" ? (
           <>
             <div className="mbob-steps">
               {STEPS.map((item) => (

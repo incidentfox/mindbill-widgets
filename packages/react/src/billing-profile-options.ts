@@ -15,7 +15,7 @@ export type BillSubmissionProfileOptions = {
 };
 
 /** Explicit adapter: does not fetch, auto-select, persist, or mutate existing bills. */
-export function organizationProfileOptions(profile: OrganizationProfileData): BillSubmissionProfileOptions {
+export function organizationProfileOptions(profile: Pick<OrganizationProfileData, "billingProviders" | "renderingProviders" | "locations">): BillSubmissionProfileOptions {
   return {
     billingProviders: profile.billingProviders.map((provider) => ({
       id: provider.id, label: provider.name,

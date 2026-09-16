@@ -12,6 +12,10 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `DentalDraftEditor` and `RfaDraftForm` add host-managed dental and unsigned authorization preparation. Dental saves preserve host-supplied clinical details, recorded attestations, and service-specific diagnosis pointers. See [treatment drafts](docs/treatment-drafts.md) for saving, charge semantics, and delivery boundaries.
 
+`RfaDashboard` provides connected authorization tracking, clinical PDF uploads, physician-authorized signing preview, assembled packet review with cover sheet, directory/manual recipient selection, and delivery history. See [RFA dashboard](docs/rfa-dashboard.md) for server scopes, signer setup, and sandbox behavior.
+
+React 0.62 loads saved provider/location choices automatically for organization-wide bill creation. Administrator-only `billingSettings` opens reusable practice setup from bill creation and correction. See [saved profiles](docs/saved-profiles.md). Component styles are injected; no stylesheet import is required.
+
 ## Install
 
 ```bash

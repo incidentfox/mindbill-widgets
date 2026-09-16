@@ -3,6 +3,8 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
+  createOrganizationClient,
+  type OrganizationClientOptions,
   createBillReferenceClient,
   createBillSubmissionClient,
   type BillDeliveryOptions,
@@ -29,9 +31,10 @@ import { AnesthesiaLineFields, anesthesiaDetailsFromSaved, anesthesiaCalculation
 import { DrugLineFields, drugDetailsFromSaved, drugFieldsEnabled, drugRequestDetails, type DrugDetails } from "./bill-drug-context";
 import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } from "./bill-equipment-context";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { BillingSettings } from "./organization-onboarding";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
-import type { BillSubmissionProfileOptions } from "./billing-profile-options";
+import { organizationProfileOptions, type BillSubmissionProfileOptions } from "./billing-profile-options";
 import {
   BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
   calculateBillSubmissionAllowedAmount,
@@ -308,6 +311,8 @@ export type BillSubmissionFormProps = {
   idempotencyKey?: string;
   /** Host-owned choices or organizationProfileOptions(profile). Selection copies a snapshot into this bill only. */
   profileOptions?: BillSubmissionProfileOptions;
+  /** Separate organization:manage session. Supply only for users allowed to manage practice settings. */
+  billingSettings?: OrganizationClientOptions;
   /** Compact keeps provider fields available behind an edit disclosure; validation errors expand it. */
   profileDisplay?: "expanded" | "compact";
   attachments?: BillSubmissionSourceAttachment[];
@@ -922,7 +927,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 
 export function BillSubmissionForm({
   initialBill, idempotencyKey, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
-  profileOptions, profileDisplay = "expanded",
+  profileOptions, billingSettings, profileDisplay = "expanded",
   fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
@@ -996,6 +1001,23 @@ export function BillSubmissionForm({
   const connected = !onSubmit;
   const referenceClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const submissionClient = useMemo(() => connected ? createBillSubmissionClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
+  const profileClient = useMemo(() => profileOptions === undefined && (getSession || sessionEndpoint || connected)
+    ? createOrganizationClient({ ...(getSession ? { getSession } : {}), ...(sessionEndpoint ? { sessionEndpoint } : {}), ...(apiBaseUrl ? { apiBaseUrl } : {}), ...(fetchOverride ? { fetch: fetchOverride } : {}) }) : null,
+  [profileOptions, getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
+  const [loadedProfiles, setLoadedProfiles] = useState<{ client: typeof profileClient; options?: BillSubmissionProfileOptions; error?: string } | null>(null);
+  const [profileRetry, setProfileRetry] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (profileClient) {
+      setLoadedProfiles(null);
+      void profileClient.getBillingProfile().then((profile) => {
+        if (alive) setLoadedProfiles({ client: profileClient, options: organizationProfileOptions(profile) });
+      }).catch(() => { if (alive) setLoadedProfiles({ client: profileClient, error: "Saved practice settings could not be loaded. You can retry or enter the details below." }); });
+    }
+    return () => { alive = false; };
+  }, [profileClient, profileRetry]);
+  const availableProfiles = loadedProfiles?.client === profileClient && loadedProfiles.options ? loadedProfiles.options : profileOptions;
   const locked = disabled || submitting;
   const showAttachmentReportTypes = attachmentReportTypeMode === "visible" || (attachmentReportTypeMode === "auto" && bill.billingMode !== "med_legal");
   const forcedAttachmentReportType = showAttachmentReportTypes ? undefined : (defaultAttachmentReportType ?? MED_LEGAL_REPORT_TYPE_CODE);
@@ -1443,9 +1465,12 @@ export function BillSubmissionForm({
   const compactProviders = profileDisplay === "compact";
   const providerErrors = Object.keys(errors).some((path) => /^(billingProvider|renderingProvider|serviceLocation)\./.test(path));
   const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend>
+    {profileClient && !loadedProfiles ? <p role="status" className="mbsf-help">Loading saved practice settings…</p> : null}
+    {loadedProfiles?.client === profileClient && loadedProfiles.error ? <p role="status">{loadedProfiles.error} <button type="button" onClick={() => setProfileRetry((value) => value + 1)}>Retry</button></p> : null}
+    {billingSettings ? <button type="button" className="mbsf-secondary" onClick={() => setSettingsOpen((value) => !value)}>Add or manage providers, locations &amp; W-9</button> : null}
     <div className="mbsf-grid">
       {([ ["billingProviders", "billingProvider", "Billing provider"], ["renderingProviders", "renderingProvider", "Rendering provider"], ["serviceLocations", "serviceLocation", "Service location"] ] as const).map(([collection, key, label]) => {
-        const options = profileOptions?.[collection];
+        const options = availableProfiles?.[collection];
         return options?.length ? <Field key={key} label={`Saved ${label.toLowerCase()}`}>
           <ComboBox ariaLabel={`Saved ${label.toLowerCase()}`} disabled={locked} value="" placeholder={bill[key]?.name || `Choose ${label.toLowerCase()}…`} options={options.map(({ id, label: optionLabel }) => ({ id, label: optionLabel }))} onSelect={({ id }) => {
             const option = options.find((candidate) => candidate.id === id);
@@ -1542,7 +1567,7 @@ export function BillSubmissionForm({
 
   const attachmentsSection = <fieldset className="mbsf-card" data-field-path="attachments" data-invalid={Boolean(errors.attachments)} disabled={locked}><legend className="mbsf-legend">Attachments</legend><div className="mbsf-attach-list">
       {attachments.filter((attachment) => !removedSourceIds.includes(attachment.id)).map((attachment) => { const auto = attachment.autoAttached || attachment.documentType === "w9"; const removable = attachment.removable ?? !auto; const reportTypeCode = sourceAttachmentReportTypes[attachment.id] || attachment.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" data-auto={auto} key={attachment.id}><div className="mbsf-attach-main">{auto ? <span aria-label="Auto-attached" role="img">✓</span> : null}<span className="mbsf-file"><strong>{attachment.fileName}</strong><span className="mbsf-badge">{auto ? "Auto-attached" : documentLabels[attachment.documentType]}</span><span className="mbsf-help" style={{ display: "block" }}>{attachment.description || (auto ? "Included automatically with every bill." : documentLabels[attachment.documentType])}</span></span></div>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${attachment.fileName}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setSourceAttachmentReportTypes((current) => ({ ...current, [attachment.id]: option.id }))} /></div> : null}<div className="mbsf-attach-actions">{attachment.previewUrl ? <a className="mbsf-secondary" href={attachment.previewUrl} target="_blank" rel="noopener noreferrer">Preview</a> : null}{removable ? <button className="mbsf-icon-btn" type="button" aria-label={`Remove ${attachment.fileName}`} disabled={locked} onClick={() => { setSelectedIds((current) => current.filter((id) => id !== attachment.id)); setRemovedSourceIds((current) => [...new Set([...current, attachment.id])]); }}>×</button> : null}</div></div>; })}
-      {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
+      {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div><label className="mbsf-attach-type">Document purpose<select aria-label={`Document purpose for ${upload.file.name}`} value={upload.description ?? ""} onChange={(event) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))}><option value="">Supporting document</option><option value="Authorization / UR response">Authorization / UR response</option><option value="MPN / network documentation">MPN / network documentation</option></select></label>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
     </div>{errors.attachments ? <p className="mbsf-error" role="alert">{errors.attachments}</p> : null}<input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
 
   const actionsSection = <>{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions"><button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
@@ -1581,6 +1606,7 @@ export function BillSubmissionForm({
         />
       ) : null}
     </form>
+    {settingsOpen && billingSettings ? <section aria-label="Practice settings"><button type="button" onClick={() => setSettingsOpen(false)}>Close practice settings</button><BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} onSaved={(profile) => { setLoadedProfiles({ client: profileClient, options: organizationProfileOptions(profile) }); }} /></section> : null}
     <ClaimsAdministratorDirectoryDialog
       open={directoryOpen}
       directory={directory}

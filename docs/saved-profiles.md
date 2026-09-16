@@ -1,7 +1,9 @@
 # Reusable billing profiles
 
-Shared profiles are optional. By default, supply the billing provider, rendering provider,
-service location, and W-9 with each bill from authorized host records.
+React 0.62 automatically loads saved billing providers, rendering providers, and service
+locations when a connected `BillSubmissionForm` has no explicit `profileOptions`. The
+read uses an organization-wide `bills:create` session. Values already entered are preserved;
+loading options never selects or replaces a provider.
 
 Workspace administrators can use `BillingSettings` to manage shared billing providers,
 rendering providers, service locations/POS, and the practice W-9 in MindBill. Use
@@ -24,11 +26,13 @@ on the server. See the [integration quickstart](https://docs.mindbill.org/learn/
 
 ## Choose saved values when authoring a bill
 
-Fetch a masked organization profile with `createOrganizationClient(...).getBillingProfile()`
+For manual loading, fetch a masked organization profile with `createOrganizationClient(...).getBillingProfile()`
 using an organization-wide `bills:create` session, or provide your own host-owned choices.
 This read-only route does not need `organization:manage` and rejects customer-scoped
 and single-bill sessions. Customer integrations use their own authorized inline values
-or host-owned choices instead of fetching shared profiles.
+or host-owned choices instead of fetching shared profiles. Pass `profileOptions={}` to
+explicitly disable automatic reads for scoped sessions. Connected bill corrections use the
+authorized options in the bill review response, including single-bill sessions.
 The adapter does not fetch profiles or broaden permissions.
 
 ```tsx
@@ -77,6 +81,24 @@ Choice IDs remain UI references; SSN provider values carry an explicit `savedPro
 You can mix MindBill-owned and
 host-owned collections without adding a database table. Retain the canonical bill ID in
 existing case metadata where practical; use an idempotency key for submission retries.
+
+## Optional administrator settings in the form
+
+```tsx
+<BillSubmissionForm
+  getSession={getBillingSession}
+  initialBill={billPrefilledFromYourCase}
+  billingSettings={isAdministrator ? { getSession: getSettingsSession } : undefined}
+/>
+```
+
+`billingSettings` adds **Add or manage saved providers** and an embedded settings page.
+The separate settings session needs `organization:manage`; enforce the administrator role
+on your server before minting it. Saving refreshes the available choices without replacing
+typed bill values. The same prop is available on `ConnectedBillLifecycle` and
+`ConnectedBillingWorkspace` for corrections and resubmission. Do not grant management
+permission to ordinary bill-entry sessions. A saved practice W-9 is attached by the backend
+when applicable; review the final submission documents.
 
 ## Sensitive data and documents
 
