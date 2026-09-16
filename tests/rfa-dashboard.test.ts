@@ -40,3 +40,35 @@ it("selects only the newest signed form for the current content revision",async(
  await act(async()=>named("Earlier current form.pdf").click());expect(named("Current form.pdf").checked).toBe(false);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+it("edits retained service rows without losing metadata, invalidates the signed form, and keeps stale edits visible",async()=>{
+ const current={...record,metadata:{host:"request_context"},providerFax:"+18005550100",requestType:"new",items:[{id:"service_existing",diagnosisCode:"M54.5",serviceDescription:"Existing service",procedureCode:"97110",quantity:2,units:1,frequency:"Weekly",duration:"Two weeks",requestedFrom:"2026-09-01",requestedTo:"2026-09-15",metadata:{host:"service_context"},outcome:"pending",authorizationNumber:null,decisionReason:null}]};
+ let stale=true;
+ const fetcher=vi.fn<typeof fetch>(async(input,init)=>{
+  if(init?.method==="PATCH")return stale?Response.json({error:{message:"Content revision changed"}},{status:409}):Response.json({data:{...current,...JSON.parse(String(init.body)),items:JSON.parse(String(init.body)).items.map((item:object)=>({...item,outcome:"pending"})),contentRevision:2,status:"draft",signedAt:null}});
+  return String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current});
+ });
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text)!;
+ try{
+ await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["edit"]})));
+ await act(async()=>button("Review request").click());await act(async()=>button("Edit request draft").click());
+ expect(container.textContent).toContain("clears its signature");expect(button("Refresh request").disabled).toBe(true);
+ const input=[...container.querySelectorAll("input")].find(x=>x.parentElement?.textContent==="Frequency")!;
+ await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"Twice weekly");input.dispatchEvent(new Event("input",{bubbles:true}));});
+ await act(async()=>container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+ expect(container.textContent).toContain("Your edits are still here");expect(input.value).toBe("Twice weekly");
+ stale=false;await act(async()=>container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+ const mutations=fetcher.mock.calls.filter(([,init])=>init?.method==="PATCH");expect(mutations).toHaveLength(2);
+ expect(mutations[0]?.[1]?.body).toBe(mutations[1]?.[1]?.body);expect(new Headers(mutations[0]?.[1]?.headers).get("idempotency-key")).toBe(new Headers(mutations[1]?.[1]?.headers).get("idempotency-key"));
+ const body=JSON.parse(String(mutations[0]?.[1]?.body));expect(body.expectedRevision).toBe(1);expect(body.items[0]).toMatchObject({id:"service_existing",frequency:"Twice weekly",duration:"Two weeks",metadata:{host:"service_context"}});expect(body.metadata).toEqual({host:"request_context"});
+ expect(button("Save draft changes")).toBeUndefined();const oldForm=[...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(x=>x.parentElement?.textContent?.includes("Synthetic form.pdf"))!;expect(oldForm.disabled).toBe(true);expect(oldForm.checked).toBe(false);expect(button("Prepare packet with cover sheet").disabled).toBe(true);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("does not expose content editing without permission or after submission",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ try{for(const [permissions,current] of [[[],record],[["edit"],{...record,submittedAt:"2026-09-01T00:00:00Z"}]] as const){
+ const fetcher=vi.fn<typeof fetch>(async(input)=>String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current}));
+ await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions})));
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Review request")!.click());expect(container.textContent).not.toContain("Edit request draft");
+ }}finally{await act(async()=>root.unmount());container.remove();}
+});

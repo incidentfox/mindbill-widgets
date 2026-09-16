@@ -3,11 +3,11 @@ import { useState, type ReactElement } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
 export type RfaDraftItemInput = {
-  externalId?: string; diagnosisCode: string; serviceDescription: string; procedureCode?: string;
+  id?: string; externalId?: string; diagnosisCode: string; serviceDescription: string; procedureCode?: string;
   quantity?: number; units?: number; frequency?: string; duration?: string;
   requestedFrom?: string; requestedTo?: string; metadata?: Record<string, unknown>;
 };
-/** An unsigned preparation draft. The host owns identity selection, signing, and delivery. */
+/** An unsigned preparation draft. The host selects identities; RfaDashboard can continue through reviewed signing and delivery. */
 export type RfaDraftInput = {
   claimId: string; patientId: string; renderingProviderId: string; employeeName: string; providerName: string;
   externalId?: string; claimsAdminId?: string;
@@ -18,8 +18,9 @@ export type RfaDraftInput = {
   items: RfaDraftItemInput[]; metadata?: Record<string, unknown>;
 };
 export type RfaDraftFormProps = TreatmentDraftAppearance & {
-  /** Remount with a different React key when switching requests. Never pass a signed request. */
+  /** Remount with a different React key when switching requests. Use mode="edit" when replacing existing content; saving invalidates its signature. */
   initialDraft: RfaDraftInput;
+  mode?: "create" | "edit";
   /** Persist an unsigned draft only; this callback must not sign or transmit the request. */
   onSave: (draft: RfaDraftInput) => Promise<void>;
 };
@@ -58,7 +59,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, onSave, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, onSave, mode = "create", disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [draft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   const action = useDraftSave(onSave), locked = disabled || action.busy;
   const update = (patch: Partial<RfaDraftInput>) => { action.clear(); setDraft((current) => ({ ...current, ...patch })); };
@@ -70,7 +71,7 @@ export function RfaDraftForm({ initialDraft, onSave, disabled = false, ...appear
     }) }));
   };
   return <TreatmentDraftShell {...appearance} title="Request for authorization" description="Prepare services and supporting rationale for utilization review.">
-    <p className="mbtd-note">Saving creates an unsigned draft. It does not send the request or authorize treatment.</p>
+    <p className="mbtd-note">{mode === "edit" ? "Saving replaces this draft, clears its signature, and requires a new signing review. It does not send the request or authorize treatment." : "Saving creates an unsigned draft. It does not send the request or authorize treatment."}</p>
     <form onSubmit={(event) => { event.preventDefault(); if (locked) return; const next = normalizeRfaDraft(draft); void action.save(next, validateRfaDraft(next)); }}>
       <fieldset disabled={locked}><legend>Request details</legend><div className="mbtd-grid">
         <label>Employee<input readOnly value={draft.employeeName} /></label><label>Requesting provider<input readOnly value={draft.providerName} /></label>
@@ -93,7 +94,7 @@ export function RfaDraftForm({ initialDraft, onSave, disabled = false, ...appear
         <label>Requested through<input type="date" value={item.requestedTo ?? ""} onChange={(event) => updateItem(index, { requestedTo: event.target.value })} /></label>
       </div><button type="button" disabled={draft.items.length === 1} onClick={() => update({ items: draft.items.filter((_, position) => position !== index) })}>Remove requested service {index + 1}</button></fieldset>)}
       <div><button type="button" disabled={locked || draft.items.length >= 100} onClick={() => update({ items: [...draft.items, { diagnosisCode: "", serviceDescription: "" }] })}>Add requested service</button></div>
-      {action.error ? <p role="alert">{action.error}</p> : null}<div className="mbtd-actions"><button type="submit" className="mbtd-primary" disabled={locked}>{action.busy ? "Saving…" : "Save RFA draft"}</button><p role="status">{action.message}</p></div>
+      {action.error ? <p role="alert">{action.error}{mode === "edit" ? " Your edits are still here. If this request changed elsewhere, discard edits and refresh before editing the latest version." : ""}</p> : null}<div className="mbtd-actions"><button type="submit" className="mbtd-primary" disabled={locked}>{action.busy ? "Saving…" : mode === "edit" ? "Save draft changes" : "Save RFA draft"}</button><p role="status">{action.message}</p></div>
     </form>
   </TreatmentDraftShell>;
 }
