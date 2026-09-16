@@ -1,3 +1,5 @@
+import { parseCaClaimFeeQuote, type CaClaimFeeQuoteInput, type CaClaimFeeQuoteResult } from "./claim-fees";
+export type { CaClaimFeeQuoteInput, CaClaimFeeQuoteResult, CaClaimLineQuote, CaFeeCalculation, CaFeeCitation, CaClaimEditFinding, CaClaimFeeFinding } from "./claim-fees";
 export { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance } from "./rfa-directory";
 export type { RfaAuthorizationDestinationOption } from "./rfa-directory";
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
@@ -1221,6 +1223,7 @@ export type BillReferenceClient = {
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   searchProcedureCodes: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
   quoteFee: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
+  quoteClaimFees: (input: CaClaimFeeQuoteInput) => Promise<CaClaimFeeQuoteResult>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   /**
    * Delivery-route preview (recommended route + selectable options + payer
@@ -1240,6 +1243,7 @@ export type BillLifecycleClient = {
   searchDiagnosisCodes: (query: string, limit?: number, offset?: number) => Promise<BillDiagnosisCode[]>;
   searchProcedureCodes: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
   quoteFee: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
+  quoteClaimFees: (input: CaClaimFeeQuoteInput) => Promise<CaClaimFeeQuoteResult>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
   getDeliveryPreview: (input: BillDeliveryPreviewInput) => Promise<BillDeliveryOptions>;
@@ -1663,6 +1667,15 @@ export function createBillLifecycleClient({
     };
   };
 
+  const quoteClaimFees = async (input: CaClaimFeeQuoteInput): Promise<CaClaimFeeQuoteResult> => {
+    const response = await request("/partner/v2/fee-quotes/ca/claim", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input),
+    });
+    if (!response.ok) throw await responseError(response, "Claim fee pricing is unavailable.");
+    const body = await response.json() as { data?: unknown };
+    return parseCaClaimFeeQuote(body.data, input);
+  };
+
   const quoteFee = async (input: BillFeeQuoteInput): Promise<BillFeeQuote> => {
     const response = await request("/partner/v2/fee-quotes", {
       method: "POST",
@@ -1727,6 +1740,7 @@ export function createBillLifecycleClient({
     searchDiagnosisCodes,
     searchProcedureCodes,
     quoteFee,
+    quoteClaimFees,
     lookupPostalCode,
     async getDeliveryOptions() {
       const response = await request(billPath("/delivery-options"));
@@ -1825,6 +1839,7 @@ export function createBillReferenceClient(
     searchDiagnosisCodes: lifecycle.searchDiagnosisCodes,
     searchProcedureCodes: lifecycle.searchProcedureCodes,
     quoteFee: lifecycle.quoteFee,
+    quoteClaimFees: lifecycle.quoteClaimFees,
     lookupPostalCode: lifecycle.lookupPostalCode,
     getDeliveryPreview: lifecycle.getDeliveryPreview,
     clearSession: lifecycle.clearSession,

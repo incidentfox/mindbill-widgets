@@ -12,6 +12,8 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `DentalDraftEditor` and `RfaDraftForm` add host-managed dental and unsigned authorization preparation. Dental saves preserve host-supplied clinical details, recorded attestations, and service-specific diagnosis pointers. See [treatment drafts](docs/treatment-drafts.md) for saving, charge semantics, and delivery boundaries.
 
+`FeeScheduleCalculator` provides multi-line California fee estimates with modifiers, provider and service context, claim edits, calculation details, and regulation sources. See [claim fee calculator](docs/claim-fee-calculator.md) for sessions, inputs, and review outcomes.
+
 ## Install
 
 ```bash
