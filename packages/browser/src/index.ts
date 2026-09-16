@@ -175,6 +175,7 @@ export type BillReviewClaimPatternStatus = {
 };
 
 export type BillReviewData = {
+  options?: Pick<OrganizationProfileData, "billingProviders" | "renderingProviders" | "locations">;
   bill: {
     id: string;
     billNumber: string | number;
@@ -2142,4 +2143,127 @@ export function buildBillTasksDashboard(
   }
 
   return { sections: built, grandTotals, grandTotal, grandBalanceTotals, grandBalanceTotal };
+}
+
+
+/** An unsigned RFA preparation draft. Signing and sending are separate operations. */
+export type RfaCreateDraftInput = {
+  claimId: string; patientId: string; renderingProviderId: string; employeeName: string; providerName: string;
+  externalId?: string; claimsAdminId?: string;
+  requestType?: "new" | "resubmission_material_change" | "oral_authorization_confirmation";
+  reviewType?: "prospective" | "concurrent" | "retrospective"; expedited?: boolean;
+  placeOfServiceCode?: string; providerNpi?: string; providerPhone?: string; providerFax?: string;
+  claimNumber?: string; dateOfInjury?: string; rationale?: string; materialChange?: string;
+  items: Array<{ externalId?: string; diagnosisCode: string; serviceDescription: string; procedureCode?: string;
+    quantity?: number; units?: number; frequency?: string; duration?: string; requestedFrom?: string; requestedTo?: string; metadata?: Record<string, unknown> }>;
+  metadata?: Record<string, unknown>;
+};
+export type RfaRecord = {
+  contentRevision: number; id: string; claimId: string; patientId: string; renderingProviderId: string; claimsAdminId: string | null;
+  employeeName: string; providerName: string; claimNumber: string | null; status: string;
+  reviewType: string; expedited: boolean; createdAt: string | null; updatedAt: string | null;
+  signedAt: string | null; submittedAt: string | null; receivedAt: string | null;
+  decisionDueAt: string | null; decisionDeadlineBasis: string | null;
+  incompleteReason: string | null; deferredReason: string | null; closedReason: string | null;
+  readiness: { ready: boolean; missing: string[] };
+  items: Array<{ id: string; diagnosisCode: string; serviceDescription: string; procedureCode: string | null;
+    outcome: string; quantity: number | null; units: number | null; authorizationNumber: string | null; decisionReason: string | null }>;
+  documents: Array<{ id: string; documentType: string; filename: string; contentUrl: string; contentRevision: number | null; createdAt: string | null }>;
+  transmissions: Array<{ id: string; direction: string; channel: string; status: string; destination: string | null;
+    occurredAt: string | null; receivedAt: string | null; proofDocumentId: string | null; providerMessageId: string | null }>;
+  informationRequests: Array<{ id: string; requestText: string; requestedAt: string | null; dueAt: string | null; respondedAt: string | null }>;
+  events: Array<{ id: string; type: string; occurredAt: string | null }>;
+};
+export type RfaListQuery = { claimId?: string; renderingProviderId?: string; status?: string; createdFrom?: string; createdTo?: string; limit?: number; cursor?: string };
+export type RfaListResult = { data: RfaRecord[]; nextCursor: string | null; summary: { total: number; byStatus: Record<string, number> } };
+export type RfaSigningPreviewInput = { billingProviderId?: string; diagnosisDescriptions: Record<string, string> };
+export type RfaSigningPreview = { id: string; contentHash: string; contentRevision: number; renderingProviderId: string; previewDocumentId: string; expiresAt: string };
+export type RfaSignInput = { snapshotId: string; contentHash: string; renderingProviderId: string; physicianAuthorized: true; actorReference: string };
+export type RfaFaxInput = { to: string; documentIds: string[]; nonBusinessDates?: string[] };
+export type RfaUploadDocumentInput = { file: File; documentType: "clinical_report" | "supporting_record" | "ur_response" | "other"; contentRevision: number };
+export type RfaClient = {
+  list: (query?: RfaListQuery) => Promise<RfaListResult>;
+  get: (rfaId: string) => Promise<RfaRecord>;
+  createDraft: (draft: RfaCreateDraftInput, idempotencyKey: string) => Promise<RfaRecord>;
+  getDocument: (rfaId: string, documentId: string) => Promise<Blob>;
+  uploadDocument: (rfaId: string, input: RfaUploadDocumentInput, idempotencyKey: string) => Promise<RfaRecord>;
+  prepareSigning: (rfaId: string, input: RfaSigningPreviewInput, idempotencyKey: string) => Promise<RfaSigningPreview>;
+  sign: (rfaId: string, input: RfaSignInput, idempotencyKey: string) => Promise<RfaRecord>;
+  previewPacket: (rfaId: string, documentIds: string[]) => Promise<Blob>;
+  sendFax: (rfaId: string, input: RfaFaxInput, idempotencyKey: string) => Promise<RfaRecord>;
+  refreshFaxes: (rfaId: string, idempotencyKey: string) => Promise<RfaRecord>;
+};
+/** Uses short-lived browser credentials. Never pass a partner API key. */
+export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, getSession, apiBaseUrl = DEFAULT_API_BASE_URL, fetch: fetchOverride }: OrganizationClientOptions = {}): RfaClient {
+  const fetcher = fetchOverride ?? globalThis.fetch;
+  let session: BillLifecycleSession | null = null;
+  let pending: Promise<BillLifecycleSession> | null = null;
+  const mint = (force = false): Promise<BillLifecycleSession> => {
+    if (!force && isSessionFresh(session)) return Promise.resolve(session as BillLifecycleSession);
+    if (pending) return pending;
+    pending = (async () => {
+      const value = getSession ? await getSession({ signal: new AbortController().signal }) : await (async () => {
+        const response = await fetcher(sessionEndpoint, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: "{}" });
+        if (!response.ok) throw await responseError(response, "The RFA session could not be created.");
+        return response.json();
+      })();
+      session = normalizeSession(value); return session;
+    })().finally(() => { pending = null; });
+    return pending;
+  };
+  const request = async (path: string, init: RequestInit = {}) => {
+    const perform = (active: BillLifecycleSession) => {
+      const headers = new Headers(init.headers); headers.set("authorization", `Bearer ${active.token}`);
+      if (init.body && !(init.body instanceof FormData)) headers.set("content-type", "application/json");
+      return fetcher(`${(active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "")}/partner/v2/rfas${path}`, { ...init, headers });
+    };
+    let response = await perform(await mint());
+    if (response.status === 401) response = await perform(await mint(true));
+    if (!response.ok) throw await responseError(response, "The RFA request failed.");
+    return response;
+  };
+  const record = async (path: string, init?: RequestInit): Promise<RfaRecord> => {
+    const body = await (await request(path, init)).json() as { data?: RfaRecord };
+    if (!body.data?.id) throw new Error("The RFA response was invalid.");
+    return body.data;
+  };
+  const mutation = (body: unknown, key: string): RequestInit => {
+    if (!key.trim()) throw new Error("An idempotency key is required.");
+    return { method: "POST", headers: { "idempotency-key": key }, body: JSON.stringify(body) };
+  };
+  const path = (id: string, suffix: string) => `/${encodeURIComponent(id)}/${suffix}`;
+  return {
+    list: async (query = {}) => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(key, String(value));
+      const body = await (await request(params.size ? `?${params}` : "")).json() as RfaListResult;
+      if (!Array.isArray(body.data) || !body.summary) throw new Error("The RFA list response was invalid.");
+      return body;
+    },
+    get: (id) => record(`/${encodeURIComponent(id)}`),
+    createDraft: (draft, idempotencyKey) => {
+      if (!idempotencyKey.trim()) return Promise.reject(new Error("An idempotency key is required."));
+      const unsigned = { ...draft } as RfaCreateDraftInput & { signedAt?: unknown }; delete unsigned.signedAt;
+      return record("", { method: "POST", headers: { "idempotency-key": idempotencyKey }, body: JSON.stringify(unsigned) });
+    },
+    uploadDocument: (id, input, key) => {
+      if (!key.trim()) return Promise.reject(new Error("An idempotency key is required."));
+      if (input.file.size < 1 || input.file.size > 25 * 1024 * 1024) return Promise.reject(new Error("Choose a PDF up to 25 MB."));
+      const body = new FormData(); body.set("file", input.file); body.set("documentType", input.documentType); body.set("contentRevision", String(input.contentRevision));
+      return record(path(id, "documents"), { method: "POST", headers: { "idempotency-key": key }, body });
+    },
+    prepareSigning: async (id, input, key) => {
+      const body = await (await request(path(id, "signing-preview"), mutation(input, key))).json() as { data: RfaSigningPreview };
+      if (!body.data?.id || !body.data.contentHash || !body.data.previewDocumentId) throw new Error("The signing preview was invalid.");
+      return body.data;
+    },
+    sign: (id, input, key) => {
+      if (input.physicianAuthorized !== true || !input.actorReference.trim()) return Promise.reject(new Error("Physician authorization and signer identity are required."));
+      return record(path(id, "sign"), mutation(input, key));
+    },
+    previewPacket: async (id, documentIds) => (await request(path(id, "packet"), { method: "POST", body: JSON.stringify({ documentIds }) })).blob(),
+    sendFax: (id, input, key) => record(path(id, "fax"), mutation(input, key)),
+    refreshFaxes: (id, key) => record(path(id, "fax/refresh"), mutation({}, key)),
+    getDocument: async (id, documentId) => (await request(`/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`)).blob(),
+  };
 }

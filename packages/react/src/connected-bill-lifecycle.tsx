@@ -1,4 +1,6 @@
 "use client";
+import { organizationProfileOptions } from "./billing-profile-options";
+import type { BillSubmissionFormProps } from "./bill-submission-form";
 
 import {
   useCallback,
@@ -362,6 +364,7 @@ export function useBillLifecycle({
 }
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & {
+  billingSettings?: BillSubmissionFormProps["billingSettings"];
   appearance?: MindBillReactAppearance;
   /** Case-scoped suggestions; recipients must still be selected and confirmed. */
   courtesyCopyRecipientOptions?: readonly CourtesyCopyRecipientOption[];
@@ -646,7 +649,8 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
   return enabled && environment === "sandbox";
 }
 
-export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+export function ConnectedBillLifecycle({
+  billingSettings, appearance, actorName, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -902,6 +906,9 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     {activePanel === "resubmit" && correctionInitialBill ? <LifecycleDialog title="Correct and resubmit" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Correct and resubmit</h3><p>Review the rejected snapshot, correct the highlighted information, and submit a new immutable attempt under this bill.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>Resubmitting sends a real bill. Confirm the corrected information before continuing.</span></div> : null}{data.rejection ? <CorrectionRejectionReason rejection={data.rejection} /> : null}<CorrectionVerificationContact delivery={data.delivery} /><label className="mb-lifecycle-correction-note"><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
       className="mbsf-lifecycle-correction"
       initialBill={correctionInitialBill}
+              profileOptions={data.options ? organizationProfileOptions(data.options) : {}}
+              {...(billingSettings ? { billingSettings } : {})}
+              treatmentBilling={data.bill.billingMode === "professional"}
       attachments={correctionAttachments}
       onSubmit={submitCorrection}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
@@ -926,6 +933,9 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     {activePanel === "submit_new_bill" && correctionInitialBill ? <LifecycleDialog title="Submit New Bill" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Submit New Bill</h3><p>This closed bill stays closed and keeps its record. Review the carried-over snapshot below and submit a fresh bill — both bills stay linked in the submissions timeline.</p></div></header><label className="mb-lifecycle-correction-note"><span>Submission note (optional)</span><textarea value={reason} placeholder="Why is a new bill being submitted?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
       className="mbsf-lifecycle-correction"
       initialBill={correctionInitialBill}
+              profileOptions={data.options ? organizationProfileOptions(data.options) : {}}
+              {...(billingSettings ? { billingSettings } : {})}
+              treatmentBilling={data.bill.billingMode === "professional"}
       attachments={correctionAttachments}
       onSubmit={submitNewBillFromForm}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
@@ -964,6 +974,9 @@ export function ConnectedBillLifecycle({ appearance, actorName, claimsAdministra
     {activePanel === "send_duplicate" && correctionInitialBill ? <LifecycleDialog title="Send duplicate bill" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Send duplicate bill</h3><p>Review and edit any bill field before creating a duplicate submission. The original bill and its history stay unchanged.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>The duplicate will be sent only after you confirm its delivery route in the next dialog.</span></div> : null}<CorrectionVerificationContact delivery={data.delivery} /><BillSubmissionForm
       className="mbsf-lifecycle-correction"
       initialBill={correctionInitialBill}
+              profileOptions={data.options ? organizationProfileOptions(data.options) : {}}
+              {...(billingSettings ? { billingSettings } : {})}
+              treatmentBilling={data.bill.billingMode === "professional"}
       attachments={correctionAttachments}
       onSubmit={submitDuplicateFromForm}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}

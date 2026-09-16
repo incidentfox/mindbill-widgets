@@ -69,6 +69,7 @@ it("forwards a persisted host key when the connected form is submitted and retri
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [] }));
     await act(async () => root.render(createElement(BillSubmissionForm, {
       initialBill: validBill,
+      profileOptions: {}, // A scoped host supplies its permitted options; do not read organization profiles.
       idempotencyKey: "host-case-persisted-key",
       getSession: async () => ({ token: "synthetic-token" }),
       fetch: fetcher, deliveryRoutePicker: "off",

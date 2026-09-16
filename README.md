@@ -14,6 +14,10 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `FeeScheduleCalculator` provides multi-line California fee estimates with modifiers, provider and service context, claim edits, calculation details, and regulation sources. See [claim fee calculator](docs/claim-fee-calculator.md) for sessions, inputs, and review outcomes.
 
+`RfaDashboard` provides connected authorization tracking, clinical PDF uploads, physician-authorized signing preview, assembled packet review with cover sheet, directory/manual recipient selection, and delivery history. See [RFA dashboard](docs/rfa-dashboard.md) for server scopes, signer setup, and sandbox behavior.
+
+React 0.62 loads saved provider/location choices automatically for organization-wide bill creation. Administrator-only `billingSettings` opens reusable practice setup from bill creation and correction. See [saved profiles](docs/saved-profiles.md). Component styles are injected; no stylesheet import is required.
+
 ## Install
 
 ```bash
