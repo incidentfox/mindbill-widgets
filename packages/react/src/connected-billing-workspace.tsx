@@ -59,17 +59,23 @@ function money(value: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
 
-function RenderingProviderFilter({ value, options, onChange }: {
+function EntityFilter({ value, options, onChange, label, plural }: {
   value: string;
   options: Array<{ id: string; name: string }> | undefined;
   onChange: (value: string) => void;
+  label: string;
+  plural: string;
 }): ReactElement | null {
   if (!options && !value) return null;
-  return <select className="mbow-select" aria-label="Rendering provider filter" value={value} onChange={(event) => onChange(event.target.value)}>
-    <option value="">All rendering providers</option>
-    {value && !options?.some((option) => option.id === value) ? <option value={value}>Selected rendering provider</option> : null}
+  return <select className="mbow-select" aria-label={`${label} filter`} value={value} onChange={(event) => onChange(event.target.value)}>
+    <option value="">All {plural}</option>
+    {value && !options?.some((option) => option.id === value) ? <option value={value}>Selected {label.toLowerCase()}</option> : null}
     {options?.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
   </select>;
+}
+
+function RenderingProviderFilter(props: { value: string; options: Array<{ id: string; name: string }> | undefined; onChange: (value: string) => void }): ReactElement | null {
+  return <EntityFilter {...props} label="Rendering provider" plural="rendering providers" />;
 }
 
 function shortDate(value: string | null): string {
@@ -179,6 +185,8 @@ function BillSearchContent({
       <select className="mbow-select" value={query.age ?? "all"} onChange={(event) => update({ age: event.target.value as BillRegistryAge })} aria-label="A/R age">
         <option value="all">All A/R ages</option><option value="0-30">0–30 days</option><option value="31-60">31–60 days</option><option value="61-90">61–90 days</option><option value="91+">91+ days</option><option value="91-180">91–180 days</option><option value="181+">181+ days</option>
       </select>
+      <EntityFilter label="Patient" plural="patients" value={query.patientId ?? ""} options={result?.filters?.patients} onChange={(value) => update({ patientId: value })} />
+      <EntityFilter label="Claims administrator" plural="claims administrators" value={query.claimsAdministrator ?? ""} options={result?.filters?.claimsAdministrators} onChange={(value) => update({ claimsAdministrator: value })} />
       <RenderingProviderFilter value={query.renderingProviderId ?? ""} options={result?.filters?.renderingProviders} onChange={(value) => update({ renderingProviderId: value })} />
       <p id={searchHelpId} className="mbow-muted" style={{ flexBasis: "100%" }}>Search across bill details. Combine words to narrow results; use MM/DD/YYYY or YYYY-MM-DD for dates.</p>
       <div style={{ flex: "1 1 520px", minWidth: 0 }}><BillDateFilters {...dates} onChange={(next) => setDates((current) => ({ ...current, ...next }))} /></div>

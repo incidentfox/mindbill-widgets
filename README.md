@@ -380,9 +380,11 @@ SSN writes fail closed if server encryption has not been configured.
 `ConnectedBillingWorkspace` separates follow-up tasks from Sent/Accepted bills waiting
 for payer responses. Waiting inventory has its own totals and may overlap overdue tasks;
 do not add those totals together. Drill-down preserves status, age, payer, and rendering-provider filters.
-The doctor picker uses workspace-scoped `filters.renderingProviders` from the browser API,
-not doctors inferred from the current page. Rendering providers are distinct from billing
-practices. `ConnectedBillSearch` also accepts `initialQuery={{ renderingProviderId: "provider-id" }}`.
+Patient, claims-administrator, and doctor pickers use workspace-scoped inventories
+from the browser API, not records inferred from the current page. Rendering providers
+are distinct from billing practices. `ConnectedBillSearch` accepts `initialQuery`
+with `patientId`, `claimsAdministrator`, and `renderingProviderId` to open a filtered list.
+Static dashboards accept optional entity IDs to keep same-named records distinct.
 Search supports patient and claims-administrator names, bill and claim identifiers, statuses, procedure codes, and dates. Both dashboards include inclusive service/submission date ranges; see [bill search](./docs/bill-search.md) for query behavior and examples.
 Dashboard colors, borders, radii, spacing, and aging palettes are configurable through
 [appearance tokens](./docs/theme-customization.md).

@@ -16,6 +16,11 @@ export type BillingDashboardBill = {
   billNumber?: string | number;
   externalId?: string;
   patientName: string;
+  /** Stable IDs keep records with the same display name distinct. */
+  patientId?: string;
+  claimsAdministratorId?: string;
+  renderingProviderId?: string;
+  renderingProviderName?: string;
   claimNumber?: string;
   payerName?: string;
   state: string;
@@ -188,21 +193,43 @@ export function BillAgingSummary(props: BillAgingSummaryProps): ReactElement {
   return <Shell {...shellProps}><AgingContent bills={props.bills} {...(props.heading === undefined ? {} : { heading: props.heading })} /></Shell>;
 }
 
+function entityKey(id: string | undefined, name: string | undefined): string {
+  return id ? `id:${id}` : name?.trim() ? `name:${name.trim()}` : "";
+}
+
+function entityChoices(bills: BillingDashboardBill[], key: (bill: BillingDashboardBill) => string, label: (bill: BillingDashboardBill) => string | undefined): Array<{ id: string; name: string }> {
+  const choices = new Map<string, string>();
+  for (const bill of bills) {
+    const id = key(bill);
+    if (id) choices.set(id, label(bill)?.trim() || "Unnamed record");
+  }
+  return [...choices].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
 export function BillingDashboard({ bills, heading = "Billing", description = "Track submitted bills, payments, and outstanding balances.", onSelectBill, initialSearch = "", initialState = "all", hideFilters = false, showSettings = true, billingSettings, onSettingsSaved, appearance, className, style }: BillingDashboardProps): ReactElement {
   const tabId = useId();
   const [selectedView, setSelectedView] = useState<"bills" | "settings">("bills");
   const view = showSettings ? selectedView : "bills";
   const [search, setSearch] = useState(initialSearch); const [state, setState] = useState(initialState);
+  const [entities, setEntities] = useState({ patient: "", administrator: "", provider: "" });
+  const entityOptions = useMemo(() => ({
+    patient: entityChoices(bills, (bill) => entityKey(bill.patientId, bill.patientName), (bill) => bill.patientName),
+    administrator: entityChoices(bills, (bill) => entityKey(bill.claimsAdministratorId, bill.payerName), (bill) => bill.payerName),
+    provider: entityChoices(bills, (bill) => entityKey(bill.renderingProviderId, bill.renderingProviderName), (bill) => bill.renderingProviderName),
+  }), [bills]);
   const [dates, setDates] = useState({ dateField: "submitted" as BillSearchDateField, from: "", to: "" });
   const invalidDates = Boolean(dates.from && dates.to && dates.from > dates.to);
   const states = useMemo(() => [...new Set(bills.map((bill) => bill.state))].sort((a, b) => a.localeCompare(b)), [bills]);
   const filtered = useMemo(() => bills.filter((bill) => !invalidDates
     && (state === "all" || bill.state === state)
+    && (!entities.patient || entityKey(bill.patientId, bill.patientName) === entities.patient)
+    && (!entities.administrator || entityKey(bill.claimsAdministratorId, bill.payerName) === entities.administrator)
+    && (!entities.provider || entityKey(bill.renderingProviderId, bill.renderingProviderName) === entities.provider)
     && billDateInRange(dates.dateField === "service" ? bill.dateOfService : bill.submittedAt, dates.from, dates.to)
     && matchesBillSearch(search, [bill.id, bill.billNumber, bill.externalId, bill.patientName, bill.claimNumber,
-      bill.payerName, bill.workItemLabel, bill.state, stateLabel(bill.state), bill.state === "accepted_no_response" ? "response overdue" : "", ...(bill.procedureCodes ?? []),
+      bill.payerName, bill.renderingProviderName, bill.workItemLabel, bill.state, stateLabel(bill.state), bill.state === "accepted_no_response" ? "response overdue" : "", ...(bill.procedureCodes ?? []),
       billSearchDateText(bill.dateOfService), billSearchDateText(bill.submittedAt), billSearchDateText(bill.updatedAt)])),
-  [bills, search, state, dates, invalidDates]);
+  [bills, search, state, dates, invalidDates, entities]);
   const shellProps = {
     ...(appearance === undefined ? {} : { appearance }),
     ...(className === undefined ? {} : { className }),
@@ -213,10 +240,11 @@ export function BillingDashboard({ bills, heading = "Billing", description = "Tr
     {showSettings ? <DashboardTabs id={tabId} tabs={[["bills", "Bills"], ["settings", "Settings"]]} value={view} onChange={setSelectedView} className="mbdash-tabs" tabClassName="mbdash-tab" /> : null}
     <div className="mbdash-panel" {...(showSettings ? { role: "tabpanel", id: `${tabId}-panel-${view}`, "aria-labelledby": `${tabId}-tab-${view}`, tabIndex: 0 } : {})}>
     {view === "settings" ? <BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : <><AgingContent bills={filtered} heading="Receivables" />{hideFilters ? null : <><div className="mbdash-filters"><input className="mbdash-control" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Patient, claims administrator, bill, claim, status, or date…" aria-label="Search bills" aria-describedby={`${tabId}-search-help`} /><select className="mbdash-control" value={state} onChange={(event) => setState(event.target.value)} aria-label="Filter bills by status"><option value="all">All statuses</option>{states.map((item) => <option value={item} key={item}>{stateLabel(item)}</option>)}</select></div>
+      <div className="mbdash-filters">{([['patient', 'Patient', 'patients'], ['provider', 'Rendering provider', 'rendering providers'], ['administrator', 'Claims administrator', 'claims administrators']] as const).map(([key, label, plural]) => entityOptions[key].length || entities[key] ? <select key={key} className="mbdash-control" aria-label={`${label} filter`} value={entities[key]} onChange={(event) => setEntities((current) => ({ ...current, [key]: event.target.value }))}><option value="">All {plural}</option>{entities[key] && !entityOptions[key].some((item) => item.id === entities[key]) ? <option value={entities[key]}>Selected {label.toLowerCase()}</option> : null}{entityOptions[key].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select> : null)}</div>
       <p id={`${tabId}-search-help`} className="mbdash-copy">Search across bill details. Combine words to narrow results; use MM/DD/YYYY or YYYY-MM-DD for dates.</p>
       <BillDateFilters {...dates} onChange={(next) => setDates((current) => ({ ...current, ...next }))} />
       {invalidDates ? <p role="alert">From date must be on or before through date.</p> : null}
-      {search || state !== "all" || dates.from || dates.to ? <button type="button" className="mbdash-control" onClick={() => { setSearch(""); setState("all"); setDates({ dateField: "submitted", from: "", to: "" }); }}>Clear filters</button> : null}</>}<BillListContent {...listProps} /></>}
+      {search || state !== "all" || dates.from || dates.to || entities.patient || entities.provider || entities.administrator ? <button type="button" className="mbdash-control" onClick={() => { setSearch(""); setState("all"); setEntities({ patient: "", administrator: "", provider: "" }); setDates({ dateField: "submitted", from: "", to: "" }); }}>Clear filters</button> : null}</>}<BillListContent {...listProps} /></>}
     </div></Shell>;
 }
 
