@@ -98,7 +98,9 @@ export {
 } from "./native-bill-review";
 
 export { BillReadOnlyForm } from "./bill-read-only-form";
-export type { BillReadOnlyFormProps } from "./bill-read-only-form";
+export { BillDetailLayout, BillDetailSection } from "./bill-detail-layout";
+export type { BillDetailLayoutProps, BillDetailSectionProps, BillDetailValidationIssue } from "./bill-detail-layout";
+export type { BillReadOnlyFormProps, BillDetailNavigationProps, BillDetailSectionKey } from "./bill-read-only-form";
 
 export {
   applyBillSubmissionEvaluationDiagnoses,
@@ -414,3 +416,6 @@ export type { BillClaimsAdministratorAuthorizationStatus, RfaAuthorizationDestin
 export { RfaDashboard } from "./rfa-dashboard";
 export type { RfaDashboardProps } from "./rfa-dashboard";
 export type { RfaRecord, RfaSigningPreview, RfaCreateDraftInput } from "@mindbill/browser";
+
+export { RfaLifecycleControls } from "./rfa-lifecycle-controls";
+export type { RfaLifecycleControlsProps } from "./rfa-lifecycle-controls";

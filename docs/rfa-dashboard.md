@@ -1,6 +1,6 @@
 # Connected RFA dashboard
 
-React 0.62 and browser 0.38 add a complete embedded authorization workflow:
+The dashboard supports draft preparation and editing, reviewed signing, packet preparation, deliberate fax delivery, and recording receipt and utilization review outcomes:
 
 ```tsx
 import { RfaDashboard } from "@mindbill/react";
@@ -9,7 +9,7 @@ import { RfaDashboard } from "@mindbill/react";
   getSession={getAuthorizedRfaSession}
   claimId={authorizedClaimId}
   actorReference={authenticatedUser.id}
-  permissions={["create", "edit", "sign", "send"]}
+  permissions={["create", "edit", "sign", "send", "act"]}
   environment="sandbox"
   initialDraft={prefilledDraftFromAuthorizedCase}
 />
@@ -30,14 +30,28 @@ The trusted server must authenticate the user and mint a short-lived exact-origi
 | PDF previews and delivery proof | `documents:read` |
 | Authorization recipient directory | `payers:read` |
 | Create draft | `rfas:create` |
-| Upload clinical PDF | `rfas:edit` |
+| Edit eligible draft; upload clinical, response, or IMR PDF | `rfas:edit` |
 | Signing preview and attested signing | `rfas:sign` |
-| Fax send and refresh transmission status | `rfas:act` |
+| Fax send and refresh; record receipt, decisions, information responses; update follow-up tasks | `rfas:act` |
 
 Use only the scopes authorized for the current user. Permanent API keys stay on your server.
 The UI `permissions` default is an empty array. PDF views require `documents:read` even
 when the user has `rfas:read`. Directory failure leaves manual recipient confirmation
 available; it never substitutes a telephone number or silently picks a recipient.
+
+## Edit an existing draft
+
+With `edit` permission, **Edit request draft** opens the existing service rows. Saving
+replaces the full content at `expectedRevision`, preserves retained service IDs and host
+metadata, removes deleted rows, and creates IDs for new rows. Claim, patient, and rendering
+provider IDs remain fixed. A successful save increments the content revision, clears the
+signature, and requires a new signing preview and attestation. Historical signed PDFs remain
+viewable but cannot be selected as the current signed form.
+
+Only unsent `draft` or `ready` requests can be edited. The server also rejects edits once
+submission is queued, sent, delivered, or receipt is recorded. A stale revision returns 409;
+the form retains edits and offers **Discard edits and refresh** to load the latest request.
+It never silently overwrites newer content or automatically sends the changed request.
 
 ## Prepare, sign, review, send
 
@@ -64,12 +78,32 @@ outcomes, information requests, event history, and fax delivery proof. It does n
 receipt or start a deadline from an attempted send. Existing transmitted requests are not
 sent again through the initial-send action.
 
+## Record outcomes and follow-up
+
+`act` enables evidence-backed receipt recording, item-level utilization review decisions,
+recording an information request or a response that has already been delivered, and updating existing
+follow-up tasks. `edit` enables document uploads. Recording a receipt requires a proof
+PDF or transmission reference. Decision entry associates the response PDF and, for modified
+or denied treatment, an IMR form. These actions record supplied evidence; they do not infer
+receipt from attempted fax delivery, send information responses, create follow-up tasks, or
+queue notifications.
+
+`RfaLifecycleControls` is also exported for a custom detail page. Pass `rfa`, the same
+connection options, `permissions={["act", "edit"]}`, and `onUpdated` to adopt the refreshed
+record. Its default is read-only. Clock corrections and other advanced workflows remain
+available through the documented [RFA API](https://docs.mindbill.org/guides/rfas).
+
 ## Custom browser UI
 
 `createRfaClient` from `@mindbill/browser` accepts `OrganizationClientOptions` (`getSession`
 or `sessionEndpoint`, optional `apiBaseUrl` and `fetch`). Its methods are `list`, `get`,
-`createDraft`, `getDocument`, `uploadDocument`, `prepareSigning`, `sign`, `previewPacket`,
+`createDraft`, `updateDraft`, `getDocument`, `uploadDocument`, `prepareSigning`, `sign`, `previewPacket`,
 `sendFax`, and `refreshFaxes`. JSON detail/mutation responses unwrap to `RfaRecord`; list
 returns `{data, nextCursor, summary}`. Documents and packets return authenticated `Blob`s.
 Mutations take an explicit idempotency key; reuse it for retries of the same operation.
 A single authentication retry preserves that key. `getDocument` requires `documents:read`.
+
+`updateDraft(id, replacement, key)` uses `PATCH /rfas/{id}/draft`. Pass a positive
+`expectedRevision` and the complete editable content; retained items carry `id`, new items
+omit it. `createRfaLifecycleClient` exposes `recordReceipt`, `recordDecisions`,
+`recordInformationRequest`, `recordInformationResponse`, `listFollowUps`, and `updateFollowUp` for custom lifecycle UIs.
