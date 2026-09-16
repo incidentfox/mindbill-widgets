@@ -121,3 +121,34 @@ The profile-choice adapter supplies provider/location values, not attachment byt
 
 For colors, layout geometry, and dashboard aging styles, see
 [theme customization](./theme-customization.md).
+
+
+### Built-in Settings tab
+
+React 0.64.0 adds a **Settings** tab, enabled by default, to
+`ConnectedBillingWorkspace` and `BillingDashboard`. It includes practice identity,
+billing providers, rendering providers, service locations, W-9 upload, and setup
+readiness. Settings load only when the tab opens.
+
+```tsx
+<ConnectedBillingWorkspace
+  sessionEndpoint="/api/mindbill/session"
+  showSettings={isAdministrator}
+  billingSettings={{ sessionEndpoint: "/api/mindbill/settings-session" }}
+  onSettingsSaved={(profile) => refreshHostBillingProfile(profile)}
+/>
+```
+
+Use `showSettings={false}` to hide the tab. Your server must authorize the signed-in
+user before minting a settings session with `org:manage`; tab visibility does not
+grant access. With no `billingSettings`, the connected workspace reuses its main
+connection. The data-driven `BillingDashboard` uses `/api/mindbill/session` unless
+you pass `billingSettings`. No settings request is made while the tab is hidden.
+Use `initialView="settings"` on the workspace to open setup immediately; if settings
+are hidden, it opens Bill tasks instead.
+
+Saved profiles become available when bill creation/correction forms next load.
+`onSettingsSaved` lets hosts refresh separately mounted forms or their own caches.
+Continue passing the same `billingSettings` to a standalone `BillSubmissionForm`
+for its inline “Add or manage” action. You can still mount `BillingSettings`
+separately when your product has its own settings navigation.

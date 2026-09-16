@@ -1,9 +1,12 @@
 "use client";
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import type { OrganizationClientOptions, OrganizationProfileData } from "@mindbill/browser";
+import { BillingSettings } from "./organization-onboarding";
+import { DashboardTabs } from "./dashboard-tabs";
 import { acceptedNoResponseLabel } from "./bill-status-label";
 
 export type BillingDashboardBill = {
@@ -65,6 +68,11 @@ export type BillingDashboardProps = BillingComponentProps & {
   initialSearch?: string;
   initialState?: string;
   hideFilters?: boolean;
+  /** Show the built-in Settings tab. Defaults to true; hide for users without org:manage. */
+  showSettings?: boolean;
+  /** Optional dedicated settings session. Defaults to /api/mindbill/session. */
+  billingSettings?: OrganizationClientOptions;
+  onSettingsSaved?: (profile: OrganizationProfileData) => void;
 };
 
 export type BillingReportDimension = "status" | "payer" | "aging";
@@ -85,6 +93,7 @@ export type BillingReportProps = BillingComponentProps & {
 
 const css = `
 .mbdash{display:grid;gap:20px;color:var(--mb-text);font-family:var(--mb-font);font-size:15px}.mbdash *{box-sizing:border-box}.mbdash h2,.mbdash h3,.mbdash p{margin:0}.mbdash-copy{color:var(--mb-muted);margin-top:5px!important}.mbdash-card{min-width:0;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow)}
+.mbdash-panel{display:grid;gap:20px;min-width:0}.mbdash-tabs{display:flex;gap:4px;border-bottom:1px solid var(--mb-border);overflow:auto}.mbdash-tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--mb-muted);padding:10px 13px;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.mbdash-tab.active{color:var(--mb-text);border-bottom-color:var(--mb-accent)}
 .mbdash-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.mbdash-head h2{font-size:24px}.mbdash-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden}.mbdash-stat{display:grid;gap:7px;padding:20px 22px;border-right:1px solid var(--mb-border)}.mbdash-stat:last-child{border:0}.mbdash-label{color:var(--mb-muted);font-size:12px;font-weight:760;letter-spacing:.06em;text-transform:uppercase}.mbdash-value{font-size:24px;font-weight:780;font-variant-numeric:tabular-nums}.mbdash-aging{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden}.mbdash-aging-item{display:grid;gap:5px;padding:16px 20px;border-right:1px solid var(--mb-border)}.mbdash-aging-item:last-child{border:0}.mbdash-aging-item strong{font-size:18px;font-variant-numeric:tabular-nums}.mbdash-aging-item span:last-child{color:var(--mb-muted);font-size:13px}
 .mbdash-filters{display:grid;grid-template-columns:minmax(240px,1fr) minmax(180px,260px);gap:12px}.mbdash-control{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbdash-control:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}
 .mbdash-table-wrap{overflow:auto}.mbdash-table{width:100%;border-collapse:collapse}.mbdash-table th{padding:13px 16px;border-bottom:1px solid var(--mb-border);color:var(--mb-muted);font-size:12px;letter-spacing:.04em;text-align:left;text-transform:uppercase;white-space:nowrap}.mbdash-table td{padding:16px;border-bottom:1px solid var(--mb-border);vertical-align:top}.mbdash-table tr:last-child td{border-bottom:0}.mbdash-table tbody tr[data-clickable=true]{cursor:pointer}.mbdash-table tbody tr[data-clickable=true]:hover{background:color-mix(in srgb,var(--mb-accent) 5%,var(--mb-surface))}.mbdash-primary{display:block;color:var(--mb-text);font-weight:720;text-decoration:none}.mbdash-secondary{display:block;margin-top:4px;color:var(--mb-muted);font-size:13px}.mbdash-state{display:inline-flex;padding:4px 9px;border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-text);font-size:12px;font-weight:720}.mbdash-money{text-align:right!important;font-variant-numeric:tabular-nums;white-space:nowrap}.mbdash-empty{padding:46px 22px;color:var(--mb-muted);text-align:center}.mbdash-mobile-list{display:none}.mbdash-mobile-card{display:grid;gap:14px;padding:18px;border-bottom:1px solid var(--mb-border)}.mbdash-mobile-card:last-child{border:0}.mbdash-mobile-top,.mbdash-mobile-money{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mbdash-mobile-money>span{display:grid;gap:3px}.mbdash-mobile-money small{color:var(--mb-muted)}
@@ -174,7 +183,10 @@ export function BillAgingSummary(props: BillAgingSummaryProps): ReactElement {
   return <Shell {...shellProps}><AgingContent bills={props.bills} {...(props.heading === undefined ? {} : { heading: props.heading })} /></Shell>;
 }
 
-export function BillingDashboard({ bills, heading = "Billing", description = "Track submitted bills, payments, and outstanding balances.", onSelectBill, initialSearch = "", initialState = "all", hideFilters = false, appearance, className, style }: BillingDashboardProps): ReactElement {
+export function BillingDashboard({ bills, heading = "Billing", description = "Track submitted bills, payments, and outstanding balances.", onSelectBill, initialSearch = "", initialState = "all", hideFilters = false, showSettings = true, billingSettings, onSettingsSaved, appearance, className, style }: BillingDashboardProps): ReactElement {
+  const tabId = useId();
+  const [selectedView, setSelectedView] = useState<"bills" | "settings">("bills");
+  const view = showSettings ? selectedView : "bills";
   const [search, setSearch] = useState(initialSearch); const [state, setState] = useState(initialState);
   const states = useMemo(() => [...new Set(bills.map((bill) => bill.state))].sort((a, b) => a.localeCompare(b)), [bills]);
   const filtered = useMemo(() => { const query = search.trim().toLowerCase(); return bills.filter((bill) => (state === "all" || bill.state === state) && (!query || [bill.billNumber, bill.externalId, bill.patientName, bill.claimNumber, bill.payerName, bill.workItemLabel].some((value) => String(value ?? "").toLowerCase().includes(query)))); }, [bills, search, state]);
@@ -184,7 +196,11 @@ export function BillingDashboard({ bills, heading = "Billing", description = "Tr
     ...(style === undefined ? {} : { style }),
   };
   const listProps = { bills: filtered, ...(onSelectBill === undefined ? {} : { onSelectBill }) };
-  return <Shell {...shellProps}><div className="mbdash-head"><div><h2>{heading}</h2><p className="mbdash-copy">{description}</p></div></div><AgingContent bills={filtered} heading="Receivables" />{hideFilters ? null : <div className="mbdash-filters"><input className="mbdash-control" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search patient, claim, payer, or bill…" aria-label="Search bills" /><select className="mbdash-control" value={state} onChange={(event) => setState(event.target.value)} aria-label="Filter bills by status"><option value="all">All statuses</option>{states.map((item) => <option value={item} key={item}>{stateLabel(item)}</option>)}</select></div>}<BillListContent {...listProps} /></Shell>;
+  return <Shell {...shellProps}><div className="mbdash-head"><div><h2>{heading}</h2><p className="mbdash-copy">{description}</p></div></div>
+    {showSettings ? <DashboardTabs id={tabId} tabs={[["bills", "Bills"], ["settings", "Settings"]]} value={view} onChange={setSelectedView} className="mbdash-tabs" tabClassName="mbdash-tab" /> : null}
+    <div className="mbdash-panel" {...(showSettings ? { role: "tabpanel", id: `${tabId}-panel-${view}`, "aria-labelledby": `${tabId}-tab-${view}`, tabIndex: 0 } : {})}>
+    {view === "settings" ? <BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : <><AgingContent bills={filtered} heading="Receivables" />{hideFilters ? null : <div className="mbdash-filters"><input className="mbdash-control" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search patient, claim, payer, or bill…" aria-label="Search bills" /><select className="mbdash-control" value={state} onChange={(event) => setState(event.target.value)} aria-label="Filter bills by status"><option value="all">All statuses</option>{states.map((item) => <option value={item} key={item}>{stateLabel(item)}</option>)}</select></div>}<BillListContent {...listProps} /></>}
+    </div></Shell>;
 }
 
 export function buildBillingReportRows(bills: BillingDashboardBill[], groupBy: BillingReportDimension = "status"): BillingReportRow[] {
