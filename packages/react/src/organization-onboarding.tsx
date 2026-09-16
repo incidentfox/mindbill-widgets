@@ -12,6 +12,7 @@ import {
   type OrganizationRenderingProviderInput,
 } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { OrganizationAdministration } from "./organization-administration";
 import { TaxIdInput, taxIdWrite } from "./tax-id-input";
 import { W9Upload } from "./w9-upload";
 
@@ -40,7 +41,7 @@ export type OrganizationOnboardingProps = {
 
 type StepId = "practice" | "rendering" | "locations" | "w9" | "review";
 const STEPS: Array<{ id: StepId; label: string }> = [
-  { id: "practice", label: "Practice & billing" },
+  { id: "practice", label: "Billing provider" },
   { id: "rendering", label: "Rendering providers" },
   { id: "locations", label: "Locations" },
   { id: "w9", label: "W-9" },
@@ -60,7 +61,7 @@ const css = `
 .mbob-field{display:grid;gap:7px;font-size:13px;font-weight:720}
 .mbob-field input,.mbob-field select{width:100%;min-height:44px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);padding:10px 12px;color:var(--mb-text);font:inherit;font-weight:450}
 .mbob-field input:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}
-.mbob-subhead{margin:20px 0 12px!important;padding-top:16px;border-top:1px solid var(--mb-border);font-size:15px}
+.mbob-organization{margin-top:20px;border-top:1px solid var(--mb-border);padding-top:16px}.mbob-organization summary{cursor:pointer;font-weight:700;min-height:36px}.mbob-organization p{margin-bottom:12px}.mbob-subhead{margin:20px 0 12px!important;padding-top:16px;border-top:1px solid var(--mb-border);font-size:15px}
 .mbob-loc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:end;border-top:1px solid color-mix(in srgb,var(--mb-border) 60%,transparent);padding:16px 0}
 .mbob-loc:first-of-type{border-top:0}
 .mbob-primary{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mb-muted);white-space:nowrap;padding-bottom:12px}
@@ -103,7 +104,7 @@ export function OrganizationOnboarding({
   apiBaseUrl,
   fetch: fetchOverride,
   heading = "Billing setup",
-  description = "Practice identity, locations, and the W-9 — saved once, used on every bill.",
+  description = "Billing providers, rendering providers, places of service, and your W-9 — saved once for bill entry.",
   variant = "onboarding",
   onSaved,
   onCompleted,
@@ -243,15 +244,7 @@ export function OrganizationOnboarding({
 
   const practiceSection = (
     <div>
-      <p className="mbob-status">Choose EIN for a business or SSN for an individual. Saved SSNs are encrypted and shown only by their last four digits.</p>
-      <div className="mbob-grid">
-        {field("Practice name", identity.name, (name) => setIdentity((c) => ({ ...c, name })))}
-        {field("Legal name", identity.legalName, (legalName) => setIdentity((c) => ({ ...c, legalName })))}
-        <TaxIdInput label="Practice tax ID" value={identity} disabled={saving} onChange={(patch) => setIdentity((c) => ({ ...c, ...patch }))} />
-        {field("Group NPI", identity.npi, (npi) => setIdentity((c) => ({ ...c, npi })))}
-        {field("Phone", identity.phone, (phone) => setIdentity((c) => ({ ...c, phone })))}
-        {field("Email", identity.email, (email) => setIdentity((c) => ({ ...c, email })))}
-      </div>
+      <p className="mbob-status">The selected billing provider supplies the billing name, tax ID, NPI, and address on the claim.</p>
       <h3 className="mbob-subhead">Billing provider (pay-to)</h3>
       <label className="mbob-field">Saved billing provider
         <select disabled={saving} value={provider.id ?? ""} onChange={(event) => setProvider({ ...(profile?.billingProviders.find((item) => item.id === event.target.value) ?? { name: "", taxId: "", npi: "" }) })}>
@@ -269,7 +262,20 @@ export function OrganizationOnboarding({
         {field("State", provider.billingState ?? "", (billingState) => setProvider((c) => ({ ...c, billingState: billingState.toUpperCase().slice(0, 2) })))}
         {field("ZIP", provider.billingZip ?? "", (billingZip) => setProvider((c) => ({ ...c, billingZip })))}
       </div>
-      <div className="mbob-actions"><span className="mbob-status">{savedStep["practice"] ? "Saved to MindBill." : "Saved once, used on every bill."}</span><button className="mbob-save" type="button" disabled={saving} onClick={savePractice}>{saving ? "Saving…" : "Save practice"}</button></div>
+      <details className="mbob-organization">
+        <summary>Organization details</summary>
+        <p className="mbob-status">Your organization profile identifies this account and supplies onboarding defaults. It is separate from the billing provider selected on each bill.</p>
+      <p className="mbob-status">Choose EIN for a business or SSN for an individual. Saved SSNs are encrypted and shown only by their last four digits.</p>
+      <div className="mbob-grid">
+        {field("Organization display name", identity.name, (name) => setIdentity((c) => ({ ...c, name })))}
+        {field("Legal name", identity.legalName, (legalName) => setIdentity((c) => ({ ...c, legalName })))}
+        <TaxIdInput label="Organization tax ID" value={identity} disabled={saving} onChange={(patch) => setIdentity((c) => ({ ...c, ...patch }))} />
+        {field("Group NPI", identity.npi, (npi) => setIdentity((c) => ({ ...c, npi })))}
+        {field("Phone", identity.phone, (phone) => setIdentity((c) => ({ ...c, phone })))}
+        {field("Email", identity.email, (email) => setIdentity((c) => ({ ...c, email })))}
+      </div>
+      </details>
+      <div className="mbob-actions"><span className="mbob-status">{savedStep["practice"] ? "Saved to MindBill." : "Saved once, used on every bill."}</span><button className="mbob-save" type="button" disabled={saving} onClick={savePractice}>{saving ? "Saving…" : "Save billing profile"}</button></div>
     </div>
   );
 
@@ -307,7 +313,7 @@ export function OrganizationOnboarding({
         </div>
       ))}
       <button className="mbob-add" type="button" onClick={() => setLocations((current) => [...current, blankLocation()])}>+ Add location</button>
-      <div className="mbob-actions"><span className="mbob-status">{savedStep["locations"] ? "Saved to MindBill." : "Where evaluations happen."}</span><button className="mbob-save" type="button" disabled={saving} onClick={saveLocations}>{saving ? "Saving…" : "Save locations"}</button></div>
+      <div className="mbob-actions"><span className="mbob-status">{savedStep["locations"] ? "Saved to MindBill." : "Where services are performed; used for the service facility and place of service on bills."}</span><button className="mbob-save" type="button" disabled={saving} onClick={saveLocations}>{saving ? "Saving…" : "Save locations"}</button></div>
     </div>
   );
 
@@ -348,9 +354,9 @@ export function OrganizationOnboarding({
             {practiceSection}
             <h3 className="mbob-subhead">Rendering providers</h3>
             {renderingSection}
-            <h3 className="mbob-subhead">Locations</h3>
+            <h3 className="mbob-subhead">Places of service</h3>
             {locationsSection}
-            <h3 className="mbob-subhead">Practice W-9</h3>
+            <h3 className="mbob-subhead">W-9</h3>
             {w9Section}
             <h3 className="mbob-subhead">Checklist</h3>
             {reviewSection}
@@ -362,14 +368,14 @@ export function OrganizationOnboarding({
   );
 }
 
-/** Compact edit-after-setup variant of {@link OrganizationOnboarding}. */
+/** Organization settings, including billing profiles, custom administrators, and team roles. */
 export function BillingSettings(props: Omit<OrganizationOnboardingProps, "variant">): ReactElement {
-  return (
-    <OrganizationOnboarding
-      heading="Billing settings"
-      description="Practice identity, locations, and the W-9 used on every bill."
-      {...props}
-      variant="settings"
-    />
-  );
+  const [section, setSection] = useState<"profiles" | "claims" | "team">("profiles");
+  return <div>
+    <style>{`.mbsettings-nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.mbsettings-nav button{font:inherit;padding:9px 14px;border:1px solid var(--mb-border,#dce2ea);border-radius:8px;background:var(--mb-surface,#fff);color:var(--mb-text,#172033);cursor:pointer}.mbsettings-nav button[aria-pressed=true]{background:var(--mb-primary,#3155d9);border-color:transparent;color:#fff}.mbsettings-nav button:focus-visible{outline:2px solid var(--mb-primary,#3155d9);outline-offset:2px}`}</style>
+    <nav className="mbsettings-nav" aria-label="Billing settings sections" style={mindBillAppearanceStyle(props.appearance)}>
+      {([ ["profiles", "Billing profiles"], ["claims", "Claims administrators"], ["team", "Team"] ] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={section === id} onClick={() => setSection(id)}>{label}</button>)}
+    </nav>
+    {section === "profiles" ? <OrganizationOnboarding heading="Billing settings" description="Manage providers, places of service, W-9, and organization settings." {...props} variant="settings" /> : <OrganizationAdministration {...props} section={section} />}
+  </div>;
 }

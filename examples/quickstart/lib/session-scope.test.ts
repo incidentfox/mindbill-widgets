@@ -30,3 +30,14 @@ test("workspace dashboard and shared settings are administrator-only", async () 
     assert.equal((await sessionScope({ surface }, admin, async () => null)).resource, undefined);
   }
 });
+
+test("only the administrator settings surface receives organization and team management", async () => {
+  assert.deepEqual(await sessionScope({ surface: "settings" }, admin, async () => null), {
+    permissions: ["organization:manage", "team:manage"],
+  });
+  for (const input of [{ surface: "billing" }, { surface: "case", caseId: CASE_ID }]) {
+    const scope = await sessionScope(input, admin, async () => null);
+    assert.equal(scope.permissions.includes("organization:manage"), false);
+    assert.equal(scope.permissions.includes("team:manage"), false);
+  }
+});

@@ -1,6 +1,6 @@
 "use client";
 import { ConnectedBillingWorkspace } from "@mindbill/react";
-import { appearance, getSession } from "./session";
+import { appearance, getSession, getSettingsSession } from "./session";
 
 export function BillingDashboard({ openBill }: { openBill(): void }) {
   return <>
@@ -9,7 +9,7 @@ export function BillingDashboard({ openBill }: { openBill(): void }) {
     </div><button className="primary-button" onClick={openBill}>Open example case →</button></div>
     <div className="sdk-surface dashboard-surface"><ConnectedBillingWorkspace
       initialView="bills" getSession={getSession} appearance={appearance}
-      onCreateBill={openBill} style={{ height: 770 }}
+      billingSettings={{ getSession: getSettingsSession }} onCreateBill={openBill} style={{ height: 770 }}
     /></div>
   </>;
 }

@@ -11,6 +11,7 @@ export const MINDBILL_BROWSER_PERMISSIONS = [
   "payers:read",
   "eors:read",
   "organization:manage",
+  "team:manage",
 ] as const;
 export type MindBillBrowserPermission = (typeof MINDBILL_BROWSER_PERMISSIONS)[number];
 
@@ -687,7 +688,7 @@ export class MindBillClient {
         throw new Error("resource.billId must contain 1 to 128 characters");
       if (input.resource.customerExternalId !== undefined && (!customerExternalId || customerExternalId.length > 255))
         throw new Error("resource.customerExternalId must contain 1 to 255 characters");
-      if (input.permissions.includes("organization:manage"))
+      if (input.permissions.includes("organization:manage") || input.permissions.includes("team:manage"))
         throw new Error("Shared organization settings require a separate unscoped administrator session");
     }
     if (billId && input.permissions.includes("bills:create")) {

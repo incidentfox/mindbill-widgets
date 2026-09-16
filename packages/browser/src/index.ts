@@ -1911,7 +1911,35 @@ export type OrganizationClientOptions = {
   fetch?: typeof globalThis.fetch;
 };
 
+export type OrganizationTeamRole = "admin" | "manager" | "biller" | "payments" | "viewer";
+export type OrganizationTeamMember = {
+  id: string; email: string; name: string; role: string; active: boolean;
+  createdAt: string; canManage: boolean;
+};
+export type OrganizationTeam = {
+  members: OrganizationTeamMember[];
+  roles: Array<{ id: OrganizationTeamRole; label: string; permissions: string[] }>;
+  capabilities: { canManage: boolean; canAdd: boolean };
+  identityDomain: "mindbill";
+};
+export type OrganizationClaimsAdministratorInput = {
+  name: string; fax?: string; email?: string; mailingAddress?: string; notes?: string;
+};
+export type OrganizationClaimsAdministrator = {
+  id: string; name: string; fax: string | null; email: string | null;
+  mailingAddress: string | null; notes: string | null; submissionMethod: string;
+  active: boolean; createdAt: string;
+};
+
 export type OrganizationClient = {
+  /** Requires explicit team:manage; organization:manage alone does not grant team access. */
+  getTeam: () => Promise<OrganizationTeam>;
+  updateTeamMember: (id: string, input: { role?: OrganizationTeamRole; active?: boolean }) => Promise<OrganizationTeamMember>;
+  getClaimsAdministrators: () => Promise<OrganizationClaimsAdministrator[]>;
+  createClaimsAdministrator: (input: OrganizationClaimsAdministratorInput) => Promise<OrganizationClaimsAdministrator>;
+  updateClaimsAdministrator: (id: string, input: OrganizationClaimsAdministratorInput) => Promise<OrganizationClaimsAdministrator>;
+  deleteClaimsAdministrator: (id: string) => Promise<{ id: string; deleted: true }>;
+
   getOrganization: () => Promise<OrganizationProfileData>;
   /** Masked saved profiles for bill entry; requires org-wide bills:create. */
   getBillingProfile: () => Promise<OrganizationProfileData>;
@@ -1951,7 +1979,7 @@ export function createOrganizationClient({
     return session;
   };
 
-  const request = async (path: string, init: RequestInit = {}): Promise<OrganizationProfileData> => {
+  const request = async <T = OrganizationProfileData>(path: string, init: RequestInit = {}): Promise<T> => {
     let current = await mintSession();
     const perform = (active: BillLifecycleSession) => {
       const base = (active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
@@ -1966,7 +1994,7 @@ export function createOrganizationClient({
       response = await perform(current);
     }
     if (!response.ok) throw await responseError(response, "The organization request failed.");
-    const body = (await response.json()) as { data?: OrganizationProfileData };
+    const body = (await response.json()) as { data?: T };
     if (!body.data || typeof body.data !== "object") {
       throw new Error("The organization response was invalid.");
     }
@@ -1974,6 +2002,12 @@ export function createOrganizationClient({
   };
 
   return {
+    getTeam: () => request<OrganizationTeam>("/partner/v2/organization/team"),
+    updateTeamMember: (id, input) => request<OrganizationTeamMember>(`/partner/v2/organization/team/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) }),
+    getClaimsAdministrators: () => request<OrganizationClaimsAdministrator[]>("/partner/v2/organization/claims-administrators"),
+    createClaimsAdministrator: (input) => request<OrganizationClaimsAdministrator>("/partner/v2/organization/claims-administrators", { method: "POST", body: JSON.stringify(input) }),
+    updateClaimsAdministrator: (id, input) => request<OrganizationClaimsAdministrator>(`/partner/v2/organization/claims-administrators/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) }),
+    deleteClaimsAdministrator: (id) => request<{ id: string; deleted: true }>(`/partner/v2/organization/claims-administrators/${encodeURIComponent(id)}`, { method: "DELETE" }),
     getOrganization: () => request("/partner/v2/organization"),
     getBillingProfile: () => request("/partner/v2/organization/billing-profile"),
     saveBillingProfile: (input) =>
