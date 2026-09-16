@@ -8,6 +8,8 @@ import type { OrganizationClientOptions, OrganizationProfileData } from "@mindbi
 import { BillingSettings } from "./organization-onboarding";
 import { DashboardTabs } from "./dashboard-tabs";
 import { acceptedNoResponseLabel } from "./bill-status-label";
+import { billDateInRange, billSearchDateText, matchesBillSearch, type BillSearchDateField } from "./bill-search";
+import { BillDateFilters } from "./bill-date-filters";
 
 export type BillingDashboardBill = {
   id: string;
@@ -17,6 +19,9 @@ export type BillingDashboardBill = {
   claimNumber?: string;
   payerName?: string;
   state: string;
+  /** Optional service date enables service-date search and range filters. */
+  dateOfService?: string;
+  procedureCodes?: string[];
   submittedAt?: string;
   updatedAt?: string;
   agingDays?: number;
@@ -188,8 +193,16 @@ export function BillingDashboard({ bills, heading = "Billing", description = "Tr
   const [selectedView, setSelectedView] = useState<"bills" | "settings">("bills");
   const view = showSettings ? selectedView : "bills";
   const [search, setSearch] = useState(initialSearch); const [state, setState] = useState(initialState);
+  const [dates, setDates] = useState({ dateField: "submitted" as BillSearchDateField, from: "", to: "" });
+  const invalidDates = Boolean(dates.from && dates.to && dates.from > dates.to);
   const states = useMemo(() => [...new Set(bills.map((bill) => bill.state))].sort((a, b) => a.localeCompare(b)), [bills]);
-  const filtered = useMemo(() => { const query = search.trim().toLowerCase(); return bills.filter((bill) => (state === "all" || bill.state === state) && (!query || [bill.billNumber, bill.externalId, bill.patientName, bill.claimNumber, bill.payerName, bill.workItemLabel].some((value) => String(value ?? "").toLowerCase().includes(query)))); }, [bills, search, state]);
+  const filtered = useMemo(() => bills.filter((bill) => !invalidDates
+    && (state === "all" || bill.state === state)
+    && billDateInRange(dates.dateField === "service" ? bill.dateOfService : bill.submittedAt, dates.from, dates.to)
+    && matchesBillSearch(search, [bill.id, bill.billNumber, bill.externalId, bill.patientName, bill.claimNumber,
+      bill.payerName, bill.workItemLabel, bill.state, stateLabel(bill.state), bill.state === "accepted_no_response" ? "response overdue" : "", ...(bill.procedureCodes ?? []),
+      billSearchDateText(bill.dateOfService), billSearchDateText(bill.submittedAt), billSearchDateText(bill.updatedAt)])),
+  [bills, search, state, dates, invalidDates]);
   const shellProps = {
     ...(appearance === undefined ? {} : { appearance }),
     ...(className === undefined ? {} : { className }),
@@ -199,7 +212,11 @@ export function BillingDashboard({ bills, heading = "Billing", description = "Tr
   return <Shell {...shellProps}><div className="mbdash-head"><div><h2>{heading}</h2><p className="mbdash-copy">{description}</p></div></div>
     {showSettings ? <DashboardTabs id={tabId} tabs={[["bills", "Bills"], ["settings", "Settings"]]} value={view} onChange={setSelectedView} className="mbdash-tabs" tabClassName="mbdash-tab" /> : null}
     <div className="mbdash-panel" {...(showSettings ? { role: "tabpanel", id: `${tabId}-panel-${view}`, "aria-labelledby": `${tabId}-tab-${view}`, tabIndex: 0 } : {})}>
-    {view === "settings" ? <BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : <><AgingContent bills={filtered} heading="Receivables" />{hideFilters ? null : <div className="mbdash-filters"><input className="mbdash-control" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search patient, claim, payer, or bill…" aria-label="Search bills" /><select className="mbdash-control" value={state} onChange={(event) => setState(event.target.value)} aria-label="Filter bills by status"><option value="all">All statuses</option>{states.map((item) => <option value={item} key={item}>{stateLabel(item)}</option>)}</select></div>}<BillListContent {...listProps} /></>}
+    {view === "settings" ? <BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : <><AgingContent bills={filtered} heading="Receivables" />{hideFilters ? null : <><div className="mbdash-filters"><input className="mbdash-control" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Patient, claims administrator, bill, claim, status, or date…" aria-label="Search bills" aria-describedby={`${tabId}-search-help`} /><select className="mbdash-control" value={state} onChange={(event) => setState(event.target.value)} aria-label="Filter bills by status"><option value="all">All statuses</option>{states.map((item) => <option value={item} key={item}>{stateLabel(item)}</option>)}</select></div>
+      <p id={`${tabId}-search-help`} className="mbdash-copy">Search across bill details. Combine words to narrow results; use MM/DD/YYYY or YYYY-MM-DD for dates.</p>
+      <BillDateFilters {...dates} onChange={(next) => setDates((current) => ({ ...current, ...next }))} />
+      {invalidDates ? <p role="alert">From date must be on or before through date.</p> : null}
+      {search || state !== "all" || dates.from || dates.to ? <button type="button" className="mbdash-control" onClick={() => { setSearch(""); setState("all"); setDates({ dateField: "submitted", from: "", to: "" }); }}>Clear filters</button> : null}</>}<BillListContent {...listProps} /></>}
     </div></Shell>;
 }
 

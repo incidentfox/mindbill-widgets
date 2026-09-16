@@ -69,7 +69,12 @@ export type BillRegistryAge = "all" | "0-30" | "31-60" | "61-90" | "91+" | "91-1
 export type BillRegistrySort = "submitted_desc" | "submitted_asc" | "balance_desc" | "balance_asc" | "patient_asc";
 
 export type BillRegistryQuery = {
+  /** Case-insensitive words across patient, administrator, identifiers, status, procedures and dates. */
   q?: string;
+  /** Inclusive calendar-date bounds. Defaults to submission date when omitted. */
+  dateField?: "service" | "submitted";
+  from?: string;
+  to?: string;
   status?: string;
   age?: BillRegistryAge;
   claimsAdministrator?: string;

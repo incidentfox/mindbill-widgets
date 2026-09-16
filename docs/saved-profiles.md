@@ -140,7 +140,7 @@ readiness. Settings load only when the tab opens.
 ```
 
 Use `showSettings={false}` to hide the tab. Your server must authorize the signed-in
-user before minting a settings session with `org:manage`; tab visibility does not
+user before minting a settings session with `organization:manage`; tab visibility does not
 grant access. With no `billingSettings`, the connected workspace reuses its main
 connection. The data-driven `BillingDashboard` uses `/api/mindbill/session` unless
 you pass `billingSettings`. No settings request is made while the tab is hidden.
@@ -152,3 +152,45 @@ Saved profiles become available when bill creation/correction forms next load.
 Continue passing the same `billingSettings` to a standalone `BillSubmissionForm`
 for its inline “Add or manage” action. You can still mount `BillingSettings`
 separately when your product has its own settings navigation.
+
+
+### Organization administration (React 0.65)
+
+Settings now has **Billing profiles**, **Claims administrators**, and **Team** sections.
+Billing provider fields come first; the separate organization identity is under
+**Organization details**. Organization identity supports onboarding and does not
+replace the bill's selected billing provider, rendering provider, or service location
+on CMS-1500 forms. Saved profiles and submitted bill snapshots remain separate.
+
+Claims administrators supports adding, editing, and removing organization-owned entries
+with a name and at least one delivery method. These entries join the shared directory
+when creating claims. Removal hides future selections; existing bills keep their snapshots.
+It uses `organization:manage`, like billing profiles. Directory access remains tenant-scoped.
+
+Team manages roles and active status for existing **MindBill accounts**. It does not
+create accounts, invite users, or change roles in your own application. Your server must
+explicitly delegate `team:manage` in a separate organization-wide browser session,
+authorized for the actual administrator. The API key needs `orgs:team:write` to mint
+that permission. `organization:manage` alone never grants team access. Customer- or
+bill-scoped sessions cannot receive either management permission. Protected accounts
+and the last administrator cannot be demoted or disabled.
+
+```ts
+const organization = createOrganizationClient({ sessionEndpoint: "/api/mindbill/settings-session" });
+await organization.getClaimsAdministrators();
+await organization.createClaimsAdministrator({ name: "Example Administrator", fax: "2025550100" });
+await organization.updateClaimsAdministrator("saved-id", { name: "Updated Administrator", fax: "2025550100" });
+await organization.deleteClaimsAdministrator("saved-id");
+const team = await organization.getTeam();
+await organization.updateTeamMember("member-id", { role: "viewer" });
+```
+
+The matching server routes are `/partner/v2/organization/claims-administrators`
+(GET/POST), `/partner/v2/organization/claims-administrators/{id}` (PATCH/DELETE),
+`/partner/v2/organization/team` (GET), and `/partner/v2/organization/team/{id}` (PATCH).
+API-key reads/writes use `orgs:read`/`orgs:write` for custom administrators and
+`orgs:team:read`/`orgs:team:write` for team membership. Billing profile callbacks do
+not fire for team or directory changes.
+
+Notification preferences and recipient invitations remain available through the
+separate notification components. Signature setup remains in MindBill.

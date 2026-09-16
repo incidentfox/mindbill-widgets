@@ -92,14 +92,14 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s se
       expect(tab(container, "Settings")).toBeDefined();
       expect(options.getSession).not.toHaveBeenCalled();
       expect(options.fetch).not.toHaveBeenCalled();
-      expect(container.textContent).not.toContain("Save practice");
+      expect(container.textContent).not.toContain("Save billing profile");
 
       await act(async () => tab(container, "Settings")!.click());
 
       expect(tab(container, "Settings")!.getAttribute("aria-selected")).toBe("true");
       expect(options.getSession).toHaveBeenCalledTimes(1);
       expect(options.fetch).toHaveBeenCalledTimes(1);
-      expect(container.textContent).toContain("Save practice");
+      expect(container.textContent).toContain("Save billing profile");
       expect([...container.querySelectorAll("input")].some((input) => input.value === profile.practiceIdentity.name)).toBe(true);
     });
   });
@@ -108,7 +108,7 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s se
     const { options } = settingsConnection();
     await mounted(surface({ billingSettings: options, showSettings: false }), async (container) => {
       expect(tab(container, "Settings")).toBeUndefined();
-      expect(container.textContent).not.toContain("Save practice");
+      expect(container.textContent).not.toContain("Save billing profile");
       expect(options.getSession).not.toHaveBeenCalled();
       expect(options.fetch).not.toHaveBeenCalled();
     });
@@ -121,7 +121,7 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s se
     await mounted(surface({ billingSettings: options, onSettingsSaved }, operations), async (container) => {
       await act(async () => tab(container, "Settings")!.click());
       expect(onSettingsSaved).not.toHaveBeenCalled();
-      const save = [...container.querySelectorAll("button")].find((button) => button.textContent === "Save practice");
+      const save = [...container.querySelectorAll("button")].find((button) => button.textContent === "Save billing profile");
       expect(save).toBeDefined();
       await act(async () => save!.click());
 
@@ -163,7 +163,7 @@ it("uses the standard session endpoint for standalone dashboard settings without
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: "POST", credentials: "same-origin" });
     expect(String(fetcher.mock.calls[1]?.[0])).toMatch(/\/partner\/v2\/organization$/);
     expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("Authorization")).toBe("Bearer synthetic_default_token");
-    expect(container.textContent).toContain("Save practice");
+    expect(container.textContent).toContain("Save billing profile");
   });
 });
 
@@ -178,7 +178,7 @@ it("falls back to bill tasks when workspace initialView is settings but Settings
     expect(operations.fetch.mock.calls.some(([url]) => String(url).includes("/partner/v2/bill-tasks"))).toBe(true);
     expect(options.getSession).not.toHaveBeenCalled();
     expect(options.fetch).not.toHaveBeenCalled();
-    expect(container.textContent).not.toContain("Save practice");
+    expect(container.textContent).not.toContain("Save billing profile");
   });
 });
 
@@ -187,6 +187,6 @@ it("inherits the workspace connection when no separate settings connection is su
   await mounted(createElement(ConnectedBillingWorkspace, { ...options, initialView: "settings" }), async (container) => {
     expect(options.getSession).toHaveBeenCalledTimes(1);
     expect(options.fetch.mock.calls[0]?.[0]).toBe("https://settings.example.test/partner/v2/organization");
-    expect(container.textContent).toContain("Save practice");
+    expect(container.textContent).toContain("Save billing profile");
   });
 });

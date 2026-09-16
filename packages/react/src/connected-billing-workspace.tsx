@@ -14,6 +14,8 @@ import {
   type ReactNode,
 } from "react";
 import { BillingSettings } from "./organization-onboarding";
+import { BillDateFilters } from "./bill-date-filters";
+import type { BillSearchDateField } from "./bill-search";
 import { DashboardTabs } from "./dashboard-tabs";
 import type { BillTasksDashboardCell } from "./bill-tasks-dashboard";
 import { BillTasksDashboard } from "./bill-tasks-dashboard";
@@ -147,12 +149,19 @@ function BillSearchContent({
 }): ReactElement {
   const [query, setQuery] = useState<BillRegistryQuery>({ age: "all", page: 1, pageSize: 25, sort: "submitted_desc", ...initialQuery, status: initialQuery?.status === "submitted" ? "sent" : initialQuery?.status ?? "all" });
   const [draft, setDraft] = useState(initialQuery?.q ?? "");
+  const searchHelpId = useId();
+  const [dates, setDates] = useState({ dateField: initialQuery?.dateField ?? "submitted" as BillSearchDateField, from: initialQuery?.from ?? "", to: initialQuery?.to ?? "" });
+  const invalidDates = Boolean(dates.from && dates.to && dates.from > dates.to);
   const [result, setResult] = useState<BillRegistryResult | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setError(null);
-    try { setResult(await client.getBills(query, signal)); }
+    try {
+      if (query.from && query.to && query.from > query.to) throw new Error("From date must be on or before through date.");
+      const next = await client.getBills(query, signal);
+      if (!signal?.aborted) setResult(next);
+    }
     catch (cause) { if (!signal?.aborted) setError(cause instanceof Error ? cause : new Error("Bills could not be loaded.")); }
     finally { if (!signal?.aborted) setLoading(false); }
   }, [client, query]);
@@ -162,16 +171,23 @@ function BillSearchContent({
 
   return <>
     {heading ? <div className="mbow-head"><div>{typeof heading === "string" ? <h2>{heading}</h2> : heading}</div></div> : null}
-    <form className="mbow-toolbar" onSubmit={(event) => { event.preventDefault(); update({ q: draft.trim() }); }}>
-      <input className="mbow-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Search patient, bill ID, claim, or external ID…" aria-label="Search bills" />
+    <form className="mbow-toolbar" onSubmit={(event) => { event.preventDefault(); if (!invalidDates) update({ q: draft.trim(), ...dates }); }}>
+      <input className="mbow-input" type="search" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Patient, claims administrator, bill, claim, status, or date…" aria-label="Search bills" aria-describedby={searchHelpId} />
       <select className="mbow-select" value={query.status ?? "all"} onChange={(event) => update({ status: event.target.value })} aria-label="Bill status">
         <option value="all">All statuses</option><option value="incomplete">Incomplete</option><option value="sent">Sent</option><option value="accepted">Accepted</option><option value="accepted_no_response">Accepted — response overdue</option><option value="rejected">Rejected</option><option value="processed">Processed</option><option value="paid">Paid</option><option value="closed">Closed</option>
       </select>
       <select className="mbow-select" value={query.age ?? "all"} onChange={(event) => update({ age: event.target.value as BillRegistryAge })} aria-label="A/R age">
         <option value="all">All A/R ages</option><option value="0-30">0–30 days</option><option value="31-60">31–60 days</option><option value="61-90">61–90 days</option><option value="91+">91+ days</option><option value="91-180">91–180 days</option><option value="181+">181+ days</option>
       </select>
-      <button className="mbow-button" type="submit">Search</button>
       <RenderingProviderFilter value={query.renderingProviderId ?? ""} options={result?.filters?.renderingProviders} onChange={(value) => update({ renderingProviderId: value })} />
+      <p id={searchHelpId} className="mbow-muted" style={{ flexBasis: "100%" }}>Search across bill details. Combine words to narrow results; use MM/DD/YYYY or YYYY-MM-DD for dates.</p>
+      <div style={{ flex: "1 1 520px", minWidth: 0 }}><BillDateFilters {...dates} onChange={(next) => setDates((current) => ({ ...current, ...next }))} /></div>
+      <button className="mbow-button" type="submit" disabled={invalidDates}>Search</button>
+      <button className="mbow-button" type="button" onClick={() => {
+        setDraft(""); setDates({ dateField: "submitted", from: "", to: "" });
+        setQuery({ status: "all", age: "all", page: 1, pageSize: query.pageSize ?? 25, sort: "submitted_desc" });
+      }}>Clear filters</button>
+      {invalidDates ? <p role="alert" style={{ flexBasis: "100%" }}>From date must be on or before through date.</p> : null}
     </form>
     <div className="mbow-card mbow-scroll">
       {loading ? <div className="mbow-state" role="status">Loading bills…</div> : error ? <div className="mbow-state mbow-error" role="alert">{error.message} <button className="mbow-button" type="button" onClick={() => void load()}>Retry</button></div> : result?.items.length === 0 ? <div className="mbow-state">No bills match these filters.</div> : <table className="mbow-table">

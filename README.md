@@ -383,6 +383,7 @@ do not add those totals together. Drill-down preserves status, age, payer, and r
 The doctor picker uses workspace-scoped `filters.renderingProviders` from the browser API,
 not doctors inferred from the current page. Rendering providers are distinct from billing
 practices. `ConnectedBillSearch` also accepts `initialQuery={{ renderingProviderId: "provider-id" }}`.
+Search supports patient and claims-administrator names, bill and claim identifiers, statuses, procedure codes, and dates. Both dashboards include inclusive service/submission date ranges; see [bill search](./docs/bill-search.md) for query behavior and examples.
 Dashboard colors, borders, radii, spacing, and aging palettes are configurable through
 [appearance tokens](./docs/theme-customization.md).
 
@@ -437,3 +438,11 @@ React 0.64.0 includes a default-on Settings tab in `ConnectedBillingWorkspace` a
 readiness. Hide it with `showSettings={false}` or supply a dedicated authorized
 `billingSettings` connection. See [saved profiles](./docs/saved-profiles.md#built-in-settings-tab)
 for session authorization, callbacks, and integration examples.
+
+
+React 0.65.0 extends Settings with custom claims administrators and existing MindBill
+team roles. Organization identity is collapsed under Organization details; billing
+providers stay first. Team access requires explicit `team:manage` delegation and never
+changes partner application roles. Browser 0.40.0 exposes directory CRUD and team
+read/update methods; Node 0.16.0 accepts the restricted team permission. See
+[organization administration](docs/saved-profiles.md#organization-administration-react-065).
