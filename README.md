@@ -429,3 +429,11 @@ California anesthesia service lines collect actual elapsed minutes separately fr
 Fee quote response validation and `BillFeeQuoteBasis` cover California reports, physician and therapy RBRVS, CLFS, simple dispensed drugs, DMEPOS, PADB, anesthesia, and practice contracts. Use browser 0.36.1 / React 0.60.2 or later for these fee families. See [procedure fees](docs/procedure-fees.md).
 
 RFA authorization routing: `RfaAuthorizationDestination` shows explicit office/fax/email choices from the claims-administrator directory. It does not sign or send requests. See [RFA directory integration](docs/rfa-directory.md) for lookup, status, and host delivery responsibilities.
+
+### Dashboard settings
+
+React 0.64.0 includes a default-on Settings tab in `ConnectedBillingWorkspace` and
+`BillingDashboard` for practice identity, providers, locations, W-9, and setup
+readiness. Hide it with `showSettings={false}` or supply a dedicated authorized
+`billingSettings` connection. See [saved profiles](./docs/saved-profiles.md#built-in-settings-tab)
+for session authorization, callbacks, and integration examples.

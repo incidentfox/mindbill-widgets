@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -12,6 +13,8 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { BillingSettings } from "./organization-onboarding";
+import { DashboardTabs } from "./dashboard-tabs";
 import type { BillTasksDashboardCell } from "./bill-tasks-dashboard";
 import { BillTasksDashboard } from "./bill-tasks-dashboard";
 import { ConnectedBillLifecycle } from "./connected-bill-lifecycle";
@@ -42,7 +45,7 @@ const css = `
 .mbow-workspace{width:100%;height:100%;max-height:var(--mbow-available-height,100dvh);min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .mbow-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}.mbow-head h2{font-size:24px;line-height:1.2}.mbow-sub{color:var(--mb-muted);margin-top:4px!important}.mbow-actions{display:flex;gap:8px;flex-wrap:wrap}
 .mbow-button,.mbow-input,.mbow-select{min-height:38px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbow-button{padding:7px 12px;cursor:pointer;font-weight:650}.mbow-button:hover{border-color:var(--mb-accent)}.mbow-button.primary{background:var(--mb-accent);border-color:var(--mb-accent);color:var(--mb-accent-contrast)}.mbow-button:disabled{opacity:.55;cursor:not-allowed}.mbow-input,.mbow-select{padding:7px 10px}.mbow-input{min-width:260px;flex:1}
-.mbow-tabs{display:flex;gap:4px;border-bottom:1px solid var(--mb-border);margin-bottom:18px;overflow:auto}.mbow-tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--mb-muted);padding:10px 13px;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.mbow-tab.active{color:var(--mb-text);border-bottom-color:var(--mb-accent)}
+.mbow-tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--mb-border);margin-bottom:18px;overflow:auto}.mbow-tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--mb-muted);padding:10px 13px;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.mbow-tab.active{color:var(--mb-text);border-bottom-color:var(--mb-accent)}
 .mbow-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.mbow-card{background:var(--mb-surface);border:1px solid var(--mb-border);border-radius:var(--mb-radius);box-shadow:var(--mb-shadow);overflow:hidden}.mbow-scroll{overflow:auto}.mbow-table{width:100%;border-collapse:collapse;min-width:820px}.mbow-table th,.mbow-table td{padding:11px 12px;border-bottom:1px solid var(--mb-border);text-align:left;vertical-align:middle}.mbow-table th{color:var(--mb-muted);font-size:11px;letter-spacing:.045em;text-transform:uppercase;font-weight:800;background:color-mix(in srgb,var(--mb-soft) 60%,var(--mb-surface))}.mbow-table tr:last-child td{border-bottom:0}.mbow-table tbody tr.clickable{cursor:pointer}.mbow-table tbody tr.clickable:hover{background:color-mix(in srgb,var(--mb-accent) 6%,var(--mb-surface))}.mbow-money{text-align:right!important;font-variant-numeric:tabular-nums}.mbow-strong{font-weight:760}.mbow-muted{color:var(--mb-muted);font-size:12px}.mbow-badge{display:inline-flex;border:1px solid var(--mb-border);border-radius:999px;padding:2px 8px;font-size:12px;background:var(--mb-soft);white-space:nowrap}.mbow-badge.success{color:var(--mb-success);border-color:color-mix(in srgb,var(--mb-success) 35%,var(--mb-border));background:color-mix(in srgb,var(--mb-success) 8%,var(--mb-surface))}.mbow-badge.danger{color:var(--mb-danger)}.mbow-badge.warning{color:var(--mb-warning)}
 .mbow-state{padding:28px;text-align:center;color:var(--mb-muted)}.mbow-error{color:var(--mb-danger)}.mbow-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;color:var(--mb-muted)}
 .mbow-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0 18px}.mbow-metric{padding:16px;background:var(--mb-surface);border:1px solid var(--mb-border);border-radius:var(--mb-radius);box-shadow:var(--mb-shadow)}.mbow-metric span{display:block;color:var(--mb-muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}.mbow-metric strong{display:block;font-size:24px;margin-top:5px}.mbow-section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--mb-border)}
@@ -256,8 +259,12 @@ export function ConnectedProductivityReport({ appearance, className, style, init
 
 export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
   actorName?: string;
+  /** Dedicated settings session, or the workspace connection when omitted. */
   billingSettings?: import("@mindbill/browser").OrganizationClientOptions;
-  initialView?: "tasks" | "bills" | "procedures" | "productivity" | "payments";
+  /** Show the Settings tab by default. Hide for users without org:manage. */
+  showSettings?: boolean;
+  onSettingsSaved?: (profile: import("@mindbill/browser").OrganizationProfileData) => void;
+  initialView?: "tasks" | "bills" | "procedures" | "productivity" | "payments" | "settings";
   /** Optional host-owned payment entry action. Review itself is read-only. */
   onPostPayment?: () => void;
   onCreateBill?: () => void;
@@ -267,8 +274,12 @@ export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
   getCourtesyCopyRecipientOptions?: (billId: string) => readonly CourtesyCopyRecipientOption[];
 };
 
-export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, billingSettings, actorName, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
-  const client = useClient(options); const [view, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
+export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, billingSettings, showSettings = true, onSettingsSaved, actorName, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
+  const client = useClient(options); const [selectedView, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
+  const tabId = useId();
+  const view = !showSettings && selectedView === "settings" ? "tasks" : selectedView;
+  const tabs: Array<readonly [NonNullable<ConnectedBillingWorkspaceProps["initialView"]>, string]> = [["tasks", "Bill tasks"], ["bills", "All bills"], ["procedures", "Procedures"], ["productivity", "Productivity"], ["payments", "Payment review"]];
+  if (showSettings) tabs.push(["settings", "Settings"]);
   const { workspaceRef, availableHeight } = useAvailableViewportHeight();
   const workspaceClassName = ["mbow-workspace", className].filter(Boolean).join(" ");
   const hasExplicitHeight = style?.height != null || style?.maxHeight != null;
@@ -276,5 +287,5 @@ export function ConnectedBillingWorkspace({ appearance, className, style, initia
   if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle {...(actorName ? { actorName } : {})} {...(billingSettings ? { billingSettings } : {})} billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
   const selectView = (next: typeof view) => { setView(next); setSelectedBillId(null); };
   const appearanceProps = appearance ? { appearance } : {};
-  return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><div className="mbow-tabs" role="tablist">{([['tasks','Bill tasks'],['bills','All bills'],['procedures','Procedures'],['productivity','Productivity'],['payments','Payment review']] as const).map(([id,label]) => <button key={id} className={`mbow-tab ${view === id ? "active" : ""}`} type="button" role="tab" aria-selected={view === id} onClick={() => selectView(id)}>{label}</button>)}</div>{view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : view === "payments" ? <ConnectedPaymentReview {...options} {...appearanceProps} {...(onPostPayment ? { onPostPayment } : {})} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</Surface>;
+  return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><DashboardTabs id={tabId} tabs={tabs} value={view} onChange={selectView} className="mbow-tabs" tabClassName="mbow-tab" /><div role="tabpanel" id={`${tabId}-panel-${view}`} aria-labelledby={`${tabId}-tab-${view}`} tabIndex={0}>{view === "settings" ? <BillingSettings {...(billingSettings ?? options)} {...appearanceProps} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : view === "payments" ? <ConnectedPaymentReview {...options} {...appearanceProps} {...(onPostPayment ? { onPostPayment } : {})} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</div></Surface>;
 }
