@@ -406,3 +406,7 @@ export type { RfaDraftInput, RfaDraftItemInput, RfaDraftFormProps } from "./rfa-
 export { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 export type { RfaAuthorizationDestinationProps } from "./rfa-authorization-destination";
 export type { BillClaimsAdministratorAuthorizationStatus, RfaAuthorizationDestinationOption } from "@mindbill/browser";
+
+export { RfaDashboard } from "./rfa-dashboard";
+export type { RfaDashboardProps } from "./rfa-dashboard";
+export type { RfaRecord, RfaSigningPreview, RfaCreateDraftInput } from "@mindbill/browser";
