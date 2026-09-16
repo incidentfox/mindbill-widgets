@@ -23,7 +23,7 @@
     "@angular/core": "^21.2.4",
     "@angular/forms": "^21.2.4",
     "@eslint/js": "^9.33.0",
-    "@types/node": "^22.17.1",
+    "@types/node": "^22.20.2",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.2.7",
     "eslint": "^9.33.0",
