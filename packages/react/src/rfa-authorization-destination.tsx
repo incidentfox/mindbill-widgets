@@ -27,7 +27,6 @@ export function RfaAuthorizationDestination({ contextKey, directory, loading = f
     <legend>Authorization destination</legend>
     <p style={{ margin: 0 }}>{loading ? "Loading authorization contacts…" : error ? "Directory details are unavailable. Confirm a destination with the handling adjuster." : rfaAuthorizationGuidance(directory)}</p>
     {directory?.authorizationNotice ? <p style={{ margin: 0 }}>{directory.authorizationNotice}</p> : null}
-    {directory?.authorizationSource ? <small>Directory observed: {directory.authorizationSource.observedAt.slice(0, 10)}{ /^https?:\/\//i.test(directory.authorizationSource.url) ? <> · <a href={directory.authorizationSource.url} target="_blank" rel="noreferrer">Source</a></> : null}</small> : null}
     <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
       <select value={selection} onChange={(event) => { const value = event.target.value; setSelection(value); setManual(""); onChange(value === "" || value === "manual" ? null : options[Number(value)] ?? null); }} style={{ padding: 10, width: "100%", minWidth: 0, maxWidth: "100%", font: "inherit" }}>
         <option value="">Choose a destination…</option>

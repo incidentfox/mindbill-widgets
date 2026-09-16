@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { createBillReferenceClient, normalizeRfaFax, rfaAuthorizationDestinations, type BillClaimsAdministratorDirectory } from "../packages/browser/src/index";
 import { RfaAuthorizationDestination } from "../packages/react/src/rfa-authorization-destination";
+import { ClaimsAdministratorDirectoryDialog } from "../packages/react/src/claims-administrator-directory-dialog";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const directory: BillClaimsAdministratorDirectory = {
@@ -40,6 +41,8 @@ it("requires explicit choice, separates email, clears retired destinations and t
   const choose = async (value: string) => act(async () => { const select = container.querySelector("select")!; select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); });
   try {
     await render(directory); expect(changed).toHaveBeenLastCalledWith(null);
+    expect(container.textContent).not.toContain("Directory observed");
+    expect(container.querySelector(`a[href="${directory.authorizationSource?.url}"]`)).toBeNull();
     expect(container.querySelector("select")?.value).toBe("");
     await choose("0"); expect(changed.mock.lastCall?.[0]?.destination).toBe("+18005550100");
     const calls = changed.mock.calls.length;
@@ -52,5 +55,16 @@ it("requires explicit choice, separates email, clears retired destinations and t
     await choose("manual");
     expect(container.querySelector('input[type="tel"]')).not.toBeNull();
     await render(null, "different_synthetic_request"); expect(container.querySelector("select")?.value).toBe("");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+it("does not expose directory-source provenance in the claims administrator dialog", async () => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(ClaimsAdministratorDirectoryDialog, { open: true, directory, onClose: vi.fn() })));
+    const authorizationTab = [...container.querySelectorAll("button")].find((button) => button.textContent === "Authorization Info");
+    await act(async () => authorizationTab?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.textContent).not.toContain("Directory observed");
+    expect(container.querySelector(`a[href="${directory.authorizationSource?.url}"]`)).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
