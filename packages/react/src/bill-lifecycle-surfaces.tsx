@@ -26,6 +26,8 @@ export type BillLifecycleActionsProps = SurfaceProps & {
   onAction: (action: BillLifecycleAction) => void;
   /** Show disabled actions and the server-provided reason. Defaults to false. */
   showUnavailable?: boolean;
+  /** Limit visible actions so hosts can keep one recommended action in a compact action bar. */
+  maxVisible?: number;
   disabled?: boolean;
 };
 
@@ -33,20 +35,23 @@ export type BillLifecycleActionsProps = SurfaceProps & {
 export function visibleBillLifecycleActions(
   actions: readonly BillLifecycleAction[],
   showUnavailable = false,
+  maxVisible?: number,
 ): BillLifecycleAction[] {
-  return actions.filter((action) => action.enabled || showUnavailable);
+  const visible = actions.filter((action) => action.enabled || showUnavailable);
+  return maxVisible === undefined ? visible : visible.slice(0, Math.max(0, maxVisible));
 }
 
 export function BillLifecycleActions({
   actions,
   onAction,
   showUnavailable = false,
+  maxVisible,
   disabled = false,
   appearance,
   className,
   style,
 }: BillLifecycleActionsProps): ReactElement | null {
-  const visible = visibleBillLifecycleActions(actions, showUnavailable);
+  const visible = visibleBillLifecycleActions(actions, showUnavailable, maxVisible);
   if (!visible.length) return null;
 
   return (

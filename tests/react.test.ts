@@ -1018,6 +1018,8 @@ describe("bill lifecycle surfaces", () => {
 
     expect(visibleBillLifecycleActions(actions)).toEqual([actions[0]]);
     expect(visibleBillLifecycleActions(actions, true)).toEqual(actions);
+    expect(visibleBillLifecycleActions(actions, true, 1)).toEqual([actions[0]]);
+    expect(visibleBillLifecycleActions(actions, true, 0)).toEqual([]);
   });
 
   it("labels known and future event types", () => {

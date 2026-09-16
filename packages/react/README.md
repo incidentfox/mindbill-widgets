@@ -175,6 +175,7 @@ import { BillLifecycleActions } from "@mindbill/react";
 ```
 
 Disabled actions are hidden by default. Set `showUnavailable` to show them with the reason returned by the API.
+Set `maxVisible={1}` for a compact workspace that shows the recommended action and puts the remaining authorized actions in a host-provided overflow menu.
 
 ## Activity timeline
 
