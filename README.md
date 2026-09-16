@@ -450,3 +450,9 @@ providers stay first. Team access requires explicit `team:manage` delegation and
 changes partner application roles. Browser 0.41.0 exposes directory CRUD and team
 read/update methods; Node 0.16.0 accepts the restricted team permission. See
 [organization administration](docs/saved-profiles.md#organization-administration-react-065).
+
+### Optional report suggestions
+
+`BillSubmissionForm` accepts `reportAutofill={{ getSession }}` to add an explicit upload → review → apply flow. It is hidden by default and available only by written agreement with an operator-provisioned `reportAutofill` capability and dedicated organization-wide `autofill:run` session. Existing entries and service lines are preserved; analysis does not save attachments or submit bills. Custom UIs can use `ReportAutofill`, `applyReportAutofill`, or `createReportAutofillClient`. See [report suggestions](docs/report-autofill.md).
+
+Workspace detail links now open the corresponding patient, physician or claims-administrator bill filter when canonical IDs are available. Hosts can override `onPatientClick`, `onRenderingProviderClick` and `onClaimsAdministratorClick`; see [bill search](docs/bill-search.md).

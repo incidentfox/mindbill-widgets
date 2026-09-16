@@ -31,6 +31,8 @@ import { AnesthesiaLineFields, anesthesiaDetailsFromSaved, anesthesiaCalculation
 import { DrugLineFields, drugDetailsFromSaved, drugFieldsEnabled, drugRequestDetails, type DrugDetails } from "./bill-drug-context";
 import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } from "./bill-equipment-context";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { ReportAutofill } from "./report-autofill";
+import { applyReportAutofill } from "./report-autofill-values";
 import { BillingSettings } from "./organization-onboarding";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
@@ -313,6 +315,8 @@ export type BillSubmissionFormProps = {
   profileOptions?: BillSubmissionProfileOptions;
   /** Separate organization:manage session. Supply only for users allowed to manage practice settings. */
   billingSettings?: OrganizationClientOptions;
+  /** Optional written-agreement feature; use a dedicated organization-wide autofill:run session. */
+  reportAutofill?: OrganizationClientOptions;
   /** Compact keeps provider fields available behind an edit disclosure; validation errors expand it. */
   profileDisplay?: "expanded" | "compact";
   attachments?: BillSubmissionSourceAttachment[];
@@ -927,7 +931,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 
 export function BillSubmissionForm({
   initialBill, idempotencyKey, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
-  profileOptions, billingSettings, profileDisplay = "expanded",
+  profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
   fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
@@ -1594,6 +1598,7 @@ export function BillSubmissionForm({
     <form ref={formRef} className={`${className} mbsf`} style={{ ...mindBillAppearanceStyle(appearance), ...style }} onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
       <style>{css}</style>
       {attentionMessage ? <div className="mbsf-attention" role="status">{attentionMessage}</div> : null}
+      {reportAutofill ? <ReportAutofill {...reportAutofill} disabled={disabled || submitting} onApply={(result) => setBill((current) => applyReportAutofill(current, result, availableProfiles))} /> : null}
       {children ?? defaultLayout}
       {routeDialog ? (
         <SendRouteDialog

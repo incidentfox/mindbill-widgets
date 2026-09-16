@@ -2325,3 +2325,5 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
 }
 
 export * from "./rfa-lifecycle";
+export { createReportAutofillClient } from "./report-autofill";
+export type { ReportAutofillClient, ReportAutofillField, ReportAutofillMatch, ReportAutofillResult } from "./report-autofill";

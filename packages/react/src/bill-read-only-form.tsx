@@ -17,6 +17,8 @@ import { mindBillAppearanceStyle } from "./appearance";
 export type BillDetailSectionKey = "patient" | "claim" | "providers" | "services" | "attachments";
 
 export type BillDetailNavigationProps = {
+  /** Suppress navigation for historical entities without canonical IDs. */
+  requireLinkedEntityIds?: { patient?: boolean; renderingProvider?: boolean; claimsAdministrator?: boolean };
   onPatientClick?: (patient: HistoricalBillReviewData["patient"]) => void;
   onRenderingProviderClick?: (provider: BillReviewClinician) => void;
   onClaimsAdministratorClick?: (administrator: { id?: string; name: string }) => void;
@@ -75,7 +77,7 @@ function PatternTable({ patterns }: { patterns: readonly BillClaimsAdministrator
   return <div className="mb-read-directory-table-wrap"><table className="mb-read-directory-table"><thead><tr><th>Status</th><th>Length</th><th>Pattern</th><th>Example</th></tr></thead><tbody>{patterns.map((entry, index) => <tr key={`${entry.pattern}-${index}`}><td>{entry.matches === true ? <span className="mb-read-match is-match">✓ Matches this claim</span> : entry.matches === false ? <span className="mb-read-match is-warning">Review format</span> : "Advisory"}</td><td>{entry.length ?? "—"}</td><td>{entry.pattern}</td><td>{entry.example || "—"}</td></tr>)}</tbody></table></div>;
 }
 
-export function BillReadOnlyForm({ data, appearance, className, style, onOpenAttachment, validationIssues, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick }: BillReadOnlyFormProps): ReactElement {
+export function BillReadOnlyForm({ data, appearance, className, style, onOpenAttachment, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick }: BillReadOnlyFormProps): ReactElement {
   const [payerOpen, setPayerOpen] = useState(false);
   const [payerTab, setPayerTab] = useState<PayerTab>("main");
   const { bill, patient, injury } = data;
@@ -117,7 +119,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
     <BillDetailLayout header={<h2 style={{ margin: 0 }}>Bill details</h2>} actions={<strong>{money(bill.totalCharge)}</strong>}>
 
     <BillDetailSection title="Patient" validationIssues={validationIssues?.patient ?? []}><dl className="mb-read-grid">
-      <Value label="Name">{onPatientClick ? <button type="button" className="mb-read-payer" onClick={() => onPatientClick(patient)}>{patient.name || [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(" ") || "Patient"}</button> : patient.name || [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(" ")}</Value>
+      <Value label="Name">{onPatientClick && (!requireLinkedEntityIds?.patient || patient.id) ? <button type="button" className="mb-read-payer" onClick={() => onPatientClick(patient)}>{patient.name || [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(" ") || "Patient"}</button> : patient.name || [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(" ")}</Value>
       <Value label="Date of birth">{date(patient.dob)}</Value>
       <Value label="Phone">{patient.phone}</Value>
       <Value label="Address" wide>{patientAddress}</Value>
@@ -126,7 +128,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
     <BillDetailSection title="Claim & injury" validationIssues={validationIssues?.claim ?? []}><dl className="mb-read-grid">
       <Value label="Claim number">{injury.claimNumber}</Value>
       <Value label="WCAB / ADJ number">{injury.adjNumber}</Value>
-      <Value label="Claims administrator">{onClaimsAdministratorClick ? <><button type="button" className="mb-read-payer" onClick={() => onClaimsAdministratorClick({ ...(payerId ? { id: payerId } : {}), name: payerName })}>{payerName}</button>{" · "}</> : null}<button type="button" className="mb-read-payer" onClick={() => { setPayerTab("main"); setPayerOpen(true); }}>{onClaimsAdministratorClick ? "Contact details" : payerName}</button></Value>
+      <Value label="Claims administrator">{onClaimsAdministratorClick && (!requireLinkedEntityIds?.claimsAdministrator || payerId) ? <><button type="button" className="mb-read-payer" onClick={() => onClaimsAdministratorClick({ ...(payerId ? { id: payerId } : {}), name: payerName })}>{payerName}</button>{" · "}</> : null}<button type="button" className="mb-read-payer" onClick={() => { setPayerTab("main"); setPayerOpen(true); }}>{onClaimsAdministratorClick && (!requireLinkedEntityIds?.claimsAdministrator || payerId) ? "Contact details" : payerName}</button></Value>
       <Value label="Employer">{injury.employer}</Value>
       <Value label="Date of injury">{date(injury.doi)}</Value>
       <Value label="Date of service">{bill.dosEnd ? `${date(bill.dos)} – ${date(bill.dosEnd)}` : date(bill.dos)}</Value>
@@ -139,7 +141,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
       <Value label="Billing tax ID">{provider?.taxId}</Value>
       <Value label="Billing phone">{provider?.phone}</Value>
       <Value label="Billing address" wide>{billingAddress}</Value>
-      <Value label="Rendering provider">{clinician && onRenderingProviderClick ? <button type="button" className="mb-read-payer" onClick={() => onRenderingProviderClick(clinician)}>{clinician.name}</button> : clinician?.name}</Value>
+      <Value label="Rendering provider">{clinician && onRenderingProviderClick && (!requireLinkedEntityIds?.renderingProvider || clinician.id) ? <button type="button" className="mb-read-payer" onClick={() => onRenderingProviderClick(clinician)}>{clinician.name}</button> : clinician?.name}</Value>
       <Value label="Rendering NPI">{clinician?.npi}</Value>
       <Value label="Rendering taxonomy">{clinician?.taxonomy}</Value>
       <Value label="Place of service code">{location?.posCode}</Value>

@@ -73,3 +73,9 @@ and `claimsAdministratorId` to distinguish records with identical names, and
 `renderingProviderName` for the doctor label and text search. Without an ID, the
 static dashboard groups that entity by its display name. Selectors without any
 entity information are omitted. All three selectors combine with the other filters.
+
+## Navigate from bill details
+
+`ConnectedBillingWorkspace` links patient, rendering provider and claims administrator names to all bills filtered by their canonical entity ID. Each navigation resets pagination and prior filters. Historical snapshots without a canonical ID show plain text instead of an inactive navigation button. Claims administrator contact details remain available.
+
+Hosts can override `onPatientClick`, `onRenderingProviderClick` and `onClaimsAdministratorClick` for their own record pages. These callbacks receive the complete public entity object, including its optional ID. Hosts decide how to handle older snapshots without an ID. The lower-level `BillReadOnlyForm` and `ConnectedBillLifecycle` also accept these callbacks; their optional `requireLinkedEntityIds` flags suppress navigation for missing IDs when desired.

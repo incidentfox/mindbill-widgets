@@ -419,3 +419,7 @@ export type { RfaRecord, RfaSigningPreview, RfaCreateDraftInput } from "@mindbil
 
 export { RfaLifecycleControls } from "./rfa-lifecycle-controls";
 export type { RfaLifecycleControlsProps } from "./rfa-lifecycle-controls";
+export { ReportAutofill } from "./report-autofill";
+export type { ReportAutofillProps } from "./report-autofill";
+
+export { applyReportAutofill } from "./report-autofill-values";

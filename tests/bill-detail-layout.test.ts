@@ -44,3 +44,19 @@ it("returns canonical entity references on opt-in links while retaining administ
     expect(container.querySelectorAll(".mb-read-payer")).toHaveLength(1);
   } finally { await act(async () => root.unmount()); }
 });
+
+it("hides default entity navigation without canonical IDs but allows explicit host navigation", async () => {
+  const container = document.createElement("div"); const root = createRoot(container);
+  const legacy = structuredClone(detail); delete legacy.patient.id;
+  delete legacy.bill.billingSnapshot!.renderingProvider!.id; delete legacy.injury!.claimsAdminId;
+  const onPatientClick = vi.fn(); const onRenderingProviderClick = vi.fn(); const onClaimsAdministratorClick = vi.fn();
+  try {
+    await act(async () => root.render(createElement(BillReadOnlyForm, { data: legacy, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, requireLinkedEntityIds: { patient: true, renderingProvider: true, claimsAdministrator: true } })));
+    expect([...container.querySelectorAll("button")].filter(item => ["Synthetic patient", "Synthetic physician"].includes(item.textContent ?? ""))).toHaveLength(0);
+    expect(container.querySelectorAll(".mb-read-payer")).toHaveLength(1); // Administrator contact directory remains available.
+    await act(async () => root.render(createElement(BillReadOnlyForm, { data: legacy, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick })));
+    expect(container.querySelectorAll(".mb-read-payer")).toHaveLength(4);
+    await act(async () => [...container.querySelectorAll("button")].find(item => item.textContent === "Synthetic patient")!.click());
+    expect(onPatientClick).toHaveBeenCalledWith(legacy.patient);
+  } finally { await act(async () => root.unmount()); }
+});
