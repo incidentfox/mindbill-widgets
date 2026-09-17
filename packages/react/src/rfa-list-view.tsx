@@ -1,21 +1,21 @@
 "use client";
-import { useState, type ReactElement } from "react";
+import { type ReactElement } from "react";
 import type { RfaListQuery, RfaRecord } from "@mindbill/browser";
 type Sort = NonNullable<RfaListQuery["sortBy"]>;
 const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString() : "—";
 const label = (value: string) => value.replaceAll("_", " ");
 /** Both views use the same server-filtered, globally sorted request page. */
-export function RfaListView({ records, sortBy, sortDirection, onSort, onSelect }: {
+export function RfaListView({ records, view, onViewChange, sortBy, sortDirection, onSort, onSelect }: {
+  view: "rfas" | "treatments"; onViewChange: (view: "rfas" | "treatments") => void;
   records: RfaRecord[]; sortBy: Sort; sortDirection: "asc" | "desc";
   onSort: (field: Sort) => void; onSelect: (id: string, itemId?: string) => void;
 }): ReactElement {
-  const [view, setView] = useState<"rfas" | "treatments">("rfas");
   const heading = (field: Sort, title: string) => <th scope="col" aria-sort={sortBy === field ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}><button type="button" onClick={() => onSort(field)}>{title}{sortBy === field ? (sortDirection === "asc" ? " ↑" : " ↓") : " ↕"}</button></th>;
   return <div className="mbrfa-list">
     <style>{`.mbrfa-table-scroll{overflow-x:auto;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbrfa-table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}.mbrfa-table th,.mbrfa-table td{padding:12px;border-bottom:1px solid var(--mb-border);vertical-align:top;min-width:110px}.mbrfa-table th{background:var(--mb-soft)}.mbrfa-table td small{display:block;color:var(--mb-muted);margin-top:4px}.mbrfa-table tr:last-child td{border-bottom:0}.mbrfa-table th button{white-space:nowrap}.mbrfa-view button[aria-pressed=true]{background:var(--mb-soft);font-weight:600}`}</style>
     <div className="mbtd-actions mbrfa-view" role="group" aria-label="Request list view">
-      <button type="button" aria-pressed={view === "rfas"} onClick={() => setView("rfas")}>RFAs</button>
-      <button type="button" aria-pressed={view === "treatments"} onClick={() => setView("treatments")}>Requested treatments</button>
+      <button type="button" aria-pressed={view === "rfas"} onClick={() => onViewChange("rfas")}>RFAs</button>
+      <button type="button" aria-pressed={view === "treatments"} onClick={() => onViewChange("treatments")}>Requested treatments</button>
     </div>
     {view === "treatments" ? <p>All treatments from the requests on this page. Search matches whole requests; every treatment on a matching request is shown. Page controls move between requests.</p> : null}
     {!records.length ? <p>No requests match this view.</p> : <div className="mbrfa-table-scroll" tabIndex={0} role="region" aria-label={view === "rfas" ? "RFA table" : "Requested treatments table"}>

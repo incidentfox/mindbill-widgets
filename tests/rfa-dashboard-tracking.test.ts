@@ -13,11 +13,13 @@ it("keeps patient filters through server search, sorting and cursor navigation a
  try {
   await act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher, patientId: "patient_synthetic" })));
   await click("Requested treatments"); expect(container.textContent).toContain("Synthetic therapy"); expect(container.textContent).toContain("Page controls move between requests");
-  await click("Next page"); expect(urls.at(-1)!.searchParams.get("cursor")).toBe("synthetic_cursor");
+  await click("Next page"); expect(container.querySelector('[aria-label="Requested treatments table"]')).not.toBeNull(); expect(urls.at(-1)!.searchParams.get("cursor")).toBe("synthetic_cursor");
   await click("Patient ↕"); expect(urls.at(-1)!.searchParams.get("sortBy")).toBe("employeeName"); expect(urls.at(-1)!.searchParams.get("sortDirection")).toBe("asc"); expect(urls.at(-1)!.searchParams.has("cursor")).toBe(false);
+  expect(container.querySelector('[aria-label="Requested treatments table"]')).not.toBeNull();
   const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "TEST-CLAIM"); input.dispatchEvent(new Event("input", { bubbles: true })); });
   await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  expect(container.querySelector('[aria-label="Requested treatments table"]')).not.toBeNull();
   expect(urls.at(-1)!.searchParams.get("search")).toBe("TEST-CLAIM"); expect(urls.every(url => url.searchParams.get("patientId") === "patient_synthetic")).toBe(true);
   await click("Next page"); await click("Previous page"); expect(urls.at(-1)!.searchParams.has("cursor")).toBe(false); expect(urls.at(-1)!.searchParams.get("search")).toBe("TEST-CLAIM");
  } finally { await act(async () => root.unmount()); container.remove(); }

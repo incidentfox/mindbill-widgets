@@ -44,6 +44,8 @@ export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: f
   return <RfaDashboardContent key={`${identity.key}:${patientId ?? ""}:${claimId ?? ""}:${renderingProviderId ?? ""}`} {...props} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} client={client} signatureClient={signatureClient} options={options} />;
 }
 function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, permissions = [], canCreateClaim = false, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const references = useMemo(() => createBillReferenceClient(options), [options]);
   const [profile, setProfile] = useState<OrganizationProfileData | undefined>();
   const draftFormProps = { searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
@@ -52,6 +54,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   const [searchInput, setSearchInput] = useState(""); const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<NonNullable<RfaListQuery["sortBy"]>>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [listView, setListView] = useState<"rfas" | "treatments">("rfas");
   const [pageHistory, setPageHistory] = useState<Array<string | undefined>>([]);
   const resetPage = () => { setCursor(undefined); setPageHistory([]); };
   const [reload, setReload] = useState(0); const [error, setError] = useState("");
@@ -77,7 +80,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     {selected || creating ? <button type="button" onClick={back}>← All requests</button> : <div className="mbtd-actions"><label>Status<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{STATUSES.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label><button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}>Refresh requests</button>{permissions.includes("create") ? <button type="button" className="mbtd-primary" disabled={appearance.disabled} onClick={() => setCreating(true)}>New authorization request</button> : null}</div>}
     {creating && permissions.includes("create") ? <RfaCreateForm {...appearance} client={client} canCreateClaim={canCreateClaim} draftFormProps={draftFormProps} {...(initialDraft ? { initialDraft } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} onSave={async draft => {
       const fingerprint = JSON.stringify(draft); let idempotency = createKeys.current.get(fingerprint); if (!idempotency) { idempotency = key(); createKeys.current.set(fingerprint, idempotency); }
-      const saved = await client.createDraft(draft, idempotency); setCreating(false); setSelected(saved.id); onCreated?.(saved);
+      const saved = await client.createDraft(draft, idempotency); if (!active.current) return; setCreating(false); setSelected(saved.id); onCreated?.(saved);
     }} /> : selected ? <RfaDetail key={selected} id={selected} selectedItem={selectedItem} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { setSelectedItem(null); setSelected(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : <>
       {error ? <p role="alert">{error}</p> : null}{loading ? <p role="status">Loading authorization requests…</p> : null}
       <form className="mbtd-actions" onSubmit={event => { event.preventDefault(); setSearch(searchInput.trim()); resetPage(); }}>
@@ -86,7 +89,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
       </form>
       {!loading && !error && result ? <>
         <div className="mbrfa-summary"><strong>{result.summary.total} requests</strong>{Object.entries(result.summary.byStatus).filter(([,count]) => count > 0).map(([name,count]) => <span key={name} className="mbrfa-status">{label(name)}: {count}</span>)}</div>
-        <RfaListView records={result.data} sortBy={sortBy} sortDirection={sortDirection} onSort={field => { setSortBy(field); setSortDirection(field === sortBy && sortDirection === "asc" ? "desc" : "asc"); resetPage(); }} onSelect={(id, itemId) => { setSelectedItem(itemId ?? null); setSelected(id); }} />
+        <RfaListView view={listView} onViewChange={setListView} records={result.data} sortBy={sortBy} sortDirection={sortDirection} onSort={field => { setSortBy(field); setSortDirection(field === sortBy && sortDirection === "asc" ? "desc" : "asc"); resetPage(); }} onSelect={(id, itemId) => { setSelectedItem(itemId ?? null); setSelected(id); }} />
         <div className="mbtd-actions"><span>Request page {pageHistory.length + 1}</span>{cursor ? <button type="button" onClick={resetPage}>First page</button> : null}{pageHistory.length ? <button type="button" onClick={() => { setCursor(pageHistory.at(-1)); setPageHistory(value => value.slice(0, -1)); }}>Previous page</button> : null}{result.nextCursor ? <button type="button" onClick={() => { setPageHistory(value => [...value, cursor]); setCursor(result.nextCursor!); }}>Next page</button> : null}</div>
       </> : null}
     </>}
