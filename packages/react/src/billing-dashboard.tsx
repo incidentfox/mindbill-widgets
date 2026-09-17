@@ -6,6 +6,7 @@ import { useId, useMemo, useState } from "react";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import type { OrganizationClientOptions, OrganizationProfileData } from "@mindbill/browser";
 import { BillingSettings } from "./organization-onboarding";
+import { RfaDashboard, type RfaDashboardProps } from "./rfa-dashboard";
 import { DashboardTabs } from "./dashboard-tabs";
 import { acceptedNoResponseLabel } from "./bill-status-label";
 import { billDateInRange, billSearchDateText, matchesBillSearch, type BillSearchDateField } from "./bill-search";
@@ -82,6 +83,10 @@ export type BillingDashboardProps = BillingComponentProps & {
   showSettings?: boolean;
   /** Optional dedicated settings session. Defaults to /api/mindbill/session. */
   billingSettings?: OrganizationClientOptions;
+  /** Opt in to the built-in Requests for authorization tab. Defaults to false. */
+  showRfas?: boolean;
+  /** RFA session, permissions, draft context, and lifecycle callbacks. */
+  rfaDashboard?: RfaDashboardProps;
   onSettingsSaved?: (profile: OrganizationProfileData) => void;
 };
 
@@ -206,10 +211,14 @@ function entityChoices(bills: BillingDashboardBill[], key: (bill: BillingDashboa
   return [...choices].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
-export function BillingDashboard({ bills, heading = "Billing", description = "Track submitted bills, payments, and outstanding balances.", onSelectBill, initialSearch = "", initialState = "all", hideFilters = false, showSettings = true, billingSettings, onSettingsSaved, appearance, className, style }: BillingDashboardProps): ReactElement {
+export function BillingDashboard({ bills, heading = "Billing", description = "Track submitted bills, payments, and outstanding balances.", onSelectBill, initialSearch = "", initialState = "all", hideFilters = false, showSettings = true, showRfas = false, rfaDashboard, billingSettings, onSettingsSaved, appearance, className, style }: BillingDashboardProps): ReactElement {
   const tabId = useId();
-  const [selectedView, setSelectedView] = useState<"bills" | "settings">("bills");
-  const view = showSettings ? selectedView : "bills";
+  const [selectedView, setSelectedView] = useState<"bills" | "rfas" | "settings">("bills");
+  const view = (!showSettings && selectedView === "settings") || (!showRfas && selectedView === "rfas") ? "bills" : selectedView;
+  const tabs: Array<readonly [typeof selectedView, string]> = [["bills", "Bills"]];
+  if (showRfas) tabs.push(["rfas", "Requests for authorization"]);
+  if (showSettings) tabs.push(["settings", "Settings"]);
+  const hasTabs = showSettings || showRfas;
   const [search, setSearch] = useState(initialSearch); const [state, setState] = useState(initialState);
   const [entities, setEntities] = useState({ patient: "", administrator: "", provider: "" });
   const entityOptions = useMemo(() => ({
@@ -237,9 +246,9 @@ export function BillingDashboard({ bills, heading = "Billing", description = "Tr
   };
   const listProps = { bills: filtered, ...(onSelectBill === undefined ? {} : { onSelectBill }) };
   return <Shell {...shellProps}><div className="mbdash-head"><div><h2>{heading}</h2><p className="mbdash-copy">{description}</p></div></div>
-    {showSettings ? <DashboardTabs id={tabId} tabs={[["bills", "Bills"], ["settings", "Settings"]]} value={view} onChange={setSelectedView} className="mbdash-tabs" tabClassName="mbdash-tab" /> : null}
-    <div className="mbdash-panel" {...(showSettings ? { role: "tabpanel", id: `${tabId}-panel-${view}`, "aria-labelledby": `${tabId}-tab-${view}`, tabIndex: 0 } : {})}>
-    {view === "settings" ? <BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : <><AgingContent bills={filtered} heading="Receivables" />{hideFilters ? null : <><div className="mbdash-filters"><input className="mbdash-control" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Patient, claims administrator, bill, claim, status, or date…" aria-label="Search bills" aria-describedby={`${tabId}-search-help`} /><select className="mbdash-control" value={state} onChange={(event) => setState(event.target.value)} aria-label="Filter bills by status"><option value="all">All statuses</option>{states.map((item) => <option value={item} key={item}>{stateLabel(item)}</option>)}</select></div>
+    {hasTabs ? <DashboardTabs id={tabId} tabs={tabs} value={view} onChange={setSelectedView} className="mbdash-tabs" tabClassName="mbdash-tab" /> : null}
+    <div className="mbdash-panel" {...(hasTabs ? { role: "tabpanel", id: `${tabId}-panel-${view}`, "aria-labelledby": `${tabId}-tab-${view}`, tabIndex: 0 } : {})}>
+    {view === "rfas" ? <RfaDashboard {...(appearance ? { appearance } : {})} {...rfaDashboard} /> : view === "settings" ? <BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : <><AgingContent bills={filtered} heading="Receivables" />{hideFilters ? null : <><div className="mbdash-filters"><input className="mbdash-control" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Patient, claims administrator, bill, claim, status, or date…" aria-label="Search bills" aria-describedby={`${tabId}-search-help`} /><select className="mbdash-control" value={state} onChange={(event) => setState(event.target.value)} aria-label="Filter bills by status"><option value="all">All statuses</option>{states.map((item) => <option value={item} key={item}>{stateLabel(item)}</option>)}</select></div>
       <div className="mbdash-filters">{([['patient', 'Patient', 'patients'], ['provider', 'Rendering provider', 'rendering providers'], ['administrator', 'Claims administrator', 'claims administrators']] as const).map(([key, label, plural]) => entityOptions[key].length || entities[key] ? <select key={key} className="mbdash-control" aria-label={`${label} filter`} value={entities[key]} onChange={(event) => setEntities((current) => ({ ...current, [key]: event.target.value }))}><option value="">All {plural}</option>{entities[key] && !entityOptions[key].some((item) => item.id === entities[key]) ? <option value={entities[key]}>Selected {label.toLowerCase()}</option> : null}{entityOptions[key].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select> : null)}</div>
       <p id={`${tabId}-search-help`} className="mbdash-copy">Search across bill details. Combine words to narrow results; use MM/DD/YYYY or YYYY-MM-DD for dates.</p>
       <BillDateFilters {...dates} onChange={(next) => setDates((current) => ({ ...current, ...next }))} />

@@ -39,6 +39,50 @@ The UI `permissions` default is an empty array. PDF views require `documents:rea
 when the user has `rfas:read`. Directory failure leaves manual recipient confirmation
 available; it never substitutes a telephone number or silently picks a recipient.
 
+## Optional tab in the billing dashboard
+
+React 0.68.0 adds an opt-in **Requests for authorization** tab to
+`ConnectedBillingWorkspace` and `BillingDashboard`. Set `showRfas` to enable it;
+it defaults to `false` and loads RFA data only when opened.
+
+```tsx
+<ConnectedBillingWorkspace
+  sessionEndpoint="/api/mindbill/session"
+  showRfas
+  initialView="rfas"
+  rfaDashboard={{
+    initialDraft: prefilledDraftFromAuthorizedCase,
+    actorReference: authenticatedUser.id,
+    permissions: ["create", "edit", "sign", "send", "act"],
+    environment: "sandbox",
+    onCreated: (record) => rememberCreatedRequest(record.id),
+  }}
+/>
+```
+
+The tab includes status counts and filtering, request details, **New authorization
+request**, draft editing, signing, packet review, submission, and delivery history.
+The new-request button requires both `initialDraft` and `create` permission. Supply
+that draft from the patient, claim, and rendering provider selected in your host
+application; those identities remain fixed in the form. Saving creates an unsigned
+draft. Sending is a separate, explicitly confirmed action.
+
+`rfaDashboard` accepts the same props as standalone `RfaDashboard`. The connected
+workspace inherits its main session, API URL, and fetch implementation. Supply
+`rfaDashboard.getSession` or `rfaDashboard.sessionEndpoint` for separately authorized
+RFA access; a dedicated endpoint overrides the workspace session callback. Mint the
+scopes listed above on the trusted server. Permissions default to read-only and the
+environment defaults to sandbox; showing the tab never grants backend access.
+
+For the data-driven dashboard, pass `bills`, `showRfas`, and the same `rfaDashboard`
+configuration. Its RFA connection defaults to `/api/mindbill/session`. Bill search
+filters do not apply to RFAs; use `rfaDashboard.claimId` or `renderingProviderId`
+for a restricted view. The RFA status selector filters requests within that view.
+
+`initialView="rfas"` opens the tab immediately in `ConnectedBillingWorkspace`.
+Disabling the selected tab returns to Bill tasks (or Bills in `BillingDashboard`).
+This SDK option does not change the MindBill application interface.
+
 ## Edit an existing draft
 
 With `edit` permission, **Edit request draft** opens the existing service rows. Saving

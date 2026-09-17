@@ -451,6 +451,16 @@ changes partner application roles. Browser 0.41.0 exposes directory CRUD and tea
 read/update methods; Node 0.16.0 accepts the restricted team permission. See
 [organization administration](docs/saved-profiles.md#organization-administration-react-065).
 
+### Optional RFA dashboard tab
+
+React 0.68.0 adds `showRfas` (default `false`) and `rfaDashboard` to
+`ConnectedBillingWorkspace` and `BillingDashboard`. The tab reuses `RfaDashboard`
+for status tracking, draft creation, signing, packet review, and confirmed
+submission. The connected workspace inherits its session and supports
+`initialView="rfas"`. Creation requires authorized case details in `initialDraft`
+and `create` permission; external delivery remains disabled in sandbox. See the
+[RFA dashboard integration guide](docs/rfa-dashboard.md#optional-tab-in-the-billing-dashboard).
+
 ### Optional report suggestions
 
 `BillSubmissionForm` accepts `reportAutofill={{ getSession }}` to add an explicit upload → review → apply flow. It is hidden by default and available only by written agreement with an operator-provisioned `reportAutofill` capability and dedicated organization-wide `autofill:run` session. Existing entries and service lines are preserved; analysis does not save attachments or submit bills. Custom UIs can use `ReportAutofill`, `applyReportAutofill`, or `createReportAutofillClient`. See [report suggestions](docs/report-autofill.md).

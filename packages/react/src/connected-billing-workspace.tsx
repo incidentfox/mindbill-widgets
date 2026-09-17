@@ -18,6 +18,7 @@ import {
 import { BillingSettings } from "./organization-onboarding";
 import { BillDateFilters } from "./bill-date-filters";
 import type { BillSearchDateField } from "./bill-search";
+import { RfaDashboard, type RfaDashboardProps } from "./rfa-dashboard";
 import { DashboardTabs } from "./dashboard-tabs";
 import type { BillTasksDashboardCell } from "./bill-tasks-dashboard";
 import { BillTasksDashboard } from "./bill-tasks-dashboard";
@@ -289,8 +290,12 @@ export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & Pick<BillDe
   billingSettings?: import("@mindbill/browser").OrganizationClientOptions;
   /** Show the Settings tab by default. Hide for users without org:manage. */
   showSettings?: boolean;
+  /** Opt in to Requests for authorization. Defaults to false. */
+  showRfas?: boolean;
+  /** Inherits the workspace session unless connection options are supplied here. */
+  rfaDashboard?: RfaDashboardProps;
   onSettingsSaved?: (profile: import("@mindbill/browser").OrganizationProfileData) => void;
-  initialView?: "tasks" | "bills" | "procedures" | "productivity" | "payments" | "settings";
+  initialView?: "tasks" | "bills" | "procedures" | "productivity" | "payments" | "rfas" | "settings";
   /** Optional host-owned payment entry action. Review itself is read-only. */
   onPostPayment?: () => void;
   onCreateBill?: () => void;
@@ -300,11 +305,12 @@ export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & Pick<BillDe
   getCourtesyCopyRecipientOptions?: (billId: string) => readonly CourtesyCopyRecipientOption[];
 };
 
-export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, billingSettings, showSettings = true, onSettingsSaved, actorName, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
+export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, billingSettings, showSettings = true, showRfas = false, rfaDashboard, onSettingsSaved, actorName, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
   const client = useClient(options); const [selectedView, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const tabId = useId();
-  const view = !showSettings && selectedView === "settings" ? "tasks" : selectedView;
+  const view = (!showSettings && selectedView === "settings") || (!showRfas && selectedView === "rfas") ? "tasks" : selectedView;
   const tabs: Array<readonly [NonNullable<ConnectedBillingWorkspaceProps["initialView"]>, string]> = [["tasks", "Bill tasks"], ["bills", "All bills"], ["procedures", "Procedures"], ["productivity", "Productivity"], ["payments", "Payment review"]];
+  if (showRfas) tabs.push(["rfas", "Requests for authorization"]);
   if (showSettings) tabs.push(["settings", "Settings"]);
   const { workspaceRef, availableHeight } = useAvailableViewportHeight();
   const workspaceClassName = ["mbow-workspace", className].filter(Boolean).join(" ");
@@ -314,5 +320,8 @@ export function ConnectedBillingWorkspace({ appearance, className, style, initia
   if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle requireLinkedEntityIds={{ patient: !onPatientClick, renderingProvider: !onRenderingProviderClick, claimsAdministrator: !onClaimsAdministratorClick }} onPatientClick={onPatientClick ?? ((patient) => { if (patient.id) showEntityBills({ patientId: patient.id }); })} onRenderingProviderClick={onRenderingProviderClick ?? ((provider) => { if (provider.id) showEntityBills({ renderingProviderId: provider.id }); })} onClaimsAdministratorClick={onClaimsAdministratorClick ?? ((administrator) => { if (administrator.id) showEntityBills({ claimsAdministrator: administrator.id }); })} {...(actorName ? { actorName } : {})} {...(billingSettings ? { billingSettings } : {})} billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
   const selectView = (next: typeof view) => { setView(next); setSelectedBillId(null); };
   const appearanceProps = appearance ? { appearance } : {};
-  return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><DashboardTabs id={tabId} tabs={tabs} value={view} onChange={selectView} className="mbow-tabs" tabClassName="mbow-tab" /><div role="tabpanel" id={`${tabId}-panel-${view}`} aria-labelledby={`${tabId}-tab-${view}`} tabIndex={0}>{view === "settings" ? <BillingSettings {...(billingSettings ?? options)} {...appearanceProps} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : view === "payments" ? <ConnectedPaymentReview {...options} {...appearanceProps} {...(onPostPayment ? { onPostPayment } : {})} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</div></Surface>;
+  const rfaOptions = { ...options, ...rfaDashboard };
+  // An explicit RFA session endpoint must not be shadowed by the workspace callback.
+  if (rfaDashboard?.sessionEndpoint && !rfaDashboard.getSession) delete rfaOptions.getSession;
+  return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><DashboardTabs id={tabId} tabs={tabs} value={view} onChange={selectView} className="mbow-tabs" tabClassName="mbow-tab" /><div role="tabpanel" id={`${tabId}-panel-${view}`} aria-labelledby={`${tabId}-tab-${view}`} tabIndex={0}>{view === "rfas" ? <RfaDashboard {...appearanceProps} {...rfaOptions} /> : view === "settings" ? <BillingSettings {...(billingSettings ?? options)} {...appearanceProps} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : view === "payments" ? <ConnectedPaymentReview {...options} {...appearanceProps} {...(onPostPayment ? { onPostPayment } : {})} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</div></Surface>;
 }
