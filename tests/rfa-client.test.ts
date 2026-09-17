@@ -41,3 +41,18 @@ it("replaces drafts with the exact expected revision and stable item IDs across 
  for(const call of calls)expect(new Headers(call[1]?.headers).get("idempotency-key")).toBe("edit_key");
  await expect(client.updateDraft("rfa",{...draft,expectedRevision:0},"bad")).rejects.toThrow("revision");expect(fetcher).toHaveBeenCalledTimes(2);
 });
+it("loads paginated saved identities through the browser context route with scoped filters", async () => {
+ const context={claims:[],renderingProviders:[],nextCursor:"claims_next",renderingProvidersNextCursor:"providers_next"};
+ const fetcher=vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({}, {status:401})).mockResolvedValueOnce(Response.json({data:context}));
+ const session=vi.fn().mockResolvedValue({token:"synthetic_token"});
+ const client=createRfaClient({getSession:session,fetch:fetcher});
+ expect(await client.getCreationContext({search:"Synthetic & patient",providerSearch:"Physician",cursor:"claim/page",providerCursor:"provider/page",claimId:"claim_synthetic",renderingProviderId:"provider_synthetic",limit:50})).toEqual(context);
+ const url=new URL(String(fetcher.mock.calls[1]?.[0]));
+ expect(url.pathname).toBe("/partner/v2/browser/rfas/creation-context");
+ expect(Object.fromEntries(url.searchParams)).toEqual({search:"Synthetic & patient",providerSearch:"Physician",cursor:"claim/page",providerCursor:"provider/page",claimId:"claim_synthetic",renderingProviderId:"provider_synthetic",limit:"50"});
+ expect(session).toHaveBeenCalledTimes(2); expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
+});
+it("rejects malformed saved identity responses",async()=>{
+ const client=createRfaClient({getSession:async()=>({token:"synthetic_token"}),fetch:vi.fn<typeof fetch>().mockResolvedValue(Response.json({data:{claims:[]}}))});
+ await expect(client.getCreationContext()).rejects.toThrow("creation context was invalid");
+});

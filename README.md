@@ -457,8 +457,9 @@ React 0.68.0 adds `showRfas` (default `false`) and `rfaDashboard` to
 `ConnectedBillingWorkspace` and `BillingDashboard`. The tab reuses `RfaDashboard`
 for status tracking, draft creation, signing, packet review, and confirmed
 submission. The connected workspace inherits its session and supports
-`initialView="rfas"`. Creation requires authorized case details in `initialDraft`
-and `create` permission; external delivery remains disabled in sandbox. See the
+`initialView="rfas"`. React 0.69.0 includes saved patient/claim and physician selection
+with search and pagination. Creation requires `create` permission; `initialDraft`
+optionally skips selection for prepared cases. External delivery remains disabled in sandbox. See the
 [RFA dashboard integration guide](docs/rfa-dashboard.md#optional-tab-in-the-billing-dashboard).
 
 ### Optional report suggestions

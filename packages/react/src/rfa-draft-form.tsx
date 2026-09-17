@@ -7,7 +7,7 @@ export type RfaDraftItemInput = {
   quantity?: number; units?: number; frequency?: string; duration?: string;
   requestedFrom?: string; requestedTo?: string; metadata?: Record<string, unknown>;
 };
-/** An unsigned preparation draft. The host selects identities; RfaDashboard can continue through reviewed signing and delivery. */
+/** An unsigned preparation draft. The dashboard or host selects identities; RfaDashboard can continue through reviewed signing and delivery. */
 export type RfaDraftInput = {
   claimId: string; patientId: string; renderingProviderId: string; employeeName: string; providerName: string;
   externalId?: string; claimsAdminId?: string;
@@ -23,6 +23,8 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & {
   mode?: "create" | "edit";
   /** Persist an unsigned draft only; this callback must not sign or transmit the request. */
   onSave: (draft: RfaDraftInput) => Promise<void>;
+  /** Return to saved identity selection while retaining unsaved treatment details. */
+  onBack?: (draft: RfaDraftInput) => void;
 };
 /** Remove blank optional item fields, retaining an explicitly cleared return fax. */
 export function normalizeRfaDraft(draft: RfaDraftInput): RfaDraftInput {
@@ -59,7 +61,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, onSave, mode = "create", disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [draft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   const action = useDraftSave(onSave), locked = disabled || action.busy;
   const update = (patch: Partial<RfaDraftInput>) => { action.clear(); setDraft((current) => ({ ...current, ...patch })); };
@@ -72,6 +74,7 @@ export function RfaDraftForm({ initialDraft, onSave, mode = "create", disabled =
   };
   return <TreatmentDraftShell {...appearance} title="Request for authorization" description="Prepare services and supporting rationale for utilization review.">
     <p className="mbtd-note">{mode === "edit" ? "Saving replaces this draft, clears its signature, and requires a new signing review. It does not send the request or authorize treatment." : "Saving creates an unsigned draft. It does not send the request or authorize treatment."}</p>
+    {onBack ? <button type="button" disabled={locked} onClick={() => onBack(draft)}>Back to patient and physician</button> : null}
     <form onSubmit={(event) => { event.preventDefault(); if (locked) return; const next = normalizeRfaDraft(draft); void action.save(next, validateRfaDraft(next)); }}>
       <fieldset disabled={locked}><legend>Request details</legend><div className="mbtd-grid">
         <label>Employee<input readOnly value={draft.employeeName} /></label><label>Requesting provider<input readOnly value={draft.providerName} /></label>

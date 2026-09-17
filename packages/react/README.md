@@ -116,8 +116,7 @@ component's `style` prop continues to take precedence.
 ### Optional RFA tab
 
 React 0.68.0 adds `showRfas` (default `false`) to `ConnectedBillingWorkspace` and
-`BillingDashboard`. Pass `rfaDashboard` for the selected case's `initialDraft`,
-authorized UI permissions, actor reference, callbacks, and optional dedicated
+`BillingDashboard`. Pass `rfaDashboard` for authorized UI permissions, actor reference, callbacks, and optional dedicated
 session. The connected workspace inherits its main connection; `initialView="rfas"`
 opens the tab immediately.
 
@@ -126,7 +125,6 @@ opens the tab immediately.
   sessionEndpoint="/api/mindbill/session"
   showRfas
   rfaDashboard={{
-    initialDraft: prefilledDraftFromAuthorizedCase,
     permissions: ["create", "edit", "sign", "send", "act"],
     actorReference: authenticatedUser.id,
     environment: "sandbox",
@@ -135,8 +133,9 @@ opens the tab immediately.
 ```
 
 The tab includes request status tracking, unsigned draft creation, signing, packet
-review, and deliberate submission. Creation requires a prefilled case and `create`
-permission. UI permissions do not grant server access, and sandbox disables external
+review, and deliberate submission. React 0.69.0 adds saved patient/claim and physician selection with search and
+pagination. Creation requires `create` permission; an optional `initialDraft` skips
+selection for hosts with a prepared case. UI permissions do not grant server access, and sandbox disables external
 fax delivery. See the [RFA dashboard guide](../../docs/rfa-dashboard.md) for session
 scopes, signature setup, and the reviewed delivery workflow.
 
