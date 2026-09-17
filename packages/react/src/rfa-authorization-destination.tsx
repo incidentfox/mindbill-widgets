@@ -38,6 +38,5 @@ export function RfaAuthorizationDestination({ contextKey, directory, loading = f
       {chosen.method === "email" ? <p style={{ margin: 0, overflowWrap: "anywhere" }}>Email: {chosen.destination}. This selection does not send an email. Send the signed packet through your email service and record delivery.</p> : null}
       {chosen.phone ? <small>Telephone for questions: {chosen.phone}</small> : null}
     </> : null}
-    <small><a href="https://mindbill.org" target="_blank" rel="noopener noreferrer">Powered by MindBill</a></small>
   </fieldset>;
 }

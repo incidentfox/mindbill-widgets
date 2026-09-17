@@ -8,7 +8,8 @@ This repository is intentionally public. Treat every commit, test fixture, issue
 - Use synthetic fixtures only. Values such as organization and bill IDs must be obviously fake.
 - Browser code must never receive a long-lived MindBill API key. Mint short-lived, origin-bound embed sessions on a trusted server.
 - Never collect card numbers. Live access and billing changes must redirect a human to the Stripe-hosted URL returned by MindBill.
-- Do not weaken exact-origin checks, iframe sandboxing, token redaction, or mandatory “Powered by MindBill” attribution.
+- Do not weaken exact-origin checks, iframe sandboxing, or token redaction.
+- Embedded components must not add MindBill attribution footers.
 - Autofill is not a self-serve product. `bill-from-report` is available only by written agreement.
 
 ## Development
