@@ -444,10 +444,10 @@ readiness. Hide it with `showSettings={false}` or supply a dedicated authorized
 for session authorization, callbacks, and integration examples.
 
 
-React 0.65.0 extends Settings with custom claims administrators and existing MindBill
+React 0.66.0 extends Settings with custom claims administrators and existing MindBill
 team roles. Organization identity is collapsed under Organization details; billing
 providers stay first. Team access requires explicit `team:manage` delegation and never
-changes partner application roles. Browser 0.40.0 exposes directory CRUD and team
+changes partner application roles. Browser 0.41.0 exposes directory CRUD and team
 read/update methods; Node 0.16.0 accepts the restricted team permission. See
 [organization administration](docs/saved-profiles.md#organization-administration-react-065).
 
