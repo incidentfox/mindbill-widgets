@@ -49,9 +49,9 @@ it("requires explicit choice, separates email, clears retired destinations and t
     await render(structuredClone(directory)); expect(changed.mock.calls).toHaveLength(calls);
     expect(container.querySelector("select")?.value).toBe("0");
     await choose("1"); expect(changed.mock.lastCall?.[0]?.method).toBe("email");
-    expect(container.textContent).toContain("This selection does not send an email");
+    expect(container.textContent).toContain("Review this recipient before preparing and sending the packet");
     await render({ ...directory, authorizationStatus: "profile_not_published" });
-    expect(changed).toHaveBeenLastCalledWith(null); expect(container.querySelectorAll("option")).toHaveLength(2);
+    expect(changed).toHaveBeenLastCalledWith(null); expect(container.querySelectorAll("option")).toHaveLength(3);
     await choose("manual");
     expect(container.querySelector('input[type="tel"]')).not.toBeNull();
     await render(null, "different_synthetic_request"); expect(container.querySelector("select")?.value).toBe("");

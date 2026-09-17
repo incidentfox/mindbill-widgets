@@ -56,3 +56,16 @@ it("rejects malformed saved identity responses",async()=>{
  const client=createRfaClient({getSession:async()=>({token:"synthetic_token"}),fetch:vi.fn<typeof fetch>().mockResolvedValue(Response.json({data:{claims:[]}}))});
  await expect(client.getCreationContext()).rejects.toThrow("creation context was invalid");
 });
+it("prepares and sends exact retained email packet bytes through the reviewed delivery API", async () => {
+ const preview={packetId:"packet_synthetic",sha256:"a".repeat(64),contentRevision:3};
+ const fetcher=vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({data:preview})).mockResolvedValueOnce(new Response("%PDF-synthetic",{headers:{"content-type":"application/pdf"}})).mockResolvedValueOnce(Response.json({data:{transmissionId:"tx_synthetic",packetId:preview.packetId}})).mockResolvedValueOnce(Response.json({data:{id:"rfa_synthetic",submittedAt:"2026-09-17T00:00:00Z"}}));
+ const client=createRfaClient({getSession:async()=>({token:"synthetic_token"}),fetch:fetcher});
+ expect(await client.prepareDelivery("rfa_synthetic",{documentIds:["form","report"],channel:"email",to:"authorization@example.test",message:"Synthetic message"})).toEqual(preview);
+ expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("idempotency-key")).toBeTruthy();
+ expect(await (await client.getPacket("rfa_synthetic",preview.packetId)).text()).toBe("%PDF-synthetic");
+ const body={packetId:preview.packetId,sha256:preview.sha256,channel:"email" as const,to:"authorization@example.test",message:"Synthetic message"};
+ expect(await client.submit("rfa_synthetic",body,"stable_synthetic_key")).toMatchObject({id:"rfa_synthetic",submittedAt:expect.any(String)});
+ expect(String(fetcher.mock.calls[2]?.[0])).toContain("rfa_synthetic/submit");
+ expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual(body);
+ expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get("idempotency-key")).toBe("stable_synthetic_key");
+});

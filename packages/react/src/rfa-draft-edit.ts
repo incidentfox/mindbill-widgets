@@ -8,7 +8,8 @@ export function canEditRfaDraft(rfa: RfaRecord): boolean {
 }
 export function rfaRecordToDraft(rfa: RfaRecord): RfaDraftInput {
   const optional = Object.fromEntries(Object.entries({
-    claimsAdminId: rfa.claimsAdminId, requestType: rfa.requestType,
+    claimsAdminId: rfa.claimsAdminId, requestType: rfa.requestType, writtenConfirmation: rfa.writtenConfirmation,
+    requestingPractice: rfa.requestingPractice, authorizationContact: rfa.authorizationContact,
     placeOfServiceCode: rfa.placeOfServiceCode, providerNpi: rfa.providerNpi,
     providerPhone: rfa.providerPhone, providerFax: rfa.providerFax,
     claimNumber: rfa.claimNumber, dateOfInjury: rfa.dateOfInjury,
@@ -19,7 +20,7 @@ export function rfaRecordToDraft(rfa: RfaRecord): RfaDraftInput {
     employeeName: rfa.employeeName, providerName: rfa.providerName,
     reviewType: rfa.reviewType as RfaDraftInput["reviewType"] & string, expedited: rfa.expedited,
     items: rfa.items.map(item => ({
-      ...Object.fromEntries(Object.entries({ procedureCode: item.procedureCode, quantity: item.quantity,
+      ...Object.fromEntries(Object.entries({ diagnosisDescription: item.diagnosisDescription, procedureCode: item.procedureCode, quantity: item.quantity,
         units: item.units, frequency: item.frequency, duration: item.duration, requestedFrom: item.requestedFrom,
         requestedTo: item.requestedTo, metadata: item.metadata }).filter(([, value]) => value !== null && value !== undefined)),
       id: item.id, diagnosisCode: item.diagnosisCode, serviceDescription: item.serviceDescription,

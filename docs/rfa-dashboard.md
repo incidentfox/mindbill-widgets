@@ -1,20 +1,22 @@
 # Connected RFA dashboard
 
-The dashboard supports draft preparation and editing, reviewed signing, packet preparation, deliberate fax delivery, and recording receipt and utilization review outcomes:
+The dashboard supports patient and injury selection, request preparation and editing, embedded physician signature setup, reviewed signing, and confirmed fax or email delivery. Users can also download the assembled packet and record receipt and utilization review outcomes:
 
 ```tsx
 import { RfaDashboard } from "@mindbill/react";
 
 <RfaDashboard
   getSession={getAuthorizedRfaSession}
-  claimId={authorizedClaimId}
   actorReference={authenticatedUser.id}
   permissions={["create", "edit", "sign", "send", "act"]}
+  canCreateClaim
+  canManageProviderSignatures
+  signatureSession={{ getSession: getAuthorizedSignatureSetupSession }}
   environment="sandbox"
 />
 ```
 
-React 0.69.0 shows **New authorization request** when `create` is permitted.
+The dashboard shows **New authorization request** when `create` is permitted.
 The user searches saved patients by name or claim number, selects a claim and saved
 rendering provider, confirms the selection, then enters the requested treatment.
 Physicians are searchable by name or NPI; both lists support pagination. No identifiers
@@ -31,17 +33,19 @@ The trusted server must authenticate the user and mint a short-lived exact-origi
 
 | Capability | Session scopes |
 | --- | --- |
-| List, detail, assembled packet | `rfas:read` |
+| List, detail, read retained packet | `rfas:read` |
 | PDF previews and delivery proof | `documents:read` |
-| Authorization recipient directory | `payers:read` |
+| Authorization recipient directory and diagnosis search | `payers:read` |
 | List saved creation choices; create draft | `rfas:create` |
+| Create patient and injury; prefill saved practice and location | `bills:create` (also `payers:read` for administrator search) |
+| Save physician signature in the embedded setup | `rfas:sign` and `organization:manage` |
 | Edit eligible draft; upload clinical, response, or IMR PDF | `rfas:edit` |
 | Signing preview and attested signing | `rfas:sign` |
-| Fax send and refresh; record receipt, decisions, information responses; update follow-up tasks | `rfas:act` |
+| Prepare retained delivery packet; send fax/email; refresh fax; record receipt, decisions, information responses; update follow-up tasks | `rfas:act` |
 
 Use only the scopes authorized for the current user. Permanent API keys stay on your server.
 The UI `permissions` default is an empty array. PDF views require `documents:read` even
-when the user has `rfas:read`. Directory failure leaves manual recipient confirmation
+when the user has `rfas:read`; reading a retained delivery packet uses `rfas:read`. Directory failure leaves manual recipient confirmation
 available; it never substitutes a telephone number or silently picks a recipient.
 
 ## Optional tab in the billing dashboard
@@ -59,6 +63,9 @@ it defaults to `false` and loads RFA data only when opened.
     actorReference: authenticatedUser.id,
     permissions: ["create", "edit", "sign", "send", "act"],
     environment: "sandbox",
+    canCreateClaim: true,
+    canManageProviderSignatures: true,
+    signatureSession: { getSession: getAuthorizedSignatureSetupSession },
     onCreated: (record) => rememberCreatedRequest(record.id),
   }}
 />
@@ -68,8 +75,8 @@ The tab includes status counts and filtering, request details, **New authorizati
 request**, draft editing, signing, packet review, submission, and delivery history.
 The new-request button requires `create` permission. Saved claim and physician
 selection is included; hosts can optionally provide `initialDraft` to skip selection.
-If there are no saved claims, create a patient claim or bill in your application first.
-Rendering providers are managed in Settings. Refresh the choices after setup.
+Enable `canCreateClaim` to offer **New patient and injury** inside the creation flow.
+Rendering providers are managed in the embedded Settings tab. Refresh the choices after setup.
 Saving creates an unsigned draft. Sending is a separate, explicitly confirmed action.
 
 `rfaDashboard` accepts the same props as standalone `RfaDashboard`. The connected
@@ -88,6 +95,40 @@ for a restricted view. The RFA status selector filters requests within that view
 Disabling the selected tab returns to Bill tasks (or Bills in `BillingDashboard`).
 This SDK option does not change the MindBill application interface.
 
+## Patient, injury, and request setup
+
+An RFA belongs to a patient’s injury/claim and a saved rendering provider. It does not
+require an existing bill. Saved-choice search selects the patient and injury together;
+any saved injury diagnosis codes are available in the treatment form. A patient can have
+multiple claims and each claim can have multiple RFAs.
+
+`canCreateClaim` defaults to `false`. With that prop and the authorized session scopes,
+**New patient and injury** collects patient demographics, address, claim number, employer,
+date and state of injury, and a claims administrator. It creates both records together,
+then selects the new injury. To attach another injury to an existing patient, provision
+it through your trusted integration using the patient’s stable external ID. No bill is
+created by this setup action. A `claimId`-restricted view does not offer new-patient setup.
+
+The request form separates **New request** / **Resubmission with material change** from
+the independent **Written confirmation of a prior oral request** checkbox and review
+priority. Prospective, concurrent, and retrospective review types have explanatory labels.
+Resubmissions require a material-change explanation. Clinical rationale and material
+changes are included in the reviewed form or its continuation pages.
+
+Each requested service has its own diagnosis code and description, service description,
+optional procedure code, quantity, units, frequency, duration, and requested dates. Users
+can search diagnoses, choose a saved injury diagnosis, or copy the first service’s
+diagnosis to another line. Descriptions persist with the draft for signing review.
+
+The form also edits `requestingPractice` and `authorizationContact` snapshots. Both use
+`{ name, contactName, address, city, state, zip, phone, fax, email }`; `name` is the practice
+or organization name and `contactName` is the individual contact. The requesting physician
+remains the separately selected rendering provider. Saved billing-provider and location
+choices prefill the practice when the session can read the billing profile; users can
+also enter contacts directly. These snapshots belong to this RFA and appear in its
+signing preview. Editing them does not update the shared directory. A saved authorization
+fax/email becomes an explicit delivery option, never an automatically selected recipient.
+
 ## Edit an existing draft
 
 With `edit` permission, **Edit request draft** opens the existing service rows. Saving
@@ -104,23 +145,50 @@ It never silently overwrites newer content or automatically sends the changed re
 
 ## Prepare, sign, review, send
 
-An authorized administrator must first save the physician's signature in
-[MindBill rendering provider settings](https://app.mindbill.org/settings/rendering-providers).
-`BillingSettings` does not expose signature material. In the dashboard, enter each diagnosis
-description, prepare and inspect the exact DWC-RFA, then explicitly attest physician
-authorization before signing. `actorReference` identifies that authorized human in your
-system (1–200 characters); use a stable user ID, not an API key or credential.
+Enable `canManageProviderSignatures` (default `false`) for authorized users to save a
+physician signature directly in **Review and sign**. The session needs both `rfas:sign`
+and `organization:manage`, and must not be restricted to a customer or bill. The physician
+must already be an active rendering provider in the organization. Setup accepts a PNG up
+to 512 KiB, a staff reference, and an explicit physician-authorization attestation. Saving
+it does not sign or send any request; signature image data is never returned by saved-choice lookup.
 
-Upload clinical substantiation as a PDF up to 25 MB. Select the intended documents and
-prepare the assembled packet. The backend generates a cover sheet if none is selected.
-The current-revision signed form is selected automatically; historical forms remain viewable.
-Review the packet and explicitly confirm the authorization fax recipient before sending.
-Email destinations require your approved secure email workflow; the widget does not send email.
+Pass `signatureSession` (`OrganizationClientOptions`, for example
+`{ getSession: getAuthorizedSignatureSetupSession }`) to use a separate trusted session
+for saving signatures. The ordinary RFA session can retain its narrower workflow scopes.
+Without this option, signature setup uses the regular RFA client and that session must
+have both required scopes. `signatureSession` applies only to saving the provider's
+signature; preparing previews, signing requests, and delivery use the main RFA session.
 
-`environment` defaults to `sandbox`, which disables external fax sending. `live` shows the
-fax action only for users with `send`, and still requires packet and recipient confirmations.
-Backend session environment and permissions remain authoritative. Never enable live delivery
-for a demo. Synthetic browser verification must mock every transmission.
+The developer console permits a separate signature setup session only for owner/admin
+users, with exactly `organization:manage` and `rfas:sign` and no bill or customer binding.
+Additional permissions are rejected on that console session. UI visibility never grants
+these privileges; your session endpoint must authorize the user independently.
+
+With `sign` permission and `actorReference`, review the saved diagnosis descriptions,
+prepare and inspect the exact DWC-RFA, then explicitly attest physician authorization
+before signing. `actorReference` identifies that authorized human in your system
+(1–200 characters); use a stable user ID, not an API key or credential. Signing is bound
+to the reviewed content revision, physician, and content hash. Changed content requires
+another preview and attestation.
+
+Upload one or more clinical PDFs, up to 25 MB each, by selecting or dropping files. The
+packet requires the current-revision signed form and clinical substantiation. The current
+signed form is selected automatically; historical signed forms remain viewable.
+
+Choose fax or email and the exact authorization recipient, or choose **Download packet**.
+Directory choices and saved authorization contacts are explicit options; manual contact
+entry is available when routing needs confirmation. Add an optional message for the fax
+cover or email, then prepare the assembled packet. Review its generated cover sheet,
+signed form, and selected supporting documents. Confirm both the packet review and the
+recipient before submitting. Changing the channel, destination, message, documents, or
+request revision requires a new packet preview and confirmations. The send operation
+uses the retained packet ID and hash to deliver the bytes that were reviewed.
+
+`environment` defaults to `sandbox`, which disables external fax and email sending.
+`live` enables submission only for users with `send`, subject to packet readiness and
+explicit confirmations. Backend session environment and permissions remain authoritative.
+Downloading the packet does not send it or mark it submitted. If it is delivered outside
+this workflow, preserve the actual delivery evidence before recording receipt.
 
 The dashboard renders server statuses, recorded receipt and decision deadlines, treatment
 outcomes, information requests, event history, and fax delivery proof. It does not infer a
@@ -145,22 +213,64 @@ available through the documented [RFA API](https://docs.mindbill.org/guides/rfas
 ## Custom browser UI
 
 `createRfaClient` from `@mindbill/browser` accepts `OrganizationClientOptions` (`getSession`
-or `sessionEndpoint`, optional `apiBaseUrl` and `fetch`). Its methods are `getCreationContext`, `list`, `get`,
-`createDraft`, `updateDraft`, `getDocument`, `uploadDocument`, `prepareSigning`, `sign`, `previewPacket`,
-`sendFax`, and `refreshFaxes`. JSON detail/mutation responses unwrap to `RfaRecord`; list
-returns `{data, nextCursor, summary}`. Documents and packets return authenticated `Blob`s.
-Mutations take an explicit idempotency key; reuse it for retries of the same operation.
-A single authentication retry preserves that key. `getDocument` requires `documents:read`.
+or `sessionEndpoint`, optional `apiBaseUrl` and `fetch`). Its request methods include
+`getCreationContext`, `list`, `get`, `createDraft`, `updateDraft`, `getDocument`,
+`uploadDocument`, `prepareSigning`, and `sign`. JSON request mutations unwrap to
+`RfaRecord`; list returns `{data, nextCursor, summary}`. Document and packet reads return
+authenticated `Blob`s. Mutation methods that accept an idempotency key require a stable
+key for retries of the same operation; authentication retries preserve it.
+
+Use these methods for recipient-bound delivery:
+
+```ts
+const preview = await client.prepareDelivery(rfaId, {
+  documentIds: selectedDocumentIds,
+  channel: "fax", // "email" or "download" also supported
+  to: confirmedAuthorizationFax, // omit for download
+  message: optionalCoverMessage,
+});
+const pdf = await client.getPacket(rfaId, preview.packetId);
+// Display pdf, then obtain explicit packet-review and recipient confirmations.
+await client.submit(rfaId, {
+  packetId: preview.packetId,
+  sha256: preview.sha256,
+  channel: "fax",
+  to: confirmedAuthorizationFax,
+  message: optionalCoverMessage,
+}, submissionIdempotencyKey);
+```
+
+`prepareDelivery` returns `{packetId, sha256, contentRevision}`. Preserve the exact
+channel, destination, message, and packet identity through review and submission. Download
+previews have no submit operation. `previewPacket`, `sendFax`, and `refreshFaxes` remain
+available for existing integrations; use the retained-packet flow above for a custom UI
+that needs the same review guarantee as the dashboard.
+
+`provisionClaim(input, {idempotencyKey})` creates or reuses a patient and claim using their
+stable external IDs, without a bill. Its input is `{patient, claim}` and the result is
+`{patientId, claimId, patientExternalId, claimExternalId, created: {patient, claim}}`.
+`searchClaimsAdministrators(query, claimNumber?)` supplies administrator choices.
+`saveProviderSignature(providerId, {contentBase64, physicianAuthorized: true,
+actorReference}, {idempotencyKey})` saves an authorized PNG and returns
+`{providerId, signatureConfigured: true}`. These setup methods are optional on the
+`RfaClient` interface for compatibility with host-supplied clients; `createRfaClient`
+implements all three.
 
 `updateDraft(id, replacement, key)` uses `PATCH /rfas/{id}/draft`. Pass a positive
 `expectedRevision` and the complete editable content; retained items carry `id`, new items
-omit it. `createRfaLifecycleClient` exposes `recordReceipt`, `recordDecisions`,
-`recordInformationRequest`, `recordInformationResponse`, `listFollowUps`, and `updateFollowUp` for custom lifecycle UIs.
+omit it. New fields include independent `writtenConfirmation`, each item’s
+`diagnosisDescription`, and the two contact snapshots. Explicit `null` clears a contact
+snapshot; omitted new fields are preserved for older clients. The legacy
+`requestType: "oral_authorization_confirmation"` remains accepted, but new integrations
+should use `writtenConfirmation` with a new or material-change request type.
+`createRfaLifecycleClient` exposes `recordReceipt`, `recordDecisions`,
+`recordInformationRequest`, `recordInformationResponse`, `listFollowUps`, and
+`updateFollowUp` for custom lifecycle UIs.
 
 `getCreationContext(query?)` uses `GET /partner/v2/browser/rfas/creation-context`
 and requires `rfas:create`. It returns `{claims, renderingProviders, nextCursor,
 renderingProvidersNextCursor}`. Claims include `claimId`, `patientId`, `employeeName`,
-and optional `claimNumber`, `dateOfInjury`, and `claimsAdminId`. Active rendering
+and optional `claimNumber`, `dateOfInjury`, `claimsAdminId`, and `diagnosisCodes`. Active rendering
 providers include `id`, `name`, and optional `npi`; signature material is never returned.
 Use `search` (patient name or claim number) with `cursor` for claims, and
 `providerSearch` (name or NPI) with `providerCursor` for physicians. `limit` defaults

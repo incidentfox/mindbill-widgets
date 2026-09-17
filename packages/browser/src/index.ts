@@ -2256,15 +2256,24 @@ export function buildBillTasksDashboard(
 }
 
 
+/** Contacts snapshotted on a request and included in the reviewed form. */
+export type RfaContact = {
+  name?: string; contactName?: string; address?: string; city?: string; state?: string;
+  zip?: string; phone?: string; fax?: string; email?: string;
+};
+export type RfaDeliveryPreviewInput = { documentIds: string[]; channel: "fax" | "email" | "download"; to?: string; message?: string };
+export type RfaDeliveryPreview = { packetId: string; sha256: string; contentRevision: number };
+export type RfaSubmitInput = Omit<RfaDeliveryPreview, "contentRevision"> & { channel: "fax" | "email"; to: string; message?: string; nonBusinessDates?: string[] };
 /** An unsigned RFA preparation draft. Signing and sending are separate operations. */
 export type RfaCreateDraftInput = {
   claimId: string; patientId: string; renderingProviderId: string; employeeName: string; providerName: string;
-  externalId?: string; claimsAdminId?: string;
+  externalId?: string; claimsAdminId?: string; writtenConfirmation?: boolean;
+  requestingPractice?: RfaContact | null; authorizationContact?: RfaContact | null;
   requestType?: "new" | "resubmission_material_change" | "oral_authorization_confirmation";
   reviewType?: "prospective" | "concurrent" | "retrospective"; expedited?: boolean;
   placeOfServiceCode?: string; providerNpi?: string; providerPhone?: string; providerFax?: string;
   claimNumber?: string; dateOfInjury?: string; rationale?: string; materialChange?: string;
-  items: Array<{ externalId?: string; diagnosisCode: string; serviceDescription: string; procedureCode?: string;
+  items: Array<{ externalId?: string; diagnosisCode: string; diagnosisDescription?: string; serviceDescription: string; procedureCode?: string;
     quantity?: number; units?: number; frequency?: string; duration?: string; requestedFrom?: string; requestedTo?: string; metadata?: Record<string, unknown> }>;
   metadata?: Record<string, unknown>;
 };
@@ -2276,7 +2285,8 @@ export type RfaUpdateDraftInput = Omit<RfaCreateDraftInput, "externalId" | "clai
 export type RfaRecord = {
   contentRevision: number; id: string; claimId: string; patientId: string; renderingProviderId: string; claimsAdminId: string | null;
   employeeName: string; providerName: string; claimNumber: string | null; status: string;
-  requestType?: RfaCreateDraftInput["requestType"];
+  requestType?: RfaCreateDraftInput["requestType"]; writtenConfirmation?: boolean;
+  requestingPractice?: RfaContact | null; authorizationContact?: RfaContact | null;
   placeOfServiceCode?: string | null; providerNpi?: string | null; providerPhone?: string | null; providerFax?: string | null;
   dateOfInjury?: string | null; rationale?: string | null; materialChange?: string | null; metadata?: Record<string, unknown>;
   reviewType: string; expedited: boolean; createdAt: string | null; updatedAt: string | null;
@@ -2284,7 +2294,7 @@ export type RfaRecord = {
   decisionDueAt: string | null; decisionDeadlineBasis: string | null;
   incompleteReason: string | null; deferredReason: string | null; closedReason: string | null;
   readiness: { ready: boolean; missing: string[] };
-  items: Array<{ id: string; diagnosisCode: string; serviceDescription: string; procedureCode: string | null;
+  items: Array<{ id: string; diagnosisCode: string; diagnosisDescription?: string; serviceDescription: string; procedureCode: string | null;
     frequency?: string | null; duration?: string | null; requestedFrom?: string | null; requestedTo?: string | null; metadata?: Record<string, unknown>;
     outcome: string; quantity: number | null; units: number | null; authorizationNumber: string | null; decisionReason: string | null }>;
   documents: Array<{ id: string; documentType: string; filename: string; contentUrl: string; contentRevision: number | null; createdAt: string | null }>;
@@ -2300,11 +2310,20 @@ export type RfaSigningPreview = { id: string; contentHash: string; contentRevisi
 export type RfaSignInput = { snapshotId: string; contentHash: string; renderingProviderId: string; physicianAuthorized: true; actorReference: string };
 export type RfaFaxInput = { to: string; documentIds: string[]; nonBusinessDates?: string[] };
 export type RfaUploadDocumentInput = { file: File; documentType: "clinical_report" | "supporting_record" | "ur_response" | "imr_form" | "other"; contentRevision: number };
-export type RfaCreationClaim = { claimId: string; patientId: string; employeeName: string; claimNumber?: string; dateOfInjury?: string; claimsAdminId?: string };
+export type RfaCreationClaim = { claimId: string; patientId: string; employeeName: string; claimNumber?: string; dateOfInjury?: string; claimsAdminId?: string; diagnosisCodes?: string[] };
 export type RfaCreationProvider = { id: string; name: string; npi?: string };
 export type RfaCreationContext = { claims: RfaCreationClaim[]; renderingProviders: RfaCreationProvider[]; nextCursor: string | null; renderingProvidersNextCursor: string | null };
 export type RfaCreationContextQuery = { search?: string; cursor?: string; providerSearch?: string; providerCursor?: string; limit?: number; claimId?: string; renderingProviderId?: string };
+export type RfaProvisionClaimInput = {
+  patient: Omit<BrowserBillCreateInput["patient"], "id" | "externalId"> & { externalId: string };
+  claim: Omit<BrowserBillCreateInput["claim"], "id" | "externalId"> & { externalId: string };
+};
+export type RfaProvisionClaimResult = { patientId: string; claimId: string; patientExternalId: string; claimExternalId: string; created: { patient: boolean; claim: boolean } };
 export type RfaClient = {
+  provisionClaim?: (input: RfaProvisionClaimInput, options?: { idempotencyKey?: string }) => Promise<RfaProvisionClaimResult>;
+  searchClaimsAdministrators?: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  saveProviderSignature?: (providerId: string, input: { contentBase64: string; physicianAuthorized: true; actorReference: string }, options?: { idempotencyKey?: string }) => Promise<{ providerId: string; signatureConfigured: true }>;
+
   getCreationContext: (query?: RfaCreationContextQuery) => Promise<RfaCreationContext>;
   list: (query?: RfaListQuery) => Promise<RfaListResult>;
   get: (rfaId: string) => Promise<RfaRecord>;
@@ -2314,6 +2333,9 @@ export type RfaClient = {
   uploadDocument: (rfaId: string, input: RfaUploadDocumentInput, idempotencyKey: string) => Promise<RfaRecord>;
   prepareSigning: (rfaId: string, input: RfaSigningPreviewInput, idempotencyKey: string) => Promise<RfaSigningPreview>;
   sign: (rfaId: string, input: RfaSignInput, idempotencyKey: string) => Promise<RfaRecord>;
+  prepareDelivery: (rfaId: string, input: RfaDeliveryPreviewInput, key?: string) => Promise<RfaDeliveryPreview>;
+  getPacket: (rfaId: string, packetId: string) => Promise<Blob>;
+  submit: (rfaId: string, input: RfaSubmitInput, idempotencyKey: string) => Promise<RfaRecord>;
   previewPacket: (rfaId: string, documentIds: string[]) => Promise<Blob>;
   sendFax: (rfaId: string, input: RfaFaxInput, idempotencyKey: string) => Promise<RfaRecord>;
   refreshFaxes: (rfaId: string, idempotencyKey: string) => Promise<RfaRecord>;
@@ -2336,11 +2358,11 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     })().finally(() => { pending = null; });
     return pending;
   };
-  const request = async (path: string, init: RequestInit = {}, browser = false) => {
+  const request = async (path: string, init: RequestInit = {}, browser = false, resource = "rfas") => {
     const perform = (active: BillLifecycleSession) => {
       const headers = new Headers(init.headers); headers.set("authorization", `Bearer ${active.token}`);
       if (init.body && !(init.body instanceof FormData)) headers.set("content-type", "application/json");
-      return fetcher(`${(active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "")}/partner/v2/${browser ? "browser/" : ""}rfas${path}`, { ...init, headers });
+      return fetcher(`${(active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "")}/partner/v2/${browser ? "browser/" : ""}${resource}${path}`, { ...init, headers });
     };
     let response = await perform(await mint());
     if (response.status === 401) response = await perform(await mint(true));
@@ -2358,6 +2380,19 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
   };
   const path = (id: string, suffix: string) => `/${encodeURIComponent(id)}/${suffix}`;
   return {
+    provisionClaim: async (input, options) => {
+      const response = await request("", mutation(input, options?.idempotencyKey ?? globalThis.crypto.randomUUID()), false, "claims");
+      const body = await response.json() as RfaProvisionClaimResult;
+      if (!body.patientId || !body.claimId) throw new Error("The saved patient and injury response was invalid.");
+      return body;
+    },
+    searchClaimsAdministrators: (query, claimNumber) => createBillReferenceClient({ sessionEndpoint, ...(getSession ? { getSession } : {}), apiBaseUrl, ...(fetchOverride ? { fetch: fetchOverride } : {}) }).searchClaimsAdministrators(query, claimNumber),
+    saveProviderSignature: async (providerId, input, options) => {
+      const response = await request(`/providers/${encodeURIComponent(providerId)}/signature`, mutation(input, options?.idempotencyKey ?? globalThis.crypto.randomUUID()), true);
+      const body = await response.json() as { data: { providerId: string; signatureConfigured: true } };
+      if (body.data?.signatureConfigured !== true) throw new Error("The physician signature could not be confirmed.");
+      return body.data;
+    },
     getCreationContext: async (query = {}) => {
       const params = new URLSearchParams();
       for (const [name, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(name, String(value));
@@ -2400,6 +2435,17 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     sign: (id, input, key) => {
       if (input.physicianAuthorized !== true || !input.actorReference.trim()) return Promise.reject(new Error("Physician authorization and signer identity are required."));
       return record(path(id, "sign"), mutation(input, key));
+    },
+    prepareDelivery: async (id, input, key) => {
+      const body = await (await request(path(id, "delivery-preview"), mutation(input, key ?? idempotencyKey()))).json() as { data: RfaDeliveryPreview };
+      if (!body.data?.packetId || !body.data.sha256 || !body.data.contentRevision) throw new Error("The delivery preview was invalid.");
+      return body.data;
+    },
+    getPacket: async (id, packetId) => (await request(path(id, `packets/${encodeURIComponent(packetId)}`))).blob(),
+    submit: async (id, input, key) => {
+      const body = await (await request(path(id, "submit"), mutation(input, key))).json() as { data: { transmissionId: string; packetId: string } };
+      if (!body.data?.transmissionId || !body.data.packetId) throw new Error("The submission response was invalid. Refresh before trying again.");
+      return record(`/${encodeURIComponent(id)}`);
     },
     previewPacket: async (id, documentIds) => (await request(path(id, "packet"), { method: "POST", body: JSON.stringify({ documentIds }) })).blob(),
     sendFax: (id, input, key) => record(path(id, "fax"), mutation(input, key)),

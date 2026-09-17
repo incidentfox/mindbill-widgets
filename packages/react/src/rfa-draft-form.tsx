@@ -1,16 +1,19 @@
 "use client";
+import type { BillDiagnosisCode, OrganizationProfileData, RfaContact } from "@mindbill/browser";
+import { RfaContactFields, RfaDiagnosisFields } from "./rfa-draft-fields";
 import { useState, type ReactElement } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
 export type RfaDraftItemInput = {
-  id?: string; externalId?: string; diagnosisCode: string; serviceDescription: string; procedureCode?: string;
+  id?: string; externalId?: string; diagnosisCode: string; diagnosisDescription?: string; serviceDescription: string; procedureCode?: string;
   quantity?: number; units?: number; frequency?: string; duration?: string;
   requestedFrom?: string; requestedTo?: string; metadata?: Record<string, unknown>;
 };
 /** An unsigned preparation draft. The dashboard or host selects identities; RfaDashboard can continue through reviewed signing and delivery. */
 export type RfaDraftInput = {
   claimId: string; patientId: string; renderingProviderId: string; employeeName: string; providerName: string;
-  externalId?: string; claimsAdminId?: string;
+  externalId?: string; claimsAdminId?: string; writtenConfirmation?: boolean;
+  requestingPractice?: RfaContact | null; authorizationContact?: RfaContact | null;
   requestType?: "new" | "resubmission_material_change" | "oral_authorization_confirmation";
   reviewType?: "prospective" | "concurrent" | "retrospective"; expedited?: boolean;
   placeOfServiceCode?: string; providerNpi?: string; providerPhone?: string; providerFax?: string;
@@ -21,6 +24,10 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & {
   /** Remount with a different React key when switching requests. Use mode="edit" when replacing existing content; saving invalidates its signature. */
   initialDraft: RfaDraftInput;
   mode?: "create" | "edit";
+  searchDiagnosisCodes?: (query: string) => Promise<BillDiagnosisCode[]>;
+  organizationProfile?: OrganizationProfileData;
+  /** Diagnosis codes already recorded on this injury; selecting one remains editable. */
+  savedDiagnosisCodes?: string[];
   /** Persist an unsigned draft only; this callback must not sign or transmit the request. */
   onSave: (draft: RfaDraftInput) => Promise<void>;
   /** Return to saved identity selection while retaining unsaved treatment details. */
@@ -34,6 +41,7 @@ export function normalizeRfaDraft(draft: RfaDraftInput): RfaDraftInput {
       if (item[key] !== undefined && !item[key]?.trim()) delete item[key];
     }
   }
+  if (copy.requestType === "oral_authorization_confirmation") { copy.writtenConfirmation ??= true; copy.requestType = "new"; }
   // Runtime callers may pass extra properties despite the unsigned TypeScript contract.
   delete (copy as RfaDraftInput & { signedAt?: unknown }).signedAt;
   return copy;
@@ -50,8 +58,17 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   if ((draft.providerNpi?.length ?? 0) > 20 || (draft.providerPhone?.length ?? 0) > 30 || (draft.claimNumber?.length ?? 0) > 100) return "Check provider contact and claim number lengths.";
   if (draft.providerFax && (draft.providerFax.length > 30 || !/^[+\d().\s-]+$/.test(draft.providerFax) || !/^\d{10,15}$/.test(draft.providerFax.replace(/\D/g, "")))) return "Enter a return fax with 10 to 15 digits, or leave it blank.";
   if (draft.dateOfInjury !== undefined && !isDraftDate(draft.dateOfInjury)) return "Check the injury date in the host application.";
+  for (const contact of [draft.requestingPractice, draft.authorizationContact]) {
+    if (!contact) continue;
+    for (const [field, value] of Object.entries(contact)) {
+      if (value && value.length > (({ address: 500, email: 254, city: 100, state: 2, zip: 20, phone: 30, fax: 30 } as Record<string, number>)[field] ?? 200)) return "Check contact field lengths.";
+      if (field === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid contact email.";
+      if (field === "fax" && value && !/^[+\d().\s-]+$/.test(value)) return "Enter a valid contact fax.";
+    }
+  }
   if (draft.items.length < 1 || draft.items.length > 100) return "Include between 1 and 100 requested services.";
   for (const [index, item] of draft.items.entries()) {
+    if ((item.diagnosisDescription?.length ?? 0) > 1000) return "Diagnosis descriptions must be at most 1,000 characters.";
     const prefix = `Service ${index + 1}: `;
     if (!item.diagnosisCode.trim() || item.diagnosisCode.length > 16 || !item.serviceDescription.trim() || item.serviceDescription.length > 1000) return prefix + "a diagnosis code and service description are required.";
     for (const [value, max] of [[item.externalId, 255], [item.procedureCode, 16], [item.frequency, 200], [item.duration, 200]] as const) if (value !== undefined && (!value.trim() || value.length > max)) return prefix + `optional text must contain 1 to ${max} characters.`;
@@ -61,9 +78,11 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [draft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   const action = useDraftSave(onSave), locked = disabled || action.busy;
+  const billingProviders = Array.isArray(organizationProfile?.billingProviders) ? organizationProfile.billingProviders : [];
+  const locations = Array.isArray(organizationProfile?.locations) ? organizationProfile.locations : [];
   const update = (patch: Partial<RfaDraftInput>) => { action.clear(); setDraft((current) => ({ ...current, ...patch })); };
   const updateItem = (index: number, patch: Partial<RfaDraftItemInput>) => { action.clear(); setDraft((current) => ({ ...current, items: current.items.map((item, position) => position === index ? { ...item, ...patch } : item) })); };
   const updateNumber = (index: number, key: "quantity" | "units", value: string) => {
@@ -78,15 +97,25 @@ export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", di
     <form onSubmit={(event) => { event.preventDefault(); if (locked) return; const next = normalizeRfaDraft(draft); void action.save(next, validateRfaDraft(next)); }}>
       <fieldset disabled={locked}><legend>Request details</legend><div className="mbtd-grid">
         <label>Employee<input readOnly value={draft.employeeName} /></label><label>Requesting provider<input readOnly value={draft.providerName} /></label>
-        <label>Request type<select value={draft.requestType ?? "new"} onChange={(event) => update({ requestType: event.target.value as NonNullable<RfaDraftInput["requestType"]> })}><option value="new">New request</option><option value="resubmission_material_change">Resubmission with material change</option><option value="oral_authorization_confirmation">Confirm oral authorization</option></select></label>
+        <label>Request type<select value={draft.requestType ?? "new"} onChange={(event) => update({ requestType: event.target.value as NonNullable<RfaDraftInput["requestType"]> })}><option value="new">New request</option><option value="resubmission_material_change">Resubmission with material change</option></select></label>
+        <label className="mbrfa-check"><input type="checkbox" checked={draft.writtenConfirmation ?? false} onChange={event => update({ writtenConfirmation: event.target.checked })} />Written confirmation of a prior oral request</label>
         <label>Review type<select value={draft.reviewType ?? "prospective"} onChange={(event) => update({ reviewType: event.target.value as NonNullable<RfaDraftInput["reviewType"]> })}><option value="prospective">Prospective — before treatment</option><option value="concurrent">Concurrent — during treatment</option><option value="retrospective">Retrospective — after treatment</option></select></label>
         <label>Review priority<select value={draft.expedited ? "expedited" : "standard"} onChange={(event) => update({ expedited: event.target.value === "expedited" })}><option value="standard">Standard</option><option value="expedited">Expedited review requested</option></select></label>
         <label>Return fax<input maxLength={30} value={draft.providerFax ?? ""} onChange={(event) => update({ providerFax: event.target.value })} /><small>Review the return contact. Organization defaults are not applied automatically.</small></label>
         <label className="mbtd-wide">Clinical rationale<textarea maxLength={20000} value={draft.rationale ?? ""} onChange={(event) => update({ rationale: event.target.value })} /></label>
         {draft.requestType === "resubmission_material_change" ? <label className="mbtd-wide">Material change (required)<textarea required maxLength={20000} value={draft.materialChange ?? ""} onChange={(event) => update({ materialChange: event.target.value })} /></label> : null}
       </div></fieldset>
+      <fieldset disabled={locked}><legend>Requesting practice and contacts</legend>
+        {organizationProfile ? <div className="mbtd-grid"><label>Use saved billing provider<select defaultValue="" onChange={event => { const provider = billingProviders.find(value => value.id === event.target.value); if (provider) update({ requestingPractice: { ...draft.requestingPractice, name: provider.name, address: provider.billingStreet ?? "", city: provider.billingCity ?? "", state: provider.billingState ?? "", zip: provider.billingZip ?? "", phone: provider.phone ?? "" } }); }}><option value="">Choose a saved practice…</option>{billingProviders.map(provider => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></label>
+        <label>Use saved practice location<select defaultValue="" onChange={event => { const location = locations.find(value => value.id === event.target.value); if (location) update({ requestingPractice: { ...draft.requestingPractice, address: location.street, city: location.city, state: location.state, zip: location.zip }, ...(location.posCode ? { placeOfServiceCode: location.posCode } : {}) }); }}><option value="">Choose a saved location…</option>{locations.filter(location => location.active !== false).map(location => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label></div> : null}
+        <RfaContactFields title="Requesting practice" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} />
+        <RfaContactFields title="Claims administrator authorization contact" value={draft.authorizationContact} onChange={authorizationContact => update({ authorizationContact })} />
+        <p>Confirm the authorization contact for this injury. These details are saved on this request and included in its signing review.</p>
+      </fieldset>
       {draft.items.map((item, index) => <fieldset key={index} disabled={locked}><legend>Requested service {index + 1}</legend><div className="mbtd-grid">
-        <label>Diagnosis code<input required maxLength={16} value={item.diagnosisCode} onChange={(event) => updateItem(index, { diagnosisCode: event.target.value })} /></label>
+        {savedDiagnosisCodes.length > 0 ? <label>Use injury diagnosis<select value={savedDiagnosisCodes.includes(item.diagnosisCode) ? item.diagnosisCode : ""} onChange={event => { if (event.target.value) updateItem(index, { diagnosisCode: event.target.value, diagnosisDescription: "" }); }}><option value="">Choose a saved diagnosis…</option>{savedDiagnosisCodes.map(code => <option key={code} value={code}>{code}</option>)}</select></label> : null}
+        {index > 0 && draft.items[0]?.diagnosisCode ? <button type="button" onClick={() => updateItem(index, { diagnosisCode: draft.items[0]!.diagnosisCode, diagnosisDescription: draft.items[0]!.diagnosisDescription ?? "" })}>Copy diagnosis from first service</button> : null}
+        <RfaDiagnosisFields code={item.diagnosisCode} {...(item.diagnosisDescription !== undefined ? { description: item.diagnosisDescription } : {})} {...(searchDiagnosisCodes ? { search: searchDiagnosisCodes } : {})} onChange={value => updateItem(index, value)} />
         <label>Procedure code<input maxLength={16} value={item.procedureCode ?? ""} onChange={(event) => updateItem(index, { procedureCode: event.target.value })} /></label>
         <label className="mbtd-wide">Service description<textarea required maxLength={1000} value={item.serviceDescription} onChange={(event) => updateItem(index, { serviceDescription: event.target.value })} /></label>
         <label>Quantity<input type="number" min={0.001} max={100000} step="any" value={item.quantity ?? ""} onChange={(event) => updateNumber(index, "quantity", event.target.value)} /></label>

@@ -12,8 +12,8 @@ importers:
         specifier: 0.16.5
         version: 0.16.5
       '@mindbill/react':
-        specifier: 0.69.7
-        version: 0.69.7(react@19.2.8)
+        specifier: 0.70.0
+        version: 0.70.0(react@19.2.8)
       next:
         specifier: 16.3.4
         version: 16.3.4(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -188,8 +188,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@mindbill/browser@0.43.5':
-    resolution: {integrity: sha512-sxmfNuCelhKRQcccePea7p2Wz4jhGROI/XxBZE786eS9s72rHr/cyzJieVi0UAC2UEsKqkTNnbcX3CyWYLFw4Q==}
+  '@mindbill/browser@0.44.0':
+    resolution: {integrity: sha512-7sKKF+zLGzpCW4IExjXMuFcJRu/AKCm/dPkt2uZF/FSfLiPCVB8juO6x9SPeXyyfIfG1dr6XQUpSv7ymFmC6zw==}
 
   '@mindbill/embed@0.6.0':
     resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==}
@@ -198,8 +198,8 @@ packages:
     resolution: {integrity: sha512-AfdVxbCR4kxw/xT9t/j2vwB4zLbKGn/UOP4Zw6gimX65uRTubR+Hl7dCSI7rh/q+/9269HHM+DQUJU0c2IAOJQ==}
     engines: {node: '>=20'}
 
-  '@mindbill/react@0.69.7':
-    resolution: {integrity: sha512-BgW+pJBJer0UeTiOyuScI5HccosZG+3Ev6ZXEdwNNn/o3GRx1RlFAq9+QtMzguf3pWFAMDc1ZwC8hZPP5clg+w==}
+  '@mindbill/react@0.70.0':
+    resolution: {integrity: sha512-H3E5S9J2a/Zv0j4uCOzcf9mgUkU52AJtM4C2HsjQ3FysuhLV5RFXFbC6+Vg7UvNp2OxT8Q4HK3UcBWXhRXUl4w==}
     peerDependencies:
       react: '>=18'
 
@@ -487,15 +487,15 @@ snapshots:
   '@img/sharp-win32-x64@0.35.4':
     optional: true
 
-  '@mindbill/browser@0.43.5': {}
+  '@mindbill/browser@0.44.0': {}
 
   '@mindbill/embed@0.6.0': {}
 
   '@mindbill/node@0.16.5': {}
 
-  '@mindbill/react@0.69.7(react@19.2.8)':
+  '@mindbill/react@0.70.0(react@19.2.8)':
     dependencies:
-      '@mindbill/browser': 0.43.5
+      '@mindbill/browser': 0.44.0
       '@mindbill/embed': 0.6.0
       react: 19.2.8
 
