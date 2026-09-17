@@ -165,7 +165,10 @@ and obtain dated standard fee estimates through the browser session. The form di
 the assumptions and requires applicable provider and therapy-minute inputs. Select
 “Requires adjustment” for a nonstandard case; unavailable rates and incomplete service
 details also require review before submission.
-See [procedure search and fee quotes](./docs/procedure-fees.md).
+Treatment modifier choices include `25`, `GP/GO/GN` and `CQ/CO`; `93/95` labels
+follow the line’s treatment or medical-legal context and service date. The evaluator
+selector appears for medical-legal lines. See [modifier meanings](./docs/evaluation-modifiers.md)
+and [procedure search and fee quotes](./docs/procedure-fees.md).
 
 When the biller submits, the form shows a delivery-method dialog by default: the
 verified e-bill route with its payer ID (shown only when the payer has an e-route),

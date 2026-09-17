@@ -74,6 +74,12 @@ export const DEFAULT_BILL_SUBMISSION_MODIFIERS: BillSubmissionModifierOption[] =
   { code: "AA", description: "Anesthesia personally performed by the physician" },
   { code: "QK", description: "Physician medical direction of concurrent anesthesia cases" },
   { code: "QS", description: "Monitored anesthesia care" },
+  { code: "25", description: "Significant, separately identifiable same-day evaluation and management service" },
+  { code: "GP", description: "Services under a physical therapy plan of care" },
+  { code: "GO", description: "Services under an occupational therapy plan of care" },
+  { code: "GN", description: "Services under a speech-language pathology plan of care" },
+  { code: "CQ", description: "Physical therapist assistant services (with GP)" },
+  { code: "CO", description: "Occupational therapy assistant services (with GO)" },
   { code: "26", description: "Professional component" },
   { code: "TC", description: "Technical component" },
   { code: "NU", description: "New equipment purchase" },
@@ -178,4 +184,26 @@ export function calculateBillSubmissionAllowedAmount(
     ? medicalLegalMultiplier(normalized)
     : 1;
   return Math.round(procedure.allowedAmount * units * multiplier * 100) / 100;
+}
+
+/** Internal form catalog: supplied descriptions override the contextual defaults. */
+export function billSubmissionModifierOptions(
+  medicalLegal: boolean,
+  serviceDate: string | undefined,
+  supplied: BillSubmissionModifierOption[] | undefined,
+): BillSubmissionModifierOption[] {
+  const historicalTelehealth = !!serviceDate && /^\d{4}-\d{2}-\d{2}$/.test(serviceDate) && serviceDate < "2025-02-01";
+  const defaults = DEFAULT_BILL_SUBMISSION_MODIFIERS
+    .filter((item) => medicalLegal || !["92", "94", "96", "97", "98"].includes(item.code))
+    .map((item) => {
+      if (medicalLegal) return item;
+      if (item.code === "93") return { ...item, description: "Audio-only telehealth (from February 1, 2025)" };
+      if (item.code === "95") return { ...item, description: historicalTelehealth
+        ? "Telehealth — audio-only or audio/video, subject to service eligibility"
+        : serviceDate ? "Real-time audio/video telehealth" : "Telehealth — modality depends on the service date" };
+      return item;
+    });
+  const options = new Map(defaults.map((item) => [item.code.toUpperCase(), item]));
+  supplied?.forEach((item) => options.set(item.code.toUpperCase(), item));
+  return [...options.values()];
 }
