@@ -1,5 +1,7 @@
 "use client";
 
+import type { BillDetailNavigationProps } from "./bill-read-only-form";
+
 import {
   useCallback,
   useEffect,
@@ -59,17 +61,23 @@ function money(value: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
 
-function RenderingProviderFilter({ value, options, onChange }: {
+function EntityFilter({ value, options, onChange, label, plural }: {
   value: string;
   options: Array<{ id: string; name: string }> | undefined;
   onChange: (value: string) => void;
+  label: string;
+  plural: string;
 }): ReactElement | null {
   if (!options && !value) return null;
-  return <select className="mbow-select" aria-label="Rendering provider filter" value={value} onChange={(event) => onChange(event.target.value)}>
-    <option value="">All rendering providers</option>
-    {value && !options?.some((option) => option.id === value) ? <option value={value}>Selected rendering provider</option> : null}
+  return <select className="mbow-select" aria-label={`${label} filter`} value={value} onChange={(event) => onChange(event.target.value)}>
+    <option value="">All {plural}</option>
+    {value && !options?.some((option) => option.id === value) ? <option value={value}>Selected {label.toLowerCase()}</option> : null}
     {options?.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
   </select>;
+}
+
+function RenderingProviderFilter(props: { value: string; options: Array<{ id: string; name: string }> | undefined; onChange: (value: string) => void }): ReactElement | null {
+  return <EntityFilter {...props} label="Rendering provider" plural="rendering providers" />;
 }
 
 function shortDate(value: string | null): string {
@@ -179,6 +187,8 @@ function BillSearchContent({
       <select className="mbow-select" value={query.age ?? "all"} onChange={(event) => update({ age: event.target.value as BillRegistryAge })} aria-label="A/R age">
         <option value="all">All A/R ages</option><option value="0-30">0–30 days</option><option value="31-60">31–60 days</option><option value="61-90">61–90 days</option><option value="91+">91+ days</option><option value="91-180">91–180 days</option><option value="181+">181+ days</option>
       </select>
+      <EntityFilter label="Patient" plural="patients" value={query.patientId ?? ""} options={result?.filters?.patients} onChange={(value) => update({ patientId: value })} />
+      <EntityFilter label="Claims administrator" plural="claims administrators" value={query.claimsAdministrator ?? ""} options={result?.filters?.claimsAdministrators} onChange={(value) => update({ claimsAdministrator: value })} />
       <RenderingProviderFilter value={query.renderingProviderId ?? ""} options={result?.filters?.renderingProviders} onChange={(value) => update({ renderingProviderId: value })} />
       <p id={searchHelpId} className="mbow-muted" style={{ flexBasis: "100%" }}>Search across bill details. Combine words to narrow results; use MM/DD/YYYY or YYYY-MM-DD for dates.</p>
       <div style={{ flex: "1 1 520px", minWidth: 0 }}><BillDateFilters {...dates} onChange={(next) => setDates((current) => ({ ...current, ...next }))} /></div>
@@ -273,7 +283,7 @@ export function ConnectedProductivityReport({ appearance, className, style, init
   return <Surface appearance={appearance} className={className} style={style}><div className="mbow-head"><div><h2>Productivity</h2><p className="mbow-sub">Bills created and sent per biller, plus accepted-first-try rate.</p></div></div><RangeToolbar from={from} to={to} setFrom={setFrom} setTo={setTo} />{error ? <div className="mbow-state mbow-error">{error.message}</div> : !data ? <div className="mbow-state">Loading report…</div> : <><div className="mbow-metrics"><Metric label="Bills created" value={String(data.totalCreated)} /><Metric label="Transmissions" value={String(data.totalSent)} /><Metric label="Bills submitted" value={String(data.totalSubmitted)} /><Metric label="Accepted first try" value={data.totalSubmitted ? `${Math.round(data.totalClean / data.totalSubmitted * 100)}%` : "—"} /></div><div className="mbow-card mbow-scroll"><div className="mbow-section-head"><h3>Per-biller summary</h3></div><table className="mbow-table"><thead><tr><th>Biller</th><th>Created</th><th>Transmissions</th><th>Submitted</th><th>Accepted first try</th><th>Volume</th></tr></thead><tbody>{data.billers.map((biller) => { const sent = data.sentTotal[biller.name] ?? 0; const submitted = data.submittedTotal[biller.name] ?? 0; const clean = data.cleanTotal[biller.name] ?? 0; return <tr key={biller.name}><td className="mbow-strong">{biller.name}</td><td>{data.createdTotal[biller.name] ?? 0}</td><td>{sent}</td><td>{submitted}</td><td>{submitted ? `${Math.round(clean / submitted * 100)}%` : "—"}</td><td><div className="mbow-bar"><i style={{ width: `${sent / maxSent * 100}%` }} /></div></td></tr>; })}</tbody></table></div></>}</Surface>;
 }
 
-export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
+export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & Pick<BillDetailNavigationProps, "onPatientClick" | "onRenderingProviderClick" | "onClaimsAdministratorClick"> & {
   actorName?: string;
   /** Dedicated settings session, or the workspace connection when omitted. */
   billingSettings?: import("@mindbill/browser").OrganizationClientOptions;
@@ -290,7 +300,7 @@ export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & {
   getCourtesyCopyRecipientOptions?: (billId: string) => readonly CourtesyCopyRecipientOption[];
 };
 
-export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, billingSettings, showSettings = true, onSettingsSaved, actorName, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
+export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, billingSettings, showSettings = true, onSettingsSaved, actorName, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
   const client = useClient(options); const [selectedView, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const tabId = useId();
   const view = !showSettings && selectedView === "settings" ? "tasks" : selectedView;
@@ -300,7 +310,8 @@ export function ConnectedBillingWorkspace({ appearance, className, style, initia
   const workspaceClassName = ["mbow-workspace", className].filter(Boolean).join(" ");
   const hasExplicitHeight = style?.height != null || style?.maxHeight != null;
   const workspaceStyle = availableHeight == null || hasExplicitHeight ? style : { ...style, maxHeight: availableHeight };
-  if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle {...(actorName ? { actorName } : {})} {...(billingSettings ? { billingSettings } : {})} billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
+  const showEntityBills = (query: BillRegistryQuery) => { setBillQuery({ status: "all", page: 1, ...query }); setSelectedBillId(null); setView("bills"); };
+  if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle requireLinkedEntityIds={{ patient: !onPatientClick, renderingProvider: !onRenderingProviderClick, claimsAdministrator: !onClaimsAdministratorClick }} onPatientClick={onPatientClick ?? ((patient) => { if (patient.id) showEntityBills({ patientId: patient.id }); })} onRenderingProviderClick={onRenderingProviderClick ?? ((provider) => { if (provider.id) showEntityBills({ renderingProviderId: provider.id }); })} onClaimsAdministratorClick={onClaimsAdministratorClick ?? ((administrator) => { if (administrator.id) showEntityBills({ claimsAdministrator: administrator.id }); })} {...(actorName ? { actorName } : {})} {...(billingSettings ? { billingSettings } : {})} billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
   const selectView = (next: typeof view) => { setView(next); setSelectedBillId(null); };
   const appearanceProps = appearance ? { appearance } : {};
   return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><div className="mbow-head"><div><h2>Billing</h2><p className="mbow-sub">Follow up on open work or find any bill and its current status.</p></div>{onCreateBill ? <div className="mbow-actions"><button className="mbow-button primary" type="button" onClick={onCreateBill}>+ Add bill</button></div> : null}</div><DashboardTabs id={tabId} tabs={tabs} value={view} onChange={selectView} className="mbow-tabs" tabClassName="mbow-tab" /><div role="tabpanel" id={`${tabId}-panel-${view}`} aria-labelledby={`${tabId}-tab-${view}`} tabIndex={0}>{view === "settings" ? <BillingSettings {...(billingSettings ?? options)} {...appearanceProps} {...(onSettingsSaved ? { onSaved: onSettingsSaved } : {})} /> : view === "tasks" ? <BillTasksContent client={client} onDrillDown={(query) => { setBillQuery(query); setView("bills"); }} appearance={appearance} /> : view === "bills" ? <BillSearchContent client={client} initialQuery={billQuery} onSelectBill={(bill) => setSelectedBillId(bill.id)} /> : view === "procedures" ? <ConnectedServiceLineItemsReport {...options} {...appearanceProps} onSelectBill={setSelectedBillId} /> : view === "payments" ? <ConnectedPaymentReview {...options} {...appearanceProps} {...(onPostPayment ? { onPostPayment } : {})} onSelectBill={setSelectedBillId} /> : <ConnectedProductivityReport {...options} {...appearanceProps} />}</div></Surface>;

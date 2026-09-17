@@ -50,6 +50,8 @@ export type BillRegistryItem = {
   billNumber: string;
   externalId: string | null;
   patientName: string;
+  patientId?: string | null;
+  claimsAdminId?: string | null;
   claimNumber: string;
   claimsAdministrator: string;
   status: BillRegistryStatus;
@@ -78,6 +80,8 @@ export type BillRegistryQuery = {
   status?: string;
   age?: BillRegistryAge;
   claimsAdministrator?: string;
+  /** Stable patient identity; names are searched separately through q. */
+  patientId?: string;
   billingProviderId?: string;
   /** Doctor who performed the service, distinct from the billing practice. */
   renderingProviderId?: string;
@@ -95,7 +99,11 @@ export type BillRegistryResult = {
   balanceTotal: number;
   page: number;
   pageSize: number;
-  filters?: { renderingProviders: Array<{ id: string; name: string }> };
+  filters?: {
+    renderingProviders: Array<{ id: string; name: string }>;
+    patients?: Array<{ id: string; name: string }>;
+    claimsAdministrators?: Array<{ id: string; name: string }>;
+  };
 };
 
 export type BillTasksResult = {

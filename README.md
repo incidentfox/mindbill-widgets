@@ -382,9 +382,11 @@ SSN writes fail closed if server encryption has not been configured.
 `ConnectedBillingWorkspace` separates follow-up tasks from Sent/Accepted bills waiting
 for payer responses. Waiting inventory has its own totals and may overlap overdue tasks;
 do not add those totals together. Drill-down preserves status, age, payer, and rendering-provider filters.
-The doctor picker uses workspace-scoped `filters.renderingProviders` from the browser API,
-not doctors inferred from the current page. Rendering providers are distinct from billing
-practices. `ConnectedBillSearch` also accepts `initialQuery={{ renderingProviderId: "provider-id" }}`.
+Patient, claims-administrator, and doctor pickers use workspace-scoped inventories
+from the browser API, not records inferred from the current page. Rendering providers
+are distinct from billing practices. `ConnectedBillSearch` accepts `initialQuery`
+with `patientId`, `claimsAdministrator`, and `renderingProviderId` to open a filtered list.
+Static dashboards accept optional entity IDs to keep same-named records distinct.
 Search supports patient and claims-administrator names, bill and claim identifiers, statuses, procedure codes, and dates. Both dashboards include inclusive service/submission date ranges; see [bill search](./docs/bill-search.md) for query behavior and examples.
 Dashboard colors, borders, radii, spacing, and aging palettes are configurable through
 [appearance tokens](./docs/theme-customization.md).
@@ -448,3 +450,9 @@ providers stay first. Team access requires explicit `team:manage` delegation and
 changes partner application roles. Browser 0.41.0 exposes directory CRUD and team
 read/update methods; Node 0.16.0 accepts the restricted team permission. See
 [organization administration](docs/saved-profiles.md#organization-administration-react-065).
+
+### Optional report suggestions
+
+`BillSubmissionForm` accepts `reportAutofill={{ getSession }}` to add an explicit upload → review → apply flow. It is hidden by default and available only by written agreement with an operator-provisioned `reportAutofill` capability and dedicated organization-wide `autofill:run` session. Existing entries and service lines are preserved; analysis does not save attachments or submit bills. Custom UIs can use `ReportAutofill`, `applyReportAutofill`, or `createReportAutofillClient`. See [report suggestions](docs/report-autofill.md).
+
+Workspace detail links now open the corresponding patient, physician or claims-administrator bill filter when canonical IDs are available. Hosts can override `onPatientClick`, `onRenderingProviderClick` and `onClaimsAdministratorClick`; see [bill search](docs/bill-search.md).
