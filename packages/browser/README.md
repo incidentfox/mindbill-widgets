@@ -177,14 +177,45 @@ See the [RFA directory guide](https://github.com/incidentfox/mindbill-widgets/bl
 
 ## RFA creation choices
 
-Browser 0.43.0 adds `createRfaClient(options).getCreationContext(query?)` for
+Use `createRfaClient(options).getCreationContext(query?)` for
 building a draft from saved claims and rendering providers. It requires a trusted
 server session with `rfas:create` and returns `{claims, renderingProviders,
 nextCursor, renderingProvidersNextCursor}`. Search claims with `search` and physicians
 with `providerSearch`; pass `cursor` and `providerCursor` for their independent next
 pages. Reset each cursor when its search changes. Optional `claimId` and
 `renderingProviderId` restrict choices; `limit` defaults to 50 and is capped at 100.
-The lookup is read-only. Creating, signing, and sending remain separate actions.
+Claims include saved injury diagnosis codes when available. The lookup is read-only.
+Creating, signing, and sending remain separate actions. An RFA belongs to a patient
+and injury/claim; it does not require an existing bill.
+
+`createRfaClient` also exposes `provisionClaim(input, {idempotencyKey})` to create or reuse
+patients and injuries by stable external IDs without creating a bill, and
+`searchClaimsAdministrators(query, claimNumber?)` for directory choices. Provisioning
+requires `bills:create`; directory search requires `payers:read`.
+
+`saveProviderSignature(providerId, {contentBase64, physicianAuthorized: true,
+actorReference}, {idempotencyKey})` saves an authorized PNG for an active organization
+physician. It requires both `rfas:sign` and `organization:manage` in an organization-wide
+session. It does not sign or send an RFA. Draft creation and updates support independent
+`writtenConfirmation`, per-item `diagnosisDescription`, and `requestingPractice` /
+`authorizationContact` snapshots. Explicit `null` clears a snapshot.
+
+## Reviewed RFA delivery
+
+After signing and uploading supporting PDFs, call `prepareDelivery(id, {documentIds,
+channel, to, message})`, where `channel` is `fax`, `email`, or `download` and `to` is
+omitted for download. The response contains `packetId`, `sha256`, and `contentRevision`.
+Read the retained PDF with `getPacket(id, packetId)` and obtain explicit packet-review
+and recipient confirmations before calling `submit(id, {packetId, sha256, channel,
+to, message}, idempotencyKey)`. Submission uses the retained packet bytes; changing
+recipient, message, documents, channel, or request revision requires a fresh preview.
+Download packets are not submitted by this flow.
+
+Packet preparation and submission require `rfas:act`; reading retained packets requires
+`rfas:read`. Signing previews and document reads additionally require `documents:read`.
+Sandbox sessions cannot send external fax or email. Existing `previewPacket`, `sendFax`,
+and `refreshFaxes` remain available; use the retained-packet methods for the same review
+guarantee as the dashboard.
 
 See the [RFA dashboard guide](../../docs/rfa-dashboard.md#custom-browser-ui) for the
 response fields and React's built-in saved-choice flow.

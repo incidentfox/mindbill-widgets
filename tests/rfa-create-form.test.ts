@@ -85,3 +85,27 @@ it("ignores older searches and paginates claims and physicians independently",as
   const last=new URL(String(fetcher.mock.calls.at(-1)?.[0]));expect(last.searchParams.get("search")).toBe("New");expect(last.searchParams.get("cursor")).toBe("claims_next");expect(last.searchParams.get("providerCursor")).toBe("providers_next");
  }finally{await h.close();}
 });
+it("preloads injury diagnoses, copies per-service choices, and clears treatment when changing patients",async()=>{
+ const h=harness();
+ const claims=[{...context.claims[0]!,diagnosisCodes:["M54.5","M25.5"]},{claimId:"claim_second",patientId:"patient_second",employeeName:"Second Synthetic",diagnosisCodes:["M54.2"]}];
+ const fetcher=vi.fn<typeof fetch>(async input=>String(input).includes("creation-context")?Response.json({data:{...context,claims}}):Response.json(list));
+ try{
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"]})));
+  await act(async()=>h.button("New authorization request").click());
+  await select(h.container,"Saved patient claim","claim_synthetic");await select(h.container,"Saved rendering provider","provider_synthetic");
+  await act(async()=>h.button("Continue to treatment").click());
+  const diagnosis=()=>[...h.container.querySelectorAll("input")].filter(input=>input.parentElement?.textContent?.startsWith("Diagnosis code"));
+  expect(diagnosis()[0]?.value).toBe("M54.5");
+  await select(h.container,"Use injury diagnosis","M25.5");expect(diagnosis()[0]?.value).toBe("M25.5");
+  await type(h.container,"Service description","First patient treatment");
+  await type(h.container,"Clinical rationale","First patient rationale");
+  await act(async()=>h.button("Add requested service").click());
+  await act(async()=>h.button("Copy diagnosis from first service").click());expect(diagnosis()[1]?.value).toBe("M25.5");
+  await act(async()=>h.button("Back to patient and physician").click());
+  await select(h.container,"Saved patient claim","claim_second");
+  await act(async()=>h.button("Continue to treatment").click());
+  expect(diagnosis()).toHaveLength(1);expect(diagnosis()[0]?.value).toBe("M54.2");
+  expect([...h.container.querySelectorAll("textarea")].every(input=>input.value==="")).toBe(true);
+  expect(h.container.textContent).not.toContain("TEST-001");
+ }finally{await h.close();}
+});

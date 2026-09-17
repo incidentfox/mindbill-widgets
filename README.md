@@ -14,7 +14,7 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 `FeeScheduleCalculator` provides multi-line California fee estimates with modifiers, provider and service context, documented imaging sessions and technical service facts, claim edits, calculation details, and regulation sources. See [claim fee calculator](docs/claim-fee-calculator.md) for sessions, inputs, and review outcomes.
 
-`RfaDashboard` provides connected authorization tracking, revision-safe draft editing, clinical PDF uploads, physician-authorized signing preview, assembled packet review with cover sheet, directory/manual recipient selection, delivery history, and recording receipt and utilization review outcomes. See [RFA dashboard](docs/rfa-dashboard.md) for server scopes, signer setup, and sandbox behavior.
+`RfaDashboard` provides patient/injury setup, revision-safe request editing, saved practice and authorization contacts, clinical PDF uploads, embedded physician signature setup, reviewed signing, and confirmed fax/email delivery of the reviewed packet. It also supports packet download, delivery history, and recording receipt and utilization review outcomes. See [RFA dashboard](docs/rfa-dashboard.md) for server scopes, signer setup, and sandbox behavior.
 
 `BillDetailLayout` and `BillDetailSection` share responsive detail presentation across embedded and native pages. `BillReadOnlyForm` supports per-section errors and warnings plus optional patient, provider, and claims administrator navigation callbacks. The default MindBill theme uses compact warm sections, with lifecycle actions in a sticky bottom bar and document shortcuts at the top. Hosts can supply `onOpenCms1500(billId)` for a top CMS-1500 preview button. Service-line charge disclosures render exact server-supplied fee explanations when available. See [shared bill details](docs/bill-details.md).
 
@@ -440,7 +440,7 @@ California anesthesia service lines collect actual elapsed minutes separately fr
 
 Fee quote response validation and `BillFeeQuoteBasis` cover California reports, physician and therapy RBRVS, CLFS, simple dispensed drugs, DMEPOS, PADB, anesthesia, and practice contracts. Use browser 0.36.1 / React 0.60.2 or later for these fee families. See [procedure fees](docs/procedure-fees.md).
 
-RFA authorization routing: `RfaAuthorizationDestination` shows explicit office/fax/email choices from the claims-administrator directory. It does not sign or send requests. See [RFA directory integration](docs/rfa-directory.md) for lookup, status, and host delivery responsibilities.
+RFA authorization routing: `RfaAuthorizationDestination` shows explicit office/fax/email choices from the claims-administrator directory. The standalone selector does not sign or send requests; `RfaDashboard` includes signing and delivery. See [RFA directory integration](docs/rfa-directory.md) for lookup, status, and host delivery responsibilities.
 
 ### Dashboard settings
 
@@ -460,13 +460,21 @@ read/update methods; Node 0.16.0 accepts the restricted team permission. See
 
 ### Optional RFA dashboard tab
 
-React 0.68.0 adds `showRfas` (default `false`) and `rfaDashboard` to
-`ConnectedBillingWorkspace` and `BillingDashboard`. The tab reuses `RfaDashboard`
-for status tracking, draft creation, signing, packet review, and confirmed
-submission. The connected workspace inherits its session and supports
-`initialView="rfas"`. React 0.69.0 includes saved patient/claim and physician selection
-with search and pagination. Creation requires `create` permission; `initialDraft`
-optionally skips selection for prepared cases. External delivery remains disabled in sandbox. See the
+Set `showRfas` (default `false`) and `rfaDashboard` on
+`ConnectedBillingWorkspace` or `BillingDashboard` to add the RFA tab. The connected
+workspace inherits its session and supports `initialView="rfas"`. Saved patient/injury
+and physician selection includes search and pagination; an RFA does not require a bill.
+Creation requires `create` permission, and `initialDraft` optionally skips selection.
+
+Enable `rfaDashboard.canCreateClaim` for embedded **New patient and injury** setup and
+`rfaDashboard.canManageProviderSignatures` for authorized physician signature setup.
+Both default to `false` and require matching server scopes. The form includes per-service
+diagnoses, practice and authorization contacts, and independent written-confirmation
+and expedited-review options. Set `rfaDashboard.signatureSession` to use a separate
+authorized session for saving physician signatures (`organization:manage` and `rfas:sign`).
+Delivery prepares a recipient-bound packet for review,
+then requires confirmation before fax or email submission. External fax and email
+sending remain disabled in sandbox. See the
 [RFA dashboard integration guide](docs/rfa-dashboard.md#optional-tab-in-the-billing-dashboard).
 
 ### Optional report suggestions

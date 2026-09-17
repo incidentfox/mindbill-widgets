@@ -33,11 +33,11 @@ export function rfaAuthorizationDestinations(directory: BillClaimsAdministratorD
 export function rfaAuthorizationGuidance(directory: BillClaimsAdministratorDirectory | null): string {
   switch (directory?.authorizationStatus) {
     case "central_fax": return "Select the central authorization fax after confirming it applies to this claim.";
-    case "central_email": return "Authorization is routed by email. Download the signed packet and record delivery after sending it through your email service.";
+    case "central_email": return "Authorization is routed by email. Confirm the recipient for this claim before sending the reviewed packet.";
     case "claim_handling_location_routes": return "Choose the office handling this claim. Authorization destinations vary by office.";
     case "adjuster_specific_required": return "Obtain the authorization destination from the handling adjuster.";
     case "daisybill_unverified": return "The directory has not verified an authorization destination. Confirm it with the handling adjuster.";
     case "profile_not_published": return "No authorization destination is currently published. Confirm a current destination with the handling adjuster.";
-    default: return "Select an authorization contact or enter a fax confirmed with the handling adjuster.";
+    default: return "Select an authorization contact or enter a destination confirmed with the handling adjuster.";
   }
 }

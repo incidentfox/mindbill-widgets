@@ -115,7 +115,7 @@ component's `style` prop continues to take precedence.
 
 ### Optional RFA tab
 
-React 0.68.0 adds `showRfas` (default `false`) to `ConnectedBillingWorkspace` and
+Set `showRfas` (default `false`) on `ConnectedBillingWorkspace` or
 `BillingDashboard`. Pass `rfaDashboard` for authorized UI permissions, actor reference, callbacks, and optional dedicated
 session. The connected workspace inherits its main connection; `initialView="rfas"`
 opens the tab immediately.
@@ -128,16 +128,27 @@ opens the tab immediately.
     permissions: ["create", "edit", "sign", "send", "act"],
     actorReference: authenticatedUser.id,
     environment: "sandbox",
+    canCreateClaim: true,
+    canManageProviderSignatures: true,
   }}
 />
 ```
 
-The tab includes request status tracking, unsigned draft creation, signing, packet
-review, and deliberate submission. React 0.69.0 adds saved patient/claim and physician selection with search and
-pagination. Creation requires `create` permission; an optional `initialDraft` skips
-selection for hosts with a prepared case. UI permissions do not grant server access, and sandbox disables external
-fax delivery. See the [RFA dashboard guide](../../docs/rfa-dashboard.md) for session
-scopes, signature setup, and the reviewed delivery workflow.
+The tab includes saved patient/injury and physician selection, unsigned draft creation,
+contact details, per-service diagnoses, clinical PDF uploads, reviewed signing, and
+confirmed fax/email delivery or packet download. An RFA belongs to an injury and does not
+require a bill. Creation requires `create` permission; an optional `initialDraft` skips
+selection for hosts with a prepared case.
+
+`canCreateClaim` offers new patient and injury setup. `canManageProviderSignatures`
+offers authorized signature PNG setup directly before signing. Both default to `false`;
+the trusted session also needs their scopes. Saving a signature does not sign or send a
+request. Use `signatureSession={{ getSession: getSignatureSetupSession }}` on
+`RfaDashboard` (or within `rfaDashboard`) for a separate signature setup session with
+`organization:manage` and `rfas:sign`; previews and signing still use the main RFA session.
+UI permissions do not grant server access, and sandbox disables external fax
+and email delivery. See the [RFA dashboard guide](../../docs/rfa-dashboard.md) for session
+scopes, contact snapshots, and the reviewed delivery workflow.
 
 ### Built-in Settings tab
 
@@ -451,7 +462,8 @@ The session must be minted with the optional `organization:manage` permission. E
 
 `DentalDraftEditor` captures dental services, tooth details, and nullable extended
 practice charges. `RfaDraftForm` prepares unsigned requests for authorization,
-including review type, rationale, and requested services. Both save through your
+including review type, independent written confirmation, rationale, contact snapshots,
+and requested services with per-line diagnoses. Both save through your
 host-server callback; saving does not transmit or authorize anything. See
 [treatment draft integration](../../docs/treatment-drafts.md) for input types,
 revision handling, charge semantics, and signing boundaries.
@@ -462,7 +474,7 @@ revision handling, charge semantics, and signing boundaries.
 
 ## Authorization destinations
 
-`RfaAuthorizationDestination` provides an explicit office/contact choice for an RFA using claims-administrator directory data. Fax and email are separate options; missing or withdrawn profiles allow a fax confirmed with the handling adjuster. The host owns signing, destination confirmation, and delivery.
+`RfaAuthorizationDestination` provides an explicit office/contact choice for an RFA using claims-administrator directory data. Fax and email are separate options; missing or withdrawn profiles allow a fax confirmed with the handling adjuster. When using this selector alone, the host owns signing, destination confirmation, and delivery. `RfaDashboard` supplies the connected signing, packet review, and confirmed fax/email delivery workflow.
 
 See the [RFA directory guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/rfa-directory.md) for the `contextKey`, loading/error, and `onChange` contract.
 
