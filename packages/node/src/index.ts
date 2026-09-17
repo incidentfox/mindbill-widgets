@@ -186,6 +186,18 @@ export type CaTherapyContext = {
     hpsaBonusEligible: boolean;
   };
 
+/** Actual technical imaging facts. All fields are required when this context is supplied. */
+export type CaTechnicalComponentContext = {
+  /** Whether the billing provider or group furnished the service; purchased or outsourced services require review. */
+  performedByBillingProviderGroup: boolean;
+  patientHospitalStatus: "not_hospital_patient" | "hospital_inpatient_or_outpatient";
+  supervisionLevel: "general" | "direct" | "personal";
+  /** Actual session label, 1–64 letters/digits/._:-, beginning with a letter or digit. Never a patient identifier. */
+  imagingSessionReference: string;
+  /** All imaging for this patient/provider group/date is included, including separately billed services. */
+  completeSameDayImagingServices: boolean;
+};
+
 /** Documented interpretation and imaging-session facts; an omitted completeness fact remains unknown. */
 export type CaProfessionalComponentContext = {
   interpretationLocation: "same_as_patient_service" | "different_from_patient_service";
@@ -212,6 +224,7 @@ export type ServiceLine = {
   feeContext?: {
     hasFeeAgreement?: boolean; therapyContext?: CaTherapyContext; padbContext?: CaPadbContext; anesthesiaContext?: CaAnesthesiaContext;
     professionalComponentContext?: CaProfessionalComponentContext;
+    technicalComponentContext?: CaTechnicalComponentContext;
     physicianContext?: {
       providerKind: "physician" | "physician_assistant" | "nurse_practitioner" | "clinical_nurse_specialist" | "other";
       incidentToPhysicianService?: boolean; placeOfService: string; standaloneService: boolean;

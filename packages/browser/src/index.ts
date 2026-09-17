@@ -1188,6 +1188,18 @@ export type CaTherapyContext = {
     hpsaBonusEligible: boolean;
   };
 
+/** Actual technical imaging facts. All fields are required when this context is supplied. */
+export type CaTechnicalComponentContext = {
+  /** Whether the billing provider or group furnished the service; purchased or outsourced services require review. */
+  performedByBillingProviderGroup: boolean;
+  patientHospitalStatus: "not_hospital_patient" | "hospital_inpatient_or_outpatient";
+  supervisionLevel: "general" | "direct" | "personal";
+  /** Actual session label, 1–64 letters/digits/._:-, beginning with a letter or digit. Never a patient identifier. */
+  imagingSessionReference: string;
+  /** All imaging for this patient/provider group/date is included, including separately billed services. */
+  completeSameDayImagingServices: boolean;
+};
+
 /** Documented interpretation and imaging-session facts; an omitted completeness fact remains unknown. */
 export type CaProfessionalComponentContext = {
   interpretationLocation: "same_as_patient_service" | "different_from_patient_service";
@@ -1215,6 +1227,7 @@ export type BillFeeQuoteInput = {
   serviceZip?: string;
   /** Explicit physical interpretation location for a professional component. */
   professionalComponentContext?: CaProfessionalComponentContext;
+  technicalComponentContext?: CaTechnicalComponentContext;
   /** California equipment pricing uses worker residence, independently of service location. */
   dmeposContext?: {
     residenceZip: string;

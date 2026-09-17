@@ -62,3 +62,35 @@ The session reference is an opaque label of 1–64 letters, numbers, periods, un
 The server currently supports a narrow 2026-and-later professional-component pathway: distinct eligible procedure codes, modifier `26`, one unit, physician services, and interpretation at the same physical location as the patient service. Its date-specific source files and indicators determine eligibility. Missing encounter facts, repeated procedures, mixed components, or unsupported adjustments remain review outcomes. The widget displays the server's calculation, including the highest service at 100% and subsequent eligible services in that actual session at 95%; it does not calculate or rank fees locally.
 
 `BillSubmissionForm` uses individual service estimates and does not allocate imaging session reductions. Multiple same-day professional services remain subject to review there. Use `FeeScheduleCalculator` or `quoteClaimFees` for the complete-encounter calculation. The browser and Node SDKs both expose `CaProfessionalComponentContext` for integrations that collect these facts themselves.
+
+## MRI technical components
+
+For modifier `TC`, the calculator adds four service facts: whether the billing provider or group furnished the service, hospital patient status, supervision level, and the actual imaging session reference. These fields start unspecified. An entirely unspecified context goes to the server for review; a partially completed context must be completed before requesting another estimate. The calculator never assumes that a service was furnished by the group, that the patient was outside a hospital, or that a particular supervision level applied.
+
+The current server pathway covers distinct `70551-TC`, `72141-TC` and `72148-TC`, each with one unit, for physician office services using the reviewed July 2026 RVU edition. It requires services actually furnished by the billing provider or group, a nonhospital patient, documented supervision and session, and an actual service ZIP. The server verifies the applicable source edition and requires review for unsupported dates, other codes, repeated procedures, mixed components, purchased or outsourced services, hospital patients, and cases where the outpatient hospital payment cap would reduce the fee. This is not general technical-component coverage.
+
+Hosts can supply the same documented facts through `initialLines`. Both browser and Node SDKs export `CaTechnicalComponentContext`; all five fields are required when the object is supplied:
+
+```tsx
+const technicalLine = {
+  id: 'technical-1',
+  code: '70551',
+  dateOfService: '2026-07-15',
+  modifiers: ['TC'],
+  units: 1,
+  serviceZip: '90001',
+  technicalComponentContext: {
+    performedByBillingProviderGroup: true,
+    patientHospitalStatus: 'not_hospital_patient' as const,
+    supervisionLevel: 'general' as const,
+    imagingSessionReference: 'session-1',
+    completeSameDayImagingServices: true,
+  },
+};
+```
+
+These example values describe a synthetic encounter; integrations must use the actual facts. The full-encounter calculator supplies imaging completeness from its documented scope, while preserving a host-supplied `completeSameDayImagingServices: false` through all edits. Direct API calls still need explicit complete-date and complete-imaging context. Session references follow the same format as professional components and must never contain patient identifiers.
+
+Use `quoteClaimFees` even for a single technical service. The server applies [section 9789.17.1](https://www.dir.ca.gov/t8/9789_17_1.html): the highest eligible technical fee in each actual session is paid at 100%, with subsequent eligible technical components at 50%. The calculator displays the server's session ranking, cap assessment, calculation steps, edit findings and regulation citations; it does not rank or reduce fees locally. Changes to any line or fact clear the entire quote and discard pending responses.
+
+`BillSubmissionForm` preserves host-supplied technical context but does not provide its editor or a claim-level technical allocation. Its individual-line estimates cannot establish the payable technical total; use the claim calculator for that assessment.
