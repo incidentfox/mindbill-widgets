@@ -1105,16 +1105,62 @@ export type BilledDrug = {
   };
 };
 
-/** Documented facts for a single personally performed physician anesthesia service. */
+/** Minutes since midnight on the service date; end must follow start. */
+export type CaAnesthesiaInterval = { startMinute: number; endMinute: number };
+/** Opaque references to the actual physician and service record. */
+export type CaAnesthesiaEvent = { physicianRef: string; recordRef: string; minute: number };
+export type CaAnesthesiaParticipation = CaAnesthesiaInterval & { physicianRef: string; recordRef: string };
+export type CaAnesthesiaOptionalParticipation = CaAnesthesiaParticipation | { applicability: "not_indicated"; recordRef: string };
+export type CaMedicalDirectionCase = {
+  caseRef: string;
+  anesthetistRole: "crna" | "anesthesiologist_assistant" | "intern" | "resident" | "student_nurse_anesthetist";
+  qualificationRecordRef: string;
+  procedure: "cataract" | "iridectomy" | "other";
+  interval: CaAnesthesiaInterval;
+  activities: {
+    preAnestheticEvaluation: CaAnesthesiaEvent;
+    prescribedPlan: CaAnesthesiaEvent;
+    demandingProcedures: CaAnesthesiaParticipation[];
+    induction: CaAnesthesiaOptionalParticipation;
+    emergence: CaAnesthesiaOptionalParticipation;
+    qualifiedAnesthetistProcedures: CaAnesthesiaEvent;
+    frequentMonitoring: { recordRef: string; observations: CaAnesthesiaEvent[] };
+    indicatedPostAnesthesiaCare: CaAnesthesiaEvent;
+  };
+};
+/** All overlapping cases across all payers, including cases outside this bill. */
+export type CaMedicalDirection = {
+  physicianRef: string;
+  groupPhysicianRefs: string[];
+  billedCaseRef: string;
+  rosterScope: "all_overlapping_cases_all_payers";
+  rosterRecordRef: string;
+  cases: CaMedicalDirectionCase[];
+  physicalPresenceAndImmediateAvailability: CaAnesthesiaParticipation[];
+  otherPatientServices: Array<{
+    kind: "emergency" | "labor_analgesia" | "obstetric_monitoring" | "receiving_patient" | "recovery_care" | "other";
+    interval: CaAnesthesiaInterval;
+    recordRef: string;
+  }>;
+};
+export type CaMonitoredAnesthesiaCare = {
+  medicallyNecessary: true;
+  intraoperativePhysiologicalMonitoring: true;
+  preparedForGeneralAnesthesiaOrAdverseReaction: true;
+  perioperativeAnesthesiaCare: true;
+  underlyingProcedureProvider: "different_provider" | "same_provider";
+  underlyingProcedure: "nerve_block_or_injection" | "other";
+};
+/** Clinical facts supplement AA or QK; monitored care also requires QS. */
 export type CaAnesthesiaContext = {
   providerKind: "physician";
-  personallyPerformedAlone: true;
   actualMinutes: number;
   placeOfService: string;
   completeSameDayServices: true;
   otherSameDayServices: boolean;
   codingRequirementsSatisfied: true;
-};
+  monitoredCare?: CaMonitoredAnesthesiaCare;
+} & ({ personallyPerformedAlone: true; medicalDirection?: never } | { personallyPerformedAlone: false; medicalDirection: CaMedicalDirection });
 
 export type CaPadbContext = {
   providerKind: "physician";
@@ -1215,7 +1261,7 @@ export type BillFeeQuote =
     amountCents: number;
     scheduleMaximumCents: number;
     basis: BillFeeQuoteBasis;
-    anesthesia?: { actualMinutes: number; baseUnits: number; timeUnitsTenths: number; conversionFactorCents: number; locality: string };
+    anesthesia?: { actualMinutes: number; baseUnits: number; timeUnitsTenths: number; conversionFactorCents: number; locality: string; medicalDirection?: { concurrentCases: number; baseReductionPercent: number; physicianPaymentPercent: 50 } };
     provenance: BillFeeSource[];
     notes: string[];
   }

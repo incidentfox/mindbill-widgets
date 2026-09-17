@@ -72,6 +72,8 @@ export const DEFAULT_BILL_SUBMISSION_MODIFIERS: BillSubmissionModifierOption[] =
   { code: "97", description: "Toxicology evaluation" },
   { code: "98", description: "Oncology evaluation" },
   { code: "AA", description: "Anesthesia personally performed by the physician" },
+  { code: "QK", description: "Physician medical direction of concurrent anesthesia cases" },
+  { code: "QS", description: "Monitored anesthesia care" },
   { code: "26", description: "Professional component" },
   { code: "TC", description: "Technical component" },
   { code: "NU", description: "New equipment purchase" },
