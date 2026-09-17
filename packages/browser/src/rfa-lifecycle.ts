@@ -14,6 +14,18 @@ export type RfaTreatmentDecisionInput = {
   effectiveFrom?: string; effectiveTo?: string; decisionReason?: string; reviewerName?: string; reviewerPhone?: string;
 };
 export type RfaDecisionsInput = { decidedAt: string; responseDocumentId: string; imrDocumentId?: string; decisions: RfaTreatmentDecisionInput[] };
+export type RfaScheduling = {
+  itemId: string; serviceDescription: string; outcome: string; eligible: boolean;
+  authorizationToken: string; version: number; disposition: "pending" | "scheduled" | "no_appointment" | "canceled";
+  current: boolean; appointmentAt: string | null; providerName: string | null; location: string | null;
+  reason: string | null; updatedAt: string | null;
+};
+export type RfaSchedulingInput = { expectedVersion: number; authorizationToken: string } & (
+  { disposition: "scheduled"; appointmentAt: string; providerName: string; location: string } |
+  { disposition: "no_appointment" | "canceled"; reason: string }
+);
+export type RfaDecisionCorrectionInput = { itemId: string; expectedDecisionEventId: string; reason: string; replacement: RfaDecisionsInput };
+export type RfaHistoryEvent = { id: string; sequence: number; eventType: string; actor: string; payload: Record<string, unknown>; occurredAt: string | null };
 export type RfaFollowUp = {
   id: string; rfaId: string; claimId: string; responseDocumentId: string | null; responseFilename: string | null;
   kind: string; status: string; dueAt: string; assigneeReference: string | null; snoozedUntil: string | null;
@@ -27,6 +39,11 @@ export type RfaFollowUpUpdate = {
 };
 export type RfaFollowUpList = { data: RfaFollowUp[]; nextCursor: string | null };
 export type RfaLifecycleClient = {
+  listScheduling(id: string): Promise<RfaScheduling[]>;
+  updateScheduling(id: string, itemId: string, input: RfaSchedulingInput, idempotencyKey: string): Promise<RfaScheduling[]>;
+  correctDecision(id: string, input: RfaDecisionCorrectionInput, idempotencyKey: string): Promise<RfaRecord>;
+  listHistory(id: string): Promise<RfaHistoryEvent[]>;
+  addNote(id: string, text: string, idempotencyKey: string): Promise<RfaHistoryEvent>;
   recordReceipt(id: string, input: RfaReceiptInput, idempotencyKey: string): Promise<RfaRecord>;
   recordInformationRequest(id: string, input: RfaInformationRequestInput, idempotencyKey: string): Promise<RfaRecord>;
   recordInformationResponse(id: string, requestId: string, input: RfaInformationResponseInput, idempotencyKey: string): Promise<RfaRecord>;
@@ -80,7 +97,23 @@ export function createRfaLifecycleClient({ sessionEndpoint = "/api/mindbill/sess
     return result.data;
   };
   const path = (id: string, suffix: string) => `rfas/${encodeURIComponent(id)}/${suffix}`;
+  const readArray = async <T>(route: string, init?: RequestInit): Promise<T[]> => {
+    const result = await request<{ data: T[] }>(route, init);
+    if (!Array.isArray(result.data)) throw new Error("The RFA response was invalid.");
+    return result.data;
+  };
   return {
+    listScheduling: id => readArray<RfaScheduling>(path(id, "scheduling")),
+    updateScheduling: (id, itemId, input, key) => {
+      if (!key.trim()) return Promise.reject(new Error("An idempotency key is required."));
+      return readArray<RfaScheduling>(path(id, `items/${encodeURIComponent(itemId)}/scheduling`), { method: "PATCH", headers: { "idempotency-key": key }, body: JSON.stringify(input) });
+    },
+    correctDecision: (id, input, key) => mutate(path(id, "decision-corrections"), input, key),
+    listHistory: id => readArray<RfaHistoryEvent>(path(id, "events")),
+    addNote: (id, text, key) => {
+      if (!text.trim()) return Promise.reject(new Error("Enter a note."));
+      return mutate<RfaHistoryEvent>(path(id, "events"), { text: text.trim() }, key);
+    },
     recordReceipt: (id, input, key) => {
       if (!input.proofDocumentId?.trim() && !input.providerMessageId?.trim()) return Promise.reject(new Error("Receipt requires a proof document or provider reference."));
       return mutate(path(id, "transmissions"), { ...input, direction: "inbound", status: "received", occurredAt: input.receivedAt }, key);
