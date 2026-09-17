@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
 import { RfaTrackingPanel } from "./rfa-tracking-panel";
+import { RfaRequestSummary } from "./rfa-request-summary";
+import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
 import { RfaPacketsPanel } from "./rfa-packets";
 import { RfaDraftActions } from "./rfa-draft-actions";
 import { RfaListView } from "./rfa-list-view";
@@ -103,6 +105,7 @@ function RfaDetail({ id, selectedItem, client, signatureClient, options, permiss
   const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [settingSignature, setSettingSignature] = useState(false);
   const [directory, setDirectory] = useState<BillClaimsAdministratorDirectory | null>(null); const [directoryLoading, setDirectoryLoading] = useState(false); const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
   const [openedDocument, setOpenedDocument] = useState<{ blob: Blob; title: string } | null>(null);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const adopt = (value: RfaRecord) => { if (!alive.current) return; setRfa(value); setOpenedDocument(null); setDescriptions(Object.fromEntries(value.items.map(item => [item.id, item.diagnosisDescription ?? ""]))); setPreview(null); setPreviewPdf(null); setAttested(false);  const forms = value.documents.filter(document => document.documentType === "rfa_form" && document.contentRevision === value.contentRevision);
@@ -154,6 +157,8 @@ function RfaDetail({ id, selectedItem, client, signatureClient, options, permiss
           } finally { pending.current = false; if (alive.current) setBusy(false); }
         }} />
       </> : <>
+      <RfaRequestSummary rfa={rfa} {...(rfa.claimsAdminId ? { onViewClaimsAdministrator: () => setDirectoryOpen(true) } : {})} />
+      <ClaimsAdministratorDirectoryDialog open={directoryOpen} directory={directory} loading={directoryLoading} error={directoryError} onClose={() => setDirectoryOpen(false)} />
       {permissions.includes("edit") && canEditRfaDraft(rfa) ? <button type="button" disabled={locked} onClick={() => setEditing(true)}>Edit request draft</button> : null}
       <RfaDraftActions {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} />
       <fieldset><legend>Review timeline</legend><div className="mbtd-grid"><span>Signed: {date(rfa.signedAt)}</span><span>Submitted: {date(rfa.submittedAt)}</span><span>Confirmed receipt: {date(rfa.receivedAt)}</span><span>Decision due: {date(rfa.decisionDueAt)}</span></div>{rfa.decisionDeadlineBasis ? <p>{label(rfa.decisionDeadlineBasis)}</p> : <p>The review deadline appears after the required receipt evidence is recorded.</p>}{[rfa.incompleteReason, rfa.deferredReason, rfa.closedReason].filter(Boolean).map((reason,index) => <p key={index}>{reason}</p>)}</fieldset>

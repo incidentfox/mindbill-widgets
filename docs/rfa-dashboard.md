@@ -242,6 +242,15 @@ connection options, `permissions={["act", "edit"]}`, and `onUpdated` to adopt th
 record. Its default is read-only. Clock corrections and other advanced workflows remain
 available through the documented [RFA API](https://docs.mindbill.org/guides/rfas).
 
+## Saved request details
+
+The detail page displays the saved claim and injury date, requesting physician and NPI,
+practice and authorization recipient contacts, request flags, clinical rationale, and
+material changes. Each requested treatment includes its diagnosis, quantity, units,
+frequency, duration, and requested dates when supplied. These details come from the
+request record, so they remain available after submission without opening the draft editor.
+Missing optional values are omitted. Review the signed PDF for the complete submitted form.
+
 ## Treatment tracking and notes
 
 The detail page includes an individual treatment section with its current decision,
