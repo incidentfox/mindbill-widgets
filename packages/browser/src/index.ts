@@ -1173,19 +1173,22 @@ export type CaPadbContext = {
 };
 
 export type CaTherapyContext = {
-    providerKind: "physical_therapist" | "other";
-    personallyPerformed: boolean;
-    hospitalPatient: boolean;
-    incidentToPhysicianService: boolean;
-    assistantInvolved: boolean;
-    placeOfService: string;
-    directOneOnOneMinutes: number;
-    totalVisitMinutes: number;
-    visitsOnDate: number;
-    completeSameDayServices: boolean;
-    otherSameDayServices: boolean;
-    globalPeriodApplies: boolean;
-    hpsaBonusEligible: boolean;
+    providerKind?: "physical_therapist" | "other";
+    personallyPerformed?: boolean;
+    hospitalPatient?: boolean;
+    incidentToPhysicianService?: boolean;
+    assistantInvolved?: boolean;
+    placeOfService?: string;
+    /** Whether an initial evaluation already occurred in this care episode, including prior dates. Omit when unknown. */
+    priorInitialEvaluationInEpisode?: boolean;
+    /** Required for timed treatment; initial evaluations are untimed. */
+    directOneOnOneMinutes?: number;
+    totalVisitMinutes?: number;
+    visitsOnDate?: number;
+    completeSameDayServices?: boolean;
+    otherSameDayServices?: boolean;
+    globalPeriodApplies?: boolean;
+    hpsaBonusEligible?: boolean;
   };
 
 /** Actual technical imaging facts. All fields are required when this context is supplied. */

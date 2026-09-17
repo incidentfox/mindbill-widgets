@@ -48,3 +48,21 @@ describe("documented therapy context", () => {
     expect(billSubmissionFeeRequest(bill, bill.serviceLines[0]!, saved).therapyContext?.otherSameDayServices).toBe(false);
   });
 });
+
+
+describe("initial PT evaluation context", () => {
+  it.each(["97161", "97162", "97163"])("requires episode history, not minutes, for %s", code => {
+    const evaluation = { ...details, minutes: undefined, totalMinutes: undefined, therapy: { ...facts, priorInitialEvaluationInEpisode: false } };
+    expect(missingTherapyDetails(evaluation, code)).toEqual([]);
+    const context = billSubmissionCalculationContext(code, "11", evaluation, saved);
+    expect(context.therapyContext).toHaveProperty("priorInitialEvaluationInEpisode", false);
+    expect(context.therapyContext).not.toHaveProperty("directOneOnOneMinutes");
+    expect(context.therapyContext).not.toHaveProperty("totalVisitMinutes");
+    expect(context.hasFeeAgreement).toBe(false);
+    expect(billSubmissionCalculationContext(code, "11", { ...evaluation, therapy: { ...evaluation.therapy, priorInitialEvaluationInEpisode: undefined } }, context)).toEqual({});
+    expect(billSubmissionCalculationContext(code, "11", { ...evaluation, therapy: { ...evaluation.therapy, priorInitialEvaluationInEpisode: true } }).therapyContext?.priorInitialEvaluationInEpisode).toBe(true);
+  });
+  it("retains timed service minute requirements after switching back", () => {
+    expect(missingTherapyDetails({ ...details, minutes: undefined, totalMinutes: undefined, therapy: { ...facts, priorInitialEvaluationInEpisode: false } }, "97110")).toContain("direct one-on-one minutes");
+  });
+});

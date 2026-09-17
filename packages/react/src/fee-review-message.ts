@@ -1,5 +1,9 @@
 // Presentation only. The quote status, amounts and submission checks remain authoritative.
 const messages: Record<string, string> = {
+  therapy_initial_evaluation_episode_history_requires_review: "The initial evaluation history for this care episode needs review, including evaluations on earlier dates.",
+  therapy_initial_evaluation_one_unit_required: "An initial PT evaluation requires one unit; duration does not determine units.",
+  therapy_initial_evaluation_sole_service_required: "An initial PT evaluation with other same-day services requires fee review.",
+  therapy_evaluation_date_outside_verified_coverage: "This initial PT evaluation date is outside the currently verified schedule coverage.",
   therapy_no_fee_agreement_confirmation_required: "The therapy service details and any fee agreement need review before an estimate is available.",
   therapy_modifiers_not_supported: "These therapy modifiers need fee review before an estimate is available.",
   therapy_procedure_ground_rules_not_implemented: "This therapy service needs fee review before an estimate is available.",

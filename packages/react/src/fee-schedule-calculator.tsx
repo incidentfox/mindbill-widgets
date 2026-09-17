@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { BillReferenceClient, CaClaimFeeQuoteInput, CaClaimFeeQuoteResult, CaFeeCitation } from "@mindbill/browser";
+import { isInitialPtEvaluationCode } from "./therapy-line-fields";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 
 type Line = CaClaimFeeQuoteInput["lines"][number];
@@ -44,11 +45,14 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
   };
   const update = (index: number, patch: Partial<Line>, extra: Partial<Draft> = {}) => change(rows.map((row, i) => i === index ? { ...row, ...extra, line: { ...row.line, ...patch } } : row));
   const updatePhysician = (index: number, patch: Partial<NonNullable<Line["physicianContext"]>>) => update(index, { physicianContext: { ...physician(), ...rows[index]!.line.physicianContext, ...patch } });
-  const updateTherapy = (index: number, patch: Partial<NonNullable<Line["therapyContext"]>>) => update(index, { therapyContext: { ...rows[index]!.line.therapyContext!, ...patch } });
+  const updateTherapy = (index: number, patch: { [K in keyof NonNullable<Line["therapyContext"]>]?: NonNullable<Line["therapyContext"]>[K] | undefined }) => {
+    const context = { ...rows[index]!.line.therapyContext, ...patch };
+    update(index, { therapyContext: Object.fromEntries(Object.entries(context).filter(([, value]) => value !== undefined)) });
+  };
   function selectServiceType(index: number, therapy: boolean) {
     const physicianContext = rows[index]!.line.physicianContext;
     const base = { ...rows[index]!.line }; delete base.physicianContext; delete base.therapyContext;
-    const line: Line = therapy ? { ...base, therapyContext: { providerKind: "physical_therapist", placeOfService: physicianContext?.placeOfService ?? "11", personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, directOneOnOneMinutes: 0, totalVisitMinutes: 0, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false } } : { ...base, physicianContext: physician() };
+    const line: Line = therapy ? { ...base, therapyContext: { placeOfService: physicianContext?.placeOfService ?? "11" } } : { ...base, physicianContext: physician() };
     change(rows.map((row, i) => i === index ? { ...row, line } : row));
   }
   async function calculate() {
@@ -70,6 +74,8 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
           imagingSessionReference: technicalSessionReference,
           completeSameDayImagingServices: line.technicalComponentContext?.completeSameDayImagingServices !== false,
         } : undefined;
+        const therapy = { ...line.therapyContext };
+        if (isInitialPtEvaluationCode(line.code)) { delete therapy.directOneOnOneMinutes; delete therapy.totalVisitMinutes; }
         const base = { ...line }; delete base.technicalComponentContext; delete base.professionalComponentContext; delete base.chargeCents; delete base.serviceZip; delete base.serviceCounty;
         const professional = { ...line.professionalComponentContext }; delete professional.imagingSessionReference;
         const amount = charge ? Math.round(Number(charge) * 100) : undefined;
@@ -85,7 +91,7 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
             interpretationLocation: interpretationLocation as "same_as_patient_service" | "different_from_patient_service",
             ...(imagingSessionReference ? { imagingSessionReference } : {}),
           } } : {}),
-          ...(line.therapyContext ? { therapyContext: { ...line.therapyContext, completeSameDayServices: true, otherSameDayServices: rows.some((r) => r.line.id !== line.id && r.line.dateOfService === line.dateOfService) } } : {}),
+          ...(line.therapyContext ? { therapyContext: { ...therapy, completeSameDayServices: therapy.completeSameDayServices !== false, otherSameDayServices: therapy.otherSameDayServices === true || rows.some((r) => r.line.id !== line.id && r.line.dateOfService === line.dateOfService) } } : {}),
           ...(line.physicianContext ? { physicianContext: { ...line.physicianContext, standaloneService: rows.filter((r) => r.line.dateOfService === line.dateOfService).length === 1 } } : {}),
         };
       });
@@ -112,10 +118,16 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
         <details className="mbfc-context" open><summary>Provider and service context</summary>
           {!line.anesthesiaContext && !line.padbContext && <label>Service type<select value={line.therapyContext ? "therapy" : "professional"} onChange={(e) => selectServiceType(index, e.target.value === "therapy")}><option value="professional">Professional service</option><option value="therapy">Physical therapy</option></select></label>}
           {line.therapyContext && <div className="mbfc-grid">
-            <label>Therapy provider<select value={line.therapyContext.providerKind} onChange={(e) => updateTherapy(index, { providerKind: e.target.value as "physical_therapist" | "other" })}><option value="physical_therapist">Physical therapist</option><option value="other">Other</option></select></label>
-            <label>Place of service<input required pattern="[0-9]{2}" maxLength={2} value={line.therapyContext.placeOfService} onChange={(e) => updateTherapy(index, { placeOfService: e.target.value })} /></label>
-            {([['directOneOnOneMinutes', 'Direct one-on-one minutes'], ['totalVisitMinutes', 'Total visit minutes'], ['visitsOnDate', 'Visits on this date']] as const).map(([key, title]) => <label key={key}>{title}<input required type="number" min={key === "visitsOnDate" ? 1 : 0} step="1" value={line.therapyContext![key]} onChange={(e) => updateTherapy(index, { [key]: Number(e.target.value) })} /></label>)}
-            {([['personallyPerformed', 'Personally performed by therapist'], ['hospitalPatient', 'Hospital patient'], ['incidentToPhysicianService', 'Incident to physician service'], ['assistantInvolved', 'Therapy assistant involved'], ['globalPeriodApplies', 'Global surgical period applies'], ['hpsaBonusEligible', 'HPSA bonus eligible']] as const).map(([key, title]) => <label key={key}>{title}<select value={String(line.therapyContext![key])} onChange={(e) => updateTherapy(index, { [key]: e.target.value === "true" })}><option value="false">No</option><option value="true">Yes</option></select></label>)}
+            <label>Therapy pricing basis<select value={line.hasFeeAgreement === undefined ? "" : String(line.hasFeeAgreement)} onChange={(event) => {
+              const next = { ...line }; delete next.hasFeeAgreement;
+              if (event.target.value) next.hasFeeAgreement = event.target.value === "true";
+              change(rows.map((row, i) => i === index ? { ...row, line: next } : row));
+            }}><option value="">Not specified</option><option value="false">OMFS — no negotiated fee agreement</option><option value="true">Negotiated fee agreement</option></select></label>
+            {isInitialPtEvaluationCode(line.code) && <p>Initial evaluations are untimed. Include evaluation history from earlier dates in this care episode. One unit as the only service that day is supported; other circumstances need review.</p>}
+            <label>Therapy provider<select value={line.therapyContext.providerKind ?? ""} onChange={(e) => updateTherapy(index, { providerKind: e.target.value ? e.target.value as "physical_therapist" | "other" : undefined })}><option value="">Not specified</option><option value="physical_therapist">Physical therapist</option><option value="other">Other</option></select></label>
+            <label>Place of service<input required pattern="[0-9]{2}" maxLength={2} value={line.therapyContext.placeOfService ?? ""} onChange={(e) => updateTherapy(index, { placeOfService: e.target.value })} /></label>
+            {([['directOneOnOneMinutes', 'Direct one-on-one minutes'], ['totalVisitMinutes', 'Total visit minutes'], ['visitsOnDate', 'Visits on this date']] as const).filter(([key]) => !isInitialPtEvaluationCode(line.code) || key === 'visitsOnDate').map(([key, title]) => <label key={key}>{title}<input required type="number" min={key === "visitsOnDate" ? 1 : 0} step="1" value={line.therapyContext![key] ?? ""} onChange={(e) => updateTherapy(index, { [key]: e.target.value ? Number(e.target.value) : undefined })} /></label>)}
+            {([...(isInitialPtEvaluationCode(line.code) ? [['priorInitialEvaluationInEpisode', 'Prior initial evaluation in this care episode'] as const] : []), ['personallyPerformed', 'Personally performed by therapist'], ['hospitalPatient', 'Hospital patient'], ['incidentToPhysicianService', 'Incident to physician service'], ['assistantInvolved', 'Therapy assistant involved'], ['globalPeriodApplies', 'Global surgical period applies'], ['hpsaBonusEligible', 'HPSA bonus eligible']] as const).map(([key, title]) => <label key={key}>{title}<select value={line.therapyContext![key] === undefined ? "" : String(line.therapyContext![key])} onChange={(e) => updateTherapy(index, { [key]: e.target.value ? e.target.value === "true" : undefined })}><option value="">Not specified</option><option value="false">No</option><option value="true">Yes</option></select></label>)}
           </div>}
           {line.anesthesiaContext || line.padbContext ? <p>Specialty service context supplied by your application. The complete context is included in this quote.</p> : !line.therapyContext && <div className="mbfc-grid">
             <label>Provider type<select value={line.physicianContext?.providerKind ?? "physician"} onChange={(e) => updatePhysician(index, { providerKind: e.target.value as NonNullable<Line["physicianContext"]>["providerKind"] })}><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option><option value="clinical_social_worker">Clinical social worker</option><option value="other">Other</option></select></label>
