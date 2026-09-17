@@ -28,3 +28,7 @@ For a custom UI, use `createReportAutofillClient` from `@mindbill/browser`, or `
 `ReportAutofill` calls the host's `onApply` only after review. The host must use `applyReportAutofill` (or equivalent preservation rules) to keep existing values unchanged. HTTP 403 displays the server's entitlement or permission error; the widget never provisions access automatically.
 
 The browser client calls `POST /partner/v2/report-autofill` with multipart field `report`. It returns `{ model, requiresReview: true, fields, matches, warnings }`. Each field includes `key`, `value`, `sourceText` and `confidence` (`high` or `medium`). Matches for patient, billing provider, rendering provider and service location include `status` (`matched`, `ambiguous`, `none`), candidate IDs/names and an optional uniquely matched `selectedId`.
+
+Native applications may supply `analyzeReport(file: File): Promise<ReportAutofillResult>` to `ReportAutofill`. This callback replaces browser-session extraction, so no browser credentials or session endpoint are needed. Return the unwrapped result from your authenticated server endpoint. File validation and explicit review/apply behavior remain the same; the host endpoint must enforce its own authorization and entitlement.
+
+Hosts that store the uploaded report can set `attachmentHelpText` to explain their attachment behavior. This changes explanatory text only; the component does not upload or attach the report itself.

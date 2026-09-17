@@ -38,6 +38,12 @@ applications can preserve their compact spacing. Styles are injected automatical
 `services`, `attachments`) to arrays of `{ severity: "error" | "warning", message: string }`.
 Messages appear beside the affected section without changing the supplied bill data.
 
+`ConnectedBillLifecycle` automatically highlights missing fields and mapped rejection
+issues on the current editable draft, incomplete, or rejected bill. It uses the same
+validation rules as the correction form; paid bills and historical submissions do not
+receive new required-field errors. An explicit `validationIssues` prop overrides these
+defaults, including an empty object to suppress them.
+
 Both `BillReadOnlyForm` and `ConnectedBillLifecycle` accept these optional callbacks:
 
 | Prop | Callback value |

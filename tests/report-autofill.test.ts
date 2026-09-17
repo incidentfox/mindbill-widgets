@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { createReportAutofillClient, type ReportAutofillResult } from "../packages/browser/src/report-autofill";
+import { ReportAutofill } from "../packages/react/src/report-autofill";
 import { applyReportAutofill } from "../packages/react/src/report-autofill-values";
 import { BillSubmissionForm, type BillSubmissionInput } from "../packages/react/src/bill-submission-form";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -73,4 +74,24 @@ describe("report autofill", () => {
       expect(onSubmit).not.toHaveBeenCalled(); expect(fetcher).toHaveBeenCalledTimes(1);
     } finally { await act(async () => root.unmount()); }
   });
+  it("supports native analysis without browser credentials and requires explicit apply", async () => {
+    const container = document.createElement("div"); const root = createRoot(container);
+    const analyzeReport = vi.fn().mockResolvedValue(result); const onApply = vi.fn();
+    const fetcher = vi.fn<typeof fetch>();
+    try {
+      await act(async () => root.render(createElement(ReportAutofill, { analyzeReport, onApply, fetch: fetcher, attachmentHelpText: "Your report will also be attached to the draft bill." })));
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+      const choose = async (file: File) => act(async () => { Object.defineProperty(input, "files", { value: [file], configurable: true }); input.dispatchEvent(new Event("change", { bubbles: true })); });
+      const click = async (label: string) => act(async () => { [...container.querySelectorAll("button")].find(button => button.textContent === label)!.click(); });
+      await choose(new File(["text"], "wrong.txt", { type: "text/plain" }));
+      await click("Review report suggestions");
+      expect(analyzeReport).not.toHaveBeenCalled(); expect(container.textContent).toContain("Choose a PDF");
+      await choose(pdf()); await click("Review report suggestions");
+      expect(container.textContent).toContain("Your report will also be attached to the draft bill.");
+      expect(analyzeReport).toHaveBeenCalledTimes(1); expect(fetcher).not.toHaveBeenCalled(); expect(onApply).not.toHaveBeenCalled();
+      expect(container.textContent).toContain("Review extracted details");
+      await click("Apply to empty bill fields"); expect(onApply).toHaveBeenCalledWith(result);
+    } finally { await act(async () => root.unmount()); }
+  });
+
 });

@@ -47,6 +47,7 @@ import {
   BILL_SUBMISSION_DOCUMENT_TYPES,
   BillSubmissionForm,
   prepareBillSubmissionDocuments,
+  validateBillSubmission,
   type BillSubmissionDocumentType,
   type BillSubmissionFormValue,
   type BillSubmissionInput,
@@ -611,6 +612,24 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
   };
 }
 
+/** Use the correction form's existing rules only while this current bill is editable. */
+export function billLifecycleValidationIssues(data: BillLifecycleData): BillReadOnlyFormProps["validationIssues"] {
+  if (!["draft", "incomplete", "rejected"].includes(data.lifecycle.state)
+    || !data.lifecycle.actions.some(action => action.id === "resubmit" && action.enabled)) return undefined;
+  const issues: NonNullable<BillReadOnlyFormProps["validationIssues"]> = {};
+  const add = (path: string, message: string) => {
+    const section = path.startsWith("patient.") ? "patient" : path.startsWith("claim.") ? "claim"
+      : /^(billingProvider|renderingProvider|serviceLocation)(\.|$)/.test(path) ? "providers"
+      : /^(service|serviceLines|diagnoses)(\.|$)/.test(path) ? "services"
+      : path.startsWith("attachments") ? "attachments" : null;
+    if (!section || issues[section]?.some(issue => issue.message === message)) return;
+    issues[section] = [...(issues[section] ?? []), { severity: "error", message }];
+  };
+  for (const [path, message] of Object.entries(validateBillSubmission(correctionBill(data)).fieldErrors)) add(path, message);
+  for (const issue of data.rejection?.issues ?? []) for (const path of issue.fieldPaths ?? []) add(path, issue.description);
+  return issues;
+}
+
 function today(): string {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
@@ -836,6 +855,7 @@ export function ConnectedBillLifecycle({
   const supportedActions = new Set<BillLifecycleAction["id"]>(["resubmit", "submit_new_bill", "second_review", "independent_bill_review", "post_payment", "close", "reopen", "send_duplicate", "report_bill_status"]);
   const actions = data.lifecycle.actions.filter((action) => action.enabled && supportedActions.has(action.id));
   const { activeSubmissionId, ribbonItems, selectedAttempt, historical, selectedDetail } = billLifecycleSubmissionSelection(data, selectedSubmissionId);
+  const displayedValidationIssues = validationIssues ?? (!historical ? billLifecycleValidationIssues(data) : undefined);
   const activePanel = historical ? "" : panel;
   const showSandboxControls = shouldShowSandboxControls(data.environment, sandboxControls) && !historical;
   const simulations = showSandboxControls ? sandboxScenarios(data.lifecycle.state) : [];
@@ -879,7 +899,7 @@ export function ConnectedBillLifecycle({
       {showSandboxControls ? <section className="mb-lifecycle-simulator" aria-label="Sandbox lifecycle simulator"><div><span>Sandbox demo controls</span><h3>Simulate the next payer response</h3><p>This changes sandbox data only. The host receives the result through the same lifecycle API and components partners use.</p></div>{simulations.length ? <div className="mb-lifecycle-simulator-actions">{simulations.map((scenario) => <button type="button" key={scenario.id} disabled={lifecycle.isMutating} onClick={() => void complete(`${scenario.label} simulated.`, () => lifecycle.simulateSandbox({ scenario: scenario.id }))}><strong>{scenario.label}</strong><span>{scenario.detail}</span></button>)}</div> : <p className="mb-lifecycle-simulator-idle">No simulated payer transition is needed at this stage. Use the bill action below to continue.</p>}</section> : null}
 
       {historical ? <p className="mb-lifecycle-card">{selectedDetail?.source === "submission_snapshot" ? "Saved as submitted. This previous submission is read-only; payment balances and current actions are shown on the current bill." : displayedData ? "Historical bill record. An exact as-submitted snapshot was not recorded for this older attempt; these are the stored bill values, not a guaranteed copy of the original packet." : "Detailed values were not saved for this historical submission. Select the current submission to see the current bill. We will not substitute current data for this older attempt."}</p> : null}
-      {displayedData ? <BillReadOnlyForm key={activeSubmissionId} data={displayedData} {...(requireLinkedEntityIds ? { requireLinkedEntityIds } : {})} {...(validationIssues ? { validationIssues } : {})} {...(onPatientClick ? { onPatientClick } : {})} {...(onRenderingProviderClick ? { onRenderingProviderClick } : {})} {...(onClaimsAdministratorClick ? { onClaimsAdministratorClick } : {})} {...(!historical ? { onOpenAttachment: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} /> : null}
+      {displayedData ? <BillReadOnlyForm key={activeSubmissionId} data={displayedData} {...(requireLinkedEntityIds ? { requireLinkedEntityIds } : {})} {...(displayedValidationIssues ? { validationIssues: displayedValidationIssues } : {})} {...(onPatientClick ? { onPatientClick } : {})} {...(onRenderingProviderClick ? { onRenderingProviderClick } : {})} {...(onClaimsAdministratorClick ? { onClaimsAdministratorClick } : {})} {...(!historical ? { onOpenAttachment: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} /> : null}
       {selectedAttempt ? <section className="mb-lifecycle-card" aria-label="Retained submission files"><h3>Retained submission files</h3><p>Exact files saved for this submission. These downloads do not include a regenerated current bill or a later EOR.</p>{selectedDetail?.artifacts?.length ? selectedDetail.artifacts.map((artifact) => <button type="button" className="mb-lifecycle-button secondary" key={artifact.id} onClick={() => void lifecycle.downloadSubmissionArtifact(selectedAttempt.id, artifact.id, artifact.label).catch(() => undefined)}>Download {artifact.kind === "submitted_edi" ? "submitted EDI" : "submitted attachment"}: {artifact.label}</button>) : <p>No retained files are available for this submission.</p>}</section> : null}
       {!historical ? <section className="mb-lifecycle-notes" aria-label="Bill notes">
         <header><div><h3>Team notes</h3><p>Shared with your workspace’s billing team. Never sent to the payer.</p></div><span>{billNotes.length}</span></header>

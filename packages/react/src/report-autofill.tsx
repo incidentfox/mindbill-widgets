@@ -14,12 +14,16 @@ const fieldLabels: Record<string, string> = {
 const labels: Record<string, string> = { patient: "Patient", billingProvider: "Billing provider", renderingProvider: "Rendering provider", serviceLocation: "Service location" };
 
 export type ReportAutofillProps = OrganizationClientOptions & {
+  /** Use an authenticated host endpoint instead of a MindBill browser session. */
+  analyzeReport?(file: File): Promise<ReportAutofillResult>;
   /** Apply with applyReportAutofill(currentBill, result) to preserve entered values. */
   onApply(result: ReportAutofillResult): void;
   disabled?: boolean;
+  /** Explain attachment handling when a host owns extraction and document storage. */
+  attachmentHelpText?: string;
 };
 /** Optional, agreement-gated report extraction. Every result requires explicit human review. */
-export function ReportAutofill({ onApply, disabled = false, ...connection }: ReportAutofillProps): ReactElement {
+export function ReportAutofill({ onApply, analyzeReport, attachmentHelpText = "Add the report separately as a bill attachment if needed.", disabled = false, ...connection }: ReportAutofillProps): ReactElement {
   const client = useMemo(() => createReportAutofillClient(connection), [connection.getSession, connection.sessionEndpoint, connection.apiBaseUrl, connection.fetch]);
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ReportAutofillResult | null>(null);
@@ -27,18 +31,21 @@ export function ReportAutofill({ onApply, disabled = false, ...connection }: Rep
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState(false);
   const generation = useRef(0);
-  useEffect(() => { generation.current += 1; setResult(null); setError(null); setBusy(false); setApplied(false); return () => { generation.current += 1; }; }, [client]);
+  useEffect(() => { generation.current += 1; setResult(null); setError(null); setBusy(false); setApplied(false); return () => { generation.current += 1; }; }, [client, analyzeReport]);
   const analyze = async () => {
     if (!file) return;
     const current = ++generation.current;
     setBusy(true); setError(null); setResult(null); setApplied(false);
-    try { const value = await client.analyze(file); if (current === generation.current) setResult(value); }
+    try {
+      if (file.type !== "application/pdf") throw new Error("Choose a PDF report.");
+      if (!file.size || file.size > 25 * 1024 * 1024) throw new Error("Choose a non-empty PDF report no larger than 25 MB.");
+      const value = await (analyzeReport ? analyzeReport(file) : client.analyze(file)); if (current === generation.current) setResult(value); }
     catch (cause) { if (current === generation.current) setError(cause instanceof Error ? cause.message : "Report analysis failed. Try again."); }
     finally { if (current === generation.current) setBusy(false); }
   };
   return <section aria-label="Fill from report" style={{ color: "#253346", lineHeight: 1.5, padding: 16, border: "1px solid #dbe2ea", borderRadius: 12, marginBottom: 16 }}>
     <h3 style={{ marginTop: 0 }}>Fill from report</h3>
-    <p>Upload a PDF to suggest bill details. Review every suggestion before applying it. Existing entries stay unchanged. Add the report separately as a bill attachment if needed.</p>
+    <p>Upload a PDF to suggest bill details. Review every suggestion before applying it. Existing entries stay unchanged. {attachmentHelpText}</p>
     <label style={{ display: "block", marginBottom: 12 }}>Medical report (PDF, up to 25 MB) <input type="file" style={{ display: "block", maxWidth: "100%", marginTop: 6 }} accept="application/pdf,.pdf" disabled={disabled || busy} onChange={event => { generation.current += 1; setFile(event.target.files?.[0] ?? null); setResult(null); setError(null); setApplied(false); }} /></label>
     <button className="mbsf-secondary" type="button" disabled={disabled || busy || !file} onClick={() => { void analyze(); }}>{busy ? "Reading report…" : "Review report suggestions"}</button>
     {error ? <p role="alert">{error}</p> : null}
