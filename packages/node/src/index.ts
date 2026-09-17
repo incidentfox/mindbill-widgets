@@ -1,5 +1,17 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+/** Paper claim family; clearinghouse transport is selected by the server. */
+export type ClaimForm = "cms1500" | "ub04" | "ada" | "ncpdp";
+/** JSON fields validated by the server's form-specific contract. */
+export type BillFormValue = string | number | boolean | null | BillFormValue[] | { [key: string]: BillFormValue };
+export type BillFormData = {
+  institutional?: { [key: string]: BillFormValue };
+  dental?: { [key: string]: BillFormValue };
+  pharmacy?: { [key: string]: BillFormValue };
+};
+/** Service-line metadata, including revenue, tooth, and prescription details. */
+export type BillLineFormData = BillFormData;
+
 export const MINDBILL_API_BASE_URL = "https://app.mindbill.org";
 export const MINDBILL_BROWSER_COMPONENTS = ["bill-review", "bill-timeline"] as const;
 export type MindBillBrowserComponent = (typeof MINDBILL_BROWSER_COMPONENTS)[number];
@@ -212,6 +224,7 @@ export type CaProfessionalComponentContext = {
 };
 
 export type ServiceLine = {
+  formData?: BillLineFormData;
   id?: string;
   code: string;
   modifiers?: string[];
@@ -238,6 +251,8 @@ export type ServiceLine = {
 };
 
 export type CreateBillRequest = {
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   /** Stable report, case, or work-item ID in your system. */
   externalId?: string;
   billingMode?: "med_legal" | "professional";
@@ -282,6 +297,8 @@ export type BillDocument = {
 };
 
 export type Bill = {
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   id: string;
   customerExternalId?: string | null;
   externalId: string | null;

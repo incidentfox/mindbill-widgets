@@ -367,6 +367,8 @@ export function useBillLifecycle({
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & BillDetailNavigationProps & {
   /** Opens the host-provided CMS-1500 preview for the current bill. */
   onOpenCms1500?: (billId: string) => void;
+  /** Opens the matching paper form for any supported claim family. */
+  onOpenClaimForm?: (billId: string, claimForm: import("@mindbill/browser").ClaimForm) => void;
   validationIssues?: BillReadOnlyFormProps["validationIssues"];
   billingSettings?: BillSubmissionFormProps["billingSettings"];
   appearance?: MindBillReactAppearance;
@@ -602,7 +604,11 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
     } } : {}),
     diagnoses: data.injury.diagnoses?.map((diagnosis) => diagnosis.code)
       ?? [...(data.injury.diagnosisCodes || [])],
+    ...(data.bill.claimForm ? { claimForm: data.bill.claimForm } : {}),
+    ...(data.bill.formData ? { formData: data.bill.formData } : {}),
     serviceLines: data.bill.lineItems.map((line) => ({
+      ...(line.formData ? { formData: line.formData } : {}),
+      ...(line.drug ? { drug: line.drug } : {}),
       code: line.code,
       modifiers: [...line.modifiers],
       units: line.units,
@@ -672,7 +678,7 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
 }
 
 export function ConnectedBillLifecycle({
-  billingSettings, appearance, actorName, onOpenCms1500, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+  billingSettings, appearance, actorName, onOpenCms1500, onOpenClaimForm, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -876,7 +882,7 @@ export function ConnectedBillLifecycle({
 
     <header className="mb-lifecycle-head">
       <div><div className="mb-lifecycle-title"><h2>{historical && !selectedAttempt ? "Previous submission" : `Bill #${historical ? selectedAttempt?.billNumber : data.bill.billNumber}`}</h2></div><p>{displayedData ? `Claim ${displayedData.injury.claimNumber || "—"}` : "Previous submission"}{lifecycle.isRefreshing ? " · Refreshing…" : ""}</p></div>
-      {!historical ? <>{onOpenCms1500 ? <button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => onOpenCms1500(data.bill.id)}>View CMS-1500</button> : null}<button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadPacket().catch(() => undefined)}>Download packet</button>
+      {!historical ? <>{onOpenClaimForm ? <button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => onOpenClaimForm(data.bill.id, data.bill.claimForm ?? "cms1500")}>View {({ cms1500: "CMS-1500", ub04: "UB-04", ada: "ADA", ncpdp: "NCPDP" } as const)[data.bill.claimForm ?? "cms1500"]}</button> : onOpenCms1500 && (!data.bill.claimForm || data.bill.claimForm === "cms1500") ? <button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => onOpenCms1500(data.bill.id)}>View CMS-1500</button> : null}<button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadPacket().catch(() => undefined)}>Download packet</button>
       <button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("courtesy_copy")}>Forward copy</button></> : null}
     </header>
 

@@ -423,3 +423,5 @@ export { ReportAutofill } from "./report-autofill";
 export type { ReportAutofillProps } from "./report-autofill";
 
 export { applyReportAutofill } from "./report-autofill-values";
+
+export type { ClaimForm, BillFormValue, BillFormData, BillLineFormData, BilledDrug } from "@mindbill/browser";
