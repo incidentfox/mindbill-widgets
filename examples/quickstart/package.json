@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@mindbill/node": "0.16.1",
-    "@mindbill/react": "0.69.2",
+    "@mindbill/react": "0.69.3",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"

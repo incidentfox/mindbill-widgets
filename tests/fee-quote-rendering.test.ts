@@ -55,3 +55,55 @@ it.each([...BILL_FEE_QUOTE_BASES, "unknown_fee_family"])("renders the API result
     await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
   }
 });
+
+it("keeps a treatment review unpriced, explains the reason, and offers treatment modifiers", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const fetcher = vi.fn<typeof fetch>(async (url) => Response.json({ data: String(url).endsWith("/partner/v2/fee-quotes")
+    ? { status: "requires_review", reason: "therapy_no_fee_agreement_confirmation_required", provenance: [] } : [] }));
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: { ...bill, serviceLines: [{ ...bill.serviceLines[0]!, code: "97110", units: 4 }] },
+      getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher,
+      treatmentBilling: true, deliveryRoutePicker: "off",
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("Needs review");
+    expect(container.textContent).toContain("The therapy service details and any fee agreement need review");
+    expect(container.textContent).not.toContain("therapy_no_fee_agreement_confirmation_required");
+    expect(container.querySelector('[aria-label="Evaluation type"]')).toBeNull();
+    await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Modifiers 1"]')!.focus());
+    const menu = container.querySelector('[role="listbox"]')!;
+    expect(menu.textContent).toContain("Services under a physical therapy plan of care");
+    expect(menu.textContent).toContain("Significant, separately identifiable");
+    expect(menu.textContent).toContain("Audio-only telehealth");
+    expect(menu.textContent).not.toContain("Qualified Medical Evaluator");
+    const gp = [...menu.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((option) => option.querySelector("strong")?.textContent === "−GP")!;
+    await act(async () => gp.click());
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(container.querySelector('[aria-label="Remove modifier GP"]')).not.toBeNull();
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("Needs review");
+  } finally {
+    await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
+  }
+});
+
+it("retains evaluator controls and medical-legal modifier meanings for an ML line in treatment mode", async () => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: { ...bill, billingMode: "med_legal", serviceLines: [{ ...bill.serviceLines[0]!, code: "ML201", units: 1, modifiers: ["95"] }] },
+      getSession: async () => ({ token: "synthetic_session" }), fetch: async () => Response.json({ data: [] }),
+      treatmentBilling: true, deliveryRoutePicker: "off",
+    })));
+    expect(container.querySelector('[aria-label="Evaluation type"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Remove modifier 95"]')).not.toBeNull();
+    await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Modifiers 1"]')!.focus());
+    expect(container.querySelector('[role="listbox"]')?.textContent).toContain("Interpreter required");
+    expect(container.querySelector('[role="listbox"]')?.textContent).not.toContain("Audio-only telehealth");
+  } finally {
+    await act(async () => root.unmount()); container.remove();
+  }
+});

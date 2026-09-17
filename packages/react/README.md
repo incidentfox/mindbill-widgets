@@ -465,3 +465,9 @@ revision handling, charge semantics, and signing boundaries.
 `RfaAuthorizationDestination` provides an explicit office/contact choice for an RFA using claims-administrator directory data. Fax and email are separate options; missing or withdrawn profiles allow a fax confirmed with the handling adjuster. The host owns signing, destination confirmation, and delivery.
 
 See the [RFA directory guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/rfa-directory.md) for the `contextKey`, loading/error, and `onChange` contract.
+
+Treatment lines offer `25`, `GP/GO/GN` and `CQ/CO`, with dated telehealth meanings
+for `93/95`. Medical-legal lines retain evaluator defaults and modifier meanings.
+Treatment-only bills hide the evaluator selector. Modifier choices do not promise
+pricing: unresolved quotes remain subject to fee review, with readable help text
+that wraps on mobile. See [modifier guidance](../../docs/evaluation-modifiers.md).
