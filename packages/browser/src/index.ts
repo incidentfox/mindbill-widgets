@@ -2334,14 +2334,17 @@ export type RfaRecord = {
   readiness: { ready: boolean; missing: string[] };
   items: Array<{ id: string; diagnosisCode: string; diagnosisDescription?: string; serviceDescription: string; procedureCode: string | null;
     frequency?: string | null; duration?: string | null; requestedFrom?: string | null; requestedTo?: string | null; metadata?: Record<string, unknown>;
-    outcome: string; quantity: number | null; units: number | null; authorizationNumber: string | null; decisionReason: string | null }>;
+    outcome: string; quantity: number | null; units: number | null; authorizationNumber: string | null; decisionReason: string | null;
+    currentDecisionEventId?: string | null; currentResponseDocumentId?: string | null; currentImrDocumentId?: string | null;
+    authorizedProcedureCode?: string | null; authorizedQuantity?: number | null; authorizedUnits?: number | null;
+    effectiveFrom?: string | null; effectiveTo?: string | null; decidedAt?: string | null; reviewerName?: string | null; reviewerPhone?: string | null }>;
   documents: Array<{ id: string; documentType: string; filename: string; contentUrl: string; contentRevision: number | null; createdAt: string | null }>;
   transmissions: Array<{ id: string; purpose?: string; direction: string; channel: string; status: string; destination: string | null;
     occurredAt: string | null; receivedAt: string | null; proofDocumentId: string | null; providerMessageId: string | null }>;
   informationRequests: Array<{ id: string; requestText: string; requestedAt: string | null; dueAt: string | null; respondedAt: string | null }>;
-  events: Array<{ id: string; type: string; occurredAt: string | null }>;
+  events: Array<{ id: string; type: string; occurredAt: string | null; text?: string }>;
 };
-export type RfaListQuery = { claimId?: string; renderingProviderId?: string; status?: string; createdFrom?: string; createdTo?: string; limit?: number; cursor?: string };
+export type RfaListQuery = { patientId?: string; search?: string; sortBy?: "createdAt" | "employeeName" | "providerName" | "submittedAt" | "status"; sortDirection?: "asc" | "desc"; claimId?: string; renderingProviderId?: string; status?: string; createdFrom?: string; createdTo?: string; limit?: number; cursor?: string };
 export type RfaListResult = { data: RfaRecord[]; nextCursor: string | null; summary: { total: number; byStatus: Record<string, number> } };
 export type RfaSigningPreviewInput = { billingProviderId?: string; diagnosisDescriptions: Record<string, string> };
 export type RfaSigningPreview = { id: string; contentHash: string; contentRevision: number; renderingProviderId: string; previewDocumentId: string; expiresAt: string };
@@ -2495,3 +2498,7 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
 export * from "./rfa-lifecycle";
 export { createReportAutofillClient } from "./report-autofill";
 export type { ReportAutofillClient, ReportAutofillField, ReportAutofillMatch, ReportAutofillResult } from "./report-autofill";
+
+export * from "./rfa-draft-actions";
+
+export * from "./rfa-packets";

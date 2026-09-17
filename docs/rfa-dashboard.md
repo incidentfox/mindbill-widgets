@@ -26,6 +26,8 @@ need to be entered manually. **Back to patient and physician** retains treatment
 a prepared case. It uses the same input as `RfaDraftForm`. `claimId` and
 `renderingProviderId` optionally restrict both the request list and saved creation choices. Server authorization must enforce the
 actual permitted records; filters and `permissions` only control the interface.
+`patientId` optionally limits the request list across that patient’s injuries; it does
+not change the creation picker or grant access to additional records.
 `onCreated(record)` observes draft creation; optional `onContinue(record)` adds a host
 navigation action without replacing the native signing and packet workflow.
 
@@ -94,6 +96,36 @@ for a restricted view. The RFA status selector filters requests within that view
 `initialView="rfas"` opens the tab immediately in `ConnectedBillingWorkspace`.
 Disabling the selected tab returns to Bill tasks (or Bills in `BillingDashboard`).
 This SDK option does not change the MindBill application interface.
+
+## Find requests and individual treatments
+
+Switch between **RFAs** and **Requested treatments** without losing the current search.
+Search matches saved patient and physician names, claim number, RFA ID, status,
+claims administrator, treatment descriptions, CPT/HCPCS, and diagnosis codes. The status
+selector and optional patient, claim, and physician filters combine with that search.
+Search and sorting run on the server across all matching requests. Sort by patient,
+physician, submission date, creation date, or request status; click again to reverse it.
+
+First, previous, and next navigate request pages. The treatment view shows every item
+on those requests, so its row count can exceed the request page size. Its page controls
+still page by request. Opening a treatment focuses its section in the request detail.
+Dates and individual treatment outcomes are displayed but are not separate list filters.
+
+## Draft actions
+
+**Copy as new draft** requires `create`. The copy preserves editable clinical request
+content, but requires a fresh review, supporting documents, and physician signature.
+It does not copy delivery evidence, outcomes, or history. `onCreated` receives the copy.
+
+**Cancel draft** requires `edit` and a separate confirmation. Only an unsigned,
+unsubmitted draft with no queued submission is eligible. The server checks the current
+revision under a lock. Cancellation retains the audit history; it does not delete the
+request or cancel a fax in progress. Submitted requests remain immutable.
+
+For a custom page use `RfaDraftActions` with the connection options, `rfa`,
+`permissions={["create", "edit"]}`, `onCopied`, and `onCanceled`.
+`createRfaDraftActionsClient` exposes `copy` and `cancelDraft`, each requiring the
+expected revision and a stable idempotency key.
 
 ## Patient, injury, and request setup
 
@@ -210,6 +242,30 @@ connection options, `permissions={["act", "edit"]}`, and `onUpdated` to adopt th
 record. Its default is read-only. Clock corrections and other advanced workflows remain
 available through the documented [RFA API](https://docs.mindbill.org/guides/rfas).
 
+## Treatment tracking and notes
+
+The detail page includes an individual treatment section with its current decision,
+authorization, response evidence, and appointment. Users with `act` can correct a decision
+with a reason and supporting response document. Corrections preserve history and check
+the expected decision version. An existing scheduled appointment prevents correction;
+resolve that appointment first. Modified or denied decisions require an IMR document.
+
+Appointment updates use the current authorization and appointment version. Record the
+scheduled provider, location and time, or explain why no appointment will be made or why
+one was canceled. This records scheduling information; it does not book an appointment
+with a third party. No One Call integration is implied.
+
+History shows actor-attributed notes and recorded events. `edit` enables adding notes;
+`act` alone does not. Notes are append-only and never copied into webhook payloads.
+Delivery history keeps submission and forwarding evidence distinct and offers available
+proof PDFs. Attempted sending is not treated as receipt.
+
+`RfaTrackingPanel` is exported for custom pages. Pass `rfa`, `options` containing the
+connection options, optional `permissions={["act", "edit"]}`, and `onUpdated`.
+The standalone panel defaults to read-only. Supporting PDFs can be excluded from a new
+packet with the document checkboxes; retained documents and historical packet bytes
+are preserved rather than deleted.
+
 ## Custom browser UI
 
 `createRfaClient` from `@mindbill/browser` accepts `OrganizationClientOptions` (`getSession`
@@ -277,3 +333,9 @@ Use `search` (patient name or claim number) with `cursor` for claims, and
 to 50 and is capped at 100. Reset the corresponding cursor when changing a search.
 Optional exact `claimId` and `renderingProviderId` restrict choices. Cursors and records
 remain scoped to the authorized organization and environment.
+
+### Retained packets and forwarding
+
+The detail view lists retained packet PDFs and their transmission history. Opening a packet loads the immutable PDF that was prepared for that submission; it does not regenerate a new document from current data.
+
+`RfaPacketsPanel` is also exported for standalone use. Forwarding requires `environment="live"`, the `act` permission, an eligible retained packet, review of its exact PDF, and explicit confirmation of the recipient. A forward creates a separate transmission and does not replace the original submission or reset the review timeline. Sandbox forwarding is disabled. Available delivery channels are enforced by the backend; an unavailable email channel returns an error rather than claiming delivery succeeded.

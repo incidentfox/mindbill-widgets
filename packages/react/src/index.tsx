@@ -425,3 +425,11 @@ export type { ReportAutofillProps } from "./report-autofill";
 export { applyReportAutofill } from "./report-autofill-values";
 
 export type { ClaimForm, BillFormValue, BillFormData, BillLineFormData, BilledDrug } from "@mindbill/browser";
+
+export { RfaTrackingPanel } from "./rfa-tracking-panel";
+export type { RfaTrackingPanelProps } from "./rfa-tracking-panel";
+export { RfaDraftActions } from "./rfa-draft-actions";
+export type { RfaDraftActionsProps } from "./rfa-draft-actions";
+
+export { RfaPacketsPanel } from "./rfa-packets";
+export type { RfaPacketsPanelProps } from "./rfa-packets";
