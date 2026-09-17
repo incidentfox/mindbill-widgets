@@ -31,22 +31,17 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
   const generation = useRef(0);
   const counter = useRef(1);
   useEffect(() => () => { generation.current++; }, []);
-  const change = (next: Draft[], membershipChanged = false) => {
-    // Host completeness describes its supplied encounter. Membership edits require a new authoritative encounter.
-    if (membershipChanged) next = next.map(row => {
-      if (!row.line.professionalComponentContext) return row;
-      const context = { ...row.line.professionalComponentContext }; delete context.completeSameDayImagingServices;
-      return { ...row, line: { ...row.line, professionalComponentContext: context } };
-    });
-    generation.current++; setRows(next); setResult(null); setError(""); setBusy(false); };
-  const update = (index: number, patch: Partial<Line>, extra: Partial<Draft> = {}) => change(rows.map((row, i) => i === index ? { ...row, ...extra, line: { ...row.line, ...patch } } : row), ["code", "dateOfService", "units"].some(key => key in patch) || "modifiers" in extra);
+  const change = (next: Draft[]) => {
+    generation.current++; setRows(next); setResult(null); setError(""); setBusy(false);
+  };
+  const update = (index: number, patch: Partial<Line>, extra: Partial<Draft> = {}) => change(rows.map((row, i) => i === index ? { ...row, ...extra, line: { ...row.line, ...patch } } : row));
   const updatePhysician = (index: number, patch: Partial<NonNullable<Line["physicianContext"]>>) => update(index, { physicianContext: { ...physician(), ...rows[index]!.line.physicianContext, ...patch } });
   const updateTherapy = (index: number, patch: Partial<NonNullable<Line["therapyContext"]>>) => update(index, { therapyContext: { ...rows[index]!.line.therapyContext!, ...patch } });
   function selectServiceType(index: number, therapy: boolean) {
     const physicianContext = rows[index]!.line.physicianContext;
     const base = { ...rows[index]!.line }; delete base.physicianContext; delete base.therapyContext;
     const line: Line = therapy ? { ...base, therapyContext: { providerKind: "physical_therapist", placeOfService: physicianContext?.placeOfService ?? "11", personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, directOneOnOneMinutes: 0, totalVisitMinutes: 0, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false } } : { ...base, physicianContext: physician() };
-    change(rows.map((row, i) => i === index ? { ...row, line } : row), true);
+    change(rows.map((row, i) => i === index ? { ...row, line } : row));
   }
   async function calculate() {
     const requestGeneration = ++generation.current; setBusy(true); setError(""); setResult(null);
@@ -66,6 +61,8 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
           catalogContext: { ...line.catalogContext, codingRequirementsSatisfied: true },
           ...(interpretationLocation ? { professionalComponentContext: {
             ...professional,
+            // This calculator collects the full encounter; preserve an explicit host restriction.
+            completeSameDayImagingServices: professional.completeSameDayImagingServices !== false,
             interpretationLocation: interpretationLocation as "same_as_patient_service" | "different_from_patient_service",
             ...(imagingSessionReference ? { imagingSessionReference } : {}),
           } } : {}),
@@ -115,13 +112,13 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
               <label>Interpretation location<select value={interpretationLocation} onChange={e => update(index, {}, { interpretationLocation: e.target.value })}><option value="">Not specified</option><option value="same_as_patient_service">Same physical location as patient service</option><option value="different_from_patient_service">Different physical location</option></select></label>
               <label>Imaging session reference<input maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._:\-]{0,63}" placeholder="Optional, e.g. session-1" value={imagingSessionReference} onChange={e => update(index, {}, { imagingSessionReference: e.target.value })} /><small>Use the same reference only for services in the same actual imaging session. Do not include patient identifiers.</small></label>
             </div>
-            <p>{line.professionalComponentContext?.completeSameDayImagingServices === true ? "Your application supplied the complete imaging encounter for this patient, provider group and service date." : "Imaging session pricing needs a complete encounter from your application, including imaging billed elsewhere for this patient, provider group and date. An incomplete or unknown encounter needs review."}</p>
+            <p>{line.professionalComponentContext?.completeSameDayImagingServices === false ? "Your application marked this imaging encounter as incomplete. Its estimate needs review." : "Include all imaging for this patient, provider or group, and service date, including services billed elsewhere. Enter the actual session reference for each imaging service."}</p>
           </div>}
           {line.dmeposContext && <p>Equipment residence ZIP: {line.dmeposContext.residenceZip}. Rental and prior-payment context supplied by your application.</p>}
         </details>
-        {rows.length > 1 && <button type="button" className="mbfc-remove" onClick={() => change(rows.filter((_, i) => i !== index), true)}>Remove service {index + 1}</button>}
+        {rows.length > 1 && <button type="button" className="mbfc-remove" onClick={() => change(rows.filter((_, i) => i !== index))}>Remove service {index + 1}</button>}
       </fieldset>)}
-      <div className="mbfc-actions"><button type="button" disabled={rows.length >= 100} onClick={() => { let id: string; do { id = `line-${++counter.current}`; } while (rows.some((r) => r.line.id === id)); change([...rows, draft(newLine(id))], true); }}>Add service</button><button className="mbfc-primary" type="submit" disabled={busy}>{busy ? "Calculating…" : "Calculate fees"}</button></div>
+      <div className="mbfc-actions"><button type="button" disabled={rows.length >= 100} onClick={() => { let id: string; do { id = `line-${++counter.current}`; } while (rows.some((r) => r.line.id === id)); change([...rows, draft(newLine(id))]); }}>Add service</button><button className="mbfc-primary" type="submit" disabled={busy}>{busy ? "Calculating…" : "Calculate fees"}</button></div>
       {error && <p className="mbfc-error" role="alert">{error}</p>}
     </form>
     {result && <section className="mbfc-results" aria-label="Calculation results" aria-live="polite">

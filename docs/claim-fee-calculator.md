@@ -35,7 +35,7 @@ The result shows each line's status, fee calculation and available RVU/GPCI comp
 
 For eligible imaging services billed with modifier `26`, the calculator can send actual imaging-session references and show the server's ranking and professional-component reduction. [California section 9789.17.1](https://www.dir.ca.gov/t8/9789_17_1.html) groups imaging by actual session, patient, service date and physician or physician group. Sharing a date does not establish a shared session.
 
-Supply documented encounter facts through `initialLines`:
+Enter the services and their actual session and interpretation location in the calculator, or supply those facts through `initialLines`:
 
 ```tsx
 const lines = ['72148', '72141'].map((code, index) => ({
@@ -53,9 +53,11 @@ const lines = ['72148', '72141'].map((code, index) => ({
 }));
 ```
 
-Set `completeSameDayImagingServices: true` only when your application has established that the encounter includes all relevant imaging for this patient, physician or group, and date, including services billed elsewhere. Omit it when unknown; `false` indicates incomplete information. The calculator preserves this fact and never infers it from the number of entered lines. All services must belong to the same physician or group; group membership means the same group NPI.
+The calculator is a full-encounter workflow: include all relevant imaging for this patient, physician or group, and date, including services billed elsewhere. All services must belong to the same physician or group; group membership means the same group NPI. The calculator sends `completeSameDayImagingServices: true` for entered professional-component context unless the host explicitly supplied `false`. An explicit `false` remains incomplete and subject to review after edits.
 
-The session reference is an opaque label of 1–64 letters, numbers, periods, underscores, colons or hyphens, starting with a letter or number. Do not put patient identifiers in it. Users can edit the session reference and interpretation location. All session edits clear the complete displayed quote and discard pending responses. Adding, removing, or changing a service's code, date, units or modifiers also clears host-supplied imaging completeness for every line. After obtaining a refreshed authoritative encounter, remount the calculator with a new React `key` and updated `initialLines`.
+Direct `quoteClaimFees` and API callers must still supply `completeSameDayImagingServices: true` only when the complete encounter is known, alongside `completeDateOfServiceContext: true`. Omitting either fact or supplying `false` does not establish completeness for the server.
+
+The session reference is an opaque label of 1–64 letters, numbers, periods, underscores, colons or hyphens, starting with a letter or number. Do not put patient identifiers in it. The calculator never derives a session or interpretation location from the service date. Users can edit these facts and add, remove, or change services, then recalculate in the same form. Every edit clears the entire displayed quote and discards pending responses so that the server reassesses all current lines together.
 
 The server currently supports a narrow 2026-and-later professional-component pathway: distinct eligible procedure codes, modifier `26`, one unit, physician services, and interpretation at the same physical location as the patient service. Its date-specific source files and indicators determine eligibility. Missing encounter facts, repeated procedures, mixed components, or unsupported adjustments remain review outcomes. The widget displays the server's calculation, including the highest service at 100% and subsequent eligible services in that actual session at 95%; it does not calculate or rank fees locally.
 
