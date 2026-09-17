@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaLifecycleControls, type RfaLifecycleControlsProps } from "../packages/react/src/rfa-lifecycle-controls";
 import type { RfaRecord } from "../packages/browser/src/index";
+vi.mock("../packages/react/src/rfa-delivery-panel", () => ({ RfaPdfReview: ({ title }: { title: string }) => createElement("div", { "data-testid": "pdf-preview" }, title) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const record: RfaRecord = { patientId: "patient_synthetic", renderingProviderId: "provider_synthetic", claimsAdminId: null, employeeName: "Synthetic patient", providerName: "Synthetic physician", claimNumber: "SYNTHETIC", reviewType: "prospective", expedited: false, createdAt: null, updatedAt: null, signedAt: null, submittedAt: null, incompleteReason: null, deferredReason: null, closedReason: null, readiness: { ready: true, missing: [] }, transmissions: [], events: [], id: "rfa_synthetic", claimId: "claim_synthetic", contentRevision: 1, status: "under_review", receivedAt: "2026-09-15T00:00:00Z", decisionDueAt: null, decisionDeadlineBasis: null, documents: [{ id: "ur_one", documentType: "ur_response", filename: "Synthetic response.pdf", contentUrl: "", contentRevision: 1, createdAt: null }, { id: "imr_one", documentType: "imr_form", filename: "Synthetic IMR.pdf", contentUrl: "", contentRevision: 1, createdAt: null }], informationRequests: [], items: [{ id: "item_one", procedureCode: "97110", serviceDescription: "Synthetic therapy", outcome: "pending", diagnosisCode: "M54.5", quantity: 1, units: 1, authorizationNumber: null, decisionReason: null }, { id: "item_two", procedureCode: "99213", serviceDescription: "Synthetic visit", outcome: "pending", diagnosisCode: "M54.5", quantity: 1, units: 1, authorizationNumber: null, decisionReason: null }] };
 const getSession = async () => ({ token: "synthetic_token" });
@@ -102,5 +103,28 @@ it("updates a follow-up with the next date and reloads the full RFA", async () =
     const request = fetcher.mock.calls.find(call => call[1]?.method === "PATCH");
     expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ outcome: "message_left", note: "Synthetic follow-up contact", snoozedUntil: "2026-09-18T10:00:00.000Z" });
     expect(onUpdated).toHaveBeenCalledWith(record);
+  } finally { await view.close(); }
+});
+
+it("requires a saved decision and explicit confirmation before completing Post UR", async () => {
+  const task = { id: "task_ur", rfaId: record.id, claimId: record.claimId, kind: "post_ur_decision", status: "open", dueAt: "2026-09-16T00:00:00Z", responseDocumentId: "ur_one", responseFilename: "Synthetic response.pdf", assigneeReference: null, snoozedUntil: null, lastOutcome: null, lastNote: null, createdAt: "", updatedAt: "", resolvedAt: null };
+  const fetcher = vi.fn<typeof fetch>(async (url, init) => String(url).includes("rfa-follow-ups") ? Response.json({ data: init?.method === "PATCH" ? task : [task], nextCursor: null }) : String(url).includes("/documents/") ? new Response("%PDF-synthetic", { headers: { "Content-Type": "application/pdf" } }) : Response.json({ data: record }));
+  const view = await setup({ fetch: fetcher, permissions: ["act"], selectedResponseDocumentId: "ur_one" });
+  try {
+    expect(view.container.querySelector('[data-testid="pdf-preview"]')?.textContent).toContain("Utilization review response");
+    const savedChoice = () => view.container.querySelector<HTMLOptionElement>('option[value="decisions_recorded"]')!;
+    expect(savedChoice().disabled).toBe(true);
+    await view.rerender({ rfa: { ...record, items: record.items.map(item => item.id === "item_one" ? { ...item, outcome: "approved", currentResponseDocumentId: "ur_one" } : item) } });
+    expect(savedChoice().disabled).toBe(false);
+    const choice = savedChoice().parentElement as HTMLSelectElement;
+    await act(async () => { choice.value = "decisions_recorded"; choice.dispatchEvent(new Event("change", { bubbles: true })); });
+    const form = choice.closest("form")!;
+    await act(async () => { set(form, "note", "Recorded the one decision in the synthetic response"); form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    expect(fetcher.mock.calls.some(call => call[1]?.method === "PATCH")).toBe(false);
+    await act(async () => form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    const patch = fetcher.mock.calls.find(call => call[1]?.method === "PATCH");
+    expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ note: "Recorded the one decision in the synthetic response", responseReview: { disposition: "decisions_recorded", allDecisionsRecordedConfirmed: true } });
+    expect(record.items[1]?.outcome).toBe("pending");
   } finally { await view.close(); }
 });

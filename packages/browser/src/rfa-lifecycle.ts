@@ -37,8 +37,17 @@ export type RfaFollowUpUpdate = {
   note?: string;
   responseReview?: { disposition: "no_new_decision"; noNewDecisionConfirmed: true } | { disposition: "decisions_recorded"; allDecisionsRecordedConfirmed: true };
 };
+export type RfaInboundFax = {
+  id: string; receivedAt: string; fromFax: string | null; fromName: string | null; pages: number | null;
+  ocrStatus: string | null; matchedRfaId: string | null; documentId: string | null; previewUrl: string;
+  suggestedRfaIds: string[];
+};
+export type RfaInboundFaxMatch = { faxId: string; rfaId: string; documentId: string; alreadyAttached: boolean };
 export type RfaFollowUpList = { data: RfaFollowUp[]; nextCursor: string | null };
 export type RfaLifecycleClient = {
+  listInboundFaxes(query?: { includeMatched?: boolean; cursor?: string; limit?: number }): Promise<{ data: RfaInboundFax[]; hasMore: boolean; nextCursor: string | null }>;
+  getInboundFaxContent(faxId: string): Promise<Blob>;
+  matchInboundFax(faxId: string, rfaId: string, idempotencyKey: string): Promise<RfaInboundFaxMatch>;
   listScheduling(id: string): Promise<RfaScheduling[]>;
   updateScheduling(id: string, itemId: string, input: RfaSchedulingInput, idempotencyKey: string): Promise<RfaScheduling[]>;
   correctDecision(id: string, input: RfaDecisionCorrectionInput, idempotencyKey: string): Promise<RfaRecord>;
@@ -48,7 +57,7 @@ export type RfaLifecycleClient = {
   recordInformationRequest(id: string, input: RfaInformationRequestInput, idempotencyKey: string): Promise<RfaRecord>;
   recordInformationResponse(id: string, requestId: string, input: RfaInformationResponseInput, idempotencyKey: string): Promise<RfaRecord>;
   recordDecisions(id: string, input: RfaDecisionsInput, idempotencyKey: string): Promise<RfaRecord>;
-  listFollowUps(query?: { claimId?: string; includeResolved?: boolean; limit?: number; cursor?: string }): Promise<RfaFollowUpList>;
+  listFollowUps(query?: { patientId?: string; renderingProviderId?: string; claimId?: string; includeResolved?: boolean; limit?: number; cursor?: string }): Promise<RfaFollowUpList>;
   updateFollowUp(id: string, input: RfaFollowUpUpdate, idempotencyKey: string): Promise<RfaFollowUp>;
   clearSession(): void;
 };
@@ -79,7 +88,7 @@ export function createRfaLifecycleClient({ sessionEndpoint = "/api/mindbill/sess
     })().finally(() => { pending = null; });
     return pending;
   };
-  const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+  const responseFor = async (path: string, init: RequestInit = {}): Promise<Response> => {
     const perform = (active: BillLifecycleSession) => {
       const headers = new Headers(init.headers); headers.set("authorization", `Bearer ${active.token}`);
       if (init.body) headers.set("content-type", "application/json");
@@ -88,8 +97,9 @@ export function createRfaLifecycleClient({ sessionEndpoint = "/api/mindbill/sess
     let response = await perform(await mint());
     if (response.status === 401) response = await perform(await mint(true));
     if (!response.ok) throw await failure(response);
-    return response.json() as Promise<T>;
+    return response;
   };
+  const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => (await responseFor(path, init)).json() as Promise<T>;
   const mutate = async <T extends { id: string }>(path: string, input: unknown, key: string, method = "POST"): Promise<T> => {
     if (!key.trim()) throw new Error("An idempotency key is required.");
     const result = await request<{ data: T }>(path, { method, headers: { "idempotency-key": key }, body: JSON.stringify(input) });
@@ -103,6 +113,21 @@ export function createRfaLifecycleClient({ sessionEndpoint = "/api/mindbill/sess
     return result.data;
   };
   return {
+    listInboundFaxes: async (query = {}) => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
+      const result = await request<{ data: RfaInboundFax[]; hasMore: boolean; nextCursor: string | null }>(`rfa-inbound-faxes${params.size ? `?${params}` : ""}`);
+      if (!Array.isArray(result.data) || typeof result.hasMore !== "boolean" || (result.nextCursor !== null && typeof result.nextCursor !== "string") || (result.hasMore && !result.nextCursor)) throw new Error("The inbound fax response was invalid.");
+      return result;
+    },
+    getInboundFaxContent: async faxId => (await responseFor(`rfa-inbound-faxes/${encodeURIComponent(faxId)}/content`)).blob(),
+    matchInboundFax: async (faxId, rfaId, key) => {
+      if (!key.trim()) throw new Error("An idempotency key is required.");
+      if (!rfaId.trim()) throw new Error("Choose an authorization request.");
+      const result = await request<{ data: RfaInboundFaxMatch }>(`rfa-inbound-faxes/${encodeURIComponent(faxId)}/match`, { method: "POST", headers: { "idempotency-key": key }, body: JSON.stringify({ rfaId }) });
+      if (!result.data?.documentId || result.data.faxId !== faxId || result.data.rfaId !== rfaId) throw new Error("The fax match response was invalid.");
+      return result.data;
+    },
     listScheduling: id => readArray<RfaScheduling>(path(id, "scheduling")),
     updateScheduling: (id, itemId, input, key) => {
       if (!key.trim()) return Promise.reject(new Error("An idempotency key is required."));

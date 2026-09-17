@@ -109,3 +109,22 @@ it("preloads injury diagnoses, copies per-service choices, and clears treatment 
   expect(h.container.textContent).not.toContain("TEST-001");
  }finally{await h.close();}
 });
+it.each([false,true])("creates once and preserves revision-safe uploads (partial failure: %s)", async (failSecond) => {
+ const h=harness(); const onCreated=vi.fn();
+ let saved={id:"rfa_synthetic",...context.claims[0]!,renderingProviderId:"provider_synthetic",providerName:"Synthetic Physician",status:"draft",reviewType:"prospective",items:[],documents:[] as object[],transmissions:[],events:[],informationRequests:[],readiness:{ready:false,missing:[]},contentRevision:1};
+ const revisions:string[]=[];
+ const fetcher=vi.fn<typeof fetch>(async(input,init)=>{
+  if(String(input).endsWith("/documents") && init?.method==="POST") { const body=init.body as FormData; revisions.push(String(body.get("contentRevision"))); if(failSecond && revisions.length===2) return Response.json({detail:"Synthetic upload failure"},{status:503}); saved={...saved,contentRevision:saved.contentRevision+1,documents:[...saved.documents,{id:`doc_${saved.contentRevision}`,documentType:"clinical_report",filename:"Synthetic.pdf"}]}; return Response.json({data:saved}); }
+  return init?.method==="POST" || String(input).endsWith("rfa_synthetic") ? Response.json({data:saved}) : Response.json(list);
+ });
+ try{
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],onCreated,initialDraft:{...context.claims[0]!,renderingProviderId:"provider_synthetic",providerName:"Synthetic Physician",items:[{diagnosisCode:"M54.5",serviceDescription:"Synthetic therapy",quantity:1}]}})));
+  await act(async()=>h.button("New authorization request").click());
+  const input=h.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  await act(async()=>{Object.defineProperty(input,"files",{value:[new File(["%PDF-synthetic one"],"report-one.pdf",{type:"application/pdf"}),new File(["%PDF-synthetic two"],"report-two.pdf",{type:"application/pdf"})]});input.dispatchEvent(new Event("change",{bubbles:true}));});
+  await act(async()=>h.container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+  expect(revisions).toEqual(["1","2"]); if(failSecond) expect(h.container.textContent).toContain("1 of 2 supporting documents attached"); expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({contentRevision:failSecond?2:3}));
+  expect(fetcher.mock.calls.filter(([url,init])=>init?.method==="POST" && !String(url).endsWith("/documents"))).toHaveLength(1);
+  expect(fetcher.mock.calls.some(([url])=>/\/(sign|fax|submit)$/.test(String(url)))).toBe(false);
+ }finally{await h.close();}
+});
