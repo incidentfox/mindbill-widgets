@@ -304,6 +304,7 @@ export function billSubmissionQuoteContext(input: BillFeeQuoteInput): BillFeeCon
     ...(input.therapyContext ? { therapyContext: input.therapyContext } : {}),
     ...(input.reportQualification ? { reportQualification: input.reportQualification } : {}),
     ...(input.professionalComponentContext ? { professionalComponentContext: input.professionalComponentContext } : {}),
+    ...(input.technicalComponentContext ? { technicalComponentContext: input.technicalComponentContext } : {}),
     ...(input.padbContext ? { padbContext: input.padbContext } : {}),
     ...(input.anesthesiaContext ? { anesthesiaContext: input.anesthesiaContext } : {}),
     ...(input.dmeposContext ? { dmeposContext: input.dmeposContext } : {}),

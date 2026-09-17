@@ -4,7 +4,11 @@ import type { BillReferenceClient, CaClaimFeeQuoteInput, CaClaimFeeQuoteResult, 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 
 type Line = CaClaimFeeQuoteInput["lines"][number];
-type Draft = { line: Line; modifiers: string; charge: string; interpretationLocation: string; imagingSessionReference: string };
+type Technical = NonNullable<Line["technicalComponentContext"]>;
+type Draft = { line: Line; modifiers: string; charge: string; interpretationLocation: string; imagingSessionReference: string;
+  technicalPerformance: "" | "true" | "false"; technicalHospitalStatus: "" | Technical["patientHospitalStatus"];
+  technicalSupervision: "" | Technical["supervisionLevel"]; technicalSessionReference: string;
+};
 export type FeeScheduleCalculatorProps = {
   client: Pick<BillReferenceClient, "quoteClaimFees">;
   initialLines?: CaClaimFeeQuoteInput["lines"];
@@ -20,7 +24,11 @@ function SourceLink({ url, children }: { url: string; children: React.ReactNode 
 function Sources({ sources }: { sources: CaFeeCitation[] }) { return <ul className="mbfc-sources">{sources.map((s, i) => <li key={`${s.id}-${i}`}><SourceLink url={s.url}>{s.id}</SourceLink>{(s.effectiveFrom || s.effectiveThrough) && <small>Effective {s.effectiveFrom ?? "—"} through {s.effectiveThrough ?? "open-ended"}</small>}</li>)}</ul>; }
 const physician = (): NonNullable<Line["physicianContext"]> => ({ providerKind: "physician", placeOfService: "11", standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false });
 const newLine = (id: string): Line => ({ id, code: "", dateOfService: "", units: 1, physicianContext: physician() });
-const draft = (line: Line): Draft => ({ line: { ...line, ...(!line.physicianContext && !line.therapyContext && !line.anesthesiaContext && !line.padbContext ? { physicianContext: physician() } : {}) }, modifiers: line.modifiers?.join(", ") ?? "", interpretationLocation: line.professionalComponentContext?.interpretationLocation ?? "", imagingSessionReference: line.professionalComponentContext?.imagingSessionReference ?? "", charge: line.chargeCents === undefined ? "" : (line.chargeCents / 100).toFixed(2) });
+const draft = (line: Line): Draft => ({
+  technicalPerformance: line.technicalComponentContext ? String(line.technicalComponentContext.performedByBillingProviderGroup) as "true" | "false" : "",
+  technicalHospitalStatus: line.technicalComponentContext?.patientHospitalStatus ?? "",
+  technicalSupervision: line.technicalComponentContext?.supervisionLevel ?? "",
+  technicalSessionReference: line.technicalComponentContext?.imagingSessionReference ?? "", line: { ...line, ...(!line.physicianContext && !line.therapyContext && !line.anesthesiaContext && !line.padbContext ? { physicianContext: physician() } : {}) }, modifiers: line.modifiers?.join(", ") ?? "", interpretationLocation: line.professionalComponentContext?.interpretationLocation ?? "", imagingSessionReference: line.professionalComponentContext?.imagingSessionReference ?? "", charge: line.chargeCents === undefined ? "" : (line.chargeCents / 100).toFixed(2) });
 
 /** Uses the server's effective-date calculation and claim edits; never calculates fees in the browser. */
 export function FeeScheduleCalculator({ client, initialLines, onQuote, appearance, className, style }: FeeScheduleCalculatorProps) {
@@ -46,19 +54,30 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
   async function calculate() {
     const requestGeneration = ++generation.current; setBusy(true); setError(""); setResult(null);
     try {
-      const lines = rows.map(({ line, modifiers, charge, interpretationLocation, imagingSessionReference }) => {
+      const lines = rows.map(({ line, modifiers, charge, interpretationLocation, imagingSessionReference, technicalPerformance, technicalHospitalStatus, technicalSupervision, technicalSessionReference }) => {
         const values = modifiers.trim() ? modifiers.trim().toUpperCase().split(/[\s,]+/) : [];
         if (values.length > 4 || new Set(values).size !== values.length || values.some((v) => !/^[A-Z0-9]{2}$/.test(v))) throw new Error("Enter up to four distinct two-character modifiers per line.");
         if (charge && !/^\d+(\.\d{1,2})?$/.test(charge)) throw new Error("Enter charges in dollars with no more than two decimal places.");
         if (imagingSessionReference && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(imagingSessionReference)) throw new Error("Use a session reference of 1–64 letters, numbers, periods, underscores, colons or hyphens, beginning with a letter or number.");
         if (imagingSessionReference && !interpretationLocation) throw new Error("Select the interpretation location for each imaging session.");
-        const base = { ...line }; delete base.professionalComponentContext; delete base.chargeCents; delete base.serviceZip; delete base.serviceCounty;
+        const hasTechnicalDraft = Boolean(technicalPerformance || technicalHospitalStatus || technicalSupervision || technicalSessionReference);
+        if (hasTechnicalDraft && (!technicalPerformance || !technicalHospitalStatus || !technicalSupervision || !technicalSessionReference)) throw new Error("Complete the technical imaging details: who furnished the service, hospital patient status, supervision and actual session reference.");
+        if (technicalSessionReference && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(technicalSessionReference)) throw new Error("Use a technical imaging session reference of 1–64 letters, numbers, periods, underscores, colons or hyphens, beginning with a letter or number.");
+        const technical: Technical | undefined = technicalPerformance && technicalHospitalStatus && technicalSupervision && technicalSessionReference ? {
+          performedByBillingProviderGroup: technicalPerformance === "true",
+          patientHospitalStatus: technicalHospitalStatus,
+          supervisionLevel: technicalSupervision,
+          imagingSessionReference: technicalSessionReference,
+          completeSameDayImagingServices: line.technicalComponentContext?.completeSameDayImagingServices !== false,
+        } : undefined;
+        const base = { ...line }; delete base.technicalComponentContext; delete base.professionalComponentContext; delete base.chargeCents; delete base.serviceZip; delete base.serviceCounty;
         const professional = { ...line.professionalComponentContext }; delete professional.imagingSessionReference;
         const amount = charge ? Math.round(Number(charge) * 100) : undefined;
         if (amount !== undefined && !Number.isSafeInteger(amount)) throw new Error("Charge is outside the supported range.");
         return { ...base, ...(line.serviceZip?.trim() ? { serviceZip: line.serviceZip.trim() } : {}), ...(line.serviceCounty?.trim() ? { serviceCounty: line.serviceCounty.trim() } : {}), code: line.code.toUpperCase().trim(), modifiers: values,
           ...(amount === undefined ? {} : { chargeCents: amount }),
-          catalogContext: { ...line.catalogContext, codingRequirementsSatisfied: true },
+          catalogContext: { ...line.catalogContext, codingRequirementsSatisfied: line.catalogContext?.codingRequirementsSatisfied !== false },
+          ...(technical ? { technicalComponentContext: technical } : {}),
           ...(interpretationLocation ? { professionalComponentContext: {
             ...professional,
             // This calculator collects the full encounter; preserve an explicit host restriction.
@@ -80,7 +99,7 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
     <style>{styles}</style>
     <header><p className="mbfc-eyebrow">CALIFORNIA · FEE SCHEDULES</p><h2>Calculate treatment fees</h2><p>Enter all services for one patient and provider or group. Each service date selects the applicable schedule and amendments.</p></header>
     <form onSubmit={(event) => { event.preventDefault(); void calculate(); }}>
-      {rows.map(({ line, modifiers, charge, interpretationLocation, imagingSessionReference }, index) => <fieldset key={line.id}><legend>Service {index + 1}</legend>
+      {rows.map(({ line, modifiers, charge, interpretationLocation, imagingSessionReference, technicalPerformance, technicalHospitalStatus, technicalSupervision, technicalSessionReference }, index) => <fieldset key={line.id}><legend>Service {index + 1}</legend>
         <div className="mbfc-grid">
           <label>Procedure code<input required pattern="[A-Za-z0-9]{5}" maxLength={5} value={line.code} onChange={(e) => update(index, { code: e.target.value.toUpperCase() })} /></label>
           <label>Date of service<input required type="date" value={line.dateOfService} onChange={(e) => update(index, { dateOfService: e.target.value })} /></label>
@@ -113,6 +132,17 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
               <label>Imaging session reference<input maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._:\-]{0,63}" placeholder="Optional, e.g. session-1" value={imagingSessionReference} onChange={e => update(index, {}, { imagingSessionReference: e.target.value })} /><small>Use the same reference only for services in the same actual imaging session. Do not include patient identifiers.</small></label>
             </div>
             <p>{line.professionalComponentContext?.completeSameDayImagingServices === false ? "Your application marked this imaging encounter as incomplete. Its estimate needs review." : "Include all imaging for this patient, provider or group, and service date, including services billed elsewhere. Enter the actual session reference for each imaging service."}</p>
+          </div>}
+          {(modifiers.toUpperCase().split(/[\s,]+/).includes("TC") || line.technicalComponentContext || technicalPerformance || technicalHospitalStatus || technicalSupervision || technicalSessionReference) && <div className="mbfc-imaging">
+            <h3>Technical imaging service</h3>
+            <div className="mbfc-grid">
+              <label>Furnished by billing provider or group<select value={technicalPerformance} onChange={e => update(index, {}, { technicalPerformance: e.target.value as Draft["technicalPerformance"] })}><option value="">Not specified</option><option value="true">Yes — furnished by this provider or group</option><option value="false">No — purchased or outsourced</option></select></label>
+              <label>Hospital patient status<select value={technicalHospitalStatus} onChange={e => update(index, {}, { technicalHospitalStatus: e.target.value as Draft["technicalHospitalStatus"] })}><option value="">Not specified</option><option value="not_hospital_patient">Not a hospital patient</option><option value="hospital_inpatient_or_outpatient">Hospital inpatient or outpatient</option></select></label>
+              <label>Technical service supervision<select value={technicalSupervision} onChange={e => update(index, {}, { technicalSupervision: e.target.value as Draft["technicalSupervision"] })}><option value="">Not specified</option><option value="general">General</option><option value="direct">Direct</option><option value="personal">Personal</option></select></label>
+              <label>Technical imaging session reference<input maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._:\-]{0,63}" placeholder="e.g. session-1" value={technicalSessionReference} onChange={e => update(index, {}, { technicalSessionReference: e.target.value })} /><small>Use the same reference only for services in the same actual session. Do not include patient identifiers.</small></label>
+            </div>
+            <p>{line.technicalComponentContext?.completeSameDayImagingServices === false ? "Your application marked this imaging encounter as incomplete. Its estimate needs review." : "Include all imaging for this patient, provider or group, and service date, including services billed elsewhere."}</p>
+            <p>The current supported technical calculation covers 70551, 72141 and 72148, each with modifier TC and one unit, for physician office services under the reviewed July 2026 schedule. Other circumstances need review.</p>
           </div>}
           {line.dmeposContext && <p>Equipment residence ZIP: {line.dmeposContext.residenceZip}. Rental and prior-payment context supplied by your application.</p>}
         </details>
