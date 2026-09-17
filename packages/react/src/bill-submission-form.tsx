@@ -1,6 +1,6 @@
 "use client";
 
-import { TherapyLineFields, therapyDetailsFromSaved, therapyCalculationContext, missingTherapyDetails, isTherapyEditorCode, type TherapyDetails } from "./therapy-line-fields";
+import { TherapyLineFields, therapyDetailsFromSaved, therapyCalculationContext, missingTherapyDetails, isTherapyEditorCode, isInitialPtEvaluationCode, type TherapyDetails } from "./therapy-line-fields";
 
 import { feeReviewMessage } from "./fee-review-message";
 
@@ -230,14 +230,14 @@ export function billSubmissionEstimateContext(code: string, placeOfService: stri
       },
     } : {}),
   };
-  if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details);
+  if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details, {}, code);
   return {};
 }
 /** Rebuild edited fields so clearing an input cannot retain a previously priced context. */
 export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}, modifiers: readonly string[] = []): BillFeeContext {
   if (details.basis === "adjustment") return {};
   if (isAnesthesiaCandidate(code)) return anesthesiaCalculationContext(placeOfService, details);
-  if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details, saved);
+  if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details, saved, code);
   const equipment = equipmentFields(code, modifiers);
   if (equipment.residence) return equipmentCalculationContext(code, modifiers, details);
   if (drugFieldsEnabled(code, details)) {
@@ -255,12 +255,6 @@ export function billSubmissionCalculationContext(code: string, placeOfService: s
   if (estimated.physicianContext) context.physicianContext = {
     ...estimated.physicianContext, ...saved.physicianContext,
     providerKind: estimated.physicianContext.providerKind, placeOfService,
-  };
-  if (estimated.therapyContext) context.therapyContext = {
-    ...estimated.therapyContext, ...saved.therapyContext,
-    providerKind: estimated.therapyContext.providerKind, placeOfService,
-    directOneOnOneMinutes: estimated.therapyContext.directOneOnOneMinutes,
-    totalVisitMinutes: estimated.therapyContext.totalVisitMinutes,
   };
   if (estimated.prolongedServiceContext) context.prolongedServiceContext = estimated.prolongedServiceContext;
   return context;
@@ -1261,7 +1255,7 @@ export function BillSubmissionForm({
     const equipment = supportedFeeJurisdiction ? equipmentFields(line.code, line.modifiers) : { residence: false, rental: false, priorPayments: false };
     return <div className="mbsf-fee-details">
       <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Fee schedule estimate</option><option value="adjustment">Requires adjustment</option></select></label>
-      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : anesthesia ? "The fee uses documented anesthesia minutes and the service location. Contracted anesthesia rates require review of their rate basis." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "The therapy estimate uses the service record and pricing basis below. Enter actual minutes and include all same-day services in this bill. Unsupported arrangements remain available for fee review." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
+      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : anesthesia ? "The fee uses documented anesthesia minutes and the service location. Contracted anesthesia rates require review of their rate basis." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "The therapy estimate uses the service record and pricing basis below. Include all same-day services in this bill; timed treatments also require actual minutes. Unsupported arrangements remain available for fee review." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
       {prolonged ? <div className="mbsf-grid" aria-label={`Prolonged-service details for line ${index + 1}`}>
         <label className="mbsf-field"><span>Total prolonged minutes on this service date</span><input className="mbsf-input" aria-label={`Total prolonged minutes for line ${index + 1}`} type="number" min="30" max="1440" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label>
         <label className="mbsf-field"><span>Related evaluation date</span><input className="mbsf-input" aria-label={`Related evaluation date for line ${index + 1}`} type="date" value={details.relatedEvaluationDate ?? ""} onChange={(event) => update({ relatedEvaluationDate: event.target.value })} /></label>
@@ -1283,10 +1277,10 @@ export function BillSubmissionForm({
         <label className="mbsf-field"><span>Interpretation circumstances</span><select className="mbsf-input" aria-label={`Interpretation circumstances for line ${index + 1}`} value={details.professionalComponentBasis ?? ""} onChange={(event) => update({ professionalComponentBasis: event.target.value as FeeDetails["professionalComponentBasis"] })}><option value="">Select documented circumstances…</option><option value="standard">Standard standalone physician interpretation</option><option value="review">Other circumstances — review needed</option></select></label>
         <p className="mbsf-help mbsf-span">Standard means one physician interpretation on this date, documented coding requirements and signed report, with no other same-day services, incident-to service, global-period adjustment or HPSA bonus. Include the report with the bill. Different interpretation addresses require fee review.</p>
       </div> : null}
-      {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: event.target.value ? Number(event.target.value) : undefined })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: event.target.value ? Number(event.target.value) : undefined })} /></label></div> : null}
-      {therapy ? <TherapyLineFields index={index} details={details} update={update} /> : null}
+      {therapy && !isInitialPtEvaluationCode(line.code) ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: event.target.value ? Number(event.target.value) : undefined })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: event.target.value ? Number(event.target.value) : undefined })} /></label></div> : null}
+      {therapy ? <TherapyLineFields code={line.code} index={index} details={details} update={update} /> : null}
       </details> : null}
-      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : therapy && missingTherapyDetails(details).length ? `Enter therapy details: ${missingTherapyDetails(details).join(", ")}.` : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Fee estimate for this service date and the details above." : feeReviewMessage(quote?.reason)}</p>
+      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : therapy && missingTherapyDetails(details, line.code).length ? `Enter therapy details: ${missingTherapyDetails(details, line.code).join(", ")}.` : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Fee estimate for this service date and the details above." : feeReviewMessage(quote?.reason)}</p>
       {quote?.status === "priced" && <AnesthesiaCalculationDetails quote={quote} />}
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
     </div>;

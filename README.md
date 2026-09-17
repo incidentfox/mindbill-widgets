@@ -434,7 +434,7 @@ The default modifier dropdown includes professional/technical components (26/TC)
 
 Physician-administered injectable drug details are available inside the existing treatment service lines. The form keeps procedure billing units separate from NDC quantity and requires documented unit definitions and separately payable office-injection circumstances before requesting a fee. See [California injectable drugs](docs/california-injectable-drugs.md).
 
-California therapy service lines collect the pricing basis, actual minutes, provider and service circumstances before requesting an estimate. The verified single-line 97110 path preserves supplied context and sends other arrangements for review. See [California therapy details](docs/california-therapy.md).
+California therapy service lines collect the pricing basis, provider and service circumstances before requesting an estimate. Timed 97110 treatment also needs actual minutes. Untimed 97161–97163 initial evaluations instead require the actual prior-evaluation history for the care episode; the verified current path requires one unit as the sole same-day service. Supplied context is preserved and other arrangements remain under review. See [California therapy details](docs/california-therapy.md).
 
 California anesthesia service lines collect actual elapsed minutes separately from the service quantity. The form supports documented physician-alone cases (AA), monitored anesthesia care (QS), and structured physician medical direction records (QK). It preserves diagnosis selections and requires a new estimate when timing, records or circumstances change. See [California anesthesia](docs/california-anesthesia.md).
 

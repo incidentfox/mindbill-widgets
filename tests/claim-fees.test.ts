@@ -254,3 +254,37 @@ it("preserves host technical facts when projecting a quote into bill context", (
   const context = { ...technicalContext, performedByBillingProviderGroup: false, completeSameDayImagingServices: false };
   expect(billSubmissionQuoteContext({ code: "70551", dateOfService: "2026-07-15", technicalComponentContext: context })).toEqual({ technicalComponentContext: context });
 });
+
+
+it("collects initial PT history without timing requirements and clears stale facts", async () => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client, [{ id: "evaluation", code: "97161", dateOfService: "2026-09-17", units: 1, therapyContext: { priorInitialEvaluationInEpisode: false, directOneOnOneMinutes: 60, totalVisitMinutes: 60, completeSameDayServices: false, otherSameDayServices: true }, hasFeeAgreement: false }]);
+  try {
+    expect(ui.container.textContent).not.toContain("Direct one-on-one minutes");
+    expect(field(ui.container, "Prior initial evaluation in this care episode").value).toBe("false");
+    await ui.submit();
+    const sent = client.quoteClaimFees.mock.calls[0]![0].lines[0]!;
+    expect(sent.therapyContext).toMatchObject({ priorInitialEvaluationInEpisode: false, completeSameDayServices: false, otherSameDayServices: true });
+    expect(sent.therapyContext).not.toHaveProperty("directOneOnOneMinutes");
+    await edit(field(ui.container, "Prior initial evaluation in this care episode"), "");
+    expect(ui.container.querySelector(".mbfc-results")).toBeNull();
+    await ui.submit(); expect(client.quoteClaimFees.mock.calls[1]![0].lines[0]!.therapyContext).not.toHaveProperty("priorInitialEvaluationInEpisode");
+    await edit(field(ui.container, "Procedure code"), "97110");
+    expect(ui.container.textContent).toContain("Direct one-on-one minutes");
+  } finally { await ui.cleanup(); }
+});
+it("does not invent therapy facts when changing service type", async () => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client);
+  try {
+    await edit(field(ui.container, "Service type"), "therapy"); await ui.submit();
+    expect(client.quoteClaimFees.mock.calls[0]![0].lines[0]!.therapyContext).toEqual({ placeOfService: "11", completeSameDayServices: true, otherSameDayServices: false });
+    expect(field(ui.container, "Therapy pricing basis").value).toBe("");
+  } finally { await ui.cleanup(); }
+});
+it("ignores a pending evaluation quote when episode history changes", async () => {
+  let resolve!: (value: CaClaimFeeQuoteResult) => void;
+  const lines = [{ id: "evaluation", code: "97161", dateOfService: "2026-09-17", therapyContext: { priorInitialEvaluationInEpisode: false } }];
+  const ui = await mount({ quoteClaimFees: () => new Promise(r => { resolve = r; }) }, lines);
+  try { await ui.submit(); await edit(field(ui.container, "Prior initial evaluation in this care episode"), "true"); await act(async () => resolve(result({ lines, completeDateOfServiceContext: true }))); expect(ui.container.querySelector(".mbfc-results")).toBeNull(); } finally { await ui.cleanup(); }
+});
