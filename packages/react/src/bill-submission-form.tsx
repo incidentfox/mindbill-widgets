@@ -1,5 +1,7 @@
 "use client";
 
+import { AnesthesiaCalculationDetails } from "./anesthesia-calculation-details";
+
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -1279,6 +1281,7 @@ export function BillSubmissionForm({
       {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: Number(event.target.value) })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label></div> : null}
       </details> : null}
       <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Fee estimate for this service date and the details above." : quote?.reason ?? "Checking the fee schedule…"}</p>
+      {quote?.status === "priced" && <AnesthesiaCalculationDetails quote={quote} />}
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
     </div>;
 
