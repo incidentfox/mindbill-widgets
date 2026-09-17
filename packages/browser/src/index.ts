@@ -63,6 +63,14 @@ export type BillReviewLocation = {
   active?: boolean;
 };
 
+/** Verified, server-provided fee explanation. Display strings only; never recalculate fees from these values. */
+export type BillLineFeeBreakdown = {
+  method: string;
+  inputs: Array<{ label: string; value: string }>;
+  steps: Array<{ label: string; value: string }>;
+  notes: string[];
+};
+
 export type BillReviewLineItem = {
   id?: string;
   code: string;
@@ -70,6 +78,8 @@ export type BillReviewLineItem = {
   units: number;
   charge: number;
   feeSchedule?: number;
+  /** Omitted when no verified fee explanation is available for this saved line. */
+  pricing?: { breakdown?: BillLineFeeBreakdown };
   serviceDate?: string | null;
   serviceDateEnd?: string | null;
   diagnosisPointers?: number[];
@@ -479,6 +489,11 @@ export type BillAttemptSummary = {
   status?: string;
   complianceLabel?: string;
   complianceAt?: string;
+  /** Server-resolved payer outcome; no client-side deadline inference. */
+  outcomeLabel?: string;
+  outcomeAt?: string;
+  outcomeDateLabel?: string;
+  outcomeWorkingDays?: number;
   /** The latest attempt that receives lifecycle mutations. */
   isCurrent: boolean;
 };

@@ -49,9 +49,14 @@ export function billSubmissionsRibbonDeliveryLabel(summary: string): string {
 }
 
 function ribbonDate(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const date = new Date(`${iso}T00:00:00Z`);
+    if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === iso) return `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`;
+    return iso;
+  }
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }).format(parsed);
+  return new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric", timeZone: "America/Los_Angeles" }).format(parsed);
 }
 
 function attemptStatus(
@@ -60,8 +65,14 @@ function attemptStatus(
 ): Pick<BillSubmissionRibbonItem, "badge" | "badgeTone" | "meta"> {
   // Each attempt's server-resolved status includes events after its ACK.
   // This applies to historical attempts as well as the current bill.
+  if (attempt?.outcomeLabel) return {
+    badge: attempt.outcomeLabel + (Number.isInteger(attempt.outcomeWorkingDays) && attempt.outcomeWorkingDays! >= 0 ? ` in ${attempt.outcomeWorkingDays} working days` : ""),
+    badgeTone: /deni|reject/i.test(attempt.outcomeLabel) ? "danger" : /zero[ -]?payment|pending|unpaid|not paid/i.test(attempt.outcomeLabel) ? "neutral" : /payment|paid/i.test(attempt.outcomeLabel) ? "success" : "neutral",
+    ...(attempt.outcomeAt ? { meta: [{ label: attempt.outcomeDateLabel ?? "Effective date", value: ribbonDate(attempt.outcomeAt) }] } : {}),
+  };
   if (attempt?.status) return {
     badge: attempt.status.replaceAll("_", " "),
+    ...(attempt.ackAt ? { meta: [{ label: attempt.ackLabel ?? "Acknowledged", value: ribbonDate(attempt.ackAt) }] } : {}),
     badgeTone: attempt.status === "rejected" ? "danger" : /accepted|processed|paid/.test(attempt.status) ? "success" : "neutral",
   };
   const latestAck = [...entries].reverse().find((entry) => entry.kind === "ack");
@@ -159,7 +170,7 @@ export function billSubmissionsRibbonFromHistory(
 const css = `
 .mbsr{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;color:var(--mb-text);font-family:var(--mb-font);font-size:13px}
 .mbsr *{box-sizing:border-box}
-.mbsr-chip{flex:0 0 240px;display:grid;gap:7px;width:240px;min-width:min(240px,85vw);max-width:280px;padding:11px 13px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:inherit;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.mbsr-chip{flex:0 0 auto;display:grid;gap:7px;width:max-content;min-width:min(180px,85vw);max-width:min(380px,85vw);padding:11px 13px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:inherit;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
 .mbsr-chip:hover{border-color:var(--mb-accent)}
 .mbsr-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));box-shadow:0 0 0 1px var(--mb-accent) inset}
 .mbsr-top{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
@@ -168,7 +179,7 @@ const css = `
 .mbsr-badge[data-tone=success]{border-color:color-mix(in srgb,#23876f 52%,var(--mb-border));background:color-mix(in srgb,#23876f 11%,var(--mb-surface));color:#176452}
 .mbsr-badge[data-tone=warning]{border-color:color-mix(in srgb,var(--mb-warning) 55%,var(--mb-border));background:color-mix(in srgb,var(--mb-warning) 12%,var(--mb-surface))}
 .mbsr-badge[data-tone=danger]{border-color:color-mix(in srgb,var(--mb-danger) 45%,var(--mb-border));background:color-mix(in srgb,var(--mb-danger) 9%,var(--mb-surface));color:var(--mb-danger)}
-.mbsr-meta{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,auto);gap:2px 14px;justify-content:start}
+.mbsr-meta{display:grid;grid-auto-flow:column;grid-auto-columns:max-content;gap:8px 14px;justify-content:start}
 .mbsr-meta>span{display:grid;gap:1px;min-width:0}
 .mbsr-meta i{color:var(--mb-muted);font-size:10.5px;font-style:normal;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
 .mbsr-meta b{font-size:12.5px;font-weight:700;white-space:nowrap}

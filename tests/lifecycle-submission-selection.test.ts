@@ -47,3 +47,20 @@ describe("lifecycle submission file selection", () => {
     expect(selection.selectedDetail).toBeNull();
   });
 });
+
+
+it("keeps authoritative outcome and calendar dates on the ribbon", () => {
+  const selection = billLifecycleSubmissionSelection({ attempts: [{ ...attempt("current", true), deliveryLabel: "e-Bill (837)", sentAt: "2026-08-28", status: "processed", ackLabel: "277 Accept", ackAt: "2026-09-02", outcomeLabel: "Payment", outcomeAt: "2026-09-16", outcomeWorkingDays: 13 }] });
+  expect(selection.ribbonItems[0]!.badge).toBe("Payment in 13 working days");
+  expect(selection.ribbonItems[0]!.meta).toEqual([{ label: "Delivery", value: "e-Bill (837)" }, { label: "Sent", value: "08/28/2026" }, { label: "Effective date", value: "09/16/2026" }]);
+});
+it("retains the 277 acceptance date with a resolved status and never invents elapsed days", () => {
+  const selection = billLifecycleSubmissionSelection({ attempts: [{ ...attempt("current", true), status: "accepted", ackLabel: "277 Accept", ackAt: "2026-09-02" }] });
+  expect(selection.ribbonItems[0]!.meta).toContainEqual({ label: "277 Accept", value: "09/02/2026" });
+  expect(selection.ribbonItems[0]!.badge).not.toContain("working days");
+});
+
+it.each(["Zero-payment EOR", "Payment pending", "Unpaid", "Not paid"])("keeps %s neutral", (outcomeLabel) => {
+  const selection = billLifecycleSubmissionSelection({ attempts: [{ ...attempt("current", true), outcomeLabel }] });
+  expect(selection.ribbonItems[0]!.badgeTone).toBe("neutral");
+});

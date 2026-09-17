@@ -287,6 +287,8 @@ export function ConnectedProductivityReport({ appearance, className, style, init
 export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & Pick<BillDetailNavigationProps, "onPatientClick" | "onRenderingProviderClick" | "onClaimsAdministratorClick"> & {
   actorName?: string;
   /** Dedicated settings session, or the workspace connection when omitted. */
+  /** Opens the host-provided CMS-1500 preview for the selected current bill. */
+  onOpenCms1500?: (billId: string) => void;
   billingSettings?: import("@mindbill/browser").OrganizationClientOptions;
   /** Show the Settings tab by default. Hide for users without org:manage. */
   showSettings?: boolean;
@@ -305,7 +307,7 @@ export type ConnectedBillingWorkspaceProps = ConnectedSurfaceProps & Pick<BillDe
   getCourtesyCopyRecipientOptions?: (billId: string) => readonly CourtesyCopyRecipientOption[];
 };
 
-export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, billingSettings, showSettings = true, showRfas = false, rfaDashboard, onSettingsSaved, actorName, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
+export function ConnectedBillingWorkspace({ appearance, className, style, initialView = "tasks", onCreateBill, onPostPayment, sandboxControls = false, getCourtesyCopyRecipientOptions, onOpenCms1500, billingSettings, showSettings = true, showRfas = false, rfaDashboard, onSettingsSaved, actorName, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, ...options }: ConnectedBillingWorkspaceProps): ReactElement {
   const client = useClient(options); const [selectedView, setView] = useState(initialView); const [billQuery, setBillQuery] = useState<BillRegistryQuery>({ status: "all" }); const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const tabId = useId();
   const view = (!showSettings && selectedView === "settings") || (!showRfas && selectedView === "rfas") ? "tasks" : selectedView;
@@ -317,7 +319,7 @@ export function ConnectedBillingWorkspace({ appearance, className, style, initia
   const hasExplicitHeight = style?.height != null || style?.maxHeight != null;
   const workspaceStyle = availableHeight == null || hasExplicitHeight ? style : { ...style, maxHeight: availableHeight };
   const showEntityBills = (query: BillRegistryQuery) => { setBillQuery({ status: "all", page: 1, ...query }); setSelectedBillId(null); setView("bills"); };
-  if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle requireLinkedEntityIds={{ patient: !onPatientClick, renderingProvider: !onRenderingProviderClick, claimsAdministrator: !onClaimsAdministratorClick }} onPatientClick={onPatientClick ?? ((patient) => { if (patient.id) showEntityBills({ patientId: patient.id }); })} onRenderingProviderClick={onRenderingProviderClick ?? ((provider) => { if (provider.id) showEntityBills({ renderingProviderId: provider.id }); })} onClaimsAdministratorClick={onClaimsAdministratorClick ?? ((administrator) => { if (administrator.id) showEntityBills({ claimsAdministrator: administrator.id }); })} {...(actorName ? { actorName } : {})} {...(billingSettings ? { billingSettings } : {})} billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
+  if (selectedBillId) return <Surface surfaceRef={workspaceRef} appearance={appearance} className={workspaceClassName} style={workspaceStyle}><button className="mbow-button mbow-back" type="button" onClick={() => setSelectedBillId(null)}>← Back to bills</button><ConnectedBillLifecycle {...(onOpenCms1500 ? { onOpenCms1500 } : {})} requireLinkedEntityIds={{ patient: !onPatientClick, renderingProvider: !onRenderingProviderClick, claimsAdministrator: !onClaimsAdministratorClick }} onPatientClick={onPatientClick ?? ((patient) => { if (patient.id) showEntityBills({ patientId: patient.id }); })} onRenderingProviderClick={onRenderingProviderClick ?? ((provider) => { if (provider.id) showEntityBills({ renderingProviderId: provider.id }); })} onClaimsAdministratorClick={onClaimsAdministratorClick ?? ((administrator) => { if (administrator.id) showEntityBills({ claimsAdministrator: administrator.id }); })} {...(actorName ? { actorName } : {})} {...(billingSettings ? { billingSettings } : {})} billId={selectedBillId} sandboxControls={sandboxControls} courtesyCopyRecipientOptions={getCourtesyCopyRecipientOptions?.(selectedBillId) ?? []} {...options} {...(appearance ? { appearance } : {})} /></Surface>;
   const selectView = (next: typeof view) => { setView(next); setSelectedBillId(null); };
   const appearanceProps = appearance ? { appearance } : {};
   const rfaOptions = { ...options, ...rfaDashboard };
