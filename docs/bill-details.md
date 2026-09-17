@@ -72,10 +72,29 @@ appears at the top for the current bill. The host must open its authorized previ
 this callback does not introduce a document endpoint or change submission status.
 Historical attempts continue to use retained submission files, never the current form.
 
-Click a service-line charge to inspect its saved units, average charge per unit, total,
-and recorded fee-schedule amount when provided. The average is arithmetic from the
-saved charge; it is not represented as a base fee or modifier calculation. Missing
-fee-schedule data stays unavailable. No present-day rate lookup alters historical bills.
+Click a service-line charge to inspect its calculation. `BillReviewLineItem.pricing.breakdown`
+accepts an optional `BillLineFeeBreakdown` from the server:
+
+```ts
+{
+  method: "Saved synthetic calculation",
+  inputs: [{ label: "Base rate", value: "$10.00" }],
+  steps: [{ label: "Allowed", value: "$10.00 × 2 = $20.00" }],
+  notes: ["Synthetic example only"]
+}
+```
+
+`method`, input/step labels and values, and notes are display-only text. Inputs and
+steps retain their supplied order; the component does not parse the strings or
+recompute rates, modifiers, allowances, or deadlines. Only supply a breakdown verified
+against the saved line. Omit it for manual charges or stale/unverified calculations.
+Total charge and fee-schedule amount still come from the saved numeric line fields.
+
+Without a verified breakdown, the disclosure shows saved units, average charge per
+unit, total, and recorded fee-schedule amount when provided. The average is arithmetic
+from the saved charge; it is not represented as a base fee or modifier calculation.
+Missing fee-schedule data stays unavailable. No present-day rate lookup alters
+historical bills.
 
 Submission ribbons also accept optional `outcomeLabel`, `outcomeAt`, `outcomeDateLabel`,
 and `outcomeWorkingDays` fields on `BillAttemptSummary`. Supply authoritative values;

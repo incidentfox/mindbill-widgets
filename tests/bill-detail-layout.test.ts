@@ -78,3 +78,27 @@ it("explains saved line charges without inventing a modifier rate and preserves 
     expect(container.querySelector(".mb-read-summary")?.textContent).toContain("Patient information");
   } finally { await act(async () => root.unmount()); }
 });
+
+it("renders supplied fee inputs, ordered steps and notes verbatim without reverse-engineering a rate", async () => {
+  const container = document.createElement("div"); const root = createRoot(container);
+  const data = structuredClone(detail);
+  data.bill.lineItems = [{ code: "SYN", modifiers: ["TEST"], units: 2, charge: 30, feeSchedule: 30, pricing: { breakdown: {
+    method: "Saved synthetic fee calculation",
+    inputs: [{ label: "Base rate", value: "$10.00" }, { label: "Multiplier", value: "1.50 (TEST)" }],
+    steps: [{ label: "Adjusted rate", value: "$10.00 × 1.50 = $15.00" }, { label: "Allowed", value: "$15.00 × 2 = $30.00" }],
+    notes: ["Synthetic modifier rationale", "<b>Display as text</b>"],
+  } } }];
+  try {
+    await act(async () => root.render(createElement(BillReadOnlyForm, { data })));
+    const disclosure = container.querySelector(".mb-read-charge-detail")!;
+    expect(disclosure.textContent).toContain("Saved synthetic fee calculation");
+    expect(disclosure.querySelector('[aria-label="Fee calculation inputs"]')?.textContent).toContain("Base rate$10.00Multiplier1.50 (TEST)");
+    expect([...disclosure.querySelectorAll('[aria-label="Fee calculation steps"] dd')].map(el => el.textContent)).toEqual(["$10.00 × 1.50 = $15.00", "$15.00 × 2 = $30.00"]);
+    expect(disclosure.textContent).toContain("Synthetic modifier rationale");
+    expect(disclosure.textContent).toContain("<b>Display as text</b>");
+    expect(disclosure.querySelector("b")).toBeNull();
+    expect(disclosure.textContent).not.toContain("Average charge per unit");
+    expect(disclosure.textContent).not.toContain("not a base rate");
+    expect(disclosure.textContent).toContain("Total charge$30.00Recorded fee schedule$30.00");
+  } finally { await act(async () => root.unmount()); }
+});
