@@ -51,3 +51,10 @@ it("requires a cancellation reason and keeps the current appointment version",as
  const request=view.fetcher.mock.calls.find(call=>call[1]?.method==="PATCH");expect(JSON.parse(String(request?.[1]?.body))).toEqual({expectedVersion:4,authorizationToken:"a".repeat(64),disposition:"canceled",reason:"Synthetic cancellation request"});
  }finally{await view.close();}
 });
+
+it.each(["no_appointment", "canceled"] as const)("preserves saved %s disposition and reason when reopened",async disposition=>{
+ const view=await setup({permissions:["edit"]},async url=>String(url).endsWith("/scheduling")?Response.json({data:[{...appointment,version:3,disposition,current:true,reason:"Synthetic saved reason"}]}):String(url).endsWith("/events")?Response.json({data:history}):Response.json({data:record}));try{
+ const select=[...view.container.querySelectorAll("select")].find(node=>node.parentElement?.textContent?.startsWith("Disposition"))!;expect(select.value).toBe(disposition);expect(view.container.querySelector<HTMLTextAreaElement>('textarea[name="reason"]')?.value).toBe("Synthetic saved reason");
+ await act(async()=>submit(view.container,"Save appointment"));const request=view.fetcher.mock.calls.find(call=>call[1]?.method==="PATCH");expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({disposition,reason:"Synthetic saved reason",expectedVersion:3});
+ }finally{await view.close();}
+});

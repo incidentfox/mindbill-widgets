@@ -104,7 +104,7 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
   </TreatmentDraftShell>;
 }
 function AppointmentForm({ appointment, editable, disabled, onError, onSave }: { appointment: RfaScheduling; editable: boolean; disabled: boolean; onError: (message: string) => void; onSave: (input: RfaSchedulingInput) => Promise<boolean> }): ReactElement {
-  const [disposition, setDisposition] = useState(appointment.eligible ? "scheduled" : "canceled");
+  const [disposition, setDisposition] = useState(appointment.disposition === "canceled" && appointment.version > 0 ? "canceled" : appointment.eligible && appointment.disposition === "no_appointment" ? "no_appointment" : appointment.eligible ? "scheduled" : "canceled");
   return <section><h4>Appointment</h4><p>{words(appointment.disposition)}{appointment.appointmentAt ? ` · ${date(appointment.appointmentAt)}` : ""}</p>{appointment.providerName ? <p>{appointment.providerName} · {appointment.location}</p> : null}{appointment.reason ? <p>{appointment.reason}</p> : null}
     {appointment.version > 0 && !appointment.current ? <p role="status">Authorization has changed. Review the current decision before updating this appointment.</p> : null}
     {editable && (appointment.eligible || appointment.version > 0) ? <details><summary>Update appointment</summary><form onSubmit={event => {
@@ -115,7 +115,7 @@ function AppointmentForm({ appointment, editable, disabled, onError, onSave }: {
         void onSave(input);
       } catch (reason) { onError(reason instanceof Error ? reason.message : "Review the appointment details."); }
     }}><fieldset disabled={disabled}><legend>Appointment details</legend><label>Disposition<select value={disposition} onChange={event => setDisposition(event.target.value)}>{appointment.eligible ? <><option value="scheduled">Scheduled</option><option value="no_appointment">No appointment needed</option></> : null}{appointment.version > 0 ? <option value="canceled">Canceled</option> : null}</select></label>
-      {disposition === "scheduled" ? <div className="mbtd-grid"><label>Date and time (your local time)<input name="appointmentAt" type="datetime-local" required defaultValue={localTime(appointment.appointmentAt)} /></label><label>Provider name<input name="providerName" required maxLength={200} defaultValue={appointment.providerName ?? ""} /></label><label>Location<input name="location" required maxLength={500} defaultValue={appointment.location ?? ""} /></label></div> : <label>Reason<textarea name="reason" required maxLength={2000} /></label>}
+      {disposition === "scheduled" ? <div className="mbtd-grid"><label>Date and time (your local time)<input name="appointmentAt" type="datetime-local" required defaultValue={localTime(appointment.appointmentAt)} /></label><label>Provider name<input name="providerName" required maxLength={200} defaultValue={appointment.providerName ?? ""} /></label><label>Location<input name="location" required maxLength={500} defaultValue={appointment.location ?? ""} /></label></div> : <label>Reason<textarea name="reason" required maxLength={2000} defaultValue={appointment.reason ?? ""} /></label>}
       <button type="submit">Save appointment</button></fieldset></form></details> : !appointment.eligible && appointment.disposition === "pending" ? <p>Appointments become available after treatment is authorized.</p> : null}
   </section>;
 }
