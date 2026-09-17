@@ -53,3 +53,113 @@ it("renders untrusted citation text without executable links", async () => {
   const ui = await mount({ quoteClaimFees: async () => data });
   try { await ui.submit(); expect(ui.container.querySelector('a[href^="javascript:"]')).toBeNull(); expect(ui.container.textContent).toContain("Synthetic regulation"); } finally { await ui.cleanup(); }
 });
+
+const imagingLines: CaClaimFeeQuoteInput["lines"] = ["72148", "72141"].map((code, index) => ({
+  id: `imaging-${index + 1}`, code, dateOfService: "2026-09-17", units: 1, modifiers: ["26"], serviceZip: "90012",
+  professionalComponentContext: { interpretationLocation: "same_as_patient_service", supervisionLevel: "general", imagingSessionReference: "session-1", completeSameDayImagingServices: true },
+}));
+function field(container: HTMLElement, name: string, index = 0): HTMLInputElement | HTMLSelectElement {
+  return [...container.querySelectorAll("label")].filter(label => label.firstChild?.textContent === name)[index]!.querySelector("input,select")!;
+}
+async function edit(element: HTMLInputElement | HTMLSelectElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value")!.set!.call(element, value);
+    element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+  });
+}
+it.each([true, false, undefined])("uses the full encounter while preserving explicit host incompleteness %s and actual sessions", async (complete) => {
+  const lines = imagingLines.map(line => { const context = { ...line.professionalComponentContext! }; delete context.completeSameDayImagingServices; return { ...line, professionalComponentContext: { ...context, ...(complete === undefined ? {} : { completeSameDayImagingServices: complete }) } }; });
+  const fetcher = vi.fn<typeof fetch>(async (_url, init) => Response.json({ data: result(JSON.parse(init!.body as string)) }));
+  const ui = await mount(createBillReferenceClient({ getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher }), lines);
+  try {
+    await edit(field(ui.container, "Imaging session reference", 1), "session-2"); await ui.submit();
+    const sent = JSON.parse(fetcher.mock.calls[0]![1]!.body as string) as CaClaimFeeQuoteInput;
+    expect(sent.lines.map(line => line.professionalComponentContext?.imagingSessionReference)).toEqual(["session-1", "session-2"]);
+    expect(sent.lines.every(line => line.professionalComponentContext?.completeSameDayImagingServices === (complete !== false))).toBe(true);
+    expect(sent.lines[0]!.professionalComponentContext?.supervisionLevel).toBe("general");
+    expect(sent.lines.every(line => line.physicianContext?.standaloneService === false)).toBe(true);
+    expect(ui.container.querySelector('input[type="checkbox"]')).toBeNull();
+  } finally { await ui.cleanup(); }
+});
+it.each([["Procedure code", "70551"], ["Date of service", "2026-09-18"], ["Modifiers", "TC"], ["Units", "2"]])("invalidates the full quote and allows recalculation when %s changes", async (name, value) => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client, imagingLines);
+  try {
+    await ui.submit(); expect(ui.container.querySelector(".mbfc-results")).not.toBeNull();
+    await edit(field(ui.container, name!), value!); expect(ui.container.querySelector(".mbfc-results")).toBeNull(); await ui.submit();
+    const sent = client.quoteClaimFees.mock.calls[1]![0];
+    expect(sent.lines.every(line => line.professionalComponentContext?.completeSameDayImagingServices === true)).toBe(true);
+  } finally { await ui.cleanup(); }
+});
+it("removing an imaging service allows the surviving encounter to be recalculated", async () => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client, imagingLines);
+  try { await act(async () => (ui.container.querySelector(".mbfc-remove") as HTMLButtonElement).click()); await ui.submit(); expect(client.quoteClaimFees.mock.calls[0]![0].lines[0]!.professionalComponentContext).toHaveProperty("completeSameDayImagingServices", true); } finally { await ui.cleanup(); }
+});
+it("ignores a pending sibling allocation after a session reference changes", async () => {
+  let resolve!: (value: CaClaimFeeQuoteResult) => void;
+  const ui = await mount({ quoteClaimFees: () => new Promise(r => { resolve = r; }) }, imagingLines);
+  try { await ui.submit(); await edit(field(ui.container, "Imaging session reference"), "session-2"); await act(async () => resolve(result({ lines: imagingLines, completeDateOfServiceContext: true }))); expect(ui.container.querySelector(".mbfc-results")).toBeNull(); } finally { await ui.cleanup(); }
+});
+it("rejects an invalid session reference before requesting a quote", async () => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client, imagingLines);
+  try { await edit(field(ui.container, "Imaging session reference"), "session with spaces"); await ui.submit(); expect(client.quoteClaimFees).not.toHaveBeenCalled(); expect(ui.container.querySelector('[role="alert"]')?.textContent).toContain("session reference"); } finally { await ui.cleanup(); }
+});
+it("shows the server's imaging ranking and 95% reduction without a surgery label", async () => {
+  const data = result({ lines: imagingLines, completeDateOfServiceContext: true });
+  if (data.lines[1]!.quote.status !== "priced") throw new Error("Expected synthetic priced quote");
+  data.lines[1]!.quote.feeBreakdown = { method: "California imaging professional-component MPPR", inputs: [{ label: "Rank within actual imaging session", value: "2 of 2" }], steps: [{ label: "Professional component payment", value: "95%" }] };
+  const ui = await mount({ quoteClaimFees: async () => data }, imagingLines);
+  try { await ui.submit(); expect(ui.container.textContent).toContain("Rank within actual imaging session"); expect(ui.container.textContent).toContain("95%"); expect(ui.container.textContent).not.toContain("Multiple surgery adjustment"); } finally { await ui.cleanup(); }
+});
+it("keeps browser and Node professional-component contract fields compatible", async () => {
+  const browserContext: import("../packages/browser/src/index").CaProfessionalComponentContext = { interpretationLocation: "same_as_patient_service", supervisionLevel: "personal", imagingSessionReference: "session-1", completeSameDayImagingServices: false };
+  const nodeContext: import("../packages/node/src/index").CaProfessionalComponentContext = browserContext;
+  const nodeLine: import("../packages/node/src/index").ServiceLine = { code: "72148", units: 1, charge: 100, feeContext: { professionalComponentContext: nodeContext } };
+  expect(JSON.parse(JSON.stringify(nodeLine)).feeContext.professionalComponentContext).toEqual(browserContext);
+});
+
+it("supports imaging entered from an empty calculator without host completeness or a remount", async () => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client, []);
+  try {
+    for (let index = 0; index < 2; index++) {
+      if (index) await act(async () => [...ui.container.querySelectorAll("button")].find(button => button.textContent === "Add service")!.click());
+      await edit(field(ui.container, "Procedure code", index), index ? "72141" : "72148");
+      await edit(field(ui.container, "Date of service", index), "2026-09-17");
+      await edit(field(ui.container, "Modifiers", index), "26");
+      await edit(field(ui.container, "Interpretation location", index), "same_as_patient_service");
+      await edit(field(ui.container, "Imaging session reference", index), "session-1");
+    }
+    await ui.submit();
+    const sent = client.quoteClaimFees.mock.calls[0]![0];
+    expect(sent.completeDateOfServiceContext).toBe(true);
+    expect(sent.lines.map(line => line.professionalComponentContext)).toEqual(Array(2).fill({ interpretationLocation: "same_as_patient_service", imagingSessionReference: "session-1", completeSameDayImagingServices: true }));
+    expect(ui.container.querySelector('input[type="checkbox"]')).toBeNull();
+  } finally { await ui.cleanup(); }
+});
+it("keeps explicit incomplete imaging facts after editing and removing sibling services", async () => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client, imagingLines.map(line => ({ ...line, professionalComponentContext: { ...line.professionalComponentContext!, completeSameDayImagingServices: false } })));
+  try {
+    await edit(field(ui.container, "Procedure code"), "70551");
+    await act(async () => (ui.container.querySelectorAll(".mbfc-remove")[1] as HTMLButtonElement).click());
+    await ui.submit();
+    expect(client.quoteClaimFees.mock.calls[0]![0].lines[0]!.professionalComponentContext?.completeSameDayImagingServices).toBe(false);
+    expect(ui.container.textContent).toContain("marked this imaging encounter as incomplete");
+  } finally { await ui.cleanup(); }
+});
+it("does not invent missing session or interpretation location facts", async () => {
+  const client = { quoteClaimFees: vi.fn(async (request: CaClaimFeeQuoteInput) => result(request)) };
+  const ui = await mount(client, imagingLines.map(line => { const copy = { ...line }; delete copy.professionalComponentContext; return copy; }));
+  try {
+    await ui.submit();
+    expect(client.quoteClaimFees.mock.calls[0]![0].lines.every(line => !line.professionalComponentContext)).toBe(true);
+    await edit(field(ui.container, "Interpretation location"), "same_as_patient_service"); await ui.submit();
+    expect(client.quoteClaimFees.mock.calls[1]![0].lines[0]!.professionalComponentContext).not.toHaveProperty("imagingSessionReference");
+    await edit(field(ui.container, "Imaging session reference", 1), "session-1"); await ui.submit();
+    expect(client.quoteClaimFees).toHaveBeenCalledTimes(2);
+    expect(ui.container.querySelector('[role="alert"]')?.textContent).toContain("Select the interpretation location");
+  } finally { await ui.cleanup(); }
+});

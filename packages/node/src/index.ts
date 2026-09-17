@@ -186,6 +186,16 @@ export type CaTherapyContext = {
     hpsaBonusEligible: boolean;
   };
 
+/** Documented interpretation and imaging-session facts; an omitted completeness fact remains unknown. */
+export type CaProfessionalComponentContext = {
+  interpretationLocation: "same_as_patient_service" | "different_from_patient_service";
+  supervisionLevel?: "general" | "direct" | "personal";
+  /** Actual session label, 1–64 letters/digits/._:-, beginning with a letter or digit. Never a patient identifier. */
+  imagingSessionReference?: string;
+  /** All imaging for this patient/provider group/date is included, including separately billed services. */
+  completeSameDayImagingServices?: boolean;
+};
+
 export type ServiceLine = {
   id?: string;
   code: string;
@@ -199,7 +209,16 @@ export type ServiceLine = {
   /** One-based pointers into `diagnoses`, matching CMS-1500 box 24E. */
   diagnosisPointers?: number[];
   drug?: BilledDrug;
-  feeContext?: { hasFeeAgreement?: boolean; therapyContext?: CaTherapyContext; padbContext?: CaPadbContext; anesthesiaContext?: CaAnesthesiaContext };
+  feeContext?: {
+    hasFeeAgreement?: boolean; therapyContext?: CaTherapyContext; padbContext?: CaPadbContext; anesthesiaContext?: CaAnesthesiaContext;
+    professionalComponentContext?: CaProfessionalComponentContext;
+    physicianContext?: {
+      providerKind: "physician" | "physician_assistant" | "nurse_practitioner" | "clinical_nurse_specialist" | "other";
+      incidentToPhysicianService?: boolean; placeOfService: string; standaloneService: boolean;
+      globalPeriodApplies: boolean; hpsaBonusEligible: boolean;
+    };
+    catalogContext?: { codingRequirementsSatisfied: boolean; statusIAlternative?: "none" | "cpt" | "drug"; completeSurgicalPackage?: boolean };
+  };
 };
 
 export type CreateBillRequest = {

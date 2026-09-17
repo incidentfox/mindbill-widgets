@@ -30,3 +30,35 @@ The widget accepts multiple procedure lines with independent service dates, modi
 The result shows each line's status, fee calculation and available RVU/GPCI components, conversion factor, provider adjustment, source files, regulation links and effective dates. Claim edits and review reasons remain visible alongside line-level findings. A source URL is clickable only when it uses HTTPS.
 
 `pricedSubtotalCents` can include reference fees for lines that still need review. Only a non-null `estimatedPayableCents` is displayed as an estimated payable total. Missing data, unsupported context, or an incomplete edit assessment must not be treated as a confirmed allowance. A quote does not submit a bill or change the entered charge. Prices and coverage come from the server; the widget has no local rates or geographic defaults.
+
+## Imaging professional components and sessions
+
+For eligible imaging services billed with modifier `26`, the calculator can send actual imaging-session references and show the server's ranking and professional-component reduction. [California section 9789.17.1](https://www.dir.ca.gov/t8/9789_17_1.html) groups imaging by actual session, patient, service date and physician or physician group. Sharing a date does not establish a shared session.
+
+Enter the services and their actual session and interpretation location in the calculator, or supply those facts through `initialLines`:
+
+```tsx
+const lines = ['72148', '72141'].map((code, index) => ({
+  id: `imaging-${index + 1}`,
+  code,
+  dateOfService: '2026-09-17',
+  units: 1,
+  modifiers: ['26'],
+  serviceZip: '90012',
+  professionalComponentContext: {
+    interpretationLocation: 'same_as_patient_service' as const,
+    imagingSessionReference: 'session-1',
+    completeSameDayImagingServices: true,
+  },
+}));
+```
+
+The calculator is a full-encounter workflow: include all relevant imaging for this patient, physician or group, and date, including services billed elsewhere. All services must belong to the same physician or group; group membership means the same group NPI. The calculator sends `completeSameDayImagingServices: true` for entered professional-component context unless the host explicitly supplied `false`. An explicit `false` remains incomplete and subject to review after edits.
+
+Direct `quoteClaimFees` and API callers must still supply `completeSameDayImagingServices: true` only when the complete encounter is known, alongside `completeDateOfServiceContext: true`. Omitting either fact or supplying `false` does not establish completeness for the server.
+
+The session reference is an opaque label of 1–64 letters, numbers, periods, underscores, colons or hyphens, starting with a letter or number. Do not put patient identifiers in it. The calculator never derives a session or interpretation location from the service date. Users can edit these facts and add, remove, or change services, then recalculate in the same form. Every edit clears the entire displayed quote and discards pending responses so that the server reassesses all current lines together.
+
+The server currently supports a narrow 2026-and-later professional-component pathway: distinct eligible procedure codes, modifier `26`, one unit, physician services, and interpretation at the same physical location as the patient service. Its date-specific source files and indicators determine eligibility. Missing encounter facts, repeated procedures, mixed components, or unsupported adjustments remain review outcomes. The widget displays the server's calculation, including the highest service at 100% and subsequent eligible services in that actual session at 95%; it does not calculate or rank fees locally.
+
+`BillSubmissionForm` uses individual service estimates and does not allocate imaging session reductions. Multiple same-day professional services remain subject to review there. Use `FeeScheduleCalculator` or `quoteClaimFees` for the complete-encounter calculation. The browser and Node SDKs both expose `CaProfessionalComponentContext` for integrations that collect these facts themselves.
