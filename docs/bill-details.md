@@ -65,7 +65,10 @@ presets and explicit appearance overrides remain available. Bill information app
 first; patient and injury sections share a row on wide screens and stack on mobile.
 Provider identifiers and addresses expand on demand without hiding validation messages.
 
-`ConnectedBillLifecycle` keeps bill actions beside the header above the detail tabs.
+`ConnectedBillLifecycle` keeps lifecycle actions in a sticky bottom bar after the
+details or history content. On mobile, `--mb-host-bottom-offset` reserves space
+for host navigation (72px by default), plus the safe-area inset. Document shortcuts
+remain beside the header above the detail tabs.
 `ConnectedBillingWorkspace` and `ConnectedBillLifecycle` accept the optional
 `onOpenCms1500: (billId: string) => void` callback. When supplied, **View CMS-1500**
 appears at the top for the current bill. The host must open its authorized preview;

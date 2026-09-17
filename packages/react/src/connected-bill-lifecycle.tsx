@@ -880,18 +880,6 @@ export function ConnectedBillLifecycle({
       <button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("courtesy_copy")}>Forward copy</button></> : null}
     </header>
 
-    {!historical && (viewEor || actions.length) ? <aside className="mb-lifecycle-actions-sheet" aria-label="Bill actions">
-      {viewEor && data.eors[0] ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => void lifecycle.openEor(data.eors[0]!).catch(() => undefined)}>{viewEor.label}</button> : null}
-      {actions.map((action) => <button type="button" key={action.id} className={action.primary ? "mb-lifecycle-button primary" : "mb-lifecycle-button secondary"} onClick={() => {
-        const next = actionPanel(action);
-        if (!next) return;
-        if (next === "resubmit") setCorrectionError("");
-        if (next === "submit_new_bill") setNewBillError("");
-        if (next === "send_duplicate") setDuplicateError("");
-        setPanel(next);
-      }}>{action.label}</button>)}
-    </aside> : null}
-
     <div className="mb-lifecycle-tabs" role="tablist" aria-label="Bill view">
       <button type="button" role="tab" aria-selected={tab === "details"} onClick={() => setTab("details")}>Bill details</button>
       <button type="button" role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>Bill history</button>
@@ -914,7 +902,17 @@ export function ConnectedBillLifecycle({
       ? <BillHistoryTable entries={data.history} {...(!historical ? { onOpenDocument: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} />
       : <BillActivityTimeline events={data.activity} {...(appearance ? { appearance } : {})} />}</div>}
 
-
+    {!historical && (viewEor || actions.length) ? <aside className="mb-lifecycle-actions-sheet" aria-label="Bill actions">
+      {viewEor && data.eors[0] ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => void lifecycle.openEor(data.eors[0]!).catch(() => undefined)}>{viewEor.label}</button> : null}
+      {actions.map((action) => <button type="button" key={action.id} className={action.primary ? "mb-lifecycle-button primary" : "mb-lifecycle-button secondary"} onClick={() => {
+        const next = actionPanel(action);
+        if (!next) return;
+        if (next === "resubmit") setCorrectionError("");
+        if (next === "submit_new_bill") setNewBillError("");
+        if (next === "send_duplicate") setDuplicateError("");
+        setPanel(next);
+      }}>{action.label}</button>)}
+    </aside> : null}
 
     {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><section className="mb-lifecycle-courtesy"><h3>Forward courtesy copy</h3><BillCourtesyCopyForm documents={data.bill.attachments} recipientOptions={courtesyCopyRecipientOptions} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></section></LifecycleDialog> : null}
     {activePanel === "ibr" ? <LifecycleDialog title="Prepare Independent Bill Review packet" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><header style={{ paddingRight: 44 }}><h3>Prepare Independent Bill Review packet</h3></header><p>Download a PDF packet for self-filing Independent Bill Review (IBR). Preparing this packet does not file the review, send it to a payer, or change the bill status.</p>{lifecycle.error ? <p role="alert" className="mb-lifecycle-message error">{lifecycle.error.message}</p> : null}<div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadIbrPacket().then(() => { setPanel(""); setNotice("IBR packet prepared for self-filing. The review has not been filed."); }).catch(() => undefined)}>{lifecycle.isMutating ? "Preparing…" : "Prepare IBR packet"}</button></div></section></LifecycleDialog> : null}
@@ -1039,6 +1037,6 @@ const CONNECTED_LIFECYCLE_STYLES = `
 .mb-payment-total{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:9px;background:var(--mb-soft)}.mb-payment-total strong{font-size:1.12rem}
 .mb-lifecycle-deadline-hint{margin:0;padding:10px 12px;border-radius:9px;background:color-mix(in srgb,var(--mb-warning,#8a5c17) 10%,var(--mb-surface));color:var(--mb-warning,#8a5c17);font-size:.85rem}
 @media(max-width:700px){.mb-lifecycle-attempt-detail dl{grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-notes form{grid-template-columns:1fr}.mb-lifecycle-notes form button{width:100%}.mb-lifecycle-head,.mb-lifecycle-card header{align-items:stretch;flex-direction:column}.mb-lifecycle-head>.mb-lifecycle-button{width:100%}.mb-lifecycle-actions-sheet{bottom:calc(var(--mb-host-bottom-offset,72px) + env(safe-area-inset-bottom) + 8px);grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-actions-sheet .mb-lifecycle-button:last-child:nth-child(odd){grid-column:1/-1}.mb-lifecycle-fields.two{grid-template-columns:1fr}.mb-lifecycle-fields .full{grid-column:auto}.mb-lifecycle-dialog-backdrop{align-items:end;padding:0}.mb-lifecycle-dialog{max-height:calc(100dvh - 12px)}.mb-lifecycle-dialog .mb-lifecycle-panel,.mb-lifecycle-correction{border-radius:18px 18px 0 0}.mb-lifecycle-correction{padding:18px 12px calc(18px + env(safe-area-inset-bottom))}.mb-lifecycle-correction>header{align-items:stretch;flex-direction:column;padding-right:56px}.mb-lifecycle-correction-reason{grid-template-columns:1fr}.mb-lifecycle-correction-reason>ul{grid-column:auto}.mb-lifecycle-correction-contact dl>div{grid-template-columns:1fr;gap:2px}.mb-lifecycle-tabs button{font-size:.9rem}.mb-lifecycle-title h2{font-size:1.4rem}}
-.mb-connected-lifecycle{gap:14px}.mb-lifecycle-title h2{font-size:1.35rem}.mb-lifecycle-tabs{border-radius:var(--mb-control-radius);padding:3px}.mb-lifecycle-tabs button{min-height:40px;font-size:14px;border-radius:var(--mb-control-radius)}.mb-lifecycle-tabs button[aria-selected=true]{color:var(--mb-accent-contrast,#fff)}.mb-lifecycle-actions-sheet{position:static;display:flex;flex-wrap:wrap;gap:8px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}.mb-lifecycle-actions-sheet .mb-lifecycle-button{font-size:13px;font-weight:600}.mb-lifecycle-dialog{background:var(--mb-surface,#fff);border:1px solid var(--mb-border);border-radius:var(--mb-radius,8px);box-shadow:0 24px 70px rgba(18,35,43,.22)}.mb-lifecycle-courtesy{padding:24px}.mb-lifecycle-courtesy>h3{margin:0 44px 20px 0;font-size:18px}.mb-lifecycle-card,.mb-lifecycle-notes{padding:15px}.mb-lifecycle-tabpanel{gap:14px}@media(max-width:700px){.mb-lifecycle-actions-sheet .mb-lifecycle-button{flex:1 1 140px}.mb-lifecycle-dialog>.mb-lifecycle-courtesy{padding:64px 16px 20px}}
+.mb-connected-lifecycle{gap:14px}.mb-lifecycle-title h2{font-size:1.35rem}.mb-lifecycle-tabs{border-radius:var(--mb-control-radius);padding:3px}.mb-lifecycle-tabs button{min-height:40px;font-size:14px;border-radius:var(--mb-control-radius)}.mb-lifecycle-tabs button[aria-selected=true]{color:var(--mb-accent-contrast,#fff)}.mb-lifecycle-actions-sheet .mb-lifecycle-button{font-size:13px;font-weight:600}.mb-lifecycle-dialog{background:var(--mb-surface,#fff);border:1px solid var(--mb-border);border-radius:var(--mb-radius,8px);box-shadow:0 24px 70px rgba(18,35,43,.22)}.mb-lifecycle-courtesy{padding:24px}.mb-lifecycle-courtesy>h3{margin:0 44px 20px 0;font-size:18px}.mb-lifecycle-card,.mb-lifecycle-notes{padding:15px}.mb-lifecycle-tabpanel{gap:14px}@media(max-width:700px){.mb-lifecycle-dialog>.mb-lifecycle-courtesy{padding:64px 16px 20px}}
 
 `;
