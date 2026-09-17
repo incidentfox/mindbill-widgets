@@ -1,5 +1,7 @@
 "use client";
 
+import { TherapyLineFields, therapyDetailsFromSaved, therapyCalculationContext, missingTherapyDetails, isTherapyEditorCode, type TherapyDetails } from "./therapy-line-fields";
+
 import { feeReviewMessage } from "./fee-review-message";
 
 import { AnesthesiaCalculationDetails } from "./anesthesia-calculation-details";
@@ -205,7 +207,7 @@ export type BillSubmissionFormValue = {
 
 export type BillSubmissionFeeContext = BillFeeContext;
 
-type FeeDetails = EquipmentDetails & ProfessionalComponentDetails & DrugDetails & AnesthesiaDetails & {
+type FeeDetails = TherapyDetails & EquipmentDetails & ProfessionalComponentDetails & DrugDetails & AnesthesiaDetails & {
   providerKind?: NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | "physical_therapist" | "" | undefined;
   basis?: "standard" | "adjustment";
   minutes?: number | undefined;
@@ -218,7 +220,7 @@ const isProlongedCode = (code: string) => /^9935[89]$/.test(code.trim());
 /** Standard estimate assumptions; prolonged-service facts require an explicit documentation selection. */
 export function billSubmissionEstimateContext(code: string, placeOfService: string, details: FeeDetails = {}): BillSubmissionFeeContext {
   if (details.basis === "adjustment") return {};
-  if (code !== "97110" && /^[A-Z0-9]{5}$/.test(code) && !/^ML/.test(code) && details.providerKind && details.providerKind !== "physical_therapist") return {
+  if (!isTherapyEditorCode(code) && /^[A-Z0-9]{5}$/.test(code) && !/^ML/.test(code) && details.providerKind && details.providerKind !== "physical_therapist") return {
     hasFeeAgreement: false, physicianContext: { providerKind: details.providerKind, placeOfService, incidentToPhysicianService: false, standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false },
     ...(isProlongedCode(code) && details.prolongedTimeBasis === "documented" && details.totalMinutes && parseBillSubmissionDate(details.relatedEvaluationDate ?? "") ? {
       prolongedServiceContext: {
@@ -228,15 +230,14 @@ export function billSubmissionEstimateContext(code: string, placeOfService: stri
       },
     } : {}),
   };
-  if (code === "97110" && (details.providerKind === "physical_therapist" || details.providerKind === "other") && details.minutes && details.totalMinutes) return {
-    hasFeeAgreement: false, therapyContext: { providerKind: details.providerKind, personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, placeOfService, directOneOnOneMinutes: details.minutes, totalVisitMinutes: details.totalMinutes, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false },
-  };
+  if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details);
   return {};
 }
 /** Rebuild edited fields so clearing an input cannot retain a previously priced context. */
 export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}, modifiers: readonly string[] = []): BillFeeContext {
   if (details.basis === "adjustment") return {};
   if (isAnesthesiaCandidate(code)) return anesthesiaCalculationContext(placeOfService, details);
+  if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details, saved);
   const equipment = equipmentFields(code, modifiers);
   if (equipment.residence) return equipmentCalculationContext(code, modifiers, details);
   if (drugFieldsEnabled(code, details)) {
@@ -283,7 +284,7 @@ export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSu
   return {
     ...billSubmissionQuoteContext(context as BillFeeQuoteInput),
     ...(otherSameDayServices && context.physicianContext ? { physicianContext: { ...context.physicianContext, standaloneService: false } } : {}),
-    ...(otherSameDayServices && context.therapyContext ? { therapyContext: { ...context.therapyContext, otherSameDayServices: true } } : {}),
+    ...((padbSameDayServices.length !== 1 || Boolean(line.serviceDateEnd && parseBillSubmissionDate(line.serviceDateEnd) !== dateOfService)) && context.therapyContext ? { therapyContext: { ...context.therapyContext, otherSameDayServices: true } } : {}),
     ...(context.prolongedServiceContext ? { prolongedServiceContext: { ...context.prolongedServiceContext, sameDayServices: sameDayServices.map((candidate) => ({ code: candidate.code.trim().toUpperCase(), units: candidate.units ?? 1 })) } } : {}),
     ...(context.anesthesiaContext ? { anesthesiaContext: { ...context.anesthesiaContext, placeOfService: bill.serviceLocation?.placeOfServiceCode ?? "", otherSameDayServices: padbSameDayServices.length !== 1 || Boolean(line.serviceDateEnd && parseBillSubmissionDate(line.serviceDateEnd) !== dateOfService) } } : {}),
     ...(line.drug ? { drug: line.drug } : {}),
@@ -1196,6 +1197,7 @@ export function BillSubmissionForm({
     return feeDetails[detailsIndex] ?? {
       ...drugDetailsFromSaved(line.drug, saved),
       ...anesthesiaDetailsFromSaved(saved),
+      ...therapyDetailsFromSaved(saved),
       interpretationLocation: saved?.professionalComponentContext?.interpretationLocation,
       professionalComponentBasis: saved?.catalogContext?.codingRequirementsSatisfied && saved.physicianContext?.standaloneService && saved.physicianContext.globalPeriodApplies === false && saved.physicianContext.hpsaBonusEligible === false && saved.physicianContext.incidentToPhysicianService !== true ? "standard" : "",
       residenceZip: saved?.dmeposContext?.residenceZip,
@@ -1229,7 +1231,7 @@ export function BillSubmissionForm({
     const inputs = JSON.parse(quoteBatch) as Array<BillFeeQuoteInput | null>;
     const unique = new Map(inputs.filter((input): input is BillFeeQuoteInput => Boolean(input)).map((input) => [JSON.stringify(input), input]));
     const timer = setTimeout(() => { for (const [key, input] of unique) {
-      if (!quoteFee || !input.dateOfService || !supportedFeeJurisdiction) continue;
+      if (!quoteFee || !input.dateOfService || !supportedFeeJurisdiction || (isTherapyEditorCode(input.code) && !input.therapyContext)) continue;
       void quoteFee(input).then((result) => { if (active) { setFeeQuotes((current) => ({ ...current, [key]: result })); if (isProfessionalComponentCandidate(input.code, input.modifiers, result)) { const identity = componentIdentity(input.code, input.modifiers); setProfessionalComponentCodes((current) => current.includes(identity) ? current : [...current, identity]); } } }).catch(() => { if (active) setFeeQuotes((current) => ({ ...current, [key]: { status: "error", reason: "Fee lookup is unavailable. Retry the fee check." } })); });
     }
     }, 200);
@@ -1254,11 +1256,11 @@ export function BillSubmissionForm({
     if (prolonged && detailsIndex !== index) return <p className="mbsf-help mbsf-fee-details">Uses the prolonged-service details on line {detailsIndex + 1}.{quote?.status !== "priced" ? ` ${feeReviewMessage(quote?.reason)}` : ""}</p>;
     const component = supportedFeeJurisdiction && (isProfessionalComponentCandidate(line.code, line.modifiers, quote?.status === "error" ? undefined : quote) || professionalComponentCodes.includes(componentIdentity(line.code, line.modifiers)));
     const office = /^992(?:0[2-5]|1[2-5])$/.test(line.code);
-    const therapy = line.code === "97110";
+    const therapy = isTherapyEditorCode(line.code);
     const equipment = supportedFeeJurisdiction ? equipmentFields(line.code, line.modifiers) : { residence: false, rental: false, priorPayments: false };
     return <div className="mbsf-fee-details">
       <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Fee schedule estimate</option><option value="adjustment">Requires adjustment</option></select></label>
-      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : anesthesia ? "The fee uses documented anesthesia minutes and the service location. Contracted anesthesia rates require review of their rate basis." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "Estimate assumes personally performed physical therapy, one visit and no other same-day services, assistant, hospital care, incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
+      <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : anesthesia ? "The fee uses documented anesthesia minutes and the service location. Contracted anesthesia rates require review of their rate basis." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "The therapy estimate uses the service record and pricing basis below. Enter actual minutes and include all same-day services in this bill. Unsupported arrangements remain available for fee review." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
       {prolonged ? <div className="mbsf-grid" aria-label={`Prolonged-service details for line ${index + 1}`}>
         <label className="mbsf-field"><span>Total prolonged minutes on this service date</span><input className="mbsf-input" aria-label={`Total prolonged minutes for line ${index + 1}`} type="number" min="30" max="1440" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label>
         <label className="mbsf-field"><span>Related evaluation date</span><input className="mbsf-input" aria-label={`Related evaluation date for line ${index + 1}`} type="date" value={details.relatedEvaluationDate ?? ""} onChange={(event) => update({ relatedEvaluationDate: event.target.value })} /></label>
@@ -1273,16 +1275,17 @@ export function BillSubmissionForm({
       </div> : null}
       {anesthesia ? <AnesthesiaLineFields index={index} details={details} update={update} /> : null}
       {!anesthesia && !equipment.residence && !prolonged ? <DrugLineFields code={line.code} index={index} details={details} update={update} /> : null}
-      {!anesthesia && !equipment.residence && !drugFieldsEnabled(line.code, details) ? <details><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
+      {!anesthesia && !equipment.residence && !drugFieldsEnabled(line.code, details) ? <details open={therapy}><summary>Fee schedule details{quote?.status === "priced" && details.basis !== "adjustment" ? " · Estimate" : ""}</summary>
       {<label className="mbsf-field"><span>Provider type</span><select className="mbsf-input" aria-label={`Provider type for line ${index + 1}`} value={details.providerKind ?? ""} onChange={(event) => update({ providerKind: event.target.value as NonNullable<FeeDetails["providerKind"]> })}><option value="">Select provider type…</option>{!therapy ? <><option value="physician">Physician</option><option value="physician_assistant">Physician assistant</option><option value="nurse_practitioner">Nurse practitioner</option><option value="clinical_nurse_specialist">Clinical nurse specialist</option></> : <option value="physical_therapist">Physical therapist</option>}<option value="other">Other</option></select></label>}
       {component ? <div className="mbsf-grid" aria-label={`Interpretation details for line ${index + 1}`}>
         <label className="mbsf-field"><span>Interpretation location</span><select className="mbsf-input" aria-label={`Interpretation location for line ${index + 1}`} value={details.interpretationLocation ?? ""} onChange={(event) => update({ interpretationLocation: event.target.value as FeeDetails["interpretationLocation"] })}><option value="">Select interpretation location…</option><option value="same_as_patient_service">Same physical address as patient service</option><option value="different_from_patient_service">Different physical address</option></select></label>
         <label className="mbsf-field"><span>Interpretation circumstances</span><select className="mbsf-input" aria-label={`Interpretation circumstances for line ${index + 1}`} value={details.professionalComponentBasis ?? ""} onChange={(event) => update({ professionalComponentBasis: event.target.value as FeeDetails["professionalComponentBasis"] })}><option value="">Select documented circumstances…</option><option value="standard">Standard standalone physician interpretation</option><option value="review">Other circumstances — review needed</option></select></label>
         <p className="mbsf-help mbsf-span">Standard means one physician interpretation on this date, documented coding requirements and signed report, with no other same-day services, incident-to service, global-period adjustment or HPSA bonus. Include the report with the bill. Different interpretation addresses require fee review.</p>
       </div> : null}
-      {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: Number(event.target.value) })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: Number(event.target.value) })} /></label></div> : null}
+      {therapy ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: event.target.value ? Number(event.target.value) : undefined })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: event.target.value ? Number(event.target.value) : undefined })} /></label></div> : null}
+      {therapy ? <TherapyLineFields index={index} details={details} update={update} /> : null}
       </details> : null}
-      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Fee estimate for this service date and the details above." : feeReviewMessage(quote?.reason)}</p>
+      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : therapy && missingTherapyDetails(details).length ? `Enter therapy details: ${missingTherapyDetails(details).join(", ")}.` : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? "Fee estimate for this service date and the details above." : feeReviewMessage(quote?.reason)}</p>
       {quote?.status === "priced" && <AnesthesiaCalculationDetails quote={quote} />}
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
     </div>;
@@ -1567,7 +1570,7 @@ export function BillSubmissionForm({
             {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
           </div> : null}
           <div data-label={treatmentBilling && isAnesthesiaCandidate(line.code) ? "Services" : "Units"} data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} max={treatmentBilling && isAnesthesiaCandidate(line.code) ? 1 : undefined} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
-          <div className="mbsf-money" data-label="Allowed" data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
+          <div className="mbsf-money" data-label="Allowed" data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || (isTherapyEditorCode(line.code) && !quoteInputs[index]?.therapyContext) || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
           <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
           {feeDetailsFor(line, index)}
         </div>)}
