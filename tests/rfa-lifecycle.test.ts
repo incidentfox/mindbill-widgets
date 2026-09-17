@@ -39,3 +39,30 @@ describe("RFA lifecycle browser contracts", () => {
     await expect(client.recordDecisions("rfa_synthetic", decisions, " ")).rejects.toThrow("idempotency");
   });
 });
+
+it("uses versioned appointment contracts and rejects invalid response envelopes", async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ data: [] })).mockResolvedValueOnce(Response.json({ data: [] })).mockResolvedValueOnce(Response.json({ data: {} }));
+  const client = createRfaLifecycleClient({ getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher });
+  expect(await client.listScheduling("rfa/one")).toEqual([]);
+  const input = { expectedVersion: 3, authorizationToken: "a".repeat(64), disposition: "canceled" as const, reason: "Synthetic patient rescheduled" };
+  expect(await client.updateScheduling("rfa/one", "item/one", input, "appointment_key")).toEqual([]);
+  const mutation = fetcher.mock.calls[1];
+  expect(String(mutation?.[0])).toContain("rfa%2Fone/items/item%2Fone/scheduling");
+  expect(mutation?.[1]?.method).toBe("PATCH");
+  expect(JSON.parse(String(mutation?.[1]?.body))).toEqual(input);
+  expect(new Headers(mutation?.[1]?.headers).get("idempotency-key")).toBe("appointment_key");
+  await expect(client.listHistory("rfa/one")).rejects.toThrow("invalid");
+  await expect(client.updateScheduling("rfa/one", "item/one", input, "")).rejects.toThrow("idempotency");
+});
+it("adds nonempty notes and preserves correction evidence and decision concurrency references", async () => {
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json({ data: { id: "synthetic" } }));
+  const client = createRfaLifecycleClient({ getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher });
+  await expect(client.addNote("rfa_one", "  ", "note_key")).rejects.toThrow("Enter a note");
+  expect(fetcher).not.toHaveBeenCalled();
+  await client.addNote("rfa_one", " Synthetic note ", "note_key");
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ text: "Synthetic note" });
+  const correction = { itemId: "item_one", expectedDecisionEventId: "decision_one", reason: "Synthetic correction", replacement: { decidedAt: "2026-09-16T00:00:00Z", responseDocumentId: "ur_one", decisions: [{ itemId: "item_one", outcome: "approved" as const, authorizationNumber: "SYNTHETIC" }] } };
+  await client.correctDecision("rfa_one", correction, "correction_key");
+  expect(String(fetcher.mock.calls[1]?.[0])).toContain("/decision-corrections");
+  expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual(correction);
+});
