@@ -1,6 +1,8 @@
 "use client";
 
-import { sanitizeBillReviewSaveInput } from "@mindbill/browser";
+import { ClaimLineSummary } from "./claim-form-summary";
+
+import { type ClaimForm, type BillFormData, type BillLineFormData, type BilledDrug, sanitizeBillReviewSaveInput } from "@mindbill/browser";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
 import { acceptedNoResponseLabel } from "./bill-status-label";
@@ -25,7 +27,7 @@ export type BillReviewBillingProvider = {
   taxIdConfigured?: boolean;
   taxIdLast4?: string;
   npi: string;
-  billType: "Professional" | "Institutional";
+  billType: "Professional" | "Institutional" | "Dental" | "Pharmacy";
   phone?: string;
   billingStreet?: string;
   billingCity?: string;
@@ -63,6 +65,8 @@ export type BillReviewLocation = {
 };
 
 export type BillReviewLineItem = {
+  formData?: BillLineFormData;
+  drug?: BilledDrug;
   id?: string;
   code: string;
   modifiers: string[];
@@ -74,6 +78,12 @@ export type BillReviewLineItem = {
   diagnosisPointers?: number[];
 };
 
+/** A revenue code or NDC identifies a service even without a CPT/HCPCS code. */
+export function hasBillReviewService(line: BillReviewLineItem): boolean {
+  return Boolean(line.code.trim() || line.drug?.ndcNumber.trim()
+    || (typeof line.formData?.institutional?.revenueCode === "string" && line.formData.institutional.revenueCode.trim()));
+}
+
 const EMPTY_PROCEDURE_LINE: BillReviewLineItem = {
   code: "",
   modifiers: [],
@@ -82,7 +92,7 @@ const EMPTY_PROCEDURE_LINE: BillReviewLineItem = {
 };
 
 function isEmptyProcedureLine(line: BillReviewLineItem): boolean {
-  return !line.code.trim() && line.modifiers.length === 0 && line.units === 1 && !line.serviceDate && !line.serviceDateEnd && !line.charge && !(line.diagnosisPointers?.length);
+  return !line.formData && !line.drug && !line.code.trim() && line.modifiers.length === 0 && line.units === 1 && !line.serviceDate && !line.serviceDateEnd && !line.charge && !(line.diagnosisPointers?.length);
 }
 
 /** Keeps completed/partial lines plus one keyboard-ready empty row. */
@@ -143,6 +153,8 @@ export type BillReviewClaimPatternStatus = {
 
 export type BillReviewData = {
   bill: {
+    claimForm?: ClaimForm;
+    formData?: BillFormData;
     id: string;
     billingMode: "med_legal" | "professional";
     billNumber: string | number;
@@ -183,6 +195,7 @@ export type BillReviewData = {
 };
 
 export type BillReviewSaveInput = {
+  formData?: BillFormData;
   claimsAdminId: string;
   /** The chosen payer (subpayor) when the claims administrator requires payer selection. */
   payerId?: string;
@@ -207,6 +220,8 @@ export type BillReviewSaveInput = {
   renderingProvider?: BillReviewClinician;
   placeOfService?: BillReviewLocation;
   lineItems: Array<{
+    formData?: BillLineFormData;
+    drug?: BilledDrug;
     id?: string;
     code: string;
     modifiers: string[];
@@ -287,6 +302,8 @@ export type BillReviewFormProps = {
 };
 
 export type BillReviewDraft = {
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   claimsAdminId: string;
   claimsAdminName: string;
   patientFirstName: string;
@@ -372,6 +389,8 @@ function toDraft(data: BillReviewData): BillReviewDraft {
   const snapshot = data.bill.billingSnapshot;
   const nameParts = data.patient.name.trim().split(/\s+/);
   return {
+    ...(data.bill.claimForm ? { claimForm: data.bill.claimForm } : {}),
+    ...(data.bill.formData ? { formData: data.bill.formData } : {}),
     claimsAdminId: data.injury.claimsAdminId || "",
     claimsAdminName: data.injury.claimsAdminName || "",
     patientFirstName: data.patient.firstName || nameParts[0] || "",
@@ -402,6 +421,7 @@ export function buildBillReviewSaveInput(
 ): BillReviewSaveInput {
   return sanitizeBillReviewSaveInput({
     claimsAdminId: draft.claimsAdminId,
+    ...(draft.formData !== undefined ? { formData: draft.formData } : {}),
     patientOverrides: {
       firstName: draft.patientFirstName.trim(),
       ...(draft.patientMiddleName.trim() ? { middleName: draft.patientMiddleName.trim() } : {}),
@@ -422,8 +442,10 @@ export function buildBillReviewSaveInput(
     billingProvider: { ...draft.billingProvider },
     renderingProvider: { ...draft.clinician },
     placeOfService: { ...draft.location },
-    lineItems: draft.lineItems.filter((line) => line.code.trim()).map(({ id, code, modifiers, units, charge, serviceDate, serviceDateEnd, diagnosisPointers }) => ({
+    lineItems: draft.lineItems.filter(hasBillReviewService).map(({ id, code, modifiers, units, charge, serviceDate, serviceDateEnd, diagnosisPointers, formData, drug }) => ({
       ...(id ? { id } : {}),
+      ...(formData !== undefined ? { formData } : {}),
+      ...(drug !== undefined ? { drug } : {}),
       code: code.trim().toUpperCase(),
       modifiers,
       units,
@@ -716,7 +738,7 @@ export function BillReviewForm({
     if (!draft.billingProvider.npi.trim()) result.push("Billing NPI");
     if (!draft.clinician.name.trim() || !draft.clinician.npi.trim()) result.push("Clinician and NPI");
     if (![draft.location.name, draft.location.street, draft.location.city, draft.location.state, draft.location.zip].every((value) => value.trim())) result.push("Service location");
-    const completedLines = draft.lineItems.filter((line) => line.code.trim());
+    const completedLines = draft.lineItems.filter(hasBillReviewService);
     if (!completedLines.length || completedLines.some((line) => line.units <= 0)) result.push("Valid procedure line");
     if (data.bill.billingMode === "professional" && completedLines.some((line) => !line.serviceDate || line.charge <= 0)) {
       result.push("Service date and charge on every procedure line");
@@ -1003,7 +1025,7 @@ export function BillReviewForm({
         <div className="mb-native-lines">
           {draft.lineItems.map((line, index) => (
             <div className={`mb-native-line ${data.bill.billingMode === "professional" ? "professional" : ""}`} key={line.id || index}>
-              <label className="mb-native-field"><span>Procedure<span className="mb-native-required" aria-hidden="true"> *</span></span>{data.bill.billingMode === "professional" ? <input disabled={!editable} placeholder="CPT / HCPCS code" value={line.code} onChange={(event) => {
+              <label className="mb-native-field"><span>Procedure{draft.claimForm !== "ub04" && draft.claimForm !== "ncpdp" ? <span className="mb-native-required" aria-hidden="true"> *</span> : null}</span>{data.bill.billingMode === "professional" ? <input disabled={!editable} placeholder={draft.claimForm === "ada" ? "CDT code" : "CPT / HCPCS code"} value={line.code} onChange={(event) => {
                 const code = event.target.value.toUpperCase();
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, code } : item)) }));
               }} /> : <select disabled={!editable} value={line.code} onChange={(event) => {
@@ -1016,7 +1038,7 @@ export function BillReviewForm({
                   });
                   return { ...current, lineItems: ensureTrailingProcedureLine(lineItems) };
                 });
-              }}><option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</select>}{data.bill.billingMode === "med_legal" && line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}</label>
+              }}><option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</select>}{data.bill.billingMode === "med_legal" && line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}<ClaimLineSummary line={line} /></label>
               <div className="mb-native-modifiers">{data.bill.billingMode === "professional" ? <label className="mb-native-field"><span>Modifiers</span><input disabled={!editable} placeholder="e.g. 25, 59" value={line.modifiers.join(", ")} onChange={(event) => {
                 const modifiers = event.target.value.toUpperCase().split(/[ ,]+/).map((value) => value.replace(/^-/, "")).filter(Boolean);
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers } : item)) }));
@@ -1025,11 +1047,11 @@ export function BillReviewForm({
                 if (!modifier) return;
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: [...new Set([...item.modifiers, modifier])] } : item)) }));
               }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label>}<div className="mb-native-chips">{data.bill.billingMode === "med_legal" ? line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item)) }))}>-{modifier} ×</button>) : null}</div></div>
-              <label className="mb-native-field"><span>Units<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min="1" required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item)) }))} /></label>
+              <label className="mb-native-field"><span>Units<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min={line.drug || draft.claimForm === "ncpdp" ? "0.001" : "1"} step={line.drug || draft.claimForm === "ncpdp" ? "any" : "1"} required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item)) }))} /></label>
               {data.bill.billingMode === "professional" ? <>
-                <label className="mb-native-field"><span>Service date<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="date" required={Boolean(line.code)} disabled={!editable} value={line.serviceDate || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDate: event.target.value } : item)) }))} /></label>
+                <label className="mb-native-field"><span>Service date<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="date" required={hasBillReviewService(line)} disabled={!editable} value={line.serviceDate || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDate: event.target.value } : item)) }))} /></label>
                 <label className="mb-native-field"><span>End date <small>Optional</small></span><input type="date" disabled={!editable} value={line.serviceDateEnd || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDateEnd: event.target.value } : item)) }))} /></label>
-                <label className="mb-native-field"><span>Charge<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min="0.01" step="0.01" required={Boolean(line.code)} disabled={!editable} value={line.charge || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, charge: Number(event.target.value) } : item)) }))} /></label>
+                <label className="mb-native-field"><span>Charge<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min="0.01" step="0.01" required={hasBillReviewService(line)} disabled={!editable} value={line.charge || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, charge: Number(event.target.value) } : item)) }))} /></label>
                 <label className="mb-native-field"><span>Diagnosis pointers <small>1–12</small></span><input inputMode="numeric" disabled={!editable} value={(line.diagnosisPointers || []).join(", ")} onChange={(event) => { const diagnosisPointers = event.target.value.split(/[ ,]+/).map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 12); setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, diagnosisPointers } : item)) })); }} /></label>
               </> : null}
               <div className="mb-native-allowed"><span>Allowed</span><strong>{money(line.charge)}</strong></div>

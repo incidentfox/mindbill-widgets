@@ -1,4 +1,16 @@
 import { parseCaClaimFeeQuote, type CaClaimFeeQuoteInput, type CaClaimFeeQuoteResult } from "./claim-fees";
+/** Paper claim family; clearinghouse transport is selected by the server. */
+export type ClaimForm = "cms1500" | "ub04" | "ada" | "ncpdp";
+/** JSON fields validated by the server's form-specific contract. */
+export type BillFormValue = string | number | boolean | null | BillFormValue[] | { [key: string]: BillFormValue };
+export type BillFormData = {
+  institutional?: { [key: string]: BillFormValue };
+  dental?: { [key: string]: BillFormValue };
+  pharmacy?: { [key: string]: BillFormValue };
+};
+/** Service-line metadata, including revenue, tooth, and prescription details. */
+export type BillLineFormData = BillFormData;
+
 export type { CaClaimFeeQuoteInput, CaClaimFeeQuoteResult, CaClaimLineQuote, CaFeeCalculation, CaFeeCitation, CaClaimEditFinding, CaClaimFeeFinding } from "./claim-fees";
 export { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance } from "./rfa-directory";
 export type { RfaAuthorizationDestinationOption } from "./rfa-directory";
@@ -24,7 +36,7 @@ export type BillReviewBillingProvider = {
   taxIdConfigured?: boolean;
   taxIdLast4?: string;
   npi: string;
-  billType: "Professional" | "Institutional";
+  billType: "Professional" | "Institutional" | "Dental" | "Pharmacy";
   phone?: string;
   billingStreet?: string;
   billingCity?: string;
@@ -72,6 +84,8 @@ export type BillLineFeeBreakdown = {
 };
 
 export type BillReviewLineItem = {
+  formData?: BillLineFormData;
+  drug?: BilledDrug;
   id?: string;
   code: string;
   modifiers: string[];
@@ -189,6 +203,8 @@ export type BillReviewClaimPatternStatus = {
 export type BillReviewData = {
   options?: Pick<OrganizationProfileData, "billingProviders" | "renderingProviders" | "locations">;
   bill: {
+    claimForm?: ClaimForm;
+    formData?: BillFormData;
     id: string;
     billNumber: string | number;
     status: string;
@@ -243,6 +259,7 @@ export type BillReviewData = {
 };
 
 export type BillReviewSaveInput = {
+  formData?: BillFormData;
   claimsAdminId: string;
   /** The chosen payer (subpayor) when the claims administrator requires payer selection. */
   payerId?: string;
@@ -267,6 +284,8 @@ export type BillReviewSaveInput = {
   renderingProvider?: BillReviewClinician;
   placeOfService?: BillReviewLocation;
   lineItems: Array<{
+    formData?: BillLineFormData;
+    drug?: BilledDrug;
     id?: string;
     code: string;
     modifiers: string[];
@@ -298,6 +317,7 @@ export function sanitizeBillReviewSaveInput(
 ): BillReviewSaveInput {
   return {
     claimsAdminId: input.claimsAdminId,
+    ...(input.formData !== undefined ? { formData: input.formData } : {}),
     ...(input.payerId !== undefined ? { payerId: input.payerId } : {}),
     ...(input.patientOverrides ? {
       patientOverrides: pickDefined(input.patientOverrides, [
@@ -336,7 +356,7 @@ export function sanitizeBillReviewSaveInput(
     } : {}),
     lineItems: input.lineItems.map((line) => pickDefined(line, [
       "id", "code", "modifiers", "units", "charge", "serviceDate",
-      "serviceDateEnd", "diagnosisPointers",
+      "serviceDateEnd", "diagnosisPointers", "formData", "drug",
     ]) as BillReviewSaveInput["lineItems"][number]),
   };
 }
@@ -948,6 +968,8 @@ export type BrowserBillAddress = {
 
 /** Complete bill snapshot accepted by the browser create endpoint. */
 export type BrowserBillCreateInput = {
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   externalId?: string;
   billingMode?: "med_legal" | "professional";
   patient: {
@@ -993,6 +1015,7 @@ export type BrowserBillCreateInput = {
   serviceLocation: { name?: string; address: BrowserBillAddress; placeOfServiceCode: string };
   diagnoses: string[];
   serviceLines: Array<{
+    formData?: BillLineFormData;
     code: string;
     modifiers?: string[];
     units?: number;

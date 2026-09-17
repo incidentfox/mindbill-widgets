@@ -11,6 +11,7 @@ import type {
   BillReviewLineItem,
   HistoricalBillReviewData,
 } from "@mindbill/browser";
+import { ClaimLineSummary, CLAIM_FORM_LABELS } from "./claim-form-summary";
 import { BillDetailLayout, BillDetailSection, type BillDetailValidationIssue } from "./bill-detail-layout";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
@@ -138,6 +139,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
     <BillDetailLayout header={<h2 style={{ margin: 0 }}>Bill details</h2>} actions={<strong>{money(bill.totalCharge)}</strong>}>
 
     <BillDetailSection title="Bill information" validationIssues={validationIssues?.providers ?? []}><dl className="mb-read-grid">
+      {bill.claimForm && bill.claimForm !== "cms1500" ? <Value label="Bill form">{CLAIM_FORM_LABELS[bill.claimForm]}</Value> : null}
       <Value label="Date of service">{bill.dosEnd ? `${date(bill.dos)} – ${date(bill.dosEnd)}` : date(bill.dos)}</Value>
       <Value label="Place of service">{location?.name || locationAddress}</Value>
       <Value label="Billing provider">{provider?.name}</Value>
@@ -175,7 +177,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
     <BillDetailSection title="Service lines" validationIssues={validationIssues?.services ?? []}><div className="mb-read-lines" role="table" aria-label="Service lines">
       <div className="mb-read-line-header" role="row"><span>Procedure</span><span>Modifiers</span><span>Units</span><span>Charge</span></div>
       {bill.lineItems.map((line, index) => <div className="mb-read-line" role="row" key={line.id ?? `${line.code}-${index}`}>
-        <strong>{line.code}</strong><div className="mb-read-chips">{line.modifiers.length ? line.modifiers.map((modifier) => <span key={modifier}>{modifier}</span>) : "—"}</div><span>{line.units}</span><details className="mb-read-charge"><summary aria-label={`Charge breakdown for ${line.code}, line ${index + 1}`}>{money(line.charge)}</summary><LineChargeDetails line={line} /></details>
+        <div><strong>{line.code}</strong><ClaimLineSummary line={line} /></div><div className="mb-read-chips">{line.modifiers.length ? line.modifiers.map((modifier) => <span key={modifier}>{modifier}</span>) : "—"}</div><span>{line.units}</span><details className="mb-read-charge"><summary aria-label={`Charge breakdown for ${line.code}, line ${index + 1}`}>{money(line.charge)}</summary><LineChargeDetails line={line} /></details>
       </div>)}
       <div className="mb-read-total"><span>Paid {money(bill.totalPaid)}</span><strong>Balance {money(bill.balanceDue)}</strong></div>
     </div></BillDetailSection>

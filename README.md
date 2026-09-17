@@ -20,6 +20,8 @@ MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, pa
 
 React 0.62 loads saved provider/location choices automatically for organization-wide bill creation. Administrator-only `billingSettings` opens reusable practice setup from bill creation and correction. See [saved profiles](docs/saved-profiles.md). Component styles are injected; no stylesheet import is required.
 
+Institutional, dental, and pharmacy bill contracts preserve form and service-line metadata, including compound ingredients. Review views display specialty identifiers, and hosts can use `onOpenClaimForm` for the matching paper preview. See [specialty billing](docs/specialty-billing.md) for API fields and entry/validation boundaries.
+
 React components render without vendor attribution footers.
 
 ## Install

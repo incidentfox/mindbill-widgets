@@ -16,6 +16,9 @@ import {
   type BillDeliveryOptions,
   type BillFeeQuote,
   type BilledDrug,
+  type ClaimForm,
+  type BillFormData,
+  type BillLineFormData,
   type BillFeeContext,
   type BillFeeQuoteInput,
   type BillProcedureCodeSearchInput,
@@ -111,6 +114,8 @@ export type BillSubmissionTaxonomyOption = { code: string; description: string }
 export type BillSubmissionPostalPlace = { city: string; state: string };
 
 export type BillSubmissionInput = {
+  claimForm?: ClaimForm;
+  formData?: BillFormData;
   externalId?: string;
   billingMode?: "med_legal" | "professional";
   patient: {
@@ -150,6 +155,7 @@ export type BillSubmissionInput = {
     /** Context used for the displayed fee, revalidated when submitting. */
     feeContext?: BillFeeContext;
     drug?: BilledDrug;
+    formData?: BillLineFormData;
     /** Authorized RFA item associated with this procedure. Cleared when its code changes. */
     rfaItemId?: string;
   }>;
@@ -491,7 +497,7 @@ function blankLine(): BillSubmissionInput["serviceLines"][number] {
   return { code: "", modifiers: [], units: 1 };
 }
 function lineHasContent(line: BillSubmissionInput["serviceLines"][number]): boolean {
-  return Boolean(line.code.trim() || line.modifiers?.length || line.charge != null);
+  return Boolean(line.code.trim() || line.modifiers?.length || line.charge != null || line.drug || line.formData);
 }
 export function ensureTrailingBillSubmissionLine(
   lines: BillSubmissionInput["serviceLines"],
