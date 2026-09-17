@@ -1188,6 +1188,16 @@ export type CaTherapyContext = {
     hpsaBonusEligible: boolean;
   };
 
+/** Documented interpretation and imaging-session facts; an omitted completeness fact remains unknown. */
+export type CaProfessionalComponentContext = {
+  interpretationLocation: "same_as_patient_service" | "different_from_patient_service";
+  supervisionLevel?: "general" | "direct" | "personal";
+  /** Actual session label, 1–64 letters/digits/._:-, beginning with a letter or digit. Never a patient identifier. */
+  imagingSessionReference?: string;
+  /** All imaging for this patient/provider group/date is included, including separately billed services. */
+  completeSameDayImagingServices?: boolean;
+};
+
 export type BillFeeQuoteInput = {
   drug?: BilledDrug;
   padbContext?: CaPadbContext;
@@ -1204,9 +1214,7 @@ export type BillFeeQuoteInput = {
   hasFeeAgreement?: boolean;
   serviceZip?: string;
   /** Explicit physical interpretation location for a professional component. */
-  professionalComponentContext?: {
-    interpretationLocation: "same_as_patient_service" | "different_from_patient_service";
-  };
+  professionalComponentContext?: CaProfessionalComponentContext;
   /** California equipment pricing uses worker residence, independently of service location. */
   dmeposContext?: {
     residenceZip: string;

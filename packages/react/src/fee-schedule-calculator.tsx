@@ -4,7 +4,7 @@ import type { BillReferenceClient, CaClaimFeeQuoteInput, CaClaimFeeQuoteResult, 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 
 type Line = CaClaimFeeQuoteInput["lines"][number];
-type Draft = { line: Line; modifiers: string; charge: string };
+type Draft = { line: Line; modifiers: string; charge: string; interpretationLocation: string; imagingSessionReference: string };
 export type FeeScheduleCalculatorProps = {
   client: Pick<BillReferenceClient, "quoteClaimFees">;
   initialLines?: CaClaimFeeQuoteInput["lines"];
@@ -20,7 +20,7 @@ function SourceLink({ url, children }: { url: string; children: React.ReactNode 
 function Sources({ sources }: { sources: CaFeeCitation[] }) { return <ul className="mbfc-sources">{sources.map((s, i) => <li key={`${s.id}-${i}`}><SourceLink url={s.url}>{s.id}</SourceLink>{(s.effectiveFrom || s.effectiveThrough) && <small>Effective {s.effectiveFrom ?? "—"} through {s.effectiveThrough ?? "open-ended"}</small>}</li>)}</ul>; }
 const physician = (): NonNullable<Line["physicianContext"]> => ({ providerKind: "physician", placeOfService: "11", standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false });
 const newLine = (id: string): Line => ({ id, code: "", dateOfService: "", units: 1, physicianContext: physician() });
-const draft = (line: Line): Draft => ({ line: { ...line, ...(!line.physicianContext && !line.therapyContext && !line.anesthesiaContext && !line.padbContext ? { physicianContext: physician() } : {}) }, modifiers: line.modifiers?.join(", ") ?? "", charge: line.chargeCents === undefined ? "" : (line.chargeCents / 100).toFixed(2) });
+const draft = (line: Line): Draft => ({ line: { ...line, ...(!line.physicianContext && !line.therapyContext && !line.anesthesiaContext && !line.padbContext ? { physicianContext: physician() } : {}) }, modifiers: line.modifiers?.join(", ") ?? "", interpretationLocation: line.professionalComponentContext?.interpretationLocation ?? "", imagingSessionReference: line.professionalComponentContext?.imagingSessionReference ?? "", charge: line.chargeCents === undefined ? "" : (line.chargeCents / 100).toFixed(2) });
 
 /** Uses the server's effective-date calculation and claim edits; never calculates fees in the browser. */
 export function FeeScheduleCalculator({ client, initialLines, onQuote, appearance, className, style }: FeeScheduleCalculatorProps) {
@@ -31,29 +31,44 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
   const generation = useRef(0);
   const counter = useRef(1);
   useEffect(() => () => { generation.current++; }, []);
-  const change = (next: Draft[]) => { generation.current++; setRows(next); setResult(null); setError(""); setBusy(false); };
-  const update = (index: number, patch: Partial<Line>, extra: Partial<Draft> = {}) => change(rows.map((row, i) => i === index ? { ...row, ...extra, line: { ...row.line, ...patch } } : row));
+  const change = (next: Draft[], membershipChanged = false) => {
+    // Host completeness describes its supplied encounter. Membership edits require a new authoritative encounter.
+    if (membershipChanged) next = next.map(row => {
+      if (!row.line.professionalComponentContext) return row;
+      const context = { ...row.line.professionalComponentContext }; delete context.completeSameDayImagingServices;
+      return { ...row, line: { ...row.line, professionalComponentContext: context } };
+    });
+    generation.current++; setRows(next); setResult(null); setError(""); setBusy(false); };
+  const update = (index: number, patch: Partial<Line>, extra: Partial<Draft> = {}) => change(rows.map((row, i) => i === index ? { ...row, ...extra, line: { ...row.line, ...patch } } : row), ["code", "dateOfService", "units"].some(key => key in patch) || "modifiers" in extra);
   const updatePhysician = (index: number, patch: Partial<NonNullable<Line["physicianContext"]>>) => update(index, { physicianContext: { ...physician(), ...rows[index]!.line.physicianContext, ...patch } });
   const updateTherapy = (index: number, patch: Partial<NonNullable<Line["therapyContext"]>>) => update(index, { therapyContext: { ...rows[index]!.line.therapyContext!, ...patch } });
   function selectServiceType(index: number, therapy: boolean) {
     const physicianContext = rows[index]!.line.physicianContext;
     const base = { ...rows[index]!.line }; delete base.physicianContext; delete base.therapyContext;
     const line: Line = therapy ? { ...base, therapyContext: { providerKind: "physical_therapist", placeOfService: physicianContext?.placeOfService ?? "11", personallyPerformed: true, hospitalPatient: false, incidentToPhysicianService: false, assistantInvolved: false, directOneOnOneMinutes: 0, totalVisitMinutes: 0, visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false, globalPeriodApplies: false, hpsaBonusEligible: false } } : { ...base, physicianContext: physician() };
-    change(rows.map((row, i) => i === index ? { ...row, line } : row));
+    change(rows.map((row, i) => i === index ? { ...row, line } : row), true);
   }
   async function calculate() {
     const requestGeneration = ++generation.current; setBusy(true); setError(""); setResult(null);
     try {
-      const lines = rows.map(({ line, modifiers, charge }) => {
+      const lines = rows.map(({ line, modifiers, charge, interpretationLocation, imagingSessionReference }) => {
         const values = modifiers.trim() ? modifiers.trim().toUpperCase().split(/[\s,]+/) : [];
         if (values.length > 4 || new Set(values).size !== values.length || values.some((v) => !/^[A-Z0-9]{2}$/.test(v))) throw new Error("Enter up to four distinct two-character modifiers per line.");
         if (charge && !/^\d+(\.\d{1,2})?$/.test(charge)) throw new Error("Enter charges in dollars with no more than two decimal places.");
-        const base = { ...line }; delete base.chargeCents; delete base.serviceZip; delete base.serviceCounty;
+        if (imagingSessionReference && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(imagingSessionReference)) throw new Error("Use a session reference of 1–64 letters, numbers, periods, underscores, colons or hyphens, beginning with a letter or number.");
+        if (imagingSessionReference && !interpretationLocation) throw new Error("Select the interpretation location for each imaging session.");
+        const base = { ...line }; delete base.professionalComponentContext; delete base.chargeCents; delete base.serviceZip; delete base.serviceCounty;
+        const professional = { ...line.professionalComponentContext }; delete professional.imagingSessionReference;
         const amount = charge ? Math.round(Number(charge) * 100) : undefined;
         if (amount !== undefined && !Number.isSafeInteger(amount)) throw new Error("Charge is outside the supported range.");
         return { ...base, ...(line.serviceZip?.trim() ? { serviceZip: line.serviceZip.trim() } : {}), ...(line.serviceCounty?.trim() ? { serviceCounty: line.serviceCounty.trim() } : {}), code: line.code.toUpperCase().trim(), modifiers: values,
           ...(amount === undefined ? {} : { chargeCents: amount }),
           catalogContext: { ...line.catalogContext, codingRequirementsSatisfied: true },
+          ...(interpretationLocation ? { professionalComponentContext: {
+            ...professional,
+            interpretationLocation: interpretationLocation as "same_as_patient_service" | "different_from_patient_service",
+            ...(imagingSessionReference ? { imagingSessionReference } : {}),
+          } } : {}),
           ...(line.therapyContext ? { therapyContext: { ...line.therapyContext, completeSameDayServices: true, otherSameDayServices: rows.some((r) => r.line.id !== line.id && r.line.dateOfService === line.dateOfService) } } : {}),
           ...(line.physicianContext ? { physicianContext: { ...line.physicianContext, standaloneService: rows.filter((r) => r.line.dateOfService === line.dateOfService).length === 1 } } : {}),
         };
@@ -68,7 +83,7 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
     <style>{styles}</style>
     <header><p className="mbfc-eyebrow">CALIFORNIA · FEE SCHEDULES</p><h2>Calculate treatment fees</h2><p>Enter all services for one patient and provider or group. Each service date selects the applicable schedule and amendments.</p></header>
     <form onSubmit={(event) => { event.preventDefault(); void calculate(); }}>
-      {rows.map(({ line, modifiers, charge }, index) => <fieldset key={line.id}><legend>Service {index + 1}</legend>
+      {rows.map(({ line, modifiers, charge, interpretationLocation, imagingSessionReference }, index) => <fieldset key={line.id}><legend>Service {index + 1}</legend>
         <div className="mbfc-grid">
           <label>Procedure code<input required pattern="[A-Za-z0-9]{5}" maxLength={5} value={line.code} onChange={(e) => update(index, { code: e.target.value.toUpperCase() })} /></label>
           <label>Date of service<input required type="date" value={line.dateOfService} onChange={(e) => update(index, { dateOfService: e.target.value })} /></label>
@@ -94,11 +109,19 @@ export function FeeScheduleCalculator({ client, initialLines, onQuote, appearanc
             <label>HPSA bonus eligibility<select value={String(line.physicianContext?.hpsaBonusEligible ?? false)} onChange={(e) => updatePhysician(index, { hpsaBonusEligible: e.target.value === "true" })}><option value="false">Not eligible</option><option value="true">Eligible</option></select></label>
             {line.physicianContext && line.physicianContext.providerKind !== "physician" && <label>Incident to physician service<select value={line.physicianContext.incidentToPhysicianService === undefined ? "" : String(line.physicianContext.incidentToPhysicianService)} onChange={(e) => updatePhysician(index, { incidentToPhysicianService: e.target.value === "true" })}><option value="">Not specified</option><option value="false">No</option><option value="true">Yes</option></select></label>}
           </div>}
+          {(modifiers.split(/[\s,]+/).includes("26") || line.professionalComponentContext || interpretationLocation || imagingSessionReference) && <div className="mbfc-imaging">
+            <h3>Professional interpretation</h3>
+            <div className="mbfc-grid">
+              <label>Interpretation location<select value={interpretationLocation} onChange={e => update(index, {}, { interpretationLocation: e.target.value })}><option value="">Not specified</option><option value="same_as_patient_service">Same physical location as patient service</option><option value="different_from_patient_service">Different physical location</option></select></label>
+              <label>Imaging session reference<input maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._:\-]{0,63}" placeholder="Optional, e.g. session-1" value={imagingSessionReference} onChange={e => update(index, {}, { imagingSessionReference: e.target.value })} /><small>Use the same reference only for services in the same actual imaging session. Do not include patient identifiers.</small></label>
+            </div>
+            <p>{line.professionalComponentContext?.completeSameDayImagingServices === true ? "Your application supplied the complete imaging encounter for this patient, provider group and service date." : "Imaging session pricing needs a complete encounter from your application, including imaging billed elsewhere for this patient, provider group and date. An incomplete or unknown encounter needs review."}</p>
+          </div>}
           {line.dmeposContext && <p>Equipment residence ZIP: {line.dmeposContext.residenceZip}. Rental and prior-payment context supplied by your application.</p>}
         </details>
-        {rows.length > 1 && <button type="button" className="mbfc-remove" onClick={() => change(rows.filter((_, i) => i !== index))}>Remove service {index + 1}</button>}
+        {rows.length > 1 && <button type="button" className="mbfc-remove" onClick={() => change(rows.filter((_, i) => i !== index), true)}>Remove service {index + 1}</button>}
       </fieldset>)}
-      <div className="mbfc-actions"><button type="button" disabled={rows.length >= 100} onClick={() => { let id: string; do { id = `line-${++counter.current}`; } while (rows.some((r) => r.line.id === id)); change([...rows, draft(newLine(id))]); }}>Add service</button><button className="mbfc-primary" type="submit" disabled={busy}>{busy ? "Calculating…" : "Calculate fees"}</button></div>
+      <div className="mbfc-actions"><button type="button" disabled={rows.length >= 100} onClick={() => { let id: string; do { id = `line-${++counter.current}`; } while (rows.some((r) => r.line.id === id)); change([...rows, draft(newLine(id))], true); }}>Add service</button><button className="mbfc-primary" type="submit" disabled={busy}>{busy ? "Calculating…" : "Calculate fees"}</button></div>
       {error && <p className="mbfc-error" role="alert">{error}</p>}
     </form>
     {result && <section className="mbfc-results" aria-label="Calculation results" aria-live="polite">
