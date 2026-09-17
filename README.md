@@ -484,3 +484,5 @@ sending remain disabled in sandbox. See the
 `BillSubmissionForm` accepts `reportAutofill={{ getSession }}` to add an explicit upload → review → apply flow. It is hidden by default and available only by written agreement with an operator-provisioned `reportAutofill` capability and dedicated organization-wide `autofill:run` session. Existing entries and service lines are preserved; analysis does not save attachments or submit bills. Custom UIs can use `ReportAutofill`, `applyReportAutofill`, or `createReportAutofillClient`. See [report suggestions](docs/report-autofill.md).
 
 Workspace detail links now open the corresponding patient, physician or claims-administrator bill filter when canonical IDs are available. Hosts can override `onPatientClick`, `onRenderingProviderClick` and `onClaimsAdministratorClick`; see [bill search](docs/bill-search.md).
+
+RFA response workflows include a task board, reviewed incoming-fax matching, per-treatment Post UR decisions, and supporting PDFs during request creation. See the [RFA dashboard guide](docs/rfa-dashboard.md) for permissions and integration details.

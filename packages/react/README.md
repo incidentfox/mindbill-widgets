@@ -483,3 +483,5 @@ for `93/95`. Medical-legal lines retain evaluator defaults and modifier meanings
 Treatment-only bills hide the evaluator selector. Modifier choices do not promise
 pricing: unresolved quotes remain subject to fee review, with readable help text
 that wraps on mobile. See [modifier guidance](../../docs/evaluation-modifiers.md).
+
+RFA response workflows include a task board, reviewed incoming-fax matching, per-treatment Post UR decisions, and supporting PDFs during request creation. See the [RFA dashboard guide](../../docs/rfa-dashboard.md) for permissions and integration details.

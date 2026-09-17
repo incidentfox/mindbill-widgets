@@ -348,3 +348,17 @@ remain scoped to the authorized organization and environment.
 The detail view lists retained packet PDFs and their transmission history. Opening a packet loads the immutable PDF that was prepared for that submission; it does not regenerate a new document from current data.
 
 `RfaPacketsPanel` is also exported for standalone use. Forwarding requires `environment="live"`, the `act` permission, an eligible retained packet, review of its exact PDF, and explicit confirmation of the recipient. A forward creates a separate transmission and does not replace the original submission or reset the review timeline. Sandbox forwarding is disabled. Available delivery channels are enforced by the backend; an unavailable email channel returns an error rather than claiming delivery succeeded.
+
+## Response tasks and supporting documents
+
+The dashboard includes a **Tasks** view with **Due**, **Scheduled**, and **Completed** work, filtered by task type. Patient, claim, and physician filters also scope task results. Opening a task leads to the corresponding request; follow-up assignments, notes, and next-contact dates stay in its history. An unanswered treatment remains pending after another treatment receives a decision.
+
+The organization-wide Tasks view includes **Match UR**. Review the authenticated incoming fax PDF, choose a request, and explicitly confirm the patient, claim, and treatment match. OCR suggestions help find candidates but never select a tenant or post decisions. Matching opens **Post UR** with the retained response PDF. Record verified receipt when required, then decisions for each treatment addressed by the response. Complete the review only after confirming all decisions in that document were recorded, or explicitly mark a duplicate/no-new-decision response with a note. Partial responses leave the remaining treatments and No Response follow-up open.
+
+`RfaTaskBoard` is available separately with the usual session and appearance props, optional `patientId`, `claimId`, and `renderingProviderId`, `permissions={["act"]}` for matching, and `onSelect(rfaId, responseDocumentId?)` for navigation. Read-only users can inspect tasks and PDFs. The unmatched inbox appears only in the organization-wide view because unmatched faxes have no verified patient/claim association yet.
+
+`createRfaLifecycleClient` exposes `listInboundFaxes({limit, cursor, includeMatched})`, `getInboundFaxContent(faxId)`, and `matchInboundFax(faxId, rfaId, idempotencyKey)`. Inbox reads use `rfas:read`; matching uses `rfas:act`. RFA-attached document previews still require `documents:read`. Follow `nextCursor` until null and reset pagination when changing filters. These endpoints require an organization-wide session; customer-scoped or bill-scoped sessions cannot access the response inbox.
+
+New-request preparation includes supporting PDF selection in the same form. Creating the request uploads the selected files in sequence, preserving the latest revision. If an upload fails, the saved draft remains available and identifies the incomplete upload for retry. Signing remains blocked until required supporting documents are present. Creating and uploading needs both `rfas:create` and `rfas:edit`.
+
+Return fax numbers are managed by the backend. Live sending requires a verified, unambiguous receiving-number configuration for the organization and partner. Sandbox uses a fictional number and sends nothing. Response deadlines come from the API; hosts should not calculate separate client-side clocks.

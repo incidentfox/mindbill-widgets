@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
+import { RfaTaskBoard } from "./rfa-task-board";
 import { RfaTrackingPanel } from "./rfa-tracking-panel";
 import { RfaRequestSummary } from "./rfa-request-summary";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
@@ -56,6 +57,9 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   const [searchInput, setSearchInput] = useState(""); const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<NonNullable<RfaListQuery["sortBy"]>>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [creationWarning, setCreationWarning] = useState("");
+  const [taskView, setTaskView] = useState(false);
+  const [selectedResponseDocumentId, setSelectedResponseDocumentId] = useState<string | undefined>();
   const [listView, setListView] = useState<"rfas" | "treatments">("rfas");
   const [pageHistory, setPageHistory] = useState<Array<string | undefined>>([]);
   const resetPage = () => { setCursor(undefined); setPageHistory([]); };
@@ -76,14 +80,27 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     client.list({ ...(patientId ? { patientId } : {}), ...(search ? { search } : {}), sortBy, sortDirection, ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), ...(status ? { status } : {}), ...(cursor ? { cursor } : {}), limit: 50 }).then(value => { if (alive) setResult(value); }).catch(() => { if (alive) setError("Requests could not be loaded. Try refreshing."); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [client, patientId, claimId, renderingProviderId, search, sortBy, sortDirection, status, cursor, reload]);
-  const back = () => { setSelected(null); setSelectedItem(null); setCreating(false); setReload(value => value + 1); };
+  const back = () => { setCreationWarning(""); setSelected(null); setSelectedItem(null); setSelectedResponseDocumentId(undefined); setCreating(false); setReload(value => value + 1); };
   return <TreatmentDraftShell {...appearance} title="Requests for authorization" description="Prepare treatment requests, review signed packets, and track delivery and utilization review decisions.">
     <style>{`.mbrfa-list{display:grid;gap:10px;margin:16px 0}.mbrfa-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:16px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface)}.mbrfa-card strong{display:block}.mbrfa-card small{color:var(--mb-muted)}.mbrfa-status{text-transform:capitalize}.mbrfa-stack{display:grid;gap:16px}.mbrfa-check{display:flex!important;align-items:flex-start;gap:8px!important}.mbrfa-check input{min-height:20px;flex-shrink:0}.mbrfa-summary{display:flex;flex-wrap:wrap;gap:12px;padding:12px;background:var(--mb-soft);border-radius:var(--mb-control-radius)}@media(max-width:520px){.mbrfa-card{grid-template-columns:1fr}}`}</style>
     {selected || creating ? <button type="button" onClick={back}>← All requests</button> : <div className="mbtd-actions"><label>Status<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{STATUSES.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label><button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}>Refresh requests</button>{permissions.includes("create") ? <button type="button" className="mbtd-primary" disabled={appearance.disabled} onClick={() => setCreating(true)}>New authorization request</button> : null}</div>}
-    {creating && permissions.includes("create") ? <RfaCreateForm {...appearance} client={client} canCreateClaim={canCreateClaim} draftFormProps={draftFormProps} {...(initialDraft ? { initialDraft } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} onSave={async draft => {
+    {!selected && !creating ? <div className="mbtd-actions"><button type="button" aria-pressed={!taskView} onClick={() => setTaskView(false)}>Requests</button><button type="button" aria-pressed={taskView} onClick={() => setTaskView(true)}>Tasks and response inbox</button></div> : null}
+    {creationWarning ? <p role="alert">{creationWarning}</p> : null}
+    {creating && permissions.includes("create") ? <RfaCreateForm {...appearance} client={client} canCreateClaim={canCreateClaim} draftFormProps={draftFormProps} {...(initialDraft ? { initialDraft } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} onSave={async (draft, files) => {
       const fingerprint = JSON.stringify(draft); let idempotency = createKeys.current.get(fingerprint); if (!idempotency) { idempotency = key(); createKeys.current.set(fingerprint, idempotency); }
-      const saved = await client.createDraft(draft, idempotency); if (!active.current) return; setCreating(false); setSelected(saved.id); onCreated?.(saved);
-    }} /> : selected ? <RfaDetail key={selected} id={selected} selectedItem={selectedItem} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { setSelectedItem(null); setSelected(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : <>
+      let saved = await client.createDraft(draft, idempotency);
+      let attached = 0;
+      try {
+        for (const file of files) {
+          if (!active.current) return;
+          saved = await client.uploadDocument(saved.id, { file, documentType: "clinical_report", contentRevision: saved.contentRevision }, `${idempotency}-document-${attached}`);
+          attached += 1;
+        }
+      } catch {
+        if (active.current) setCreationWarning(`Draft saved. ${attached} of ${files.length} supporting documents attached. Add the remaining documents below before signing or sending.`);
+      }
+      if (!active.current) return; setCreating(false); setSelected(saved.id); onCreated?.(saved);
+    }} /> : selected ? <RfaDetail key={selected} id={selected} selectedItem={selectedItem} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { setSelectedResponseDocumentId(undefined); setSelectedItem(null); setSelected(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : taskView ? <RfaTaskBoard {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => { setSelectedItem(null); setSelectedResponseDocumentId(documentId); setSelected(id); }} /> : <>
       {error ? <p role="alert">{error}</p> : null}{loading ? <p role="status">Loading authorization requests…</p> : null}
       <form className="mbtd-actions" onSubmit={event => { event.preventDefault(); setSearch(searchInput.trim()); resetPage(); }}>
         <label>Search requests<input type="search" maxLength={200} value={searchInput} placeholder="Patient, physician, claim, RFA, service or code" onChange={event => setSearchInput(event.target.value)} /></label>
@@ -97,7 +114,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     </>}
   </TreatmentDraftShell>;
 }
-function RfaDetail({ id, selectedItem, client, signatureClient, options, permissions, environment, actorReference, onContinue, disabled, draftFormProps, canManageProviderSignatures, onCopied }: { draftFormProps: Pick<import("./rfa-draft-form").RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile">; canManageProviderSignatures: boolean; onCopied: (rfa: RfaRecord) => void; id: string; selectedItem: string | null; client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions; permissions: readonly string[]; environment: string; actorReference?: string; onContinue?: (rfa: RfaRecord) => void; disabled?: boolean }): ReactElement {
+function RfaDetail({ id, selectedItem, selectedResponseDocumentId, client, signatureClient, options, permissions, environment, actorReference, onContinue, disabled, draftFormProps, canManageProviderSignatures, onCopied }: { draftFormProps: Pick<import("./rfa-draft-form").RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile">; canManageProviderSignatures: boolean; onCopied: (rfa: RfaRecord) => void; id: string; selectedItem: string | null; selectedResponseDocumentId?: string; client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions; permissions: readonly string[]; environment: string; actorReference?: string; onContinue?: (rfa: RfaRecord) => void; disabled?: boolean }): ReactElement {
   const [rfa, setRfa] = useState<RfaRecord | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(false);
   const alive = useRef(true); const pending = useRef(false); const loadGeneration = useRef(0); const keys = useRef(new Map<string, string>());
@@ -130,9 +147,11 @@ function RfaDetail({ id, selectedItem, client, signatureClient, options, permiss
   const uploadFiles = (files: File[]) => run(async () => {
     if (!rfa || !permissions.includes("edit") || rfa.submittedAt) return;
     if (files.some(file => !file.name.toLowerCase().endsWith(".pdf") || !file.size || file.size > 25 * 1024 * 1024)) throw new Error("Choose PDF documents up to 25 MB each.");
+    let revision = rfa.contentRevision;
     for (const file of files) {
       const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))).join(",");
-      const value = await client.uploadDocument(id, { file, documentType: "clinical_report", contentRevision: rfa.contentRevision }, operationKey("upload", [file.name, digest, rfa.contentRevision]));
+      const value = await client.uploadDocument(id, { file, documentType: "clinical_report", contentRevision: revision }, operationKey("upload", [file.name, digest, revision]));
+      revision = value.contentRevision;
       adopt(value);
     }
   });
@@ -170,7 +189,7 @@ function RfaDetail({ id, selectedItem, client, signatureClient, options, permiss
       {permissions.includes("send") ? <button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Refresh fax status</button> : null}
       {rfa.informationRequests.length ? <fieldset><legend>Information requested</legend>{rfa.informationRequests.map(item => <p key={item.id}>{item.requestText} · Due {date(item.dueAt)} · {item.respondedAt ? `Responded ${date(item.respondedAt)}` : "Awaiting response"}</p>)}</fieldset> : null}
       <RfaPacketsPanel {...options} rfa={rfa} environment={environment === "live" ? "live" : "sandbox"} disabled={!!locked} permissions={permissions.includes("act") ? ["act"] : []} onForwarded={() => { void run(async () => adopt(await client.get(id))); }} />
-      <RfaLifecycleControls {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
+      <RfaLifecycleControls {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
       <RfaTrackingPanel rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
       </>}
     </>}

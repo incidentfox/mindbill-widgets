@@ -12,13 +12,19 @@ type Props = TreatmentDraftAppearance & {
   draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile">;
   claimId?: string;
   renderingProviderId?: string;
-  onSave: (draft: RfaDraftInput) => Promise<void>;
+  onSave: (draft: RfaDraftInput, files: File[]) => Promise<void>;
 };
 /** Dashboard creation uses saved identities. Hosts may still supply a prepared draft. */
-export function RfaCreateForm({ initialDraft, draftFormProps, ...props }: Props): ReactElement {
-  return initialDraft ? <RfaDraftForm {...props} {...draftFormProps} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} {...(draftFormProps ? { draftFormProps } : {})} />;
+export function RfaCreateForm({ initialDraft, draftFormProps, onSave, ...props }: Props): ReactElement {
+  const [files, setFiles] = useState<File[]>([]);
+  const save = async (draft: RfaDraftInput) => {
+    if (files.some(file => !file.name.toLowerCase().endsWith(".pdf") || !file.size || file.size > 25 * 1024 * 1024)) throw new Error("Choose nonempty PDF documents up to 25 MB each.");
+    await onSave(draft, files);
+  };
+  const supportingDocuments = { files, onChange: setFiles };
+  return initialDraft ? <RfaDraftForm {...props} {...draftFormProps} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} {...(draftFormProps ? { draftFormProps } : {})} />;
 }
-function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, draftFormProps, disabled = false, ...appearance }: Omit<Props, "initialDraft">): ReactElement {
+function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
   const [addingClaim, setAddingClaim] = useState(false);
   const [createdClaimId, setCreatedClaimId] = useState<string>();
   const effectiveClaimId = claimId ?? createdClaimId;
@@ -45,7 +51,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
   const claim = context?.claims.find(value => value.claimId === selectedClaim);
   const provider = context?.renderingProviders.find(value => value.id === selectedProvider);
   const locked = disabled || loading;
-  if (editing && draft) return <RfaDraftForm {...appearance} {...draftFormProps} disabled={disabled} initialDraft={draft} savedDiagnosisCodes={claim?.diagnosisCodes ?? []} onSave={onSave} onBack={value => { setDraft(value); setEditing(false); }} />;
+  if (editing && draft) return <RfaDraftForm {...appearance} {...draftFormProps} disabled={disabled} initialDraft={draft} supportingDocuments={supportingDocuments} savedDiagnosisCodes={claim?.diagnosisCodes ?? []} onSave={onSave} onBack={value => { setDraft(value); setEditing(false); }} />;
   return <TreatmentDraftShell {...appearance} title="New authorization request" description="Choose the patient's claim and requesting physician, then add the requested treatment.">
     {addingClaim ? <RfaClaimSetup client={client} disabled={disabled} onCancel={() => setAddingClaim(false)} onCreated={result => { setCreatedClaimId(result.claimId); setSelectedClaim(result.claimId); setAddingClaim(false); setQuery(value => ({ ...value, search: "", cursor: "" })); }} /> : null}
     <div className="mbtd-grid">
@@ -80,6 +86,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     {claim && provider ? <p className="mbtd-note">Create a request for <strong>{claim.employeeName}</strong>, claim <strong>{claim.claimNumber || "number not recorded"}</strong>, with <strong>{provider.name}</strong>.</p> : null}
     <div className="mbtd-actions"><button type="button" disabled={locked} onClick={() => setReload(value => value + 1)}>{error ? "Try again" : "Refresh saved choices"}</button><button type="button" className="mbtd-primary" disabled={locked || !!error || !claim || !provider} onClick={() => {
       if (locked || error || !claim || !provider) return;
+      if (draft && draft.claimId !== claim.claimId) supportingDocuments.onChange([]);
       const retained: Partial<RfaDraftInput> = draft?.claimId === claim.claimId ? { ...draft } : {};
       for (const key of ["claimNumber", "dateOfInjury", "claimsAdminId", "providerNpi"] as const) delete retained[key];
       if (draft?.renderingProviderId !== provider.id) { delete retained.providerFax; delete retained.providerPhone; }

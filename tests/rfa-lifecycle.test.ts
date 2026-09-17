@@ -66,3 +66,17 @@ it("adds nonempty notes and preserves correction evidence and decision concurren
   expect(String(fetcher.mock.calls[1]?.[0])).toContain("/decision-corrections");
   expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual(correction);
 });
+it("paginates the scoped response inbox, authenticates PDFs, and requires an explicit idempotent match", async () => {
+  const fetcher = vi.fn<typeof fetch>(async (url, init) => String(url).endsWith("/content") ? new Response("%PDF-synthetic", { headers: { "content-type": "application/pdf" } }) : init?.method === "POST" ? Response.json({ data: { faxId: "fax/one", rfaId: "rfa_one", documentId: "ur_one", alreadyAttached: false } }) : Response.json({ data: [], hasMore: true, nextCursor: "page_two" }));
+  const client = createRfaLifecycleClient({ getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher });
+  expect(await client.listInboundFaxes({ cursor: "page_one", limit: 50 })).toMatchObject({ nextCursor: "page_two" });
+  expect(String(fetcher.mock.calls[0]?.[0])).toContain("cursor=page_one&limit=50");
+  expect(await (await client.getInboundFaxContent("fax/one")).text()).toBe("%PDF-synthetic");
+  expect(String(fetcher.mock.calls[1]?.[0])).toContain("fax%2Fone/content");
+  expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("authorization")).toBe("Bearer synthetic_token");
+  await expect(client.matchInboundFax("fax/one", "rfa_one", " ")).rejects.toThrow("idempotency");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(await client.matchInboundFax("fax/one", "rfa_one", "stable_key")).toMatchObject({ documentId: "ur_one" });
+  expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({ rfaId: "rfa_one" });
+  expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get("idempotency-key")).toBe("stable_key");
+});

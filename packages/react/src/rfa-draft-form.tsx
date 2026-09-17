@@ -28,6 +28,8 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & {
   organizationProfile?: OrganizationProfileData;
   /** Diagnosis codes already recorded on this injury; selecting one remains editable. */
   savedDiagnosisCodes?: string[];
+  /** Optional files selected before creation; the host uploads them after saving the draft. */
+  supportingDocuments?: { files: File[]; onChange: (files: File[]) => void };
   /** Persist an unsigned draft only; this callback must not sign or transmit the request. */
   onSave: (draft: RfaDraftInput) => Promise<void>;
   /** Return to saved identity selection while retaining unsaved treatment details. */
@@ -78,7 +80,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [draft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   const action = useDraftSave(onSave), locked = disabled || action.busy;
   const billingProviders = Array.isArray(organizationProfile?.billingProviders) ? organizationProfile.billingProviders : [];
@@ -101,7 +103,7 @@ export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", se
         <label className="mbrfa-check"><input type="checkbox" checked={draft.writtenConfirmation ?? false} onChange={event => update({ writtenConfirmation: event.target.checked })} />Written confirmation of a prior oral request</label>
         <label>Review type<select value={draft.reviewType ?? "prospective"} onChange={(event) => update({ reviewType: event.target.value as NonNullable<RfaDraftInput["reviewType"]> })}><option value="prospective">Prospective — before treatment</option><option value="concurrent">Concurrent — during treatment</option><option value="retrospective">Retrospective — after treatment</option></select></label>
         <label>Review priority<select value={draft.expedited ? "expedited" : "standard"} onChange={(event) => update({ expedited: event.target.value === "expedited" })}><option value="standard">Standard</option><option value="expedited">Expedited review requested</option></select></label>
-        <label>Return fax<input maxLength={30} value={draft.providerFax ?? ""} onChange={(event) => update({ providerFax: event.target.value })} /><small>Review the return contact. Organization defaults are not applied automatically.</small></label>
+        <p className="mbtd-note">Responses return to your organization’s managed fax inbox for matching and utilization review.</p>
         <label className="mbtd-wide">Clinical rationale<textarea maxLength={20000} value={draft.rationale ?? ""} onChange={(event) => update({ rationale: event.target.value })} /></label>
         {draft.requestType === "resubmission_material_change" ? <label className="mbtd-wide">Material change (required)<textarea required maxLength={20000} value={draft.materialChange ?? ""} onChange={(event) => update({ materialChange: event.target.value })} /></label> : null}
       </div></fieldset>
@@ -126,6 +128,7 @@ export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", se
         <label>Requested through<input type="date" value={item.requestedTo ?? ""} onChange={(event) => updateItem(index, { requestedTo: event.target.value })} /></label>
       </div><button type="button" disabled={draft.items.length === 1} onClick={() => update({ items: draft.items.filter((_, position) => position !== index) })}>Remove requested service {index + 1}</button></fieldset>)}
       <div><button type="button" disabled={locked || draft.items.length >= 100} onClick={() => update({ items: [...draft.items, { diagnosisCode: "", serviceDescription: "" }] })}>Add requested service</button></div>
+      {supportingDocuments ? <fieldset disabled={locked}><legend>Supporting documents</legend><p>Add the clinical reports supporting this request. They will be attached when you save the draft.</p><label>Supporting documents (PDF)<input type="file" accept="application/pdf,.pdf" multiple onChange={event => { supportingDocuments.onChange([...supportingDocuments.files, ...Array.from(event.target.files ?? [])]); event.target.value = ""; }} /></label>{supportingDocuments.files.map((file, index) => <div className="mbtd-actions" key={`${index}:${file.name}`}><span>{file.name}</span><button type="button" onClick={() => supportingDocuments.onChange(supportingDocuments.files.filter((_, position) => position !== index))}>Remove {file.name}</button></div>)}</fieldset> : null}
       {action.error ? <p role="alert">{action.error}{mode === "edit" ? " Your edits are still here. If this request changed elsewhere, discard edits and refresh before editing the latest version." : ""}</p> : null}<div className="mbtd-actions"><button type="submit" className="mbtd-primary" disabled={locked}>{action.busy ? "Saving…" : mode === "edit" ? "Save draft changes" : "Save RFA draft"}</button><p role="status">{action.message}</p></div>
     </form>
   </TreatmentDraftShell>;
