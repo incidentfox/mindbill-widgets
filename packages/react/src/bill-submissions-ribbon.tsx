@@ -170,7 +170,7 @@ export function billSubmissionsRibbonFromHistory(
 const css = `
 .mbsr{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;color:var(--mb-text);font-family:var(--mb-font);font-size:13px}
 .mbsr *{box-sizing:border-box}
-.mbsr-chip{flex:0 0 auto;display:grid;gap:7px;width:max-content;min-width:min(240px,85vw);max-width:min(440px,85vw);padding:11px 13px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:inherit;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
+.mbsr-chip{flex:0 0 auto;display:grid;gap:7px;width:max-content;min-width:min(180px,85vw);max-width:min(380px,85vw);padding:11px 13px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:inherit;font:inherit;text-align:left;text-decoration:none;cursor:pointer}
 .mbsr-chip:hover{border-color:var(--mb-accent)}
 .mbsr-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));box-shadow:0 0 0 1px var(--mb-accent) inset}
 .mbsr-top{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
@@ -179,7 +179,7 @@ const css = `
 .mbsr-badge[data-tone=success]{border-color:color-mix(in srgb,#23876f 52%,var(--mb-border));background:color-mix(in srgb,#23876f 11%,var(--mb-surface));color:#176452}
 .mbsr-badge[data-tone=warning]{border-color:color-mix(in srgb,var(--mb-warning) 55%,var(--mb-border));background:color-mix(in srgb,var(--mb-warning) 12%,var(--mb-surface))}
 .mbsr-badge[data-tone=danger]{border-color:color-mix(in srgb,var(--mb-danger) 45%,var(--mb-border));background:color-mix(in srgb,var(--mb-danger) 9%,var(--mb-surface));color:var(--mb-danger)}
-.mbsr-meta{display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:flex-start}
+.mbsr-meta{display:grid;grid-auto-flow:column;grid-auto-columns:max-content;gap:8px 14px;justify-content:start}
 .mbsr-meta>span{display:grid;gap:1px;min-width:0}
 .mbsr-meta i{color:var(--mb-muted);font-size:10.5px;font-style:normal;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
 .mbsr-meta b{font-size:12.5px;font-weight:700;white-space:nowrap}
