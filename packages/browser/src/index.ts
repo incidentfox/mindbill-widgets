@@ -479,6 +479,11 @@ export type BillAttemptSummary = {
   status?: string;
   complianceLabel?: string;
   complianceAt?: string;
+  /** Server-resolved payer outcome; no client-side deadline inference. */
+  outcomeLabel?: string;
+  outcomeAt?: string;
+  outcomeDateLabel?: string;
+  outcomeWorkingDays?: number;
   /** The latest attempt that receives lifecycle mutations. */
   isCurrent: boolean;
 };

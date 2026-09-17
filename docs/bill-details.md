@@ -57,3 +57,26 @@ navigate to a profile or select a dashboard filter using an available canonical 
 Legacy or historical data may omit IDs; do not infer an identity from a display name.
 The administrator's separate **Contact details** button still opens the directory details.
 Without navigation callbacks, existing detail behavior remains available.
+
+## Compact bill view and documents
+
+The default `mindbill` preset uses a warm neutral background and teal actions. Other
+presets and explicit appearance overrides remain available. Bill information appears
+first; patient and injury sections share a row on wide screens and stack on mobile.
+Provider identifiers and addresses expand on demand without hiding validation messages.
+
+`ConnectedBillLifecycle` keeps bill actions beside the header above the detail tabs.
+`ConnectedBillingWorkspace` and `ConnectedBillLifecycle` accept the optional
+`onOpenCms1500: (billId: string) => void` callback. When supplied, **View CMS-1500**
+appears at the top for the current bill. The host must open its authorized preview;
+this callback does not introduce a document endpoint or change submission status.
+Historical attempts continue to use retained submission files, never the current form.
+
+Click a service-line charge to inspect its saved units, average charge per unit, total,
+and recorded fee-schedule amount when provided. The average is arithmetic from the
+saved charge; it is not represented as a base fee or modifier calculation. Missing
+fee-schedule data stays unavailable. No present-day rate lookup alters historical bills.
+
+Submission ribbons also accept optional `outcomeLabel`, `outcomeAt`, `outcomeDateLabel`,
+and `outcomeWorkingDays` fields on `BillAttemptSummary`. Supply authoritative values;
+do not infer payment receipt from an EOR or calculate regulatory deadlines in the host.

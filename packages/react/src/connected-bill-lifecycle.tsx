@@ -365,6 +365,8 @@ export function useBillLifecycle({
 }
 
 export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & BillDetailNavigationProps & {
+  /** Opens the host-provided CMS-1500 preview for the current bill. */
+  onOpenCms1500?: (billId: string) => void;
   validationIssues?: BillReadOnlyFormProps["validationIssues"];
   billingSettings?: BillSubmissionFormProps["billingSettings"];
   appearance?: MindBillReactAppearance;
@@ -670,7 +672,7 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
 }
 
 export function ConnectedBillLifecycle({
-  billingSettings, appearance, actorName, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+  billingSettings, appearance, actorName, onOpenCms1500, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -867,16 +869,28 @@ export function ConnectedBillLifecycle({
 
   return <section className={["mb-connected-lifecycle", className].filter(Boolean).join(" ")} style={mindBillAppearanceStyle(appearance, style)}>
     <style>{CONNECTED_LIFECYCLE_STYLES}</style>
-    {ribbonItems.length >= 2 ? <BillSubmissionsRibbon items={ribbonItems} onSelect={(item) => { setSelectedSubmissionId(item.id); setTab("details"); setPanel(""); }} {...(appearance ? { appearance } : {})} /> : null}
+    {ribbonItems.length > 0 ? <BillSubmissionsRibbon items={ribbonItems} onSelect={(item) => { setSelectedSubmissionId(item.id); setTab("details"); setPanel(""); }} {...(appearance ? { appearance } : {})} /> : null}
     {historical ? null : data.lifecycle.state.toLowerCase() === "rejected" && data.rejection
       ? <BillRejectionNotice rejection={data.rejection} submittedAt={data.lifecycle.submittedAt ?? null} {...(appearance ? { appearance } : {})} />
       : <BillLifecycleProgress state={data.lifecycle.state} nativeStatus={data.lifecycle.nativeStatus} submittedAt={data.lifecycle.submittedAt ?? null} agingDays={data.lifecycle.agingDays ?? null} {...(appearance ? { appearance } : {})} />}
 
     <header className="mb-lifecycle-head">
       <div><div className="mb-lifecycle-title"><h2>{historical && !selectedAttempt ? "Previous submission" : `Bill #${historical ? selectedAttempt?.billNumber : data.bill.billNumber}`}</h2></div><p>{displayedData ? `Claim ${displayedData.injury.claimNumber || "—"}` : "Previous submission"}{lifecycle.isRefreshing ? " · Refreshing…" : ""}</p></div>
-      {!historical ? <><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadPacket().catch(() => undefined)}>Download packet</button>
+      {!historical ? <>{onOpenCms1500 ? <button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => onOpenCms1500(data.bill.id)}>View CMS-1500</button> : null}<button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadPacket().catch(() => undefined)}>Download packet</button>
       <button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("courtesy_copy")}>Forward copy</button></> : null}
     </header>
+
+    {!historical && (viewEor || actions.length) ? <aside className="mb-lifecycle-actions-sheet" aria-label="Bill actions">
+      {viewEor && data.eors[0] ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => void lifecycle.openEor(data.eors[0]!).catch(() => undefined)}>{viewEor.label}</button> : null}
+      {actions.map((action) => <button type="button" key={action.id} className={action.primary ? "mb-lifecycle-button primary" : "mb-lifecycle-button secondary"} onClick={() => {
+        const next = actionPanel(action);
+        if (!next) return;
+        if (next === "resubmit") setCorrectionError("");
+        if (next === "submit_new_bill") setNewBillError("");
+        if (next === "send_duplicate") setDuplicateError("");
+        setPanel(next);
+      }}>{action.label}</button>)}
+    </aside> : null}
 
     <div className="mb-lifecycle-tabs" role="tablist" aria-label="Bill view">
       <button type="button" role="tab" aria-selected={tab === "details"} onClick={() => setTab("details")}>Bill details</button>
@@ -884,16 +898,6 @@ export function ConnectedBillLifecycle({
     </div>
 
     {tab === "details" ? <div className="mb-lifecycle-tabpanel" role="tabpanel">
-      {selectedAttempt && ribbonItems.length >= 2 ? <section className="mb-lifecycle-attempt-detail" aria-label="Selected submission detail">
-        <header><div><span>Selected submission</span><h3>{selectedAttempt.label}</h3></div><strong>{selectedAttempt.isCurrent ? "Current" : "Previous"}</strong></header>
-        <dl>
-          <div><dt>Bill</dt><dd>#{selectedAttempt.billNumber || data.bill.billNumber}</dd></div>
-          <div><dt>Delivery</dt><dd>{selectedAttempt.deliveryLabel || "—"}</dd></div>
-          <div><dt>Sent</dt><dd>{selectedAttempt.sentAt ? new Date(selectedAttempt.sentAt).toLocaleString() : "—"}</dd></div>
-          <div><dt>Status</dt><dd>{selectedAttempt.status || selectedAttempt.ackLabel || "Submitted"}</dd></div>
-          {selectedAttempt.complianceLabel ? <div><dt>{selectedAttempt.complianceLabel}</dt><dd>{selectedAttempt.complianceAt ? new Date(selectedAttempt.complianceAt).toLocaleDateString() : "—"}</dd></div> : null}
-        </dl>
-      </section> : null}
       {!historical && (data.eors.length || data.payments.length || ["processed", "denied", "partially_paid"].includes(data.lifecycle.state)) ? <BillExplanationOfReview remittance={data.remittance} eors={data.eors} payments={data.payments} submittedAt={data.lifecycle.submittedAt ?? null} onOpenEor={lifecycle.openEor} {...(appearance ? { appearance } : {})} /> : null}
 
       {showSandboxControls ? <section className="mb-lifecycle-simulator" aria-label="Sandbox lifecycle simulator"><div><span>Sandbox demo controls</span><h3>Simulate the next payer response</h3><p>This changes sandbox data only. The host receives the result through the same lifecycle API and components partners use.</p></div>{simulations.length ? <div className="mb-lifecycle-simulator-actions">{simulations.map((scenario) => <button type="button" key={scenario.id} disabled={lifecycle.isMutating} onClick={() => void complete(`${scenario.label} simulated.`, () => lifecycle.simulateSandbox({ scenario: scenario.id }))}><strong>{scenario.label}</strong><span>{scenario.detail}</span></button>)}</div> : <p className="mb-lifecycle-simulator-idle">No simulated payer transition is needed at this stage. Use the bill action below to continue.</p>}</section> : null}
@@ -910,19 +914,9 @@ export function ConnectedBillLifecycle({
       ? <BillHistoryTable entries={data.history} {...(!historical ? { onOpenDocument: lifecycle.openAttachment } : {})} {...(appearance ? { appearance } : {})} />
       : <BillActivityTimeline events={data.activity} {...(appearance ? { appearance } : {})} />}</div>}
 
-    {!historical && (viewEor || actions.length) ? <aside className="mb-lifecycle-actions-sheet" aria-label="Bill actions">
-      {viewEor && data.eors[0] ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => void lifecycle.openEor(data.eors[0]!).catch(() => undefined)}>{viewEor.label}</button> : null}
-      {actions.map((action) => <button type="button" key={action.id} className={action.primary ? "mb-lifecycle-button primary" : "mb-lifecycle-button secondary"} onClick={() => {
-        const next = actionPanel(action);
-        if (!next) return;
-        if (next === "resubmit") setCorrectionError("");
-        if (next === "submit_new_bill") setNewBillError("");
-        if (next === "send_duplicate") setDuplicateError("");
-        setPanel(next);
-      }}>{action.label}</button>)}
-    </aside> : null}
 
-    {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><BillCourtesyCopyForm documents={data.bill.attachments} recipientOptions={courtesyCopyRecipientOptions} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></LifecycleDialog> : null}
+
+    {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><section className="mb-lifecycle-courtesy"><h3>Forward courtesy copy</h3><BillCourtesyCopyForm documents={data.bill.attachments} recipientOptions={courtesyCopyRecipientOptions} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></section></LifecycleDialog> : null}
     {activePanel === "ibr" ? <LifecycleDialog title="Prepare Independent Bill Review packet" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><header style={{ paddingRight: 44 }}><h3>Prepare Independent Bill Review packet</h3></header><p>Download a PDF packet for self-filing Independent Bill Review (IBR). Preparing this packet does not file the review, send it to a payer, or change the bill status.</p>{lifecycle.error ? <p role="alert" className="mb-lifecycle-message error">{lifecycle.error.message}</p> : null}<div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadIbrPacket().then(() => { setPanel(""); setNotice("IBR packet prepared for self-filing. The review has not been filed."); }).catch(() => undefined)}>{lifecycle.isMutating ? "Preparing…" : "Prepare IBR packet"}</button></div></section></LifecycleDialog> : null}
     {activePanel === "resubmit" && correctionInitialBill ? <LifecycleDialog title="Correct and resubmit" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Correct and resubmit</h3><p>Review the rejected snapshot, correct the highlighted information, and submit a new immutable attempt under this bill.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>Resubmitting sends a real bill. Confirm the corrected information before continuing.</span></div> : null}{data.rejection ? <CorrectionRejectionReason rejection={data.rejection} /> : null}<CorrectionVerificationContact delivery={data.delivery} /><label className="mb-lifecycle-correction-note"><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
       className="mbsf-lifecycle-correction"
@@ -1045,4 +1039,6 @@ const CONNECTED_LIFECYCLE_STYLES = `
 .mb-payment-total{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:9px;background:var(--mb-soft)}.mb-payment-total strong{font-size:1.12rem}
 .mb-lifecycle-deadline-hint{margin:0;padding:10px 12px;border-radius:9px;background:color-mix(in srgb,var(--mb-warning,#8a5c17) 10%,var(--mb-surface));color:var(--mb-warning,#8a5c17);font-size:.85rem}
 @media(max-width:700px){.mb-lifecycle-attempt-detail dl{grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-notes form{grid-template-columns:1fr}.mb-lifecycle-notes form button{width:100%}.mb-lifecycle-head,.mb-lifecycle-card header{align-items:stretch;flex-direction:column}.mb-lifecycle-head>.mb-lifecycle-button{width:100%}.mb-lifecycle-actions-sheet{bottom:calc(var(--mb-host-bottom-offset,72px) + env(safe-area-inset-bottom) + 8px);grid-template-columns:repeat(2,minmax(0,1fr))}.mb-lifecycle-actions-sheet .mb-lifecycle-button:last-child:nth-child(odd){grid-column:1/-1}.mb-lifecycle-fields.two{grid-template-columns:1fr}.mb-lifecycle-fields .full{grid-column:auto}.mb-lifecycle-dialog-backdrop{align-items:end;padding:0}.mb-lifecycle-dialog{max-height:calc(100dvh - 12px)}.mb-lifecycle-dialog .mb-lifecycle-panel,.mb-lifecycle-correction{border-radius:18px 18px 0 0}.mb-lifecycle-correction{padding:18px 12px calc(18px + env(safe-area-inset-bottom))}.mb-lifecycle-correction>header{align-items:stretch;flex-direction:column;padding-right:56px}.mb-lifecycle-correction-reason{grid-template-columns:1fr}.mb-lifecycle-correction-reason>ul{grid-column:auto}.mb-lifecycle-correction-contact dl>div{grid-template-columns:1fr;gap:2px}.mb-lifecycle-tabs button{font-size:.9rem}.mb-lifecycle-title h2{font-size:1.4rem}}
+.mb-connected-lifecycle{gap:14px}.mb-lifecycle-title h2{font-size:1.35rem}.mb-lifecycle-tabs{border-radius:var(--mb-control-radius);padding:3px}.mb-lifecycle-tabs button{min-height:40px;font-size:14px;border-radius:var(--mb-control-radius)}.mb-lifecycle-tabs button[aria-selected=true]{color:var(--mb-accent-contrast,#fff)}.mb-lifecycle-actions-sheet{position:static;display:flex;flex-wrap:wrap;gap:8px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}.mb-lifecycle-actions-sheet .mb-lifecycle-button{font-size:13px;font-weight:600}.mb-lifecycle-dialog{background:var(--mb-surface,#fff);border:1px solid var(--mb-border);border-radius:var(--mb-radius,8px);box-shadow:0 24px 70px rgba(18,35,43,.22)}.mb-lifecycle-courtesy{padding:24px}.mb-lifecycle-courtesy>h3{margin:0 44px 20px 0;font-size:18px}.mb-lifecycle-card,.mb-lifecycle-notes{padding:15px}.mb-lifecycle-tabpanel{gap:14px}@media(max-width:700px){.mb-lifecycle-actions-sheet .mb-lifecycle-button{flex:1 1 140px}.mb-lifecycle-dialog>.mb-lifecycle-courtesy{padding:64px 16px 20px}}
+
 `;

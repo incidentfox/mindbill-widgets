@@ -60,3 +60,21 @@ it("hides default entity navigation without canonical IDs but allows explicit ho
     expect(onPatientClick).toHaveBeenCalledWith(legacy.patient);
   } finally { await act(async () => root.unmount()); }
 });
+
+
+it("explains saved line charges without inventing a modifier rate and preserves zero amounts", async () => {
+  const container = document.createElement("div"); const root = createRoot(container);
+  const data = structuredClone(detail);
+  data.bill.lineItems = [{ code: "SYN", modifiers: ["95"], units: 2, charge: 30, feeSchedule: 0 }, { code: "ZERO", modifiers: [], units: 0, charge: 0 }];
+  try {
+    await act(async () => root.render(createElement(BillReadOnlyForm, { data })));
+    const lines = container.querySelectorAll(".mb-read-charge");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.textContent).toContain("$15.00");
+    expect(lines[0]!.textContent).toContain("not a base rate or modifier calculation");
+    expect(lines[0]!.textContent).toContain("$0.00");
+    expect(lines[1]!.textContent).not.toContain("Infinity");
+    expect(lines[1]!.textContent).not.toContain("NaN");
+    expect(container.querySelector(".mb-read-summary")?.textContent).toContain("Patient information");
+  } finally { await act(async () => root.unmount()); }
+});

@@ -2349,7 +2349,8 @@ describe("connected billing workspace integration contracts", () => {
     );
 
     expect(source).toContain('setSelectedSubmissionId(item.id); setTab("details")');
-    expect(source).toContain('aria-label="Selected submission detail"');
+    expect(source).not.toContain('aria-label="Selected submission detail"');
+    expect(source).toContain("<BillSubmissionsRibbon");
     expect(source).toContain("Add a note");
   });
 });
