@@ -1172,6 +1172,22 @@ export type CaPadbContext = {
   sameDayServices: Array<{ code: string; units: number }>;
 };
 
+export type CaTherapyContext = {
+    providerKind: "physical_therapist" | "other";
+    personallyPerformed: boolean;
+    hospitalPatient: boolean;
+    incidentToPhysicianService: boolean;
+    assistantInvolved: boolean;
+    placeOfService: string;
+    directOneOnOneMinutes: number;
+    totalVisitMinutes: number;
+    visitsOnDate: number;
+    completeSameDayServices: boolean;
+    otherSameDayServices: boolean;
+    globalPeriodApplies: boolean;
+    hpsaBonusEligible: boolean;
+  };
+
 export type BillFeeQuoteInput = {
   drug?: BilledDrug;
   padbContext?: CaPadbContext;
@@ -1208,21 +1224,7 @@ export type BillFeeQuoteInput = {
     globalPeriodApplies: boolean;
     hpsaBonusEligible: boolean;
   };
-  therapyContext?: {
-    providerKind: "physical_therapist" | "other";
-    personallyPerformed: boolean;
-    hospitalPatient: boolean;
-    incidentToPhysicianService: boolean;
-    assistantInvolved: boolean;
-    placeOfService: string;
-    directOneOnOneMinutes: number;
-    totalVisitMinutes: number;
-    visitsOnDate: number;
-    completeSameDayServices: boolean;
-    otherSameDayServices: boolean;
-    globalPeriodApplies: boolean;
-    hpsaBonusEligible: boolean;
-  };
+  therapyContext?: CaTherapyContext;
   catalogContext?: {
     codingRequirementsSatisfied: boolean;
     statusIAlternative?: "none" | "cpt" | "drug";

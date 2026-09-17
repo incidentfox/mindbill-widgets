@@ -64,7 +64,12 @@ it("keeps a treatment review unpriced, explains the reason, and offers treatment
     ? { status: "requires_review", reason: "therapy_no_fee_agreement_confirmation_required", provenance: [] } : [] }));
   try {
     await act(async () => root.render(createElement(BillSubmissionForm, {
-      initialBill: { ...bill, serviceLines: [{ ...bill.serviceLines[0]!, code: "97110", units: 4 }] },
+      initialBill: { ...bill, serviceLines: [{ ...bill.serviceLines[0]!, code: "97110", units: 4, feeContext: { hasFeeAgreement: false, therapyContext: {
+        providerKind: "physical_therapist", personallyPerformed: true, assistantInvolved: false,
+        hospitalPatient: false, incidentToPhysicianService: false, globalPeriodApplies: false,
+        hpsaBonusEligible: false, placeOfService: "11", directOneOnOneMinutes: 60, totalVisitMinutes: 60,
+        visitsOnDate: 1, completeSameDayServices: true, otherSameDayServices: false,
+      } } }] },
       getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher,
       treatmentBilling: true, deliveryRoutePicker: "off",
     })));

@@ -170,6 +170,22 @@ export type CaPadbContext = {
   sameDayServices: Array<{ code: string; units: number }>;
 };
 
+export type CaTherapyContext = {
+    providerKind: "physical_therapist" | "other";
+    personallyPerformed: boolean;
+    hospitalPatient: boolean;
+    incidentToPhysicianService: boolean;
+    assistantInvolved: boolean;
+    placeOfService: string;
+    directOneOnOneMinutes: number;
+    totalVisitMinutes: number;
+    visitsOnDate: number;
+    completeSameDayServices: boolean;
+    otherSameDayServices: boolean;
+    globalPeriodApplies: boolean;
+    hpsaBonusEligible: boolean;
+  };
+
 export type ServiceLine = {
   id?: string;
   code: string;
@@ -183,7 +199,7 @@ export type ServiceLine = {
   /** One-based pointers into `diagnoses`, matching CMS-1500 box 24E. */
   diagnosisPointers?: number[];
   drug?: BilledDrug;
-  feeContext?: { padbContext?: CaPadbContext; anesthesiaContext?: CaAnesthesiaContext };
+  feeContext?: { hasFeeAgreement?: boolean; therapyContext?: CaTherapyContext; padbContext?: CaPadbContext; anesthesiaContext?: CaAnesthesiaContext };
 };
 
 export type CreateBillRequest = {
