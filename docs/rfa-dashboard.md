@@ -11,13 +11,18 @@ import { RfaDashboard } from "@mindbill/react";
   actorReference={authenticatedUser.id}
   permissions={["create", "edit", "sign", "send", "act"]}
   environment="sandbox"
-  initialDraft={prefilledDraftFromAuthorizedCase}
 />
 ```
 
-`initialDraft` is optional. It enables the New authorization request button when `create`
-is permitted, and uses the same input as `RfaDraftForm`. `claimId` and
-`renderingProviderId` optionally filter the list. Server authorization must enforce the
+React 0.69.0 shows **New authorization request** when `create` is permitted.
+The user searches saved patients by name or claim number, selects a claim and saved
+rendering provider, confirms the selection, then enters the requested treatment.
+Physicians are searchable by name or NPI; both lists support pagination. No identifiers
+need to be entered manually. **Back to patient and physician** retains treatment edits.
+
+`initialDraft` remains optional and bypasses saved selection when your host already has
+a prepared case. It uses the same input as `RfaDraftForm`. `claimId` and
+`renderingProviderId` optionally restrict both the request list and saved creation choices. Server authorization must enforce the
 actual permitted records; filters and `permissions` only control the interface.
 `onCreated(record)` observes draft creation; optional `onContinue(record)` adds a host
 navigation action without replacing the native signing and packet workflow.
@@ -29,7 +34,7 @@ The trusted server must authenticate the user and mint a short-lived exact-origi
 | List, detail, assembled packet | `rfas:read` |
 | PDF previews and delivery proof | `documents:read` |
 | Authorization recipient directory | `payers:read` |
-| Create draft | `rfas:create` |
+| List saved creation choices; create draft | `rfas:create` |
 | Edit eligible draft; upload clinical, response, or IMR PDF | `rfas:edit` |
 | Signing preview and attested signing | `rfas:sign` |
 | Fax send and refresh; record receipt, decisions, information responses; update follow-up tasks | `rfas:act` |
@@ -51,7 +56,6 @@ it defaults to `false` and loads RFA data only when opened.
   showRfas
   initialView="rfas"
   rfaDashboard={{
-    initialDraft: prefilledDraftFromAuthorizedCase,
     actorReference: authenticatedUser.id,
     permissions: ["create", "edit", "sign", "send", "act"],
     environment: "sandbox",
@@ -62,10 +66,11 @@ it defaults to `false` and loads RFA data only when opened.
 
 The tab includes status counts and filtering, request details, **New authorization
 request**, draft editing, signing, packet review, submission, and delivery history.
-The new-request button requires both `initialDraft` and `create` permission. Supply
-that draft from the patient, claim, and rendering provider selected in your host
-application; those identities remain fixed in the form. Saving creates an unsigned
-draft. Sending is a separate, explicitly confirmed action.
+The new-request button requires `create` permission. Saved claim and physician
+selection is included; hosts can optionally provide `initialDraft` to skip selection.
+If there are no saved claims, create a patient claim or bill in your application first.
+Rendering providers are managed in Settings. Refresh the choices after setup.
+Saving creates an unsigned draft. Sending is a separate, explicitly confirmed action.
 
 `rfaDashboard` accepts the same props as standalone `RfaDashboard`. The connected
 workspace inherits its main session, API URL, and fetch implementation. Supply
@@ -140,7 +145,7 @@ available through the documented [RFA API](https://docs.mindbill.org/guides/rfas
 ## Custom browser UI
 
 `createRfaClient` from `@mindbill/browser` accepts `OrganizationClientOptions` (`getSession`
-or `sessionEndpoint`, optional `apiBaseUrl` and `fetch`). Its methods are `list`, `get`,
+or `sessionEndpoint`, optional `apiBaseUrl` and `fetch`). Its methods are `getCreationContext`, `list`, `get`,
 `createDraft`, `updateDraft`, `getDocument`, `uploadDocument`, `prepareSigning`, `sign`, `previewPacket`,
 `sendFax`, and `refreshFaxes`. JSON detail/mutation responses unwrap to `RfaRecord`; list
 returns `{data, nextCursor, summary}`. Documents and packets return authenticated `Blob`s.
@@ -151,3 +156,14 @@ A single authentication retry preserves that key. `getDocument` requires `docume
 `expectedRevision` and the complete editable content; retained items carry `id`, new items
 omit it. `createRfaLifecycleClient` exposes `recordReceipt`, `recordDecisions`,
 `recordInformationRequest`, `recordInformationResponse`, `listFollowUps`, and `updateFollowUp` for custom lifecycle UIs.
+
+`getCreationContext(query?)` uses `GET /partner/v2/browser/rfas/creation-context`
+and requires `rfas:create`. It returns `{claims, renderingProviders, nextCursor,
+renderingProvidersNextCursor}`. Claims include `claimId`, `patientId`, `employeeName`,
+and optional `claimNumber`, `dateOfInjury`, and `claimsAdminId`. Active rendering
+providers include `id`, `name`, and optional `npi`; signature material is never returned.
+Use `search` (patient name or claim number) with `cursor` for claims, and
+`providerSearch` (name or NPI) with `providerCursor` for physicians. `limit` defaults
+to 50 and is capped at 100. Reset the corresponding cursor when changing a search.
+Optional exact `claimId` and `renderingProviderId` restrict choices. Cursors and records
+remain scoped to the authorized organization and environment.

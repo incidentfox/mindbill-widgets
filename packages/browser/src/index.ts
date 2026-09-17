@@ -2228,7 +2228,12 @@ export type RfaSigningPreview = { id: string; contentHash: string; contentRevisi
 export type RfaSignInput = { snapshotId: string; contentHash: string; renderingProviderId: string; physicianAuthorized: true; actorReference: string };
 export type RfaFaxInput = { to: string; documentIds: string[]; nonBusinessDates?: string[] };
 export type RfaUploadDocumentInput = { file: File; documentType: "clinical_report" | "supporting_record" | "ur_response" | "imr_form" | "other"; contentRevision: number };
+export type RfaCreationClaim = { claimId: string; patientId: string; employeeName: string; claimNumber?: string; dateOfInjury?: string; claimsAdminId?: string };
+export type RfaCreationProvider = { id: string; name: string; npi?: string };
+export type RfaCreationContext = { claims: RfaCreationClaim[]; renderingProviders: RfaCreationProvider[]; nextCursor: string | null; renderingProvidersNextCursor: string | null };
+export type RfaCreationContextQuery = { search?: string; cursor?: string; providerSearch?: string; providerCursor?: string; limit?: number; claimId?: string; renderingProviderId?: string };
 export type RfaClient = {
+  getCreationContext: (query?: RfaCreationContextQuery) => Promise<RfaCreationContext>;
   list: (query?: RfaListQuery) => Promise<RfaListResult>;
   get: (rfaId: string) => Promise<RfaRecord>;
   createDraft: (draft: RfaCreateDraftInput, idempotencyKey: string) => Promise<RfaRecord>;
@@ -2259,11 +2264,11 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     })().finally(() => { pending = null; });
     return pending;
   };
-  const request = async (path: string, init: RequestInit = {}) => {
+  const request = async (path: string, init: RequestInit = {}, browser = false) => {
     const perform = (active: BillLifecycleSession) => {
       const headers = new Headers(init.headers); headers.set("authorization", `Bearer ${active.token}`);
       if (init.body && !(init.body instanceof FormData)) headers.set("content-type", "application/json");
-      return fetcher(`${(active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "")}/partner/v2/rfas${path}`, { ...init, headers });
+      return fetcher(`${(active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "")}/partner/v2/${browser ? "browser/" : ""}rfas${path}`, { ...init, headers });
     };
     let response = await perform(await mint());
     if (response.status === 401) response = await perform(await mint(true));
@@ -2281,6 +2286,13 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
   };
   const path = (id: string, suffix: string) => `/${encodeURIComponent(id)}/${suffix}`;
   return {
+    getCreationContext: async (query = {}) => {
+      const params = new URLSearchParams();
+      for (const [name, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(name, String(value));
+      const body = await (await request(`/creation-context${params.size ? `?${params}` : ""}`, {}, true)).json() as { data?: RfaCreationContext };
+      if (!Array.isArray(body.data?.claims) || !Array.isArray(body.data?.renderingProviders)) throw new Error("The RFA creation context was invalid.");
+      return body.data;
+    },
     list: async (query = {}) => {
       const params = new URLSearchParams();
       for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(key, String(value));

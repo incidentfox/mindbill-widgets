@@ -174,3 +174,17 @@ See the [10-minute quickstart](https://docs.mindbill.org/quickstart).
 Claims-administrator directory responses include optional authorization status, source observation, and separate fax/email/telephone fields. `rfaAuthorizationDestinations(directory)` returns eligible choices without automatically selecting a destination; `normalizeRfaFax(value)` validates manual fax input.
 
 See the [RFA directory guide](https://github.com/incidentfox/mindbill-widgets/blob/main/docs/rfa-directory.md) for classification and unavailable-route handling.
+
+## RFA creation choices
+
+Browser 0.43.0 adds `createRfaClient(options).getCreationContext(query?)` for
+building a draft from saved claims and rendering providers. It requires a trusted
+server session with `rfas:create` and returns `{claims, renderingProviders,
+nextCursor, renderingProvidersNextCursor}`. Search claims with `search` and physicians
+with `providerSearch`; pass `cursor` and `providerCursor` for their independent next
+pages. Reset each cursor when its search changes. Optional `claimId` and
+`renderingProviderId` restrict choices; `limit` defaults to 50 and is capped at 100.
+The lookup is read-only. Creating, signing, and sending remain separate actions.
+
+See the [RFA dashboard guide](../../docs/rfa-dashboard.md#custom-browser-ui) for the
+response fields and React's built-in saved-choice flow.
