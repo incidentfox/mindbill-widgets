@@ -5,6 +5,8 @@ export type RfaAuthorizationDestinationOption = {
   destination: string;
   label: string;
   phone?: string;
+  /** Recipient attention line, retained on the reviewed delivery cover. */
+  recipientName?: string;
 };
 
 /** Accept fax numbers only, never telephone notes, email addresses, or extensions. */
@@ -21,7 +23,7 @@ export function normalizeRfaFax(value: string): string | null {
 export function rfaAuthorizationDestinations(directory: BillClaimsAdministratorDirectory | null): RfaAuthorizationDestinationOption[] {
   if (!directory || ["adjuster_specific_required", "daisybill_unverified", "profile_not_published"].includes(directory.authorizationStatus ?? "")) return [];
   return (directory.authorization ?? []).flatMap((contact) => {
-    const common = { label: contact.location || contact.name || "Authorization department", ...(contact.phone ? { phone: contact.phone } : {}) };
+    const common = { label: contact.location || contact.name || "Authorization department", ...(contact.name ? { recipientName: contact.name } : {}), ...(contact.phone ? { phone: contact.phone } : {}) };
     const options: RfaAuthorizationDestinationOption[] = [];
     const fax = contact.fax ? normalizeRfaFax(contact.fax) : null;
     if (fax && contact.method !== "email") options.push({ ...common, method: "fax", destination: fax });

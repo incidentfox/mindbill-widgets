@@ -2299,9 +2299,9 @@ export type RfaContact = {
   name?: string; contactName?: string; address?: string; city?: string; state?: string;
   zip?: string; phone?: string; fax?: string; email?: string;
 };
-export type RfaDeliveryPreviewInput = { documentIds: string[]; channel: "fax" | "email" | "download"; to?: string; message?: string };
+export type RfaDeliveryPreviewInput = { documentIds: string[]; channel: "fax" | "email" | "download"; to?: string; recipientName?: string; message?: string };
 export type RfaDeliveryPreview = { packetId: string; sha256: string; contentRevision: number };
-export type RfaSubmitInput = Omit<RfaDeliveryPreview, "contentRevision"> & { channel: "fax" | "email"; to: string; message?: string; nonBusinessDates?: string[] };
+export type RfaSubmitInput = Omit<RfaDeliveryPreview, "contentRevision"> & { channel: "fax" | "email"; to: string; recipientName?: string; message?: string; nonBusinessDates?: string[] };
 /** An unsigned RFA preparation draft. Signing and sending are separate operations. */
 export type RfaCreateDraftInput = {
   claimId: string; patientId: string; renderingProviderId: string; employeeName: string; providerName: string;
@@ -2323,6 +2323,8 @@ export type RfaUpdateDraftInput = Omit<RfaCreateDraftInput, "externalId" | "clai
 export type RfaRecord = {
   contentRevision: number; id: string; claimId: string; patientId: string; renderingProviderId: string; claimsAdminId: string | null;
   employeeName: string; providerName: string; claimNumber: string | null; status: string;
+  /** Delivery/review lifecycle, separate from the clinical status and item outcomes. */
+  lifecycleStatus?: import("./rfa-status").RfaLifecycleStatus;
   requestType?: RfaCreateDraftInput["requestType"]; writtenConfirmation?: boolean;
   requestingPractice?: RfaContact | null; authorizationContact?: RfaContact | null;
   placeOfServiceCode?: string | null; providerNpi?: string | null; providerPhone?: string | null; providerFax?: string | null;
@@ -2344,8 +2346,8 @@ export type RfaRecord = {
   informationRequests: Array<{ id: string; requestText: string; requestedAt: string | null; dueAt: string | null; respondedAt: string | null }>;
   events: Array<{ id: string; type: string; occurredAt: string | null; text?: string }>;
 };
-export type RfaListQuery = { patientId?: string; search?: string; sortBy?: "createdAt" | "employeeName" | "providerName" | "submittedAt" | "status"; sortDirection?: "asc" | "desc"; claimId?: string; renderingProviderId?: string; status?: string; createdFrom?: string; createdTo?: string; limit?: number; cursor?: string };
-export type RfaListResult = { data: RfaRecord[]; nextCursor: string | null; summary: { total: number; byStatus: Record<string, number> } };
+export type RfaListQuery = { patientId?: string; search?: string; sortBy?: "createdAt" | "employeeName" | "providerName" | "submittedAt" | "status" | "lifecycleStatus"; sortDirection?: "asc" | "desc"; claimId?: string; renderingProviderId?: string; status?: string; lifecycleStatus?: import("./rfa-status").RfaLifecycleStatus; createdFrom?: string; createdTo?: string; limit?: number; cursor?: string };
+export type RfaListResult = { data: RfaRecord[]; nextCursor: string | null; summary: { total: number; byStatus: Record<string, number>; byLifecycleStatus?: Partial<Record<import("./rfa-status").RfaLifecycleStatus, number>> } };
 export type RfaSigningPreviewInput = { billingProviderId?: string; diagnosisDescriptions: Record<string, string> };
 export type RfaSigningPreview = { id: string; contentHash: string; contentRevision: number; renderingProviderId: string; previewDocumentId: string; expiresAt: string };
 export type RfaSignInput = { snapshotId: string; contentHash: string; renderingProviderId: string; physicianAuthorized: true; actorReference: string };
@@ -2502,3 +2504,5 @@ export type { ReportAutofillClient, ReportAutofillField, ReportAutofillMatch, Re
 export * from "./rfa-draft-actions";
 
 export * from "./rfa-packets";
+
+export * from "./rfa-status";

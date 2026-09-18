@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaTrackingPanel, type RfaTrackingPanelProps } from "../packages/react/src/rfa-tracking-panel";
-import type { RfaRecord, RfaScheduling } from "../packages/browser/src/index";
+import type { RfaHistoryEvent, RfaRecord, RfaScheduling } from "../packages/browser/src/index";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const record: RfaRecord = { patientId: "patient_synthetic", renderingProviderId: "provider_synthetic", claimsAdminId: null, employeeName: "Synthetic patient", providerName: "Synthetic physician", claimNumber: "SYNTHETIC", reviewType: "prospective", expedited: false, createdAt: null, updatedAt: null, signedAt: null, submittedAt: null, incompleteReason: null, deferredReason: null, closedReason: null, readiness: { ready: true, missing: [] }, transmissions: [{id:"transmission_one",direction:"outbound",channel:"fax",status:"sent",destination:"+15555550123",occurredAt:"2026-09-15T00:00:00Z",receivedAt:null,proofDocumentId:"proof_one",providerMessageId:"SYNTHETIC-REFERENCE"}], events: [], id: "rfa_synthetic", claimId: "claim_synthetic", contentRevision: 1, status: "approved", receivedAt: "2026-09-15T00:00:00Z", decisionDueAt: null, decisionDeadlineBasis: null, documents: [{ id: "ur_one", documentType: "ur_response", filename: "Synthetic response.pdf", contentUrl: "", contentRevision: 1, createdAt: null }, { id: "imr_one", documentType: "imr_form", filename: "Synthetic IMR.pdf", contentUrl: "", contentRevision: 1, createdAt: null }], informationRequests: [], items: [{ id: "item_one", procedureCode: "97110", serviceDescription: "Synthetic therapy", outcome: "approved", diagnosisCode: "M54.5", quantity: 1, units: 1, authorizationNumber: "SYNTHETIC-AUTH", decisionReason: null, currentDecisionEventId:"decision_one",currentResponseDocumentId:"ur_one",decidedAt:"2026-09-16T00:00:00Z" }] };
 const appointment: RfaScheduling = {itemId:"item_one",serviceDescription:"Synthetic therapy",outcome:"approved",eligible:true,authorizationToken:"a".repeat(64),version:0,disposition:"pending",current:false,appointmentAt:null,providerName:null,location:null,reason:null,updatedAt:null};
@@ -57,4 +57,60 @@ it.each(["no_appointment", "canceled"] as const)("preserves saved %s disposition
  const select=[...view.container.querySelectorAll("select")].find(node=>node.parentElement?.textContent?.startsWith("Disposition"))!;expect(select.value).toBe(disposition);expect(view.container.querySelector<HTMLTextAreaElement>('textarea[name="reason"]')?.value).toBe("Synthetic saved reason");
  await act(async()=>submit(view.container,"Save appointment"));const request=view.fetcher.mock.calls.find(call=>call[1]?.method==="PATCH");expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({disposition,reason:"Synthetic saved reason",expectedVersion:3});
  }finally{await view.close();}
+});
+
+function event(payload: Record<string, unknown>, eventType = "rfa.updated"): RfaHistoryEvent {
+ return {id:"event_synthetic",sequence:1,eventType,actor:"Synthetic operator",occurredAt:"2026-09-16T00:00:00Z",payload};
+}
+const historyFetch = (events: RfaHistoryEvent[]): typeof fetch => async url => String(url).endsWith("/scheduling") ? Response.json({data:[appointment]}) : String(url).endsWith("/events") ? Response.json({data:events}) : new Response("synthetic PDF",{headers:{"content-type":"application/pdf"}});
+
+it("expands historical delivery details without substituting the transmission's current status or inventing a receipt", async()=>{
+ const view=await setup({},historyFetch([event({transmissionId:"transmission_one",status:"queued",purpose:"forward",packetId:"packet_one",recipientName:"Synthetic adjuster",message:"Synthetic cover message",actorId:"PRIVATE-ACTOR",binding:"PRIVATE-BINDING",packetSha256:"PRIVATE-HASH"},"rfa.transmission_recorded")]));
+ try {
+  const details=[...view.container.querySelectorAll("summary")].find(node=>node.textContent==="Event details")!.parentElement as HTMLDetailsElement;
+  expect(details.open).toBe(false); await act(async()=>{details.open=true;});
+  expect(details.textContent).toContain("Statusqueued");expect(details.textContent).not.toContain("Statussent");
+  expect(details.textContent).toContain("Recipient+15555550123");expect(details.textContent).toContain("Synthetic adjuster");expect(details.textContent).toContain("Synthetic cover message");
+  expect(details.textContent).toContain("SYNTHETIC-REFERENCE");expect(details.textContent).not.toContain("Confirmed receipt");expect(details.textContent).not.toContain("Number of pages");
+  expect(view.container.textContent).not.toMatch(/PRIVATE-(ACTOR|BINDING|HASH)/);
+ } finally {await view.close();}
+});
+
+it("shows appointment history and its treatment without exposing concurrency metadata",async()=>{
+ const view=await setup({},historyFetch([event({action:"scheduling_updated",itemId:"item_one",disposition:"scheduled",details:{appointmentAt:"2026-09-20T10:00:00Z",providerName:"Synthetic appointment physician",location:"Synthetic treatment office",authorizationToken:"PRIVATE-TOKEN",expectedVersion:12}})]));
+ try {
+  const details=[...view.container.querySelectorAll("summary")].find(node=>node.textContent==="Event details")!.parentElement as HTMLDetailsElement;
+  expect(details.textContent).toContain("Appointment details");expect(details.textContent).toContain("Synthetic appointment physician");expect(details.textContent).toContain("Synthetic treatment office");
+  expect(view.container.querySelector('a[href="#rfa-treatment-item_one"]')?.textContent).toBe("Treatment 1: Synthetic therapy");
+  expect(view.container.textContent).not.toContain("PRIVATE-TOKEN");expect(details.textContent).not.toContain("expectedVersion");
+ }finally{await view.close();}
+});
+
+it("preserves original and corrected treatment decisions with evidence and excludes unknown changed fields",async()=>{
+ const view=await setup({},historyFetch([event({itemId:"item_one",reason:"Synthetic documented correction",changedFields:["items","authorizationToken","PRIVATE-FIELD"],before:{decidedAt:"2026-09-15T00:00:00Z",responseDocumentId:"ur_original",decisions:[{itemId:"item_one",outcome:"denied",decisionReason:"Synthetic original reason",reviewerName:"Synthetic reviewer"}]},replacement:{decidedAt:"2026-09-16T00:00:00Z",responseDocumentId:"ur_one",decisions:[{itemId:"item_one",outcome:"approved",authorizationNumber:"SYNTHETIC-UPDATED",authorizedQuantity:4,effectiveFrom:"2026-09-18",effectiveTo:"2026-10-18"}]}},"rfa.decision_corrected")]));
+ try {
+  const content=view.container.textContent!;
+  expect(content).toContain("Recorded by Synthetic operator");expect(content).toContain("Synthetic documented correction");expect(content).toContain("Original decision");expect(content).toContain("Corrected decision");
+  expect(content).toContain("Synthetic original reason");expect(content).toContain("SYNTHETIC-UPDATED");expect(content).toContain("Authorized quantity4");
+  expect(content).toContain("Changed fields: Requested treatments");expect(content).not.toContain("PRIVATE-FIELD");expect(content).not.toContain("authorizationToken");
+  expect(content).toContain("Original: Download decision evidence");expect(content).toContain("Corrected: Download decision evidence: Synthetic response.pdf");
+ }finally{await view.close();}
+});
+
+it("downloads exact retained packets and documents through the authenticated RFA client",async()=>{
+ const createUrl=vi.spyOn(URL,"createObjectURL").mockReturnValue("blob:synthetic-evidence");const click=vi.spyOn(HTMLAnchorElement.prototype,"click").mockImplementation(()=>undefined);
+ const view=await setup({},historyFetch([event({packetId:"packet_one",responseDocumentId:"ur_one"},"rfa.transmission_recorded")]));
+ try {
+  for(const label of ["Download retained submission PDF","Download decision evidence: Synthetic response.pdf"]){await act(async()=>{[...view.container.querySelectorAll("button")].find(button=>button.textContent===label)!.click();});}
+  const downloads=view.fetcher.mock.calls.filter(call=>/\/(packets|documents)\//.test(String(call[0])));
+  expect(downloads).toHaveLength(2);expect(String(downloads[0]![0])).toContain("/rfas/rfa_synthetic/packets/packet_one");expect(String(downloads[1]![0])).toContain("/rfas/rfa_synthetic/documents/ur_one");
+  for(const [,init] of downloads){expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer synthetic_token");expect(init?.method).toBeUndefined();}
+  expect(click).toHaveBeenCalledTimes(2);expect(createUrl).toHaveBeenCalledTimes(2);
+ }finally{await view.close();click.mockRestore();createUrl.mockRestore();}
+});
+
+it("surfaces evidence download failures without leaving the RFA history",async()=>{
+ const fetcher=historyFetch([event({packetId:"packet_missing"},"rfa.transmission_recorded")]);
+ const view=await setup({},async(url,init)=>String(url).includes("/packets/")?Response.json({detail:"Synthetic packet unavailable"},{status:404}):fetcher(url,init));
+ try{await act(async()=>{[...view.container.querySelectorAll("button")].find(button=>button.textContent==="Download retained submission PDF")!.click();});expect(view.container.querySelector('[role="alert"]')?.textContent).toContain("Synthetic packet unavailable");expect(view.container.textContent).toContain("History and notes");}finally{await view.close();}
 });

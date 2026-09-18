@@ -24,3 +24,32 @@ it("keeps patient filters through server search, sorting and cursor navigation a
   await click("Next page"); await click("Previous page"); expect(urls.at(-1)!.searchParams.has("cursor")).toBe(false); expect(urls.at(-1)!.searchParams.get("search")).toBe("TEST-CLAIM");
  } finally { await act(async () => root.unmount()); container.remove(); }
 });
+it("filters and sorts lifecycle status while retaining treatment outcomes", async () => {
+ const urls: URL[] = [];
+ const fetcher = vi.fn<typeof fetch>(async input => { urls.push(new URL(String(input))); return Response.json({ data: [{ ...record, status: "approved", lifecycleStatus: "closed" }], summary: { total: 3, byStatus: { approved: 2, submitted: 1 }, byLifecycleStatus: { closed: 2, failed: 1 } }, nextCursor: null }); });
+ const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+ try {
+  await act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher })));
+  expect(container.textContent).toContain("Closed: 2"); expect(container.textContent).toContain("Failed: 1");
+  expect(container.textContent).toContain("Clinical review: approved");
+  const select = container.querySelector("select")!;
+  await act(async () => { select.value = "failed"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(urls.at(-1)!.searchParams.get("lifecycleStatus")).toBe("failed"); expect(urls.at(-1)!.searchParams.has("status")).toBe(false);
+  await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Status ↕")!.click());
+  expect(urls.at(-1)!.searchParams.get("sortBy")).toBe("lifecycleStatus");
+  await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Requested treatments")!.click());
+  expect(container.textContent).toContain("approved"); expect(container.textContent).toContain("Treatment decision");
+ } finally { await act(async () => root.unmount()); container.remove(); }
+});
+it("keeps legacy clinical filters for servers without lifecycle summaries", async () => {
+ const urls: URL[] = [];
+ const fetcher = vi.fn<typeof fetch>(async input => { urls.push(new URL(String(input))); return Response.json({ data: [{ ...record, status: "approved" }], summary: { total: 1, byStatus: { approved: 1 } }, nextCursor: null }); });
+ const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+ try {
+  await act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher })));
+  expect(container.textContent).toContain("Closed"); expect(container.textContent).toContain("Clinical review counts:");
+  const select = container.querySelector("select")!;
+  await act(async () => { select.value = "approved"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(urls.at(-1)!.searchParams.get("status")).toBe("approved"); expect(urls.at(-1)!.searchParams.has("lifecycleStatus")).toBe(false);
+ } finally { await act(async () => root.unmount()); container.remove(); }
+});
