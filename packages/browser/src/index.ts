@@ -2337,6 +2337,7 @@ export type RfaRecord = {
   items: Array<{ id: string; diagnosisCode: string; diagnosisDescription?: string; serviceDescription: string; procedureCode: string | null;
     frequency?: string | null; duration?: string | null; requestedFrom?: string | null; requestedTo?: string | null; metadata?: Record<string, unknown>;
     outcome: string; quantity: number | null; units: number | null; authorizationNumber: string | null; decisionReason: string | null;
+    decisionClosure?: import("./rfa-lifecycle").RfaTreatmentClosure | null;
     currentDecisionEventId?: string | null; currentResponseDocumentId?: string | null; currentImrDocumentId?: string | null;
     authorizedProcedureCode?: string | null; authorizedQuantity?: number | null; authorizedUnits?: number | null;
     effectiveFrom?: string | null; effectiveTo?: string | null; decidedAt?: string | null; reviewerName?: string | null; reviewerPhone?: string | null }>;
@@ -2346,8 +2347,10 @@ export type RfaRecord = {
   informationRequests: Array<{ id: string; requestText: string; requestedAt: string | null; dueAt: string | null; respondedAt: string | null }>;
   events: Array<{ id: string; type: string; occurredAt: string | null; text?: string }>;
 };
-export type RfaListQuery = { patientId?: string; search?: string; sortBy?: "createdAt" | "employeeName" | "providerName" | "submittedAt" | "status" | "lifecycleStatus"; sortDirection?: "asc" | "desc"; claimId?: string; renderingProviderId?: string; status?: string; lifecycleStatus?: import("./rfa-status").RfaLifecycleStatus; createdFrom?: string; createdTo?: string; limit?: number; cursor?: string };
-export type RfaListResult = { data: RfaRecord[]; nextCursor: string | null; summary: { total: number; byStatus: Record<string, number>; byLifecycleStatus?: Partial<Record<import("./rfa-status").RfaLifecycleStatus, number>> } };
+export type RfaAgingBucket = "0_5" | "6_14" | "15_30" | "31_plus";
+export type RfaAgingSummary = { byBucket: Record<RfaAgingBucket, number>; byLifecycleStatus: Record<import("./rfa-status").RfaLifecycleStatus, Record<RfaAgingBucket, number>> };
+export type RfaListQuery = { agingBucket?: RfaAgingBucket; patientId?: string; search?: string; sortBy?: "createdAt" | "employeeName" | "providerName" | "submittedAt" | "status" | "lifecycleStatus"; sortDirection?: "asc" | "desc"; claimId?: string; renderingProviderId?: string; status?: string; lifecycleStatus?: import("./rfa-status").RfaLifecycleStatus; createdFrom?: string; createdTo?: string; limit?: number; cursor?: string };
+export type RfaListResult = { data: RfaRecord[]; nextCursor: string | null; summary: { total: number; byStatus: Record<string, number>; aging?: RfaAgingSummary; byLifecycleStatus?: Partial<Record<import("./rfa-status").RfaLifecycleStatus, number>> } };
 export type RfaSigningPreviewInput = { billingProviderId?: string; diagnosisDescriptions: Record<string, string> };
 export type RfaSigningPreview = { id: string; contentHash: string; contentRevision: number; renderingProviderId: string; previewDocumentId: string; expiresAt: string };
 export type RfaSignInput = { snapshotId: string; contentHash: string; renderingProviderId: string; physicianAuthorized: true; actorReference: string };

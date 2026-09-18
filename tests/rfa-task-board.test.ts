@@ -47,6 +47,12 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
     await act(async () => { select.value = record.id; select.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
     await act(async () => h.container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    const inboxReads = () => fetcher.mock.calls.filter(call => String(call[0]).includes("rfa-inbound-faxes") && !String(call[0]).endsWith("/content")).length;
+    const beforeFocus = inboxReads();
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(inboxReads()).toBe(beforeFocus);
+    expect(select.value).toBe(record.id);
+    expect(h.container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
     await act(async () => h.button("Match response and open Post UR").click());
     expect(onSelect).toHaveBeenCalledWith(record.id, "ur_synthetic");
     expect(fetcher.mock.calls.filter(call => call[1]?.method === "POST")).toHaveLength(1);

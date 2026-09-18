@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
-import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaScheduling, type RfaSchedulingInput, type RfaHistoryEvent, type RfaDecisionCorrectionInput, type RfaTreatmentDecisionInput } from "@mindbill/browser";
+import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaScheduling, type RfaSchedulingInput, type RfaHistoryEvent, type RfaDecisionCorrectionInput, type RfaTreatmentDecisionInput, type RfaTreatmentClosureInput } from "@mindbill/browser";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 import { RfaHistoryEntry } from "./rfa-history-entry";
 
@@ -70,6 +70,7 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
   };
   const evidence = (id: string | null | undefined, title: string) => id ? <button type="button" disabled={disabled} onClick={() => void download(id, rfa.documents.find(document => document.id === id)?.filename ?? `${title}.pdf`)}>{title}</button> : null;
   const canCorrect = permissions.includes("act") && ["received", "under_review", "information_requested", "approved", "modified", "denied", "mixed"].includes(rfa.status);
+  const canClose = permissions.includes("edit") && ["submitted", "received", "under_review", "information_requested", "incomplete", "deferred"].includes(rfa.status);
   return <TreatmentDraftShell {...appearance} title="Treatments and history" description="Review each treatment's authorization, appointments, delivery evidence, and notes.">
     <div style={{ display: "grid", gap: 16 }}>
       {error ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
@@ -78,7 +79,9 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
       {rfa.items.map((item, index) => {
         const appointment = scheduling.find(value => value.itemId === item.id);
         return <fieldset key={item.id} id={`rfa-treatment-${item.id}`} tabIndex={-1}><legend>{index + 1}. {item.serviceDescription}</legend>
-          <p>{item.procedureCode || "No procedure code"} · Diagnosis {item.diagnosisCode} · {words(item.outcome)}</p>
+          <p>{item.procedureCode || "No procedure code"} · Diagnosis {item.diagnosisCode} · {item.decisionClosure?.closed ? "Decision no longer required" : words(item.outcome)}</p>
+          {item.decisionClosure ? <p>{item.decisionClosure.closed ? "Closed" : "Reopened"} by {item.decisionClosure.updatedBy} · {date(item.decisionClosure.updatedAt)}<br />{item.decisionClosure.reason}</p> : null}
+          {canClose && item.outcome === "pending" && !item.decidedAt ? <TreatmentClosureForm key={`${item.id}:${item.decisionClosure?.version ?? 0}`} item={item} disabled={disabled} onError={setError} onSave={input => run(`closure:${item.id}`, input, key => client.updateTreatmentClosure(rfa.id, item.id, input, key))} /> : null}
           {item.outcome !== "pending" ? <><p>Decision: {date(item.decidedAt)}{item.authorizationNumber ? ` · Authorization ${item.authorizationNumber}` : ""}</p>
             {item.authorizedProcedureCode || item.authorizedQuantity || item.authorizedUnits ? <p>Authorized: {item.authorizedProcedureCode || item.procedureCode || "Treatment"}{item.authorizedQuantity != null ? ` · Quantity ${item.authorizedQuantity}` : ""}{item.authorizedUnits != null ? ` · Units ${item.authorizedUnits}` : ""}</p> : null}
             {item.effectiveFrom || item.effectiveTo ? <p>Authorization dates: {item.effectiveFrom ?? "Not specified"} through {item.effectiveTo ?? "Not specified"}</p> : null}
@@ -145,4 +148,25 @@ function CorrectionForm({ item, documents, disabled, onError, onSave }: { item: 
     {outcome !== "approved" ? <><label>Independent medical review form<select name="imrDocumentId" required defaultValue={item.currentImrDocumentId ?? ""}><option value="">Choose a form</option>{documents.filter(document => document.documentType === "imr_form").map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label><label>Decision reason<textarea name="decisionReason" required defaultValue={item.decisionReason ?? ""} /></label><label>Reviewer name<input name="reviewerName" required defaultValue={item.reviewerName ?? ""} /></label><label>Reviewer phone<input name="reviewerPhone" required defaultValue={item.reviewerPhone ?? ""} /></label></> : null}
     {outcome !== "denied" ? <><label>Authorization number<input name="authorizationNumber" required defaultValue={item.authorizationNumber ?? ""} /></label><label>Authorized procedure code<input name="authorizedProcedureCode" defaultValue={item.authorizedProcedureCode ?? ""} /></label><label>Authorized quantity<input name="authorizedQuantity" type="number" min="0.001" step="any" defaultValue={item.authorizedQuantity ?? ""} /></label><label>Authorized units<input name="authorizedUnits" type="number" min="1" defaultValue={item.authorizedUnits ?? ""} /></label><label>Effective from<input name="effectiveFrom" type="date" defaultValue={item.effectiveFrom?.slice(0, 10) ?? ""} /></label><label>Effective through<input name="effectiveTo" type="date" defaultValue={item.effectiveTo?.slice(0, 10) ?? ""} /></label></> : null}
     </div><button type="submit">Save decision correction</button></fieldset></form>;
+}
+
+function TreatmentClosureForm({ item, disabled, onError, onSave }: {
+  item: RfaRecord["items"][number]; disabled: boolean;
+  onError: (message: string) => void; onSave: (input: RfaTreatmentClosureInput) => Promise<boolean>;
+}): ReactElement {
+  const closed = Boolean(item.decisionClosure?.closed);
+  const title = closed ? "Reopen treatment follow-up" : "Decision no longer required";
+  return <details><summary>{title}</summary>
+    <p>{closed ? "Resume waiting for a decision on this treatment. Its original review deadline still applies." : "Close follow-up for this treatment without recording an approval or denial. Other treatments remain active. This does not withdraw the request with the claims administrator."}</p>
+    <form onSubmit={event => {
+      event.preventDefault(); if (disabled) return;
+      try {
+        const reason = required(new FormData(event.currentTarget), "closureReason", "a reason");
+        void onSave({ closed: !closed, reason, expectedVersion: item.decisionClosure?.version ?? 0 });
+      } catch (reason) { onError(reason instanceof Error ? reason.message : "Enter a reason."); }
+    }}><fieldset disabled={disabled}><legend>{closed ? "Reopen this treatment" : "Close this treatment"}</legend>
+      <label>{closed ? "Reason for reopening" : "Reason a decision is no longer required"}<textarea name="closureReason" required maxLength={2000} /></label>
+      <div className="mbtd-actions"><button type="submit">{closed ? "Reopen treatment" : "Close treatment"}</button></div>
+    </fieldset></form>
+  </details>;
 }

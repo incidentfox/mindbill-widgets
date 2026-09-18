@@ -32,6 +32,7 @@ it("opens the current directory for a submitted request while retaining its save
  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
  try {
   await act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher })));
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());
   await act(async () => [...container.querySelectorAll("button")].find(el => el.textContent === "Review request")!.click());
   expect(container.textContent).toContain("Saved administrator");
   await act(async () => [...container.querySelectorAll("button")].find(el => el.textContent === "View current claims administrator directory")!.click());

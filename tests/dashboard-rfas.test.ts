@@ -42,6 +42,8 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s RF
       await render(surface({ ...props, showRfas: true }));
       expect(options.fetch).not.toHaveBeenCalled();
       await act(async () => tab(container, "Requests for authorization")!.click());
+      expect(container.textContent).toContain("Clinical review counts");
+      await act(async () => button(container, "RFAs")!.click());
       expect(container.textContent).toContain("Synthetic patient");
       const selected = tab(container, "Requests for authorization")!;
       expect(selected.getAttribute("aria-selected")).toBe("true");
@@ -79,16 +81,20 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s RF
 it("inherits the workspace connection and can start on RFAs", async () => {
   const options = connection();
   await mounted(createElement(ConnectedBillingWorkspace, { ...options, showRfas: true, initialView: "rfas" }), async container => {
-    expect(container.textContent).toContain("Synthetic patient");
+    expect(container.textContent).toContain("Clinical review counts");
     expect(options.getSession).toHaveBeenCalledTimes(1);
     expect(options.fetch.mock.calls).toHaveLength(1);
     expect(String(options.fetch.mock.calls[0]?.[0])).toContain("/rfas?");
+    await act(async () => button(container, "RFAs")!.click());
+    expect(container.textContent).toContain("Synthetic patient");
   });
 });
 
 it("uses a dedicated RFA endpoint instead of the workspace credential callback", async () => {
   const options = connection();
   await mounted(createElement(ConnectedBillingWorkspace, { ...options, showRfas: true, initialView: "rfas", rfaDashboard: { sessionEndpoint: "/rfa-session" } }), async container => {
+    expect(container.textContent).toContain("Clinical review counts");
+    await act(async () => button(container, "RFAs")!.click());
     expect(container.textContent).toContain("Synthetic patient");
     expect(options.getSession).not.toHaveBeenCalled();
     expect(options.fetch.mock.calls[0]?.[0]).toBe("/rfa-session");

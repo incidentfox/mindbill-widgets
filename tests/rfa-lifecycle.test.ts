@@ -80,3 +80,16 @@ it("paginates the scoped response inbox, authenticates PDFs, and requires an exp
   expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({ rfaId: "rfa_one" });
   expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get("idempotency-key")).toBe("stable_key");
 });
+
+it("closes and reopens one treatment with an encoded path, version and stable key", async () => {
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json({ data: { id: "synthetic" } }));
+  const client = createRfaLifecycleClient({ getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher });
+  await expect(client.updateTreatmentClosure("rfa/one", "item/one", {closed:true, reason:"  ", expectedVersion:0}, "closure_key")).rejects.toThrow("reason");
+  await expect(client.updateTreatmentClosure("rfa/one", "item/one", {closed:true, reason:"Canceled", expectedVersion:-1}, "closure_key")).rejects.toThrow("version");
+  expect(fetcher).not.toHaveBeenCalled();
+  for (const closed of [true, false]) await client.updateTreatmentClosure("rfa/one", "item/one", {closed, reason:" Synthetic reason ", expectedVersion:closed ? 0 : 1}, closed ? "close_key" : "reopen_key");
+  expect(String(fetcher.mock.calls[0]?.[0])).toContain("rfa%2Fone/items/item%2Fone/closure");
+  expect(fetcher.mock.calls.map(call=>JSON.parse(String(call[1]?.body)))).toEqual([{closed:true,reason:"Synthetic reason",expectedVersion:0},{closed:false,reason:"Synthetic reason",expectedVersion:1}]);
+  expect(fetcher.mock.calls.map(call=>call[1]?.method)).toEqual(["PATCH","PATCH"]);
+  expect(fetcher.mock.calls.map(call=>new Headers(call[1]?.headers).get("idempotency-key"))).toEqual(["close_key","reopen_key"]);
+});

@@ -6,6 +6,7 @@ type Evidence = { id: string; label: string; kind: "document" | "packet" };
 const object = (value: unknown): Fields => value && typeof value === "object" && !Array.isArray(value) ? value as Fields : {};
 const string = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value : undefined;
 const words = (value: string) => value.replace(/^rfa\./, "").replaceAll("_", " ");
+const actions: Record<string, string> = { treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened" };
 const date = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Not recorded";
 const fields = {
   status: "Status", from: "Previous status", to: "New status", channel: "Delivery method", direction: "Direction",
@@ -86,7 +87,7 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload }: {
   const changed = Array.isArray(payload.changedFields) ? payload.changedFields.flatMap(value => typeof value === "string" && Object.hasOwn(changedFieldNames, value) ? [changedFieldNames[value]!] : []) : [];
   const hasDetails = entries.length || appointment.length || decisionSections.length || evidence.length || changed.length;
   return <li style={{ paddingBlock: 8 }}>
-    <strong>{words(string(payload.action) ?? event.eventType)}</strong> · {date(event.occurredAt)}
+    <strong>{actions[string(payload.action) ?? ""] ?? words(string(payload.action) ?? event.eventType)}</strong> · {date(event.occurredAt)}
     <p>Recorded by {event.actor}</p>
     {["text", "reason", "requestText", "note"].map(key => string(payload[key]) ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{String(payload[key])}</p> : null)}
     {ids.size ? <ul aria-label="Related treatments">{[...ids].map(id => <li key={id}>{treatment(id)}</li>)}</ul> : null}

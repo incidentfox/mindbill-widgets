@@ -114,3 +114,43 @@ it("surfaces evidence download failures without leaving the RFA history",async()
  const view=await setup({},async(url,init)=>String(url).includes("/packets/")?Response.json({detail:"Synthetic packet unavailable"},{status:404}):fetcher(url,init));
  try{await act(async()=>{[...view.container.querySelectorAll("button")].find(button=>button.textContent==="Download retained submission PDF")!.click();});expect(view.container.querySelector('[role="alert"]')?.textContent).toContain("Synthetic packet unavailable");expect(view.container.textContent).toContain("History and notes");}finally{await view.close();}
 });
+
+const pendingRecord: RfaRecord = {...record, status:"under_review", items:[{...record.items[0]!, outcome:"pending", decidedAt:null, currentDecisionEventId:null}, {...record.items[0]!, id:"item_two"}]};
+it("closes only an undecided treatment with a reason and can reopen it without changing the clinical outcome",async()=>{
+ let current=pendingRecord;const onUpdated=vi.fn();
+ const view=await setup({rfa:current,permissions:["edit"],onUpdated},async(url,init)=>{
+  if(String(url).endsWith("/closure")){const body=JSON.parse(String(init?.body));current={...current,items:current.items.map((item,index)=>index===0?{...item,decisionClosure:{closed:body.closed,reason:body.reason,version:body.expectedVersion+1,updatedAt:"2026-09-18T12:00:00Z",updatedBy:"Synthetic operator"}}:item)};return Response.json({data:current});}
+  return Response.json({data:String(url).endsWith("/events")?history:[]});
+ });
+ try{
+  expect(view.container.querySelectorAll('[name="closureReason"]')).toHaveLength(1);
+  await act(async()=>submit(view.container,"Close treatment"));expect(view.container.textContent).toContain("Enter");expect(onUpdated).not.toHaveBeenCalled();
+  await act(async()=>{set(view.container,"closureReason","Patient no longer requests treatment");submit(view.container,"Close treatment");});
+  expect(current.items[0]?.outcome).toBe("pending");expect(current.items[1]?.outcome).toBe("approved");
+  expect(view.container.textContent).toContain("Closed by Synthetic operator");expect(view.container.textContent).toContain("Patient no longer requests treatment");
+  await act(async()=>{set(view.container,"closureReason","Patient requests follow-up again");submit(view.container,"Reopen treatment");});
+  const calls=view.fetcher.mock.calls.filter(call=>String(call[0]).endsWith("/closure"));expect(calls).toHaveLength(2);
+  expect(JSON.parse(String(calls[0]?.[1]?.body))).toEqual({closed:true,reason:"Patient no longer requests treatment",expectedVersion:0});
+  expect(JSON.parse(String(calls[1]?.[1]?.body))).toEqual({closed:false,reason:"Patient requests follow-up again",expectedVersion:1});
+  expect(view.container.textContent).toContain("Reopened by Synthetic operator");expect(onUpdated).toHaveBeenCalledTimes(2);
+ }finally{await view.close();}
+});
+it("hides administrative closure without edit permission and for draft or decided treatments",async()=>{
+ for(const props of [{rfa:pendingRecord},{rfa:{...pendingRecord,status:"draft" as const},permissions:["edit"] as const},{rfa:record,permissions:["edit"] as const}]){
+  const view=await setup(props);try{expect(view.container.querySelector('[name="closureReason"]')).toBeNull();}finally{await view.close();}
+ }
+});
+it("keeps closure retry idempotent and leaves treatment open on a failed mutation",async()=>{
+ const view=await setup({rfa:pendingRecord,permissions:["edit"]},async(url,init)=>init?.method==="PATCH"?Response.json({detail:"Synthetic conflict; refresh the treatment"},{status:409}):Response.json({data:String(url).endsWith("/events")?history:[]}));
+ try{
+  await act(async()=>{set(view.container,"closureReason","Synthetic administrative reason");submit(view.container,"Close treatment");});
+  await act(async()=>submit(view.container,"Close treatment"));
+  const calls=view.fetcher.mock.calls.filter(call=>call[1]?.method==="PATCH");expect(calls).toHaveLength(2);
+  expect(new Headers(calls[0]?.[1]?.headers).get("idempotency-key")).toBe(new Headers(calls[1]?.[1]?.headers).get("idempotency-key"));
+  expect(view.container.textContent).toContain("Synthetic conflict");expect(view.container.textContent).not.toContain("Reopen treatment follow-up");
+ }finally{await view.close();}
+});
+it("shows actor-attributed closure and reopening reasons in history",async()=>{
+ const view=await setup({},historyFetch([event({action:"treatment_closed",itemId:"item_one",reason:"Synthetic closure reason",version:1}),{...event({action:"treatment_reopened",itemId:"item_one",reason:"Synthetic reopen reason",version:2}),id:"event_reopened"}]));
+ try{expect(view.container.textContent).toContain("Treatment closed — decision no longer required");expect(view.container.textContent).toContain("Treatment follow-up reopened");expect(view.container.textContent).toContain("Synthetic closure reason");expect(view.container.textContent).toContain("Synthetic reopen reason");expect(view.container.textContent).toContain("Synthetic operator");}finally{await view.close();}
+});

@@ -128,3 +128,17 @@ it("requires a saved decision and explicit confirmation before completing Post U
     expect(record.items[1]?.outcome).toBe("pending");
   } finally { await view.close(); }
 });
+
+it("excludes administratively closed treatments from Post UR and reloads tasks after a closure update",async()=>{
+ const rfa={...record,items:record.items.map((item,index)=>index===0?{...item,decisionClosure:{closed:true,reason:"Synthetic administrative closure",version:1,updatedAt:"2026-09-18T00:00:00Z",updatedBy:"Synthetic operator"}}:item)};
+ const view=await setup({rfa,permissions:["act"]});
+ try{
+  expect(view.container.querySelector('[name="item_one:outcome"]')).toBeNull();
+  const labels=[...view.container.querySelectorAll("label")].map(label=>label.textContent);
+  expect(labels.some(label=>label?.startsWith("Decision for 97110"))).toBe(false);
+  expect(labels.some(label=>label?.startsWith("Decision for 99213"))).toBe(true);
+  const before=view.fetcher.mock.calls.length;
+  await view.rerender({rfa:{...rfa,updatedAt:"2026-09-18T01:00:00Z"}});
+  expect(view.fetcher.mock.calls.length).toBeGreaterThan(before);
+ }finally{await view.close();}
+});
