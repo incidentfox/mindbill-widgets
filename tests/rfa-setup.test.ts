@@ -24,10 +24,11 @@ it("requires a selected administrator and active payer, then retries with stable
  try {
   await act(async()=>h.root.render(createElement(RfaClaimSetup,{client,onCreated,onCancel:vi.fn()})));
   expect(h.button("Save patient and injury").disabled).toBe(true);
-  await type(h.container,"Search claims administrators","Test");await act(async()=>h.button("Find claims administrators").click());
+  for(const [label,value] of Object.entries({"Patient first name":"Synthetic","Patient last name":"Patient","Date of birth":"1980-01-01","Patient street address":"100 Test St","Patient city":"Test City","Patient ZIP code":"90001","Claim number":"TEST-001","Employer":"Synthetic Employer","Date of injury":"2026-01-01"}))await type(h.container,label,value);
+  await type(h.container,"Search claims administrators","Test");await act(async()=>new Promise(resolve=>setTimeout(resolve,350)));
   await select(h.container,"Claims administrator","admin_synthetic");expect(h.button("Save patient and injury").disabled).toBe(true);expect(h.container.textContent).not.toContain("Inactive payer");
   await select(h.container,"Payer","payer_synthetic");
-  for(const [label,value] of Object.entries({"Patient first name":"Synthetic","Patient last name":"Patient","Date of birth":"1980-01-01","Patient street address":"100 Test St","Patient city":"Test City","Patient ZIP code":"90001","Claim number":"TEST-001","Employer":"Synthetic Employer","Date of injury":"2026-01-01"}))await type(h.container,label,value);
+
   await act(async()=>h.container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
   expect(h.container.textContent).toContain("could not be saved");
   await act(async()=>h.container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));

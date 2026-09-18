@@ -48,7 +48,7 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
   const alive = useRef(true); const pending = useRef(false); const keys = useRef(new Map<string, string>());
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    let active = true; setLoading(true); setTaskError(""); setTasks([]);
+    let active = true;
     // Follow-ups are paginated by claim. Read every page so another request's tasks cannot hide this one's.
     (async () => {
       const found: RfaFollowUp[] = []; const seen = new Set<string>(); let cursor: string | undefined;
@@ -59,10 +59,16 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
         if (cursor && seen.has(cursor)) throw new Error("Follow-up pagination could not be completed. Refresh to try again.");
         if (cursor) seen.add(cursor);
       } while (cursor && active);
-      if (active) setTasks(found);
+      if (active) { setTasks(found); setTaskError(""); }
     })().catch(reason => { if (active) setTaskError(reason instanceof Error ? reason.message : "Follow-ups could not be loaded."); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [client, rfa.claimId, rfa.id, rfa.updatedAt, reload]);
+  useEffect(() => {
+    const refresh = () => { if (!pending.current && document.visibilityState !== "hidden" && !document.activeElement?.closest("form")) setReload(value => value + 1); };
+    const timer = setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", refresh);
+    return () => { clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, []);
   const act = permissions.includes("act"); const edit = permissions.includes("edit"); const disabled = busy || appearance.disabled;
   const run = async (operation: string, input: unknown, action: (key: string) => Promise<RfaRecord | void>) => {
     if (pending.current) return;
@@ -115,7 +121,7 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
         {rfa.informationRequests.map(request => <fieldset key={request.id}><legend>Requested {displayDate(request.requestedAt)}</legend><p>{request.requestText}</p>{request.dueAt ? <p>Due {displayDate(request.dueAt)}</p> : null}{request.respondedAt ? <p>Response recorded {displayDate(request.respondedAt)}</p> : act ? <form onSubmit={event => submit(event, `response:${request.id}`, data => ({ respondedAt: timestamp(data, "respondedAt"), responseDocumentIds: data.getAll("responseDocumentIds").map(String) }), (input, key) => client.recordInformationResponse(rfa.id, request.id, input, key))}><fieldset disabled={disabled}><legend>Record an already-delivered response</legend><p>This records evidence only. It does not send these documents to the administrator.</p><label>Response sent at<input type="datetime-local" name="respondedAt" required /></label><label>Response documents<select name="responseDocumentIds" multiple required>{docs().map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label><label><input type="checkbox" required /> I confirm these documents were already delivered to the administrator.</label><button type="submit">Record delivered response</button></fieldset></form> : null}</fieldset>)}
         {act && decisionAllowed ? <form onSubmit={event => submit(event, "information-request", data => ({ requestedAt: timestamp(data, "requestedAt"), requestText: text(data, "requestText"), ...(text(data, "dueAt") ? { dueAt: timestamp(data, "dueAt") } : {}) }), (input, key) => client.recordInformationRequest(rfa.id, input, key))}><fieldset disabled={disabled}><legend>Record a request for information</legend><div className="mbtd-grid"><label>Requested at<input type="datetime-local" name="requestedAt" required /></label><label>Response due (optional)<input type="datetime-local" name="dueAt" /></label><label className="mbtd-wide">Requested information<textarea name="requestText" required /></label></div><button type="submit">Save information request</button></fieldset></form> : null}
       </div></details>
-      <details open><summary>Follow-up tasks</summary>{taskError ? <p role="alert">{taskError}</p> : null}{loading ? <p role="status">Loading follow-ups…</p> : tasks.length ? tasks.map(task => <FollowUpForm key={`${task.id}:${task.updatedAt}`} task={task} hasRecordedDecisions={rfa.items.some(item => item.currentResponseDocumentId === task.responseDocumentId && item.outcome !== "pending")} onReview={task.responseDocumentId ? () => setResponseDocument(task.responseDocumentId!) : undefined} editable={act} disabled={Boolean(disabled)} onSave={input => run(`follow-up:${task.id}`, input, async key => { await client.updateFollowUp(task.id, input, key); return records.get(rfa.id); })} />) : !taskError ? <p>No follow-up tasks are recorded for this request.</p> : null}<button type="button" disabled={loading || disabled} onClick={() => setReload(value => value + 1)}>Refresh follow-ups</button></details>
+      <details open><summary>Follow-up tasks</summary>{taskError ? <p role="alert">{taskError}</p> : null}{loading ? <p role="status">Loading follow-ups…</p> : tasks.length ? tasks.map(task => <FollowUpForm key={`${task.id}:${task.updatedAt}`} task={task} hasRecordedDecisions={rfa.items.some(item => item.currentResponseDocumentId === task.responseDocumentId && item.outcome !== "pending")} onReview={task.responseDocumentId ? () => setResponseDocument(task.responseDocumentId!) : undefined} editable={act} disabled={Boolean(disabled)} onSave={input => run(`follow-up:${task.id}`, input, async key => { await client.updateFollowUp(task.id, input, key); return records.get(rfa.id); })} />) : !taskError ? <p>No follow-up tasks are recorded for this request.</p> : null}{taskError ? <button type="button" disabled={loading || disabled} onClick={() => setReload(value => value + 1)}>Retry follow-ups</button> : null}</details>
       <p className="mbtd-note">Exceptional decision clocks require the explicit <a href="https://docs.mindbill.org/guides/rfas" target="_blank" rel="noopener noreferrer">RFA API review workflows</a>. Existing evidence remains in the request history.</p>
     </div>
   </TreatmentDraftShell>;

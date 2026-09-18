@@ -1,7 +1,7 @@
 "use client";
 import type { BillDiagnosisCode, OrganizationProfileData, RfaContact } from "@mindbill/browser";
 import { RfaContactFields, RfaDiagnosisFields } from "./rfa-draft-fields";
-import { useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
 export type RfaDraftItemInput = {
@@ -24,6 +24,10 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & {
   /** Remount with a different React key when switching requests. Use mode="edit" when replacing existing content; saving invalidates its signature. */
   initialDraft: RfaDraftInput;
   mode?: "create" | "edit";
+  /** Suppress the repeated title when composing a single creation page. */
+  embedded?: boolean;
+  /** Live identity selection on the same creation page; clinical fields remain local. */
+  identity?: { claimId: string; patientId: string; renderingProviderId: string; employeeName: string; providerName: string; claimNumber?: string; dateOfInjury?: string | undefined; claimsAdminId?: string | undefined; providerNpi?: string | undefined };
   searchDiagnosisCodes?: (query: string) => Promise<BillDiagnosisCode[]>;
   organizationProfile?: OrganizationProfileData;
   /** Diagnosis codes already recorded on this injury; selecting one remains editable. */
@@ -49,7 +53,7 @@ export function normalizeRfaDraft(draft: RfaDraftInput): RfaDraftInput {
   return copy;
 }
 export function validateRfaDraft(draft: RfaDraftInput): string | null {
-  for (const value of [draft.claimId, draft.patientId, draft.renderingProviderId]) if (!value.trim() || value.length > 255) return "Select a claim, patient, and rendering provider in the host application.";
+  for (const value of [draft.claimId, draft.patientId, draft.renderingProviderId]) if (!value.trim() || value.length > 255) return "Choose a patient claim and requesting physician above.";
   for (const value of [draft.externalId, draft.claimsAdminId]) if (value !== undefined && (!value.trim() || value.length > 255)) return "Check the request and claims administrator identifiers.";
   for (const value of [draft.employeeName, draft.providerName]) if (!value.trim() || value.length > 200) return "Employee and provider names are required (up to 200 characters).";
   if (draft.requestType !== undefined && !["new", "resubmission_material_change", "oral_authorization_confirmation"].includes(draft.requestType)) return "Choose a valid request type.";
@@ -80,8 +84,19 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
-  const [draft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
+export function RfaDraftForm({ initialDraft, identity, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+  const [savedDraft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
+  useEffect(() => {
+    if (identity) setDraft(current => { const next = { ...current }; delete next.providerPhone; delete next.providerFax; return next; });
+  }, [identity?.renderingProviderId]);
+  const draft = { ...savedDraft };
+  if (identity) {
+    for (const key of ["claimId", "patientId", "renderingProviderId", "employeeName", "providerName", "claimNumber", "dateOfInjury", "claimsAdminId", "providerNpi"] as const) {
+      const value = identity[key];
+      if (value === undefined) delete (draft as Partial<RfaDraftInput>)[key];
+      else draft[key] = value;
+    }
+  }
   const action = useDraftSave(onSave), locked = disabled || action.busy;
   const billingProviders = Array.isArray(organizationProfile?.billingProviders) ? organizationProfile.billingProviders : [];
   const locations = Array.isArray(organizationProfile?.locations) ? organizationProfile.locations : [];
@@ -93,7 +108,7 @@ export function RfaDraftForm({ initialDraft, onSave, onBack, mode = "create", se
       const next = { ...item }; if (value === "") delete next[key]; else next[key] = Number(value); return next;
     }) }));
   };
-  return <TreatmentDraftShell {...appearance} title="Request for authorization" description="Prepare services and supporting rationale for utilization review.">
+  return <TreatmentDraftShell {...appearance} hideHeading={embedded} title="Request for authorization" description="Prepare services and supporting rationale for utilization review.">
     <p className="mbtd-note">{mode === "edit" ? "Saving replaces this draft, clears its signature, and requires a new signing review. It does not send the request or authorize treatment." : "Saving creates an unsigned draft. It does not send the request or authorize treatment."}</p>
     {onBack ? <button type="button" disabled={locked} onClick={() => onBack(draft)}>Back to patient and physician</button> : null}
     <form onSubmit={(event) => { event.preventDefault(); if (locked) return; const next = normalizeRfaDraft(draft); void action.save(next, validateRfaDraft(next)); }}>
