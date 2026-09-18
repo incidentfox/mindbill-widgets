@@ -486,3 +486,11 @@ sending remain disabled in sandbox. See the
 Workspace detail links now open the corresponding patient, physician or claims-administrator bill filter when canonical IDs are available. Hosts can override `onPatientClick`, `onRenderingProviderClick` and `onClaimsAdministratorClick`; see [bill search](docs/bill-search.md).
 
 RFA response workflows include a task board, reviewed incoming-fax matching, per-treatment Post UR decisions, and supporting PDFs during request creation. See the [RFA dashboard guide](docs/rfa-dashboard.md) for permissions and integration details.
+
+RFA dashboards distinguish delivery lifecycle (Incomplete, Sent, Failed, Received,
+Closed, Canceled) from treatment decisions (such as approved or denied). The
+browser client supports `lifecycleStatus` filtering and sorting, lifecycle summary
+counts, and `getRfaLifecycleStatus` for custom views, with display fallbacks for
+older servers. See [RFA lifecycle status](docs/rfa-dashboard.md#lifecycle-status-and-treatment-decisions).
+
+RFA delivery supports a reviewed recipient/attention name, including required handling-adjuster identification for adjuster-specific directory routes. RFA history exposes expandable recorded delivery, treatment decisions, appointments, and authenticated evidence downloads. See the [RFA dashboard guide](docs/rfa-dashboard.md).

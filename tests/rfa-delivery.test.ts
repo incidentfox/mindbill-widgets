@@ -69,3 +69,20 @@ it("discards a slow preview response after the selected documents change", async
     expect(ui.container.querySelector("iframe")).toBeNull(); expect(ui.button("Send authorization email").disabled).toBe(true);
   } finally { await ui.destroy(); }
 });
+
+it("binds the attention name to preview and delivery and invalidates review when it changes", async () => {
+  const ui = await setup();
+  const type = (selector: string, value: string) => act(async () => { const input = ui.container.querySelector<HTMLInputElement>(selector)!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  try {
+    await ui.select(1, "manual");
+    await type('input[type="tel"]', "8005550100");
+    await type('input:not([type])', "Synthetic Adjuster");
+    await ui.prepare(); await ui.attest();
+    expect(ui.prepareDelivery.mock.lastCall?.[1]).toMatchObject({ channel: "fax", to: "+18005550100", recipientName: "Synthetic Adjuster" });
+    await type('input:not([type])', "Another Synthetic Adjuster");
+    expect(ui.container.querySelector("iframe")).toBeNull();
+    expect(ui.button("Send authorization fax").disabled).toBe(true);
+    await ui.prepare(); await ui.attest(); await ui.click("Send authorization fax");
+    expect(ui.submit).toHaveBeenCalledWith(record.id, expect.objectContaining({ channel: "fax", to: "+18005550100", recipientName: "Another Synthetic Adjuster" }), expect.any(String));
+  } finally { await ui.destroy(); }
+});

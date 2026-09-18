@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaScheduling, type RfaSchedulingInput, type RfaHistoryEvent, type RfaDecisionCorrectionInput, type RfaTreatmentDecisionInput } from "@mindbill/browser";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
+import { RfaHistoryEntry } from "./rfa-history-entry";
 
 export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
   rfa: RfaRecord;
@@ -61,9 +62,9 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
     } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "The record could not be saved. Refresh before retrying."); return false; }
     finally { pending.current = false; if (alive.current) setBusy(false); }
   };
-  const download = async (id: string, filename: string) => {
+  const download = async (id: string, filename: string, kind: "document" | "packet" = "document") => {
     try {
-      const blob = await records.getDocument(rfa.id, id); if (!alive.current) return;
+      const blob = await (kind === "packet" ? records.getPacket(rfa.id, id) : records.getDocument(rfa.id, id)); if (!alive.current) return;
       const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "The evidence could not be opened."); }
   };
@@ -98,7 +99,7 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
           try { const note = required(new FormData(form), "note", "a note"); void run("note", note, async key => { await client.addNote(rfa.id, note, key); return records.get(rfa.id); }).then(saved => { if (saved && alive.current) form.reset(); }); }
           catch (reason) { setError(reason instanceof Error ? reason.message : "Enter a note."); }
         }}><fieldset disabled={disabled}><legend>Add a note</legend><label>Note<textarea name="note" required maxLength={10000} /></label><button type="submit">Save note</button></fieldset></form> : null}
-        {loading ? <p>Loading history…</p> : history.length ? <ol>{history.map(event => <li key={event.id}><strong>{words(typeof event.payload.action === "string" ? event.payload.action : event.eventType)}</strong> · {date(event.occurredAt)}<p>Recorded by {event.actor}</p>{["text", "reason", "requestText", "note"].map(key => typeof event.payload[key] === "string" ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{event.payload[key] as string}</p> : null)}</li>)}</ol> : !loadErrors.some(value => value.startsWith("History")) ? <p>No history entries have been recorded.</p> : null}
+        {loading ? <p>Loading history…</p> : history.length ? <ol>{history.map(event => <RfaHistoryEntry key={event.id} event={event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />)}</ol> : !loadErrors.some(value => value.startsWith("History")) ? <p>No history entries have been recorded.</p> : null}
       </details>
     </div>
   </TreatmentDraftShell>;

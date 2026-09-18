@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
+import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
 import { RfaTaskBoard } from "./rfa-task-board";
 import { RfaTrackingPanel } from "./rfa-tracking-panel";
 import { RfaRequestSummary } from "./rfa-request-summary";
@@ -34,7 +34,7 @@ export type RfaDashboardProps = OrganizationClientOptions & TreatmentDraftAppear
   onCreated?: (rfa: RfaRecord) => void;
   onContinue?: (rfa: RfaRecord) => void;
 };
-const STATUSES = ["draft", "ready", "submitted", "received", "incomplete", "under_review", "information_requested", "deferred", "approved", "modified", "denied", "mixed", "canceled", "closed"];
+const CLINICAL_STATUSES = ["draft", "ready", "submitted", "received", "incomplete", "under_review", "information_requested", "deferred", "approved", "modified", "denied", "mixed", "canceled", "closed"];
 const label = (value: string) => value.replaceAll("_", " ");
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
 const key = () => `rfa-widget-${globalThis.crypto.randomUUID()}`;
@@ -53,7 +53,9 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   const [profile, setProfile] = useState<OrganizationProfileData | undefined>();
   const draftFormProps = { searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
   const [result, setResult] = useState<RfaListResult | null>(null);
-  const [status, setStatus] = useState(""); const [cursor, setCursor] = useState<string | undefined>();
+  const [status, setStatus] = useState("");
+  const lifecycleAvailable = result?.summary.byLifecycleStatus !== undefined;
+  const [cursor, setCursor] = useState<string | undefined>();
   const [searchInput, setSearchInput] = useState(""); const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<NonNullable<RfaListQuery["sortBy"]>>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -77,13 +79,13 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   const [loading, setLoading] = useState(true); const createKeys = useRef(new Map<string, string>());
   useEffect(() => {
     let alive = true; setLoading(true); setError("");
-    client.list({ ...(patientId ? { patientId } : {}), ...(search ? { search } : {}), sortBy, sortDirection, ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), ...(status ? { status } : {}), ...(cursor ? { cursor } : {}), limit: 50 }).then(value => { if (alive) setResult(value); }).catch(() => { if (alive) setError("Requests could not be loaded. Try refreshing."); }).finally(() => { if (alive) setLoading(false); });
+    client.list({ ...(patientId ? { patientId } : {}), ...(search ? { search } : {}), sortBy, sortDirection, ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), ...(status ? lifecycleAvailable ? { lifecycleStatus: status as import("@mindbill/browser").RfaLifecycleStatus } : { status } : {}), ...(cursor ? { cursor } : {}), limit: 50 }).then(value => { if (alive) setResult(value); }).catch(() => { if (alive) setError("Requests could not be loaded. Try refreshing."); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [client, patientId, claimId, renderingProviderId, search, sortBy, sortDirection, status, cursor, reload]);
+  }, [client, patientId, claimId, renderingProviderId, search, sortBy, sortDirection, status, cursor, reload, lifecycleAvailable]);
   const back = () => { setCreationWarning(""); setSelected(null); setSelectedItem(null); setSelectedResponseDocumentId(undefined); setCreating(false); setReload(value => value + 1); };
   return <TreatmentDraftShell {...appearance} title="Requests for authorization" description="Prepare treatment requests, review signed packets, and track delivery and utilization review decisions.">
     <style>{`.mbrfa-list{display:grid;gap:10px;margin:16px 0}.mbrfa-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:16px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface)}.mbrfa-card strong{display:block}.mbrfa-card small{color:var(--mb-muted)}.mbrfa-status{text-transform:capitalize}.mbrfa-stack{display:grid;gap:16px}.mbrfa-check{display:flex!important;align-items:flex-start;gap:8px!important}.mbrfa-check input{min-height:20px;flex-shrink:0}.mbrfa-summary{display:flex;flex-wrap:wrap;gap:12px;padding:12px;background:var(--mb-soft);border-radius:var(--mb-control-radius)}@media(max-width:520px){.mbrfa-card{grid-template-columns:1fr}}`}</style>
-    {selected || creating ? <button type="button" onClick={back}>← All requests</button> : <div className="mbtd-actions"><label>Status<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{STATUSES.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label><button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}>Refresh requests</button>{permissions.includes("create") ? <button type="button" className="mbtd-primary" disabled={appearance.disabled} onClick={() => setCreating(true)}>New authorization request</button> : null}</div>}
+    {selected || creating ? <button type="button" onClick={back}>← All requests</button> : <div className="mbtd-actions"><label>{lifecycleAvailable ? "Status" : "Clinical status"}<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{(lifecycleAvailable ? Object.keys(RFA_LIFECYCLE_LABELS) : CLINICAL_STATUSES).map(value => <option key={value} value={value}>{lifecycleAvailable ? RFA_LIFECYCLE_LABELS[value as keyof typeof RFA_LIFECYCLE_LABELS] : label(value)}</option>)}</select></label><button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}>Refresh requests</button>{permissions.includes("create") ? <button type="button" className="mbtd-primary" disabled={appearance.disabled} onClick={() => setCreating(true)}>New authorization request</button> : null}</div>}
     {!selected && !creating ? <div className="mbtd-actions"><button type="button" aria-pressed={!taskView} onClick={() => setTaskView(false)}>Requests</button><button type="button" aria-pressed={taskView} onClick={() => setTaskView(true)}>Tasks and response inbox</button></div> : null}
     {creationWarning ? <p role="alert">{creationWarning}</p> : null}
     {creating && permissions.includes("create") ? <RfaCreateForm {...appearance} client={client} canCreateClaim={canCreateClaim} draftFormProps={draftFormProps} {...(initialDraft ? { initialDraft } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} onSave={async (draft, files) => {
@@ -107,8 +109,8 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
         <button type="submit">Search</button>{searchInput || search ? <button type="button" onClick={() => { setSearchInput(""); setSearch(""); resetPage(); }}>Clear search</button> : null}
       </form>
       {!loading && !error && result ? <>
-        <div className="mbrfa-summary"><strong>{result.summary.total} requests</strong>{Object.entries(result.summary.byStatus).filter(([,count]) => count > 0).map(([name,count]) => <span key={name} className="mbrfa-status">{label(name)}: {count}</span>)}</div>
-        <RfaListView view={listView} onViewChange={setListView} records={result.data} sortBy={sortBy} sortDirection={sortDirection} onSort={field => { setSortBy(field); setSortDirection(field === sortBy && sortDirection === "asc" ? "desc" : "asc"); resetPage(); }} onSelect={(id, itemId) => { setSelectedItem(itemId ?? null); setSelected(id); }} />
+        <div className="mbrfa-summary"><strong>{result.summary.total} requests</strong>{!lifecycleAvailable ? <span>Clinical review counts:</span> : null}{Object.entries(result.summary.byLifecycleStatus ?? result.summary.byStatus).filter(([,count]) => count > 0).map(([name,count]) => <span key={name} className="mbrfa-status">{lifecycleAvailable ? RFA_LIFECYCLE_LABELS[name as keyof typeof RFA_LIFECYCLE_LABELS] : label(name)}: {count}</span>)}</div>
+        <RfaListView lifecycleAvailable={lifecycleAvailable} view={listView} onViewChange={setListView} records={result.data} sortBy={sortBy} sortDirection={sortDirection} onSort={field => { setSortBy(field); setSortDirection(field === sortBy && sortDirection === "asc" ? "desc" : "asc"); resetPage(); }} onSelect={(id, itemId) => { setSelectedItem(itemId ?? null); setSelected(id); }} />
         <div className="mbtd-actions"><span>Request page {pageHistory.length + 1}</span>{cursor ? <button type="button" onClick={resetPage}>First page</button> : null}{pageHistory.length ? <button type="button" onClick={() => { setCursor(pageHistory.at(-1)); setPageHistory(value => value.slice(0, -1)); }}>Previous page</button> : null}{result.nextCursor ? <button type="button" onClick={() => { setPageHistory(value => [...value, cursor]); setCursor(result.nextCursor!); }}>Next page</button> : null}</div>
       </> : null}
     </>}
@@ -163,7 +165,7 @@ function RfaDetail({ id, selectedItem, selectedResponseDocumentId, client, signa
     <div className="mbtd-actions"><button type="button" disabled={locked || editing} onClick={() => setReload(value => value + 1)}>Refresh request</button>{rfa && onContinue ? <button type="button" disabled={locked} onClick={() => onContinue(rfa)}>Open in your application</button> : null}</div>
     {error ? <p role="alert">{error}</p> : null}{busy ? <p role="status">Working…</p> : null}
     {!rfa ? (!error ? <p role="status">Loading request…</p> : null) : <>
-      <div className="mbrfa-summary"><strong>{rfa.employeeName}</strong><span className="mbrfa-status">{label(rfa.status)}</span><span>{rfa.providerName}</span><span>{rfa.expedited ? "Expedited" : "Standard"} · {label(rfa.reviewType)}</span></div>
+      <div className="mbrfa-summary"><strong>{rfa.employeeName}</strong><span className="mbrfa-status">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><span>Clinical review: {label(rfa.status)}</span><span>{rfa.providerName}</span><span>{rfa.expedited ? "Expedited" : "Standard"} · {label(rfa.reviewType)}</span></div>
       {editing ? <>
         <button type="button" disabled={locked} onClick={() => { setEditing(false); setReload(value => value + 1); }}>Discard edits and refresh</button>
         <RfaDraftForm key={`${rfa.id}:${rfa.contentRevision}`} mode="edit" {...draftFormProps} initialDraft={rfaRecordToDraft(rfa)} disabled={!!locked} onSave={async draft => {

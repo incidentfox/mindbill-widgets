@@ -209,10 +209,10 @@ signed form is selected automatically; historical signed forms remain viewable.
 
 Choose fax or email and the exact authorization recipient, or choose **Download packet**.
 Directory choices and saved authorization contacts are explicit options; manual contact
-entry is available when routing needs confirmation. Add an optional message for the fax
+entry is available when routing needs confirmation. Adjuster-specific routes require the handling adjuster’s name and confirmed authorization fax. Central and claim-handling office routes remain explicit choices; billing fax and telephone numbers are never substituted. A custom destination can include an optional recipient/attention name. That name appears on the reviewed cover sheet and stays bound to the retained packet. Add an optional message for the fax
 cover or email, then prepare the assembled packet. Review its generated cover sheet,
 signed form, and selected supporting documents. Confirm both the packet review and the
-recipient before submitting. Changing the channel, destination, message, documents, or
+recipient before submitting. Changing the channel, destination, recipient name, message, documents, or
 request revision requires a new packet preview and confirmations. The send operation
 uses the retained packet ID and hash to deliver the bytes that were reviewed.
 
@@ -267,7 +267,7 @@ with a third party. No One Call integration is implied.
 History shows actor-attributed notes and recorded events. `edit` enables adding notes;
 `act` alone does not. Notes are append-only and never copied into webhook payloads.
 Delivery history keeps submission and forwarding evidence distinct and offers available
-proof PDFs. Attempted sending is not treated as receipt.
+proof PDFs. Expand an event to see its recorded delivery, appointment, or treatment-decision details, including original and corrected decisions. Treatment links jump to the affected service. Available supporting evidence and retained submission PDFs download through the authenticated client. History does not invent receipt page counts or provider timestamps that were not recorded. Attempted sending is not treated as receipt.
 
 `RfaTrackingPanel` is exported for custom pages. Pass `rfa`, `options` containing the
 connection options, optional `permissions={["act", "edit"]}`, and `onUpdated`.
@@ -292,6 +292,7 @@ const preview = await client.prepareDelivery(rfaId, {
   documentIds: selectedDocumentIds,
   channel: "fax", // "email" or "download" also supported
   to: confirmedAuthorizationFax, // omit for download
+  recipientName: confirmedRecipientName, // optional; required by the UI for adjuster-specific routes
   message: optionalCoverMessage,
 });
 const pdf = await client.getPacket(rfaId, preview.packetId);
@@ -301,12 +302,13 @@ await client.submit(rfaId, {
   sha256: preview.sha256,
   channel: "fax",
   to: confirmedAuthorizationFax,
+  recipientName: confirmedRecipientName, // optional; required by the UI for adjuster-specific routes
   message: optionalCoverMessage,
 }, submissionIdempotencyKey);
 ```
 
 `prepareDelivery` returns `{packetId, sha256, contentRevision}`. Preserve the exact
-channel, destination, message, and packet identity through review and submission. Download
+channel, destination, recipient name, message, and packet identity through review and submission. `recipientName` is trimmed and must contain 1–200 characters when supplied. Download
 previews have no submit operation. `previewPacket`, `sendFax`, and `refreshFaxes` remain
 available for existing integrations; use the retained-packet flow above for a custom UI
 that needs the same review guarantee as the dashboard.
@@ -362,3 +364,36 @@ The organization-wide Tasks view includes **Match UR**. Review the authenticated
 New-request preparation includes supporting PDF selection in the same form. Creating the request uploads the selected files in sequence, preserving the latest revision. If an upload fails, the saved draft remains available and identifies the incomplete upload for retry. Signing remains blocked until required supporting documents are present. Creating and uploading needs both `rfas:create` and `rfas:edit`.
 
 Return fax numbers are managed by the backend. Live sending requires a verified, unambiguous receiving-number configuration for the organization and partner. Sandbox uses a fictional number and sends nothing. Response deadlines come from the API; hosts should not calculate separate client-side clocks.
+
+## Lifecycle status and treatment decisions
+
+The request list, status filter, summary counts, and request detail use the RFA's
+`lifecycleStatus`. Treatment outcomes remain separate in Requested treatments and
+in the request's clinical review details:
+
+| Lifecycle | Meaning |
+| --- | --- |
+| Incomplete | An unsent draft, including one ready to sign or send. |
+| Sent | The current submission has no confirmed receipt yet. |
+| Failed | The current submission failed and has no later receipt. |
+| Received | Receipt is recorded for the current submission. |
+| Closed | The request is closed or its treatment decisions are resolved. Approval, modification, denial, and mixed outcomes remain visible separately. |
+| Canceled | The request was canceled. |
+
+Forwarding a copy does not change the original submission's lifecycle. A new
+submission attempt uses its own delivery and receipt evidence; an earlier receipt
+does not make that attempt Received. Closed requests may still have treatment
+scheduling work, so lifecycle status does not replace individual treatment outcomes
+or task eligibility.
+
+API-only integrations can pass `lifecycleStatus` and `sortBy: "lifecycleStatus"`
+to `createRfaClient(...).list()`. Counts are in `summary.byLifecycleStatus`.
+The existing `status` field, `status` filter, and `summary.byStatus` remain available
+for clinical review state. `getRfaLifecycleStatus(record)` and
+`RFA_LIFECYCLE_LABELS` are exported by `@mindbill/browser` for custom views.
+
+With older API responses, the components derive display labels from the request
+and available transmission evidence. If the server does not return lifecycle
+summary counts, filters and counts remain explicitly labeled as clinical status
+and use the older query fields; the component does not invent global delivery
+counts from the current page.

@@ -68,3 +68,26 @@ it("does not expose directory-source provenance in the claims administrator dial
     expect(container.querySelector(`a[href="${directory.authorizationSource?.url}"]`)).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it("requires the handling adjuster's name and fax and clears them when routing changes", async () => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container); const changed = vi.fn();
+  const render = (data: BillClaimsAdministratorDirectory) => act(async () => root.render(createElement(RfaAuthorizationDestination, { contextKey: "synthetic", directory: data, onChange: changed })));
+  const type = (selector: string, value: string) => act(async () => { const input = container.querySelector<HTMLInputElement>(selector)!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  try {
+    await render({ ...directory, authorizationStatus: "adjuster_specific_required" });
+    await act(async () => { const select = container.querySelector("select")!; select.value = "manual"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await type('input[type="tel"]', "8005550100");
+    expect(changed).toHaveBeenLastCalledWith(null);
+    expect(container.textContent).toContain("Handling adjuster name (required)");
+    await type('input:not([type])', "  Synthetic Adjuster  ");
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ method: "fax", destination: "+18005550100", recipientName: "Synthetic Adjuster" }));
+    await type('input:not([type])', " "); expect(changed).toHaveBeenLastCalledWith(null);
+    await render(directory); expect(changed).toHaveBeenLastCalledWith(null);
+    expect(container.textContent).toContain("Enter another confirmed authorization fax");
+    expect(container.querySelector('input[type="tel"]')).toBeNull();
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+it("retains the authorization contact name independently of the office label", () => {
+  expect(rfaAuthorizationDestinations({ ...directory, authorization: [{ location: "North office", name: "Synthetic Recipient", method: "fax", fax: "8005550100" }] })).toEqual([{ label: "North office", method: "fax", destination: "+18005550100", recipientName: "Synthetic Recipient" }]);
+});

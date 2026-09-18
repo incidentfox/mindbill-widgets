@@ -1,11 +1,12 @@
 "use client";
 import { type ReactElement } from "react";
-import type { RfaListQuery, RfaRecord } from "@mindbill/browser";
+import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaListQuery, type RfaRecord } from "@mindbill/browser";
 type Sort = NonNullable<RfaListQuery["sortBy"]>;
 const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString() : "—";
 const label = (value: string) => value.replaceAll("_", " ");
 /** Both views use the same server-filtered, globally sorted request page. */
-export function RfaListView({ records, view, onViewChange, sortBy, sortDirection, onSort, onSelect }: {
+export function RfaListView({ records, view, onViewChange, sortBy, sortDirection, onSort, onSelect, lifecycleAvailable = true }: {
+  lifecycleAvailable?: boolean;
   view: "rfas" | "treatments"; onViewChange: (view: "rfas" | "treatments") => void;
   records: RfaRecord[]; sortBy: Sort; sortDirection: "asc" | "desc";
   onSort: (field: Sort) => void; onSelect: (id: string, itemId?: string) => void;
@@ -19,12 +20,12 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
     </div>
     {view === "treatments" ? <p>All treatments from the requests on this page. Search matches whole requests; every treatment on a matching request is shown. Page controls move between requests.</p> : null}
     {!records.length ? <p>No requests match this view.</p> : <div className="mbrfa-table-scroll" tabIndex={0} role="region" aria-label={view === "rfas" ? "RFA table" : "Requested treatments table"}>
-      <table className="mbrfa-table"><thead><tr><th scope="col">{view === "rfas" ? "Request" : "Request / treatment"}</th>{heading("employeeName", "Patient")}{heading("providerName", "Requesting physician")}<th scope="col">{view === "rfas" ? "Practice / recipient" : "Service / diagnosis"}</th>{heading("submittedAt", "Sent")}<th scope="col">Decision due</th>{view === "rfas" ? heading("status", "Status") : <th scope="col">Treatment decision</th>}{heading("createdAt", "Created")}</tr></thead><tbody>
+      <table className="mbrfa-table"><thead><tr><th scope="col">{view === "rfas" ? "Request" : "Request / treatment"}</th>{heading("employeeName", "Patient")}{heading("providerName", "Requesting physician")}<th scope="col">{view === "rfas" ? "Practice / recipient" : "Service / diagnosis"}</th>{heading("submittedAt", "Sent")}<th scope="col">Decision due</th>{view === "rfas" ? heading(lifecycleAvailable ? "lifecycleStatus" : "status", lifecycleAvailable ? "Status" : "Clinical status") : <th scope="col">Treatment decision</th>}{heading("createdAt", "Created")}</tr></thead><tbody>
         {records.flatMap(rfa => view === "rfas" ? [<tr key={rfa.id}>
           <td><button type="button" onClick={() => onSelect(rfa.id)}>Review request</button><small>{rfa.id}</small></td>
           <td>{rfa.employeeName}<small>Claim {rfa.claimNumber || "not recorded"}</small></td><td>{rfa.providerName}</td>
           <td>{rfa.requestingPractice?.name || "—"}<small>{rfa.authorizationContact?.name || rfa.authorizationContact?.contactName || "Recipient not recorded"}</small></td>
-          <td>{date(rfa.submittedAt)}</td><td>{date(rfa.decisionDueAt)}</td><td>{label(rfa.status)}<small>{rfa.items.map(item => item.serviceDescription).join("; ")}</small></td><td>{date(rfa.createdAt)}</td>
+          <td>{date(rfa.submittedAt)}</td><td>{date(rfa.decisionDueAt)}</td><td>{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}<small>Clinical review: {label(rfa.status)}</small><small>{rfa.items.map(item => item.serviceDescription).join("; ")}</small></td><td>{date(rfa.createdAt)}</td>
         </tr>] : rfa.items.map((item, index) => <tr key={`${rfa.id}:${item.id}`}>
           <td><button type="button" onClick={() => onSelect(rfa.id, item.id)} aria-label={`Review ${item.serviceDescription} on request ${rfa.id}`}>{rfa.id} · {index + 1}</button></td>
           <td>{rfa.employeeName}<small>Claim {rfa.claimNumber || "not recorded"}</small></td><td>{rfa.providerName}</td>
