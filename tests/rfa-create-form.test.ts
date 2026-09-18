@@ -27,14 +27,11 @@ it("creates an unsigned draft from confirmed saved identities without a host ini
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],onCreated})));
   expect(fetcher.mock.calls.some(([url])=>String(url).includes("creation-context"))).toBe(false);
   await act(async()=>h.button("New authorization request").click());
-  expect(h.button("Continue to treatment").disabled).toBe(true);
+  expect(h.button("Save RFA draft").disabled).toBe(true);
   await select(h.container,"Saved patient claim","claim_synthetic"); await select(h.container,"Saved rendering provider","provider_synthetic");
   expect(h.container.textContent).toContain("claim TEST-001");
-  await act(async()=>h.button("Continue to treatment").click());
   await type(h.container,"Diagnosis code","M54.5"); await type(h.container,"Service description","Synthetic treatment service");
-  await act(async()=>h.button("Back to patient and physician").click());
   expect(h.container.textContent).toContain("claim TEST-001");
-  await act(async()=>h.button("Continue to treatment").click());
   expect((h.container.querySelector("textarea[maxlength=\"1000\"]") as HTMLTextAreaElement).value).toBe("Synthetic treatment service");
   await act(async()=>h.container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
   const posts=fetcher.mock.calls.filter(([,init])=>init?.method==="POST"); expect(posts).toHaveLength(1);
@@ -60,8 +57,8 @@ it("recovers load failures and explains empty choices",async()=>{
  try{
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"]})));
   await act(async()=>h.button("New authorization request").click()); expect(h.container.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
-  expect(h.button("Continue to treatment").disabled).toBe(true); await act(async()=>h.button("Try again").click());
-  expect(h.container.textContent).toContain("Add a patient claim"); expect(h.container.textContent).toContain("Add a rendering provider in Settings"); expect(h.button("Continue to treatment").disabled).toBe(true);
+  expect(h.button("Save RFA draft").disabled).toBe(true); await act(async()=>h.button("Try again").click());
+  expect(h.container.textContent).toContain("Add a patient claim"); expect(h.container.textContent).toContain("Add a rendering provider in Settings"); expect(h.button("Save RFA draft").disabled).toBe(true);
  }finally{await h.close();}
 });
 it("ignores older searches and paginates claims and physicians independently",async()=>{
@@ -75,12 +72,12 @@ it("ignores older searches and paginates claims and physicians independently",as
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"]})));
   await act(async()=>h.button("New authorization request").click());
   await select(h.container,"Saved patient claim","claim_synthetic"); await select(h.container,"Saved rendering provider","provider_synthetic");
-  expect(h.button("Continue to treatment").disabled).toBe(false);
-  await type(h.container,"Search patients or claim numbers","Old");await act(async()=>h.button("Search claims").click());
-  await type(h.container,"Search patients or claim numbers","New");await act(async()=>h.button("Search claims").click());
+  expect(h.button("Save RFA draft").disabled).toBe(false);
+  await type(h.container,"Search patients or claim numbers","Old");await act(async()=>new Promise(resolve=>setTimeout(resolve,350)));
+  await type(h.container,"Search patients or claim numbers","New");await act(async()=>new Promise(resolve=>setTimeout(resolve,350)));
   await act(async()=>resolveOld!(Response.json({data:{...context,claims:[{...context.claims[0],employeeName:"Stale Patient"}]}})));
   expect(h.container.textContent).not.toContain("Stale Patient");
-  expect(h.button("Continue to treatment").disabled).toBe(true);
+  expect(h.button("Save RFA draft").disabled).toBe(true);
   await act(async()=>h.button("Next claims page").click());await act(async()=>h.button("Next physicians page").click());
   const last=new URL(String(fetcher.mock.calls.at(-1)?.[0]));expect(last.searchParams.get("search")).toBe("New");expect(last.searchParams.get("cursor")).toBe("claims_next");expect(last.searchParams.get("providerCursor")).toBe("providers_next");
  }finally{await h.close();}
@@ -93,20 +90,21 @@ it("preloads injury diagnoses, copies per-service choices, and clears treatment 
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"]})));
   await act(async()=>h.button("New authorization request").click());
   await select(h.container,"Saved patient claim","claim_synthetic");await select(h.container,"Saved rendering provider","provider_synthetic");
-  await act(async()=>h.button("Continue to treatment").click());
   const diagnosis=()=>[...h.container.querySelectorAll("input")].filter(input=>input.parentElement?.textContent?.startsWith("Diagnosis code"));
   expect(diagnosis()[0]?.value).toBe("M54.5");
   await select(h.container,"Use injury diagnosis","M25.5");expect(diagnosis()[0]?.value).toBe("M25.5");
   await type(h.container,"Service description","First patient treatment");
   await type(h.container,"Clinical rationale","First patient rationale");
+  const attachment=h.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  await act(async()=>{Object.defineProperty(attachment,"files",{value:[new File(["%PDF-synthetic"],"first-patient-report.pdf",{type:"application/pdf"})]});attachment.dispatchEvent(new Event("change",{bubbles:true}));});
+  expect(h.container.textContent).toContain("first-patient-report.pdf");
   await act(async()=>h.button("Add requested service").click());
   await act(async()=>h.button("Copy diagnosis from first service").click());expect(diagnosis()[1]?.value).toBe("M25.5");
-  await act(async()=>h.button("Back to patient and physician").click());
   await select(h.container,"Saved patient claim","claim_second");
-  await act(async()=>h.button("Continue to treatment").click());
+  expect(h.container.textContent).not.toContain("first-patient-report.pdf");
   expect(diagnosis()).toHaveLength(1);expect(diagnosis()[0]?.value).toBe("M54.2");
   expect([...h.container.querySelectorAll("textarea")].every(input=>input.value==="")).toBe(true);
-  expect(h.container.textContent).not.toContain("TEST-001");
+  expect((h.container.querySelector('input[value="TEST-001"]'))).toBeNull();
  }finally{await h.close();}
 });
 it.each([false,true])("creates once and preserves revision-safe uploads (partial failure: %s)", async (failSecond) => {

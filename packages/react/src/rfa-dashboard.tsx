@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactElement } from "react";
 import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
 import { RfaTaskBoard } from "./rfa-task-board";
-import { RfaTrackingPanel } from "./rfa-tracking-panel";
+import { RfaTrackingContent } from "./rfa-tracking-panel";
+import { RfaDetailHeader, rfaDetailCss } from "./rfa-detail-header";
 import { RfaRequestSummary } from "./rfa-request-summary";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
 import { RfaPacketsPanel } from "./rfa-packets";
@@ -19,6 +20,8 @@ import { RfaProviderSignatureSetup } from "./rfa-provider-signature-setup";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
 export type RfaDashboardProps = OrganizationClientOptions & TreatmentDraftAppearance & {
+  /** Open directly in the creation form when create permission is granted. */
+  initialView?: "overview" | "create";
   canCreateClaim?: boolean;
   canManageProviderSignatures?: boolean;
   /** Optional separate admin session for saving physician signatures. */
@@ -48,7 +51,7 @@ export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: f
   const identity = useMemo(() => ({ client, signatureClient, key: key() }), [client, signatureClient]);
   return <RfaDashboardContent key={`${identity.key}:${patientId ?? ""}:${claimId ?? ""}:${renderingProviderId ?? ""}`} {...props} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} client={client} signatureClient={signatureClient} options={options} />;
 }
-function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, permissions = [], canCreateClaim = false, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
+function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", permissions = [], canCreateClaim = false, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const references = useMemo(() => createBillReferenceClient(options), [options]);
@@ -70,7 +73,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   const resetPage = () => { setCursor(undefined); setPageHistory([]); };
   const [reload, setReload] = useState(0); const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null); const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null); const [creating, setCreating] = useState(initialView === "create" && permissions.includes("create"));
   useEffect(() => {
     if (!creating && !selected) return;
     let active = true;
@@ -145,6 +148,8 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
 function RfaDetail({ id, selectedItem, selectedResponseDocumentId, client, signatureClient, options, permissions, environment, actorReference, onContinue, disabled, draftFormProps, canManageProviderSignatures, onCopied }: { draftFormProps: Pick<import("./rfa-draft-form").RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile">; canManageProviderSignatures: boolean; onCopied: (rfa: RfaRecord) => void; id: string; selectedItem: string | null; selectedResponseDocumentId?: string; client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions; permissions: readonly string[]; environment: string; actorReference?: string; onContinue?: (rfa: RfaRecord) => void; disabled?: boolean }): ReactElement {
   const [rfa, setRfa] = useState<RfaRecord | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(false);
+  const tabId = useId();
+  const [detailTab, setDetailTab] = useState<"details" | "history">("details");
   const alive = useRef(true); const pending = useRef(false); const loadGeneration = useRef(0); const keys = useRef(new Map<string, string>());
   const [descriptions, setDescriptions] = useState<Record<string, string>>({}); const [preview, setPreview] = useState<RfaSigningPreview | null>(null); const [previewPdf, setPreviewPdf] = useState<Blob | null>(null); const [attested, setAttested] = useState(false);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
@@ -156,7 +161,27 @@ function RfaDetail({ id, selectedItem, selectedResponseDocumentId, client, signa
   const adopt = (value: RfaRecord) => { if (!alive.current) return; setRfa(value); setOpenedDocument(null); setDescriptions(Object.fromEntries(value.items.map(item => [item.id, item.diagnosisDescription ?? ""]))); setPreview(null); setPreviewPdf(null); setAttested(false);  const forms = value.documents.filter(document => document.documentType === "rfa_form" && document.contentRevision === value.contentRevision);
     const currentForm = forms.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
     setDocumentIds(value.documents.filter(document => document.id === currentForm?.id || ["clinical_report", "supporting_record"].includes(document.documentType)).map(document => document.id)); };
-  useEffect(() => { let active = true; const generation = ++loadGeneration.current; setError(""); client.get(id).then(value => { if (active && generation === loadGeneration.current) adopt(value); }).catch(() => { if (active && generation === loadGeneration.current) setError("The request could not be loaded. Refresh to try again."); }); return () => { active = false; }; }, [client, id, reload]);
+  useEffect(() => { let active = true; const generation = ++loadGeneration.current; setError(""); client.get(id).then(value => { if (active && generation === loadGeneration.current) adopt(value); }).catch(() => { if (active && generation === loadGeneration.current) setError("The request could not be loaded. Retrying automatically."); }); return () => { active = false; }; }, [client, id, reload]);
+  const currentRfa = useRef(rfa); currentRfa.current = rfa;
+  useEffect(() => {
+    let active = true; let reading = false;
+    const refresh = async () => {
+      if (reading || pending.current || editing || document.visibilityState === "hidden") return;
+      const generation = loadGeneration.current; reading = true;
+      try {
+        const value = await client.get(id);
+        if (!active || pending.current || generation !== loadGeneration.current) return;
+        if (!currentRfa.current || currentRfa.current.contentRevision !== value.contentRevision) adopt(value);
+        else setRfa(value);
+        setError("");
+      } catch { if (active) setError("Updates are temporarily unavailable. Retrying automatically."); }
+      finally { reading = false; }
+    };
+    const timer = setInterval(() => void refresh(), 30_000);
+    const resume = () => void refresh();
+    window.addEventListener("focus", resume); document.addEventListener("visibilitychange", resume);
+    return () => { active = false; clearInterval(timer); window.removeEventListener("focus", resume); document.removeEventListener("visibilitychange", resume); };
+  }, [client, id, editing]);
   const focusedTreatment = useRef<string | null>(null);
   useEffect(() => {
     if (!rfa || !selectedItem || focusedTreatment.current === selectedItem) return;
@@ -187,11 +212,17 @@ function RfaDetail({ id, selectedItem, selectedResponseDocumentId, client, signa
   const canSign = permissions.includes("sign") && !!actorReference?.trim();
   const unsent = rfa && !rfa.submittedAt && ["draft", "ready", "incomplete", "deferred"].includes(rfa.status);
   const openDocument = (documentId: string, title: string) => run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) setOpenedDocument({ blob, title }); });
-  return <div className="mbrfa-stack" style={{ marginTop: 16 }}>
-    <div className="mbtd-actions"><button type="button" disabled={locked || editing} onClick={() => setReload(value => value + 1)}>Refresh request</button>{rfa && onContinue ? <button type="button" disabled={locked} onClick={() => onContinue(rfa)}>Open in your application</button> : null}</div>
+  return <div className="mbrfa-detail mbrfa-stack" style={{ marginTop: 16 }}>
+    <style>{rfaDetailCss}</style>
     {error ? <p role="alert">{error}</p> : null}{busy ? <p role="status">Working…</p> : null}
     {!rfa ? (!error ? <p role="status">Loading request…</p> : null) : <>
-      <div className="mbrfa-summary"><strong>{rfa.employeeName}</strong><span className="mbrfa-status">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><span>Clinical review: {label(rfa.status)}</span><span>{rfa.providerName}</span><span>{rfa.expedited ? "Expedited" : "Standard"} · {label(rfa.reviewType)}</span></div>
+      <RfaDetailHeader rfa={rfa} />
+      <div className="mbrfa-detail-toolbar"><div><h2>RFA <span>{rfa.id}</span></h2><span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><span className="mbrfa-badge">{rfa.expedited ? "Expedited" : label(rfa.reviewType)}</span></div><div className="mbtd-actions">
+        {permissions.includes("edit") && canEditRfaDraft(rfa) && !editing ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => { setDetailTab("details"); setEditing(true); }}>Edit request draft</button> : null}
+        {onContinue ? <button type="button" disabled={locked} onClick={() => onContinue(rfa)}>Open in your application</button> : null}
+        <RfaDraftActions {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} />
+      </div></div>
+      {!editing ? <div className="mbrfa-detail-tabs" role="tablist" aria-label="RFA information" onKeyDown={event => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? "details" : event.key === "End" ? "history" : detailTab === "details" ? "history" : "details"; setDetailTab(next); document.getElementById(`${tabId}-${next}-tab`)?.focus(); }}><button id={`${tabId}-details-tab`} role="tab" tabIndex={detailTab === "details" ? 0 : -1} aria-selected={detailTab === "details"} aria-controls={`${tabId}-details-panel`} onClick={() => setDetailTab("details")}>RFA details</button><button id={`${tabId}-history-tab`} role="tab" tabIndex={detailTab === "history" ? 0 : -1} aria-selected={detailTab === "history"} aria-controls={`${tabId}-history-panel`} onClick={() => setDetailTab("history")}>History & activity</button></div> : null}
       {editing ? <>
         <button type="button" disabled={locked} onClick={() => { setEditing(false); setReload(value => value + 1); }}>Discard edits and refresh</button>
         <RfaDraftForm key={`${rfa.id}:${rfa.contentRevision}`} mode="edit" {...draftFormProps} initialDraft={rfaRecordToDraft(rfa)} disabled={!!locked} onSave={async draft => {
@@ -204,21 +235,24 @@ function RfaDetail({ id, selectedItem, selectedResponseDocumentId, client, signa
           } finally { pending.current = false; if (alive.current) setBusy(false); }
         }} />
       </> : <>
+      <div id={`${tabId}-details-panel`} role="tabpanel" aria-labelledby={`${tabId}-details-tab`} hidden={detailTab !== "details"} className="mbrfa-stack">
       <RfaRequestSummary rfa={rfa} {...(rfa.claimsAdminId ? { onViewClaimsAdministrator: () => setDirectoryOpen(true) } : {})} />
       <ClaimsAdministratorDirectoryDialog open={directoryOpen} directory={directory} loading={directoryLoading} error={directoryError} onClose={() => setDirectoryOpen(false)} />
-      {permissions.includes("edit") && canEditRfaDraft(rfa) ? <button type="button" disabled={locked} onClick={() => setEditing(true)}>Edit request draft</button> : null}
-      <RfaDraftActions {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} />
-      <fieldset><legend>Review timeline</legend><div className="mbtd-grid"><span>Signed: {date(rfa.signedAt)}</span><span>Submitted: {date(rfa.submittedAt)}</span><span>Confirmed receipt: {date(rfa.receivedAt)}</span><span>Decision due: {rfaDecisionDueText(rfa)}</span></div>{rfa.decisionDeadlineBasis ? <p>{label(rfa.decisionDeadlineBasis)}</p> : <p>The review deadline appears after the required receipt evidence is recorded.</p>}{[rfa.incompleteReason, rfa.deferredReason, rfa.closedReason].filter(Boolean).map((reason,index) => <p key={index}>{reason}</p>)}</fieldset>
+      <fieldset><legend>Review timeline</legend><div className="mbtd-grid"><span>Signed: {date(rfa.signedAt)}</span><span>Submitted: {date(rfa.submittedAt)}</span><span>Confirmed receipt: {date(rfa.receivedAt)}</span><span>Decision due: {rfaDecisionDueText(rfa)}</span></div>{rfa.decisionDeadlineBasis ? <p>{label(rfa.decisionDeadlineBasis)}</p> : !rfa.decisionDueAt ? <p>The review deadline appears after the required receipt evidence is recorded.</p> : null}{[rfa.incompleteReason, rfa.deferredReason, rfa.closedReason].filter(Boolean).map((reason,index) => <p key={index}>{reason}</p>)}</fieldset>
       {unsent ? <fieldset><legend>Requested treatment</legend>{rfa.items.map(item => <article key={item.id} style={{ marginBottom: 14 }}><strong>{item.serviceDescription}</strong><p>{item.procedureCode || "Procedure not specified"} · Diagnosis {item.diagnosisCode} · {label(item.outcome)}{item.authorizationNumber ? ` · Authorization ${item.authorizationNumber}` : ""}</p>{item.decisionReason ? <p>{item.decisionReason}</p> : null}{unsent && !rfa.signedAt && canSign ? <label>Diagnosis description for {item.diagnosisCode}<input value={descriptions[item.id] ?? ""} disabled={locked} onChange={event => { setDescriptions(value => ({ ...value, [item.id]: event.target.value })); setPreview(null); setPreviewPdf(null); setAttested(false); }} /></label> : null}</article>)}</fieldset> : null}
       <fieldset><legend>Supporting documents</legend><p>{unsent ? "Include clinical substantiation. The signed DWC-RFA and cover sheet are assembled for you. Add one or more supporting PDFs." : "View the documents attached to this request. Saved packets preserve the exact files included with each submission."}</p>{rfa.documents.map(document => <div className="mbtd-actions" key={document.id}><label className="mbrfa-check">{unsent ? <input type="checkbox" disabled={locked || (document.documentType === "rfa_form" && document.contentRevision !== rfa.contentRevision)} checked={documentIds.includes(document.id)} onChange={event => { setDocumentIds(value => event.target.checked ? [...value.filter(item => document.documentType !== "rfa_form" || !rfa.documents.some(candidate => candidate.id === item && candidate.documentType === "rfa_form")), document.id] : value.filter(item => item !== document.id));  }} /> : null}{document.filename} ({label(document.documentType)})</label><button type="button" disabled={locked} onClick={() => void openDocument(document.id, document.filename)}>View PDF</button></div>)}{permissions.includes("edit") && unsent ? <div onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void uploadFiles(Array.from(event.dataTransfer.files)); }} style={{ marginTop: 12, padding: 16, border: "1px dashed var(--mb-border)", borderRadius: 8 }}><label>Add supporting documents (PDF, up to 25 MB each)<input type="file" multiple accept="application/pdf,.pdf" disabled={locked} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void uploadFiles(files); }} /></label><p>Choose files or drop them here.</p></div> : null}</fieldset>
       {openedDocument ? <PdfReview blob={openedDocument.blob} title={openedDocument.title} /> : null}
       {unsent && !rfa.signedAt ? <fieldset><legend>Review and sign</legend><p>An authorized human must review and approve the exact form before applying the requesting physician’s saved signature.</p>{canManageProviderSignatures && canSign ? <>{settingSignature ? <RfaProviderSignatureSetup client={signatureClient} renderingProviderId={rfa.renderingProviderId} providerName={rfa.providerName} disabled={!!locked} onSaved={() => { setSettingSignature(false); setPreview(null); setPreviewPdf(null); setAttested(false); setReload(value => value + 1); }} onCancel={() => setSettingSignature(false)} /> : <button type="button" disabled={locked} onClick={() => setSettingSignature(true)}>Set up physician signature</button>}</> : null}{!canSign ? <p>Your integration needs signing permission and a signer identity to sign here.</p> : settingSignature ? null : <><button type="button" disabled={locked || rfa.items.some(item => !descriptions[item.id]?.trim())} onClick={() => void run(async () => { const body = { diagnosisDescriptions: descriptions }; const value = await client.prepareSigning(id, body, operationKey("preview", [body, rfa.contentRevision, reload])); const blob = await client.getDocument(id, value.previewDocumentId); if (alive.current) { setPreview(value); setPreviewPdf(blob); setAttested(false); } })}>Prepare signing preview</button>{preview && previewPdf ? <><PdfReview blob={previewPdf} title="DWC-RFA signing preview" /><label className="mbrfa-check"><input type="checkbox" checked={attested} disabled={locked} onChange={event => setAttested(event.target.checked)} />I reviewed this exact form and am authorized by the requesting physician to apply their saved signature.</label><button className="mbtd-primary" type="button" disabled={locked || !attested || Date.parse(preview.expiresAt) <= Date.now()} onClick={() => void run(async () => { const body = { snapshotId: preview.id, contentHash: preview.contentHash, renderingProviderId: preview.renderingProviderId, physicianAuthorized: true as const, actorReference: actorReference! }; adopt(await client.sign(id, body, operationKey("sign", body))); })}>Sign reviewed request</button><p>Preview expires {date(preview.expiresAt)}. Prepare a new preview after refreshing if it expires.</p></> : null}</>}</fieldset> : null}
       {unsent ? <RfaDeliveryPanel key={`${rfa.id}:${rfa.contentRevision}:${rfa.signedAt ?? ""}:${rfa.submittedAt ?? ""}`} rfa={rfa} client={client} documentIds={documentIds} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} locked={!!locked} environment={environment} canSend={permissions.includes("send")} run={run} onUpdated={adopt} /> : null}
-      {permissions.includes("send") ? <button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Refresh fax status</button> : null}
+
       {rfa.informationRequests.length ? <fieldset><legend>Information requested</legend>{rfa.informationRequests.map(item => <p key={item.id}>{item.requestText} · Due {date(item.dueAt)} · {item.respondedAt ? `Responded ${date(item.respondedAt)}` : "Awaiting response"}</p>)}</fieldset> : null}
-      <RfaPacketsPanel {...options} rfa={rfa} environment={environment === "live" ? "live" : "sandbox"} disabled={!!locked} permissions={permissions.includes("act") ? ["act"] : []} onForwarded={() => { void run(async () => adopt(await client.get(id))); }} />
-      <RfaLifecycleControls {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
-      <RfaTrackingPanel rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
+      <div className="mbrfa-detail-card"><RfaPacketsPanel {...options} rfa={rfa} environment={environment === "live" ? "live" : "sandbox"} disabled={!!locked} permissions={permissions.includes("act") ? ["act"] : []} onForwarded={() => { void run(async () => adopt(await client.get(id))); }} /></div>
+      <div className="mbrfa-detail-card"><RfaLifecycleControls {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} /></div>
+      </div>
+      <div id={`${tabId}-history-panel`} role={detailTab === "history" ? "tabpanel" : undefined} aria-labelledby={detailTab === "history" ? `${tabId}-history-tab` : undefined} onClick={event => { const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="#rfa-treatment-"]'); if (link) { event.preventDefault(); setDetailTab("details"); const target = link.hash.slice(1); setTimeout(() => { const element = document.getElementById(target); element?.scrollIntoView?.({ block: "start" }); element?.focus(); }, 0); } }}>
+      <RfaTrackingContent embedded view={detailTab === "history" ? "history" : "treatments"} rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
+      {detailTab === "history" && permissions.includes("send") ? <details className="mbrfa-delivery-tools"><summary>Delivery tools</summary><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery with provider</button></details> : null}
+      </div>
       </>}
     </>}
   </div>;
