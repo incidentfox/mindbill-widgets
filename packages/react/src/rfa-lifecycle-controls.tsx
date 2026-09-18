@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaFollowUp, type RfaFollowUpUpdate, type RfaTreatmentDecisionInput, type RfaReceiptInput } from "@mindbill/browser";
+import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaPdfReview } from "./rfa-delivery-panel";
 import { rfaTaskLabel, rfaTaskState } from "./rfa-task-board";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
@@ -86,7 +87,7 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
   const decisionAllowed = ["received", "under_review", "information_requested"].includes(rfa.status);
   return <TreatmentDraftShell {...appearance} title="Receipt and utilization review" description="Record evidence received from the claims administrator and track each requested treatment. Dates and deadlines come from MindBill.">
     <div style={{ display: "grid", gap: 16 }}>
-      <div className="mbtd-note">Confirmed receipt: {displayDate(rfa.receivedAt)}<br />Decision due: {displayDate(rfa.decisionDueAt)}{rfa.decisionDeadlineBasis ? <><br />Basis: {label(rfa.decisionDeadlineBasis)}</> : null}</div>
+      <div className="mbtd-note">Confirmed receipt: {displayDate(rfa.receivedAt)}<br />Decision due: {rfaDecisionDueText(rfa)}{rfa.decisionDeadlineBasis ? <><br />Basis: {label(rfa.decisionDeadlineBasis)}</> : null}</div>
       {error ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
       {docs(["ur_response"]).length ? <section aria-label="Response document review"><label>Response to review<select value={responseDocument} onChange={event => setResponseDocument(event.target.value)}><option value="">Choose a response document</option>{docs(["ur_response"]).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>{previewError ? <div><p role="alert">{previewError}</p><button type="button" onClick={() => setPreviewReload(value => value + 1)}>Retry response preview</button></div> : null}{responsePdf ? <RfaPdfReview blob={responsePdf} title="Utilization review response" /> : responseDocument && !previewError ? <p role="status">Loading response preview…</p> : null}<p>Record each treatment decision below, then complete its Post UR response review. Treatments not addressed remain pending.</p></section> : null}
       {!act ? <p>Your session can view this record. Recording receipt, decisions, or follow-ups requires authorization from your administrator.</p> : null}

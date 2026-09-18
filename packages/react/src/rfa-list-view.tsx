@@ -1,6 +1,7 @@
 "use client";
 import { type ReactElement } from "react";
 import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaListQuery, type RfaRecord } from "@mindbill/browser";
+import { rfaDecisionDueText } from "./rfa-decision-due";
 type Sort = NonNullable<RfaListQuery["sortBy"]>;
 const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString() : "—";
 const label = (value: string) => value.replaceAll("_", " ");
@@ -25,12 +26,12 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
           <td><button type="button" onClick={() => onSelect(rfa.id)}>Review request</button><small>{rfa.id}</small></td>
           <td>{rfa.employeeName}<small>Claim {rfa.claimNumber || "not recorded"}</small></td><td>{rfa.providerName}</td>
           <td>{rfa.requestingPractice?.name || "—"}<small>{rfa.authorizationContact?.name || rfa.authorizationContact?.contactName || "Recipient not recorded"}</small></td>
-          <td>{date(rfa.submittedAt)}</td><td>{date(rfa.decisionDueAt)}</td><td>{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}<small>Clinical review: {label(rfa.status)}</small><small>{rfa.items.map(item => item.serviceDescription).join("; ")}</small></td><td>{date(rfa.createdAt)}</td>
+          <td>{date(rfa.submittedAt)}</td><td>{rfaDecisionDueText(rfa)}</td><td>{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}<small>Clinical review: {label(rfa.status)}</small><small>{rfa.items.map(item => item.serviceDescription).join("; ")}</small></td><td>{date(rfa.createdAt)}</td>
         </tr>] : rfa.items.map((item, index) => <tr key={`${rfa.id}:${item.id}`}>
           <td><button type="button" onClick={() => onSelect(rfa.id, item.id)} aria-label={`Review ${item.serviceDescription} on request ${rfa.id}`}>{rfa.id} · {index + 1}</button></td>
           <td>{rfa.employeeName}<small>Claim {rfa.claimNumber || "not recorded"}</small></td><td>{rfa.providerName}</td>
           <td>{item.serviceDescription}<small>{item.procedureCode || "No procedure code"} · {item.diagnosisCode}</small></td>
-          <td>{date(rfa.submittedAt)}</td><td>{item.decisionClosure?.closed ? "—" : date(rfa.decisionDueAt)}</td><td>{item.decisionClosure?.closed ? "Decision no longer required" : label(item.outcome)}<small>{date(item.decidedAt)}</small>{item.authorizationNumber ? <small>Authorization {item.authorizationNumber}</small> : null}</td><td>{date(rfa.createdAt)}</td>
+          <td>{date(rfa.submittedAt)}</td><td>{item.decisionClosure?.closed ? "—" : rfaDecisionDueText(rfa)}</td><td>{item.decisionClosure?.closed ? "Decision no longer required" : label(item.outcome)}<small>{date(item.decidedAt)}</small>{item.authorizationNumber ? <small>Authorization {item.authorizationNumber}</small> : null}</td><td>{date(rfa.createdAt)}</td>
         </tr>))}
       </tbody></table>
     </div>}
