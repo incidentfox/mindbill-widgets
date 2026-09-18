@@ -66,6 +66,7 @@ export type ClaimSnapshot = {
   externalId?: string;
   claimNumber: string;
   adjNumber?: string;
+  medicalProviderNetworkId?: string | null;
   employer: string;
   dateOfInjury: string;
   injuryState?: string;
@@ -318,6 +319,7 @@ export type Bill = {
   claim: {
     claimNumber: string;
     adjNumber: string | null;
+    medicalProviderNetworkId?: string | null;
     employer: string | null;
     dateOfInjury: string | null;
     injuryState: string | null;

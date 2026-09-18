@@ -1,5 +1,9 @@
 "use client";
 
+export { MedicalProviderNetworkSelect } from "./medical-provider-network-select";
+export type { MedicalProviderNetworkSelectProps } from "./medical-provider-network-select";
+export type { MedicalProviderNetwork } from "@mindbill/browser";
+
 export { FeeScheduleCalculator } from "./fee-schedule-calculator";
 export type { FeeScheduleCalculatorProps } from "./fee-schedule-calculator";
 export type { CaClaimFeeQuoteInput, CaClaimFeeQuoteResult } from "@mindbill/browser";

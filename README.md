@@ -22,6 +22,8 @@ React 0.62 loads saved provider/location choices automatically for organization-
 
 Institutional, dental, and pharmacy bill contracts preserve form and service-line metadata, including compound ingredients. Review views display specialty identifiers, and hosts can use `onOpenClaimForm` for the matching paper preview. See [specialty billing](docs/specialty-billing.md) for API fields and entry/validation boundaries.
 
+`BillSubmissionForm` includes an optional Medical Provider Network (MPN) field with search by network, applicant, or MPN ID. Only approved networks can be selected. The reusable `MedicalProviderNetworkSelect` also works in custom injury forms. See [medical provider networks](docs/medical-provider-networks.md) for directory loading, saved values, and clearing.
+
 React components render without vendor attribution footers.
 
 ## Install

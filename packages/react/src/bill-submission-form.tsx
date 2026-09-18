@@ -1,5 +1,8 @@
 "use client";
 
+import { MedicalProviderNetworkSelect } from "./medical-provider-network-select";
+import type { MedicalProviderNetwork } from "@mindbill/browser";
+
 import { TherapyLineFields, therapyDetailsFromSaved, therapyCalculationContext, missingTherapyDetails, isTherapyEditorCode, isInitialPtEvaluationCode, type TherapyDetails } from "./therapy-line-fields";
 
 import { feeReviewMessage } from "./fee-review-message";
@@ -124,7 +127,7 @@ export type BillSubmissionInput = {
     address: BillSubmissionAddress;
   };
   claim: {
-    id?: string; externalId?: string; claimNumber: string; adjNumber?: string; employer?: string;
+    id?: string; externalId?: string; claimNumber: string; adjNumber?: string; medicalProviderNetworkId?: string | null; employer?: string;
     dateOfInjury?: string; injuryState?: string; description?: string;
     claimsAdministrator?: {
       id?: string;
@@ -338,6 +341,8 @@ export type BillSubmissionFormProps = {
   sessionEndpoint?: string;
   apiBaseUrl?: string;
   fetch?: typeof globalThis.fetch;
+  /** Active California MPN directory for the optional injury field. */
+  onListMedicalProviderNetworks?: () => Promise<MedicalProviderNetwork[]>;
   /** Paginated claims-administrator directory. Empty queries return the alphabetical first page. */
   onListClaimsAdministrators?: (input?: BillReviewPayerListInput) => Promise<BillReviewPayerPage>;
   /** @deprecated Prefer onListClaimsAdministrators for browse and pagination support. */
@@ -938,7 +943,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 export function BillSubmissionForm({
   initialBill, idempotencyKey, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
   profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
-  fetch: fetchOverride, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
+  fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
@@ -1461,6 +1466,7 @@ export function BillSubmissionForm({
         </div> : null}
       </Field>
       <Field label="WCAB / ADJ number (optional)">{text(bill.claim.adjNumber, (adjNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, adjNumber } })))}</Field>
+      <div className="mbsf-field mbsf-span"><MedicalProviderNetworkSelect value={bill.claim.medicalProviderNetworkId ?? ""} disabled={locked} loadOptions={onListMedicalProviderNetworks ?? referenceClient?.listMedicalProviderNetworks} onChange={(medicalProviderNetworkId) => setBill((current) => ({ ...current, claim: { ...current.claim, medicalProviderNetworkId: medicalProviderNetworkId || null } }))} /></div>
       <Field path="claim.claimsAdministrator" label="Claims administrator" required span error={claimsAdministratorError} invalid={!administrator?.id}>
         <ComboBox ariaLabel="Claims administrator" invalid={Boolean(claimsAdministratorError) || !administrator?.id} disabled={locked} loading={payerLoading} loadingMore={payerLoadingMore} filterOptions={false} value={administrator?.name ?? ""} placeholder="Browse or search claims administrators…" options={payerResults.map((payer) => { const patternDetail = payer.claimNumberPatterns?.map((pattern) => `${pattern.pattern}${pattern.example ? ` (example: ${pattern.example})` : ""}`).join(" · ") ?? payer.claimNumberHint ?? ""; return { id: payer.id, label: payer.name, detail: [payer.aliases?.length ? `Also known as ${payer.aliases.join(", ")}` : "", patternDetail].filter(Boolean).join(" · ") || "Claims administrator", ...(payer.affiliatedEntities?.length ? { affiliatedEntities: payer.affiliatedEntities } : {}), ...(payer.route ? { trailing: payer.route } : {}) }; })} onOpen={() => { if (payerQuery !== "") loadPayers(""); }} onQuery={searchPayers} onEndReached={() => loadPayers(payerQuery ?? "", true)} onSelect={(option) => choosePayer(payerResults.find((payer) => payer.id === option.id) ?? { id: option.id, name: option.label })} />
         {orderedClaimsAdministratorSources.length ? <div className="mbsf-source-evidence">{orderedClaimsAdministratorSources.map((source, index) => <span key={`${source.source}-${source.name}-${index}`}>{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a> : <strong>{source.label}</strong>}: <q>{source.name}</q></span>)}</div> : null}

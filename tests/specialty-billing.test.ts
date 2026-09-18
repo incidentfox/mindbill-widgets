@@ -15,6 +15,11 @@ const draft: BillReviewDraft = {
 };
 
 describe("specialty review round trips", () => {
+  it("saves selected MPN identifiers and explicitly clears while preserving omitted fields", () => {
+    expect(buildBillReviewSaveInput({ ...draft, medicalProviderNetworkId: "0001" }).injuryOverrides?.medicalProviderNetworkId).toBe("0001");
+    expect(buildBillReviewSaveInput({ ...draft, medicalProviderNetworkId: "" }).injuryOverrides?.medicalProviderNetworkId).toBeNull();
+    expect(buildBillReviewSaveInput(draft).injuryOverrides).not.toHaveProperty("medicalProviderNetworkId");
+  });
   it.each([revenue, drug, dental])("retains the service identifier, quantities and metadata: $code", (line) => {
     const saved = buildBillReviewSaveInput({ ...draft, lineItems: ensureTrailingProcedureLine([line]) });
     expect(saved.formData).toEqual(draft.formData);

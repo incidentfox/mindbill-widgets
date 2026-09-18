@@ -145,6 +145,7 @@ export type UseBillLifecycleResult = {
   isRefreshing: boolean;
   isMutating: boolean;
   refresh: () => Promise<void>;
+  listMedicalProviderNetworks: BillLifecycleClient["listMedicalProviderNetworks"];
   searchClaimsAdministrators: BillLifecycleClient["searchClaimsAdministrators"];
   getClaimsAdministratorDirectory: BillLifecycleClient["getClaimsAdministratorDirectory"];
   getDeliveryOptions: BillLifecycleClient["getDeliveryOptions"];
@@ -340,6 +341,7 @@ export function useBillLifecycle({
     isRefreshing,
     isMutating,
     refresh,
+    listMedicalProviderNetworks: client.listMedicalProviderNetworks,
     searchClaimsAdministrators: (query, claimNumber) => client.searchClaimsAdministrators(query, claimNumber),
     getClaimsAdministratorDirectory: (id, injuryState) => client.getClaimsAdministratorDirectory(id, injuryState),
     getDeliveryOptions: () => client.getDeliveryOptions(),
@@ -560,6 +562,7 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
     },
     claim: {
       claimNumber: data.injury.claimNumber || "",
+      ...(data.injury.medicalProviderNetworkId ? { medicalProviderNetworkId: data.injury.medicalProviderNetworkId } : {}),
       ...(data.injury.adjNumber ? { adjNumber: data.injury.adjNumber } : {}),
       employer: data.injury.employer || "",
       dateOfInjury: data.injury.doi || "",
@@ -930,6 +933,7 @@ export function ConnectedBillLifecycle({
               treatmentBilling={data.bill.billingMode === "professional"}
       attachments={correctionAttachments}
       onSubmit={submitCorrection}
+      onListMedicalProviderNetworks={lifecycle.listMedicalProviderNetworks}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
       onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
       claimsAdministratorHint={claimsAdministratorHint}
@@ -957,6 +961,7 @@ export function ConnectedBillLifecycle({
               treatmentBilling={data.bill.billingMode === "professional"}
       attachments={correctionAttachments}
       onSubmit={submitNewBillFromForm}
+      onListMedicalProviderNetworks={lifecycle.listMedicalProviderNetworks}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
       onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
       claimsAdministratorHint={claimsAdministratorHint}
@@ -998,6 +1003,7 @@ export function ConnectedBillLifecycle({
               treatmentBilling={data.bill.billingMode === "professional"}
       attachments={correctionAttachments}
       onSubmit={submitDuplicateFromForm}
+      onListMedicalProviderNetworks={lifecycle.listMedicalProviderNetworks}
       onSearchClaimsAdministrators={lifecycle.searchClaimsAdministrators}
       onGetClaimsAdministratorDirectory={lifecycle.getClaimsAdministratorDirectory}
       claimsAdministratorHint={claimsAdministratorHint}

@@ -1,5 +1,8 @@
 "use client";
 
+import { MedicalProviderNetworkSelect } from "./medical-provider-network-select";
+import type { MedicalProviderNetwork } from "@mindbill/browser";
+
 import { ClaimLineSummary } from "./claim-form-summary";
 
 import { type ClaimForm, type BillFormData, type BillLineFormData, type BilledDrug, sanitizeBillReviewSaveInput } from "@mindbill/browser";
@@ -188,6 +191,7 @@ export type BillReviewData = {
     injuryEndDate?: string;
     cumulativeTrauma?: boolean;
     adjNumber?: string;
+    medicalProviderNetworkId?: string | null;
     claimsAdminId?: string;
     claimsAdminName?: string;
     claimPatternStatus?: BillReviewClaimPatternStatus;
@@ -212,6 +216,7 @@ export type BillReviewSaveInput = {
     injuryEndDate?: string;
     cumulativeTrauma?: boolean;
     adjNumber?: string;
+    medicalProviderNetworkId?: string | null;
   };
   dos: string;
   dosEnd?: string | null;
@@ -290,6 +295,7 @@ export type BillReviewFormProps = {
   ) => Promise<void>;
   onRemoveAttachment: (attachmentId: string) => Promise<void>;
   onOpenAttachment?: (attachment: BillReviewAttachment) => void;
+  onListMedicalProviderNetworks?: () => Promise<MedicalProviderNetwork[]>;
   onSearchClaimsAdministrators?: (
     query: string,
     claimNumber?: string,
@@ -316,6 +322,7 @@ export type BillReviewDraft = {
   injuryEndDate: string;
   cumulativeTrauma: boolean;
   adjNumber: string;
+  medicalProviderNetworkId?: string;
   dos: string;
   dosEnd: string;
   authorizationNumber: string;
@@ -403,6 +410,7 @@ function toDraft(data: BillReviewData): BillReviewDraft {
     injuryEndDate: data.injury.injuryEndDate || "",
     cumulativeTrauma: Boolean(data.injury.cumulativeTrauma),
     adjNumber: data.injury.adjNumber || "",
+    medicalProviderNetworkId: data.injury.medicalProviderNetworkId || "",
     dos: data.bill.dos || "",
     dosEnd: data.bill.dosEnd || "",
     authorizationNumber: data.bill.authorizationNumber || "",
@@ -434,6 +442,7 @@ export function buildBillReviewSaveInput(
       ...(draft.doi ? { doi: draft.doi } : {}),
       ...(draft.injuryEndDate ? { injuryEndDate: draft.injuryEndDate } : {}),
       cumulativeTrauma: draft.cumulativeTrauma,
+      ...(draft.medicalProviderNetworkId !== undefined ? { medicalProviderNetworkId: draft.medicalProviderNetworkId || null } : {}),
       ...(draft.adjNumber.trim() ? { adjNumber: draft.adjNumber.trim().toUpperCase().replace(/\s+/g, "") } : {}),
     },
     dos: draft.dos,
@@ -630,6 +639,7 @@ export function BillReviewForm({
   onAddAttachment,
   onRemoveAttachment,
   onOpenAttachment,
+  onListMedicalProviderNetworks,
   onSearchClaimsAdministrators,
   className,
   style,
@@ -963,6 +973,7 @@ export function BillReviewForm({
           <Field label="Employer" disabled={!editable} value={draft.employer} onChange={(employer) => setDraft((current) => ({ ...current, employer }))} />
           <Field label="Date of injury" type="date" required disabled={!editable} value={draft.doi} onChange={(doi) => setDraft((current) => ({ ...current, doi }))} />
           {draft.cumulativeTrauma ? <Field label="Cumulative trauma end date" type="date" required disabled={!editable} value={draft.injuryEndDate} onChange={(injuryEndDate) => setDraft((current) => ({ ...current, injuryEndDate }))} /> : null}
+          <MedicalProviderNetworkSelect value={draft.medicalProviderNetworkId ?? ""} disabled={!editable} loadOptions={onListMedicalProviderNetworks} onChange={(medicalProviderNetworkId) => setDraft((current) => ({ ...current, medicalProviderNetworkId }))} />
           {features?.wcabNumber === false ? null : <Field label="WCAB / ADJ number" optional disabled={!editable} value={draft.adjNumber} onChange={(adjNumber) => setDraft((current) => ({ ...current, adjNumber }))} hint={adjFormatValid ? "Use the EAMS case number shown as ADJ followed by digits." : "Expected format: ADJ followed by at least 7 digits."} />}
         </div>
         {features?.wcabNumber === false ? null : <p className="mb-native-eams">EAMS lookup requires California DWC verification. <a href="https://eams.dwc.ca.gov/WebEnhancement/" target="_blank" rel="noreferrer">Verify in EAMS</a>.</p>}
