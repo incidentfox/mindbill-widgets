@@ -397,3 +397,34 @@ and available transmission evidence. If the server does not return lifecycle
 summary counts, filters and counts remain explicitly labeled as clinical status
 and use the older query fields; the component does not invent global delivery
 counts from the current page.
+
+## Close follow-up for one treatment
+
+Users with `edit` permission can select **Decision no longer required** on an
+undecided treatment in a submitted request, enter a reason, and close that
+treatment's follow-up. This administrative action preserves the clinical outcome;
+it does not record an approval or denial, or withdraw the request with its recipient.
+The other treatments remain active. Once every treatment has a decision or an
+administrative closure, the request's lifecycle displays **Closed**.
+
+The treatment and history retain the reason, actor, and time. **Reopen treatment
+follow-up** requires another reason and restores follow-up against the original
+review deadline. Reopen before posting a new utilization review decision for that
+treatment. Closing follow-up does not discard received response documents or
+cancel scheduling for an approved sibling treatment.
+
+API-only hosts can use the browser client:
+
+```ts
+await lifecycle.updateTreatmentClosure(rfa.id, item.id, {
+  closed: true, // false to reopen
+  reason: "The patient no longer requests this treatment.",
+  expectedVersion: item.decisionClosure?.version ?? 0,
+}, crypto.randomUUID());
+```
+
+The endpoint is `PATCH /partner/v2/rfas/{id}/items/{itemId}/closure` (or its
+`/browser` session route), with `rfas:write` server scope or `rfas:edit` browser
+scope. Keep the same idempotency key when retrying an uncertain result. A stale
+version is rejected; reload the request before reviewing and retrying the action.
+The response is the updated RFA, with `decisionClosure` on the affected item.

@@ -24,6 +24,8 @@ export type RfaSchedulingInput = { expectedVersion: number; authorizationToken: 
   { disposition: "scheduled"; appointmentAt: string; providerName: string; location: string } |
   { disposition: "no_appointment" | "canceled"; reason: string }
 );
+export type RfaTreatmentClosureInput = { closed: boolean; reason: string; expectedVersion: number };
+export type RfaTreatmentClosure = { closed: boolean; reason: string; version: number; updatedAt: string; updatedBy: string };
 export type RfaDecisionCorrectionInput = { itemId: string; expectedDecisionEventId: string; reason: string; replacement: RfaDecisionsInput };
 export type RfaHistoryEvent = { id: string; sequence: number; eventType: string; actor: string; payload: Record<string, unknown>; occurredAt: string | null };
 export type RfaFollowUp = {
@@ -50,6 +52,7 @@ export type RfaLifecycleClient = {
   matchInboundFax(faxId: string, rfaId: string, idempotencyKey: string): Promise<RfaInboundFaxMatch>;
   listScheduling(id: string): Promise<RfaScheduling[]>;
   updateScheduling(id: string, itemId: string, input: RfaSchedulingInput, idempotencyKey: string): Promise<RfaScheduling[]>;
+  updateTreatmentClosure(id: string, itemId: string, input: RfaTreatmentClosureInput, idempotencyKey: string): Promise<RfaRecord>;
   correctDecision(id: string, input: RfaDecisionCorrectionInput, idempotencyKey: string): Promise<RfaRecord>;
   listHistory(id: string): Promise<RfaHistoryEvent[]>;
   addNote(id: string, text: string, idempotencyKey: string): Promise<RfaHistoryEvent>;
@@ -132,6 +135,12 @@ export function createRfaLifecycleClient({ sessionEndpoint = "/api/mindbill/sess
     updateScheduling: (id, itemId, input, key) => {
       if (!key.trim()) return Promise.reject(new Error("An idempotency key is required."));
       return readArray<RfaScheduling>(path(id, `items/${encodeURIComponent(itemId)}/scheduling`), { method: "PATCH", headers: { "idempotency-key": key }, body: JSON.stringify(input) });
+    },
+    updateTreatmentClosure: (id, itemId, input, key) => {
+      const reason = input.reason.trim();
+      if (!reason || reason.length > 2000) return Promise.reject(new Error("Enter a reason of 1–2000 characters."));
+      if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 0) return Promise.reject(new Error("Refresh to load the current treatment version."));
+      return mutate(path(id, `items/${encodeURIComponent(itemId)}/closure`), { ...input, reason }, key, "PATCH");
     },
     correctDecision: (id, input, key) => mutate(path(id, "decision-corrections"), input, key),
     listHistory: id => readArray<RfaHistoryEvent>(path(id, "events")),

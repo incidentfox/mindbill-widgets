@@ -494,3 +494,8 @@ counts, and `getRfaLifecycleStatus` for custom views, with display fallbacks for
 older servers. See [RFA lifecycle status](docs/rfa-dashboard.md#lifecycle-status-and-treatment-decisions).
 
 RFA delivery supports a reviewed recipient/attention name, including required handling-adjuster identification for adjuster-specific directory routes. RFA history exposes expandable recorded delivery, treatment decisions, appointments, and authenticated evidence downloads. See the [RFA dashboard guide](docs/rfa-dashboard.md).
+
+RFA treatment follow-up supports **Decision no longer required** with a required
+reason, actor-attributed history, and versioned reopening. See the
+[connected RFA dashboard guide](docs/rfa-dashboard.md#close-follow-up-for-one-treatment)
+for permissions and the browser API contract.

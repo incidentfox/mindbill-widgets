@@ -61,7 +61,7 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
       if (active) setTasks(found);
     })().catch(reason => { if (active) setTaskError(reason instanceof Error ? reason.message : "Follow-ups could not be loaded."); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [client, rfa.claimId, rfa.id, reload]);
+  }, [client, rfa.claimId, rfa.id, rfa.updatedAt, reload]);
   const act = permissions.includes("act"); const edit = permissions.includes("edit"); const disabled = busy || appearance.disabled;
   const run = async (operation: string, input: unknown, action: (key: string) => Promise<RfaRecord | void>) => {
     if (pending.current) return;
@@ -82,7 +82,7 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
   };
   const docs = (types?: string[]) => rfa.documents.filter(document => !types || types.includes(document.documentType));
   const documentSelect = (name: string, title: string, types?: string[], required = true) => <label>{title}<select name={name} required={required} defaultValue=""><option value="">Choose a document</option>{docs(types).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>;
-  const pendingItems = rfa.items.filter(item => item.outcome === "pending");
+  const pendingItems = rfa.items.filter(item => item.outcome === "pending" && !item.decisionClosure?.closed);
   const decisionAllowed = ["received", "under_review", "information_requested"].includes(rfa.status);
   return <TreatmentDraftShell {...appearance} title="Receipt and utilization review" description="Record evidence received from the claims administrator and track each requested treatment. Dates and deadlines come from MindBill.">
     <div style={{ display: "grid", gap: 16 }}>
