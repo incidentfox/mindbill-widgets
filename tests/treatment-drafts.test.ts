@@ -32,6 +32,15 @@ describe("unsigned RFA preparation", () => {
     draft.items[0]!.requestedFrom = "2026-02-30"; expect(validateRfaDraft(draft)).toMatch(/dates/);
     delete draft.items[0]!.requestedFrom; expect(validateRfaDraft(draft)).toMatch(/dates/);
   });
+  it("omits blank optional diagnosis descriptions without changing the draft", () => {
+    for (const description of ["", "   "]) {
+      const draft = rfa(); draft.items[0]!.diagnosisDescription = description;
+      expect(normalizeRfaDraft(draft).items[0]).not.toHaveProperty("diagnosisDescription");
+      expect(draft.items[0]!.diagnosisDescription).toBe(description);
+    }
+    const draft = rfa(); draft.items[0]!.diagnosisDescription = "Synthetic diagnosis";
+    expect(normalizeRfaDraft(draft).items[0]!.diagnosisDescription).toBe("Synthetic diagnosis");
+  });
   it("normalizes cleared optional fields and rejects zero units or malformed fax", () => {
     const draft = rfa(); draft.items[0]!.procedureCode = ""; draft.items[0]!.requestedTo = "";
     expect(validateRfaDraft(normalizeRfaDraft(draft))).toBeNull(); draft.items[0]!.units = 0; expect(validateRfaDraft(normalizeRfaDraft(draft))).toMatch(/units/);

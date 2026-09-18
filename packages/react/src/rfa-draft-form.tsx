@@ -43,7 +43,7 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & {
 export function normalizeRfaDraft(draft: RfaDraftInput): RfaDraftInput {
   const copy = structuredClone(draft);
   for (const item of copy.items) {
-    for (const key of ["externalId", "procedureCode", "frequency", "duration", "requestedFrom", "requestedTo"] as const) {
+    for (const key of ["externalId", "diagnosisDescription", "procedureCode", "frequency", "duration", "requestedFrom", "requestedTo"] as const) {
       if (item[key] !== undefined && !item[key]?.trim()) delete item[key];
     }
   }
