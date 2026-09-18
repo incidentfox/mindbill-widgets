@@ -247,6 +247,7 @@ export type BillReviewData = {
     injuryEndDate?: string;
     cumulativeTrauma?: boolean;
     adjNumber?: string;
+    medicalProviderNetworkId?: string | null;
     claimsAdminId?: string;
     claimsAdminName?: string;
     injuryDescription?: string;
@@ -276,6 +277,7 @@ export type BillReviewSaveInput = {
     injuryEndDate?: string;
     cumulativeTrauma?: boolean;
     adjNumber?: string;
+    medicalProviderNetworkId?: string | null;
   };
   dos: string;
   dosEnd?: string | null;
@@ -327,7 +329,7 @@ export function sanitizeBillReviewSaveInput(
     ...(input.injuryOverrides ? {
       injuryOverrides: pickDefined(input.injuryOverrides, [
         "claimNumber", "employer", "doi", "injuryEndDate",
-        "cumulativeTrauma", "adjNumber",
+        "cumulativeTrauma", "adjNumber", "medicalProviderNetworkId",
       ]) as NonNullable<BillReviewSaveInput["injuryOverrides"]>,
     } : {}),
     dos: input.dos,
@@ -989,6 +991,7 @@ export type BrowserBillCreateInput = {
     externalId?: string;
     claimNumber: string;
     adjNumber?: string;
+    medicalProviderNetworkId?: string | null;
     employer: string;
     dateOfInjury: string;
     injuryState?: string;
@@ -1331,7 +1334,19 @@ export type BillFeeQuote =
   }
   | { status: "requires_review" | "not_separately_payable"; reason: string; provenance: BillFeeSource[] };
 
+/** Public DWC directory record. Only Approved records are selectable. */
+export type MedicalProviderNetwork = {
+  id: string;
+  name: string;
+  applicantName: string;
+  applicantType?: string;
+  status: "Approved" | "Terminated" | "Withdrawn";
+  approvalDate?: string | null;
+  website?: string | null;
+};
+
 export type BillReferenceClient = {
+  listMedicalProviderNetworks: () => Promise<MedicalProviderNetwork[]>;
   listClaimsAdministrators: (input?: BillReviewPayerListInput) => Promise<BillReviewPayerPage>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
@@ -1352,6 +1367,7 @@ export type BillReferenceClient = {
 export type BillLifecycleClient = {
   getBillId: () => string;
   getLifecycle: (signal?: AbortSignal) => Promise<BillLifecycleData>;
+  listMedicalProviderNetworks: () => Promise<MedicalProviderNetwork[]>;
   listClaimsAdministrators: (input?: BillReviewPayerListInput) => Promise<BillReviewPayerPage>;
   searchClaimsAdministrators: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
@@ -1637,6 +1653,23 @@ export function createBillLifecycleClient({
     return normalizeLifecycle(body.data);
   };
 
+  const listMedicalProviderNetworks = async (): Promise<MedicalProviderNetwork[]> => {
+    const response = await request("/partner/v2/medical-provider-networks");
+    if (!response.ok) throw await responseError(response, "Medical provider networks could not be loaded.");
+    const body = await response.json() as { data?: unknown };
+    if (!Array.isArray(body.data)) throw new Error("Medical provider networks returned an invalid response.");
+    return body.data.flatMap((value): MedicalProviderNetwork[] => {
+      if (!value || typeof value !== "object") return [];
+      const row = value as Record<string, unknown>;
+      if (row.status !== "Approved" || typeof row.id !== "string" || typeof row.name !== "string" || typeof row.applicantName !== "string") return [];
+      return [{ id: row.id, name: row.name, applicantName: row.applicantName, status: "Approved",
+        ...(typeof row.applicantType === "string" ? { applicantType: row.applicantType } : {}),
+        ...(typeof row.approvalDate === "string" ? { approvalDate: row.approvalDate } : {}),
+        ...(typeof row.website === "string" ? { website: row.website } : {}),
+      }];
+    });
+  };
+
   const listClaimsAdministrators = async (input: BillReviewPayerListInput = {}): Promise<BillReviewPayerPage> => {
     const params = new URLSearchParams();
     if (input.query?.trim()) params.set("q", input.query.trim());
@@ -1849,6 +1882,7 @@ export function createBillLifecycleClient({
     getBillId() { return currentBillId; },
     clearSession() { session = null; sessionRequest = null; },
     getLifecycle: loadLifecycle,
+    listMedicalProviderNetworks,
     listClaimsAdministrators,
     searchClaimsAdministrators,
     getClaimsAdministratorDirectory,
@@ -1948,6 +1982,7 @@ export function createBillReferenceClient(
     billId: "pre-submission-reference-data",
   });
   return {
+    listMedicalProviderNetworks: lifecycle.listMedicalProviderNetworks,
     listClaimsAdministrators: lifecycle.listClaimsAdministrators,
     searchClaimsAdministrators: lifecycle.searchClaimsAdministrators,
     getClaimsAdministratorDirectory: lifecycle.getClaimsAdministratorDirectory,

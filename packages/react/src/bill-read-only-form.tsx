@@ -165,6 +165,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
 
     <BillDetailSection title="Injury information" validationIssues={validationIssues?.claim ?? []}><dl className="mb-read-grid">
       <Value label="Claim number">{injury.claimNumber}</Value>
+      {injury.medicalProviderNetworkId ? <Value label="Medical provider network">MPN {injury.medicalProviderNetworkId}</Value> : null}
       <Value label="WCAB / ADJ number">{injury.adjNumber}</Value>
       <Value label="Claims administrator">{onClaimsAdministratorClick && (!requireLinkedEntityIds?.claimsAdministrator || payerId) ? <><button type="button" className="mb-read-payer" onClick={() => onClaimsAdministratorClick({ ...(payerId ? { id: payerId } : {}), name: payerName })}>{payerName}</button>{" · "}</> : null}<button type="button" className="mb-read-payer" onClick={() => { setPayerTab("main"); setPayerOpen(true); }}>{onClaimsAdministratorClick && (!requireLinkedEntityIds?.claimsAdministrator || payerId) ? "Contact details" : payerName}</button></Value>
       <Value label="Employer">{injury.employer}</Value>
