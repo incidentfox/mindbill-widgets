@@ -6,7 +6,7 @@ type Evidence = { id: string; label: string; kind: "document" | "packet" };
 const object = (value: unknown): Fields => value && typeof value === "object" && !Array.isArray(value) ? value as Fields : {};
 const string = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value : undefined;
 const words = (value: string) => value.replace(/^rfa\./, "").replaceAll("_", " ");
-const actions: Record<string, string> = { treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened" };
+const actions: Record<string, string> = { created: "RFA created", note_added: "Note added", transmission_recorded: "Transmission recorded", followup_opened: "Follow-up opened", signed: "RFA signed", submitted: "RFA submitted", treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened" };
 const date = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Not recorded";
 const fields = {
   status: "Status", from: "Previous status", to: "New status", channel: "Delivery method", direction: "Direction",
@@ -86,9 +86,13 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload }: {
   add(payload.packetId, "Download retained submission PDF", "packet");
   const changed = Array.isArray(payload.changedFields) ? payload.changedFields.flatMap(value => typeof value === "string" && Object.hasOwn(changedFieldNames, value) ? [changedFieldNames[value]!] : []) : [];
   const hasDetails = entries.length || appointment.length || decisionSections.length || evidence.length || changed.length;
-  return <li style={{ paddingBlock: 8 }}>
-    <strong>{actions[string(payload.action) ?? ""] ?? words(string(payload.action) ?? event.eventType)}</strong> · {date(event.occurredAt)}
-    <p>Recorded by {event.actor}</p>
+  const actor = /^(system:|system$)/.test(event.actor) ? "System" : /^(native-user:|user:)/.test(event.actor) ? "Team member" : /^(developer:|integration:|api:)/.test(event.actor) ? "Integration" : event.actor;
+  const action = string(payload.action) ?? event.eventType.replace(/^rfa\./, "");
+  return <tr>
+    <td><time dateTime={event.occurredAt ?? undefined}>{date(event.occurredAt)}</time></td>
+    <td className="mbrfa-history-action">{actions[action] ?? words(action)}</td>
+    <td><span className="mbrfa-sr-only">Recorded by </span>{actor}</td>
+    <td>
     {["text", "reason", "requestText", "note"].map(key => string(payload[key]) ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{String(payload[key])}</p> : null)}
     {ids.size ? <ul aria-label="Related treatments">{[...ids].map(id => <li key={id}>{treatment(id)}</li>)}</ul> : null}
     {hasDetails ? <details><summary>Event details</summary>
@@ -103,6 +107,7 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload }: {
         const filename = rfa.documents.find(document => document.id === value.id)?.filename;
         return <li key={`${value.kind}:${value.id}`}><button type="button" disabled={disabled} onClick={() => onDownload(value.kind, value.id, filename ?? (value.kind === "packet" ? "RFA submission.pdf" : "RFA evidence.pdf"))}>{value.label}{filename ? `: ${filename}` : ""}</button></li>;
       })}</ul> : null}
-    </details> : null}
-  </li>;
+    </details> : !["text", "reason", "requestText", "note"].some(key => string(payload[key])) && !ids.size ? <span>—</span> : null}
+    </td>
+  </tr>;
 }

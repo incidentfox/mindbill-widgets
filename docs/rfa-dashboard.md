@@ -17,10 +17,13 @@ import { RfaDashboard } from "@mindbill/react";
 ```
 
 The dashboard shows **New authorization request** when `create` is permitted.
-The user searches saved patients by name or claim number, selects a claim and saved
-rendering provider, confirms the selection, then enters the requested treatment.
-Physicians are searchable by name or NPI; both lists support pagination. No identifiers
-need to be entered manually. **Back to patient and physician** retains treatment edits.
+Set `initialView="create"` to open the creation form immediately from your own Add RFA
+button. Without `create` permission it opens the overview instead.
+The user selects the patient and injury, requesting physician, treatments, and supporting
+documents on one page. Search updates automatically after typing; patients are searchable
+by name or claim number and physicians by name or NPI. Both lists support pagination.
+With `canCreateClaim`, **New patient and injury** opens inline setup when there is no
+saved claim. No identifiers need to be entered manually and no existing bill is required.
 
 `initialDraft` remains optional and bypasses saved selection when your host already has
 a prepared case. It uses the same input as `RfaDraftForm`. `claimId` and
@@ -110,6 +113,19 @@ First, previous, and next navigate request pages. The treatment view shows every
 on those requests, so its row count can exceed the request page size. Its page controls
 still page by request. Opening a treatment focuses its section in the request detail.
 Dates and individual treatment outcomes are displayed but are not separate list filters.
+
+## Request detail and history
+
+Opening a request shows patient and physician context, its submission milestones, and
+the recorded decision deadline. **RFA details** contains documents and workflow actions;
+**History & activity** contains dated actions, readable actor labels, notes, and delivery
+evidence. Expand an event to inspect its supporting facts or exact retained documents.
+The tab controls support arrow keys, Home, and End.
+
+The selected request, history, and appointments refresh every 30 seconds while visible
+and when the window regains focus. Draft editing pauses request refresh. Background
+reads preserve notes and other in-progress forms; a changed content revision resets
+previews and document selection so they cannot be used against stale content.
 
 ## Draft actions
 

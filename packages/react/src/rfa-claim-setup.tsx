@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { BillReviewPayer, RfaClient, RfaProvisionClaimInput, RfaProvisionClaimResult } from "@mindbill/browser";
 
 export type RfaClaimSetupProps = {
@@ -21,7 +21,20 @@ export function RfaClaimSetup({ client, disabled, onCreated, onCancel }: RfaClai
   const [searched, setSearched] = useState(false);
   const identities = useRef<{ patient: string; claim: string } | null>(null);
   const attempt = useRef<{ body: string; key: string } | null>(null);
-  const searchSequence = useRef(0);
+  useEffect(() => {
+    let active = true;
+    const term = search.trim();
+    setAdministrators([]); setAdministratorId(""); setPayerId(""); setSearched(false);
+    if (!term || !client.searchClaimsAdministrators) { setSearching(false); return; }
+    setSearching(true);
+    const timer = setTimeout(() => {
+      client.searchClaimsAdministrators!(term, fields.claimNumber.trim() || undefined)
+        .then(values => { if (active) { setAdministrators(values); setSearched(true); } })
+        .catch(() => { if (active) setError("Claims administrators could not be loaded. Change the search to try again."); })
+        .finally(() => { if (active) setSearching(false); });
+    }, 300);
+    return () => { active = false; clearTimeout(timer); };
+  }, [client, search, fields.claimNumber]);
   const administrator = administrators.find(value => value.id === administratorId);
   const availablePayers = administrator?.payers?.filter(value => value.active !== false) ?? [];
   const locked = disabled || busy;
@@ -54,16 +67,9 @@ export function RfaClaimSetup({ client, disabled, onCreated, onCancel }: RfaClai
         {input("dateOfInjury", "Date of injury", 10, true, "date")}{input("injuryState", "Injury state", 2)}
         {input("description", "Injury description (optional)", 1000, false)}
       </div>
-      <label>Search claims administrators<input type="search" maxLength={200} value={search} onChange={event => { setSearch(event.target.value); searchSequence.current += 1; setSearching(false); }} /></label>
-      <button type="button" disabled={searching || !search.trim() || !client.searchClaimsAdministrators} onClick={async () => {
-        if (!client.searchClaimsAdministrators) return;
-        const sequence = ++searchSequence.current;
-        setSearching(true); setError("");
-        try { const values = await client.searchClaimsAdministrators(search.trim(), fields.claimNumber.trim() || undefined); if (sequence === searchSequence.current) { setAdministrators(values); setAdministratorId(""); setPayerId(""); setSearched(true); } }
-        catch { if (sequence === searchSequence.current) setError("Claims administrators could not be loaded. Try again."); }
-        finally { if (sequence === searchSequence.current) setSearching(false); }
-      }}>{searching ? "Searching…" : "Find claims administrators"}</button>
-      <label>Claims administrator<select required value={administratorId} onChange={event => { setAdministratorId(event.target.value); setPayerId(""); }}><option value="">Choose a claims administrator</option>{administrators.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>
+      <label>Search claims administrators<input type="search" maxLength={200} value={search} onChange={event => { setSearch(event.target.value); setAdministratorId(""); setPayerId(""); setError(""); }} /></label>
+      {searching ? <p role="status">Searching claims administrators…</p> : null}
+      <label>Claims administrator<select required disabled={searching} value={administratorId} onChange={event => { setAdministratorId(event.target.value); setPayerId(""); }}><option value="">Choose a claims administrator</option>{administrators.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>
       {searched && !administrators.length ? <p>No administrators match this search. Try another name, or add a custom claims administrator in Settings.</p> : null}
       {availablePayers.length ? <label>Payer{administrator?.payerSelectionRequired ? "" : " (optional)"}<select required={administrator?.payerSelectionRequired} value={payerId} onChange={event => setPayerId(event.target.value)}><option value="">Choose a payer</option>{availablePayers.map(value => <option key={value.id} value={value.id}>{value.label}</option>)}</select></label> : null}
       {administrator?.payerSelectionRequired && !availablePayers.length ? <p role="alert">This administrator needs a payer selection, but no active payers are available. Choose another administrator or contact your administrator.</p> : null}

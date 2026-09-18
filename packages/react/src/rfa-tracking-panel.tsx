@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaScheduling, type RfaSchedulingInput, type RfaHistoryEvent, type RfaDecisionCorrectionInput, type RfaTreatmentDecisionInput, type RfaTreatmentClosureInput } from "@mindbill/browser";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
+import { rfaDetailCss } from "./rfa-detail-header";
 import { RfaHistoryEntry } from "./rfa-history-entry";
 
 export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
@@ -20,9 +21,9 @@ const localTime = (value: string | null | undefined) => { if (!value) return "";
 /** Treatment-level scheduling, evidence, and immutable history for an existing RFA. */
 export function RfaTrackingPanel(props: RfaTrackingPanelProps): ReactElement {
   const identity = useMemo(() => crypto.randomUUID(), [props.options]);
-  return <TrackingContent key={`${identity}:${props.rfa.id}`} {...props} />;
+  return <RfaTrackingContent key={`${identity}:${props.rfa.id}`} {...props} />;
 }
-function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, ...appearance }: RfaTrackingPanelProps): ReactElement {
+export function RfaTrackingContent({ rfa: provided, options, permissions = [], onUpdated, view = "all", embedded = false, ...appearance }: RfaTrackingPanelProps & { view?: "all" | "treatments" | "history"; embedded?: boolean }): ReactElement {
   const [rfa, setRfa] = useState(provided);
   useEffect(() => setRfa(provided), [provided]);
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
@@ -38,7 +39,7 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
   const alive = useRef(true); const pending = useRef(false); const keys = useRef(new Map<string, string>());
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    let active = true; setLoading(true); setLoadErrors([]); setScheduling([]); setHistory([]);
+    let active = true;
     void Promise.allSettled([client.listScheduling(rfa.id), client.listHistory(rfa.id)]).then(([appointments, events]) => {
       if (!active) return;
       const errors: string[] = [];
@@ -48,6 +49,13 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
     });
     return () => { active = false; };
   }, [client, rfa.id, rfa.updatedAt, reload]);
+  useEffect(() => {
+    const refresh = () => { if (!pending.current && document.visibilityState !== "hidden") setReload(value => value + 1); };
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(interval); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, []);
   const disabled = Boolean(busy || appearance.disabled);
   const run = async (operation: string, input: unknown, action: (key: string) => Promise<void | RfaRecord>): Promise<boolean> => {
     if (pending.current || disabled) return false;
@@ -71,11 +79,12 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
   const evidence = (id: string | null | undefined, title: string) => id ? <button type="button" disabled={disabled} onClick={() => void download(id, rfa.documents.find(document => document.id === id)?.filename ?? `${title}.pdf`)}>{title}</button> : null;
   const canCorrect = permissions.includes("act") && ["received", "under_review", "information_requested", "approved", "modified", "denied", "mixed"].includes(rfa.status);
   const canClose = permissions.includes("edit") && ["submitted", "received", "under_review", "information_requested", "incomplete", "deferred"].includes(rfa.status);
-  return <TreatmentDraftShell {...appearance} title="Treatments and history" description="Review each treatment's authorization, appointments, delivery evidence, and notes.">
+  const content = <>
     <div style={{ display: "grid", gap: 16 }}>
       {error ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
       {loadErrors.map(value => <p role="alert" key={value}>{value}</p>)}
-      <button type="button" disabled={loading || disabled} onClick={() => setReload(value => value + 1)}>Refresh treatments and history</button>
+      <div hidden={view === "history"} className="mbrfa-treatment-list">
+      <h3>Requested treatments</h3>
       {rfa.items.map((item, index) => {
         const appointment = scheduling.find(value => value.itemId === item.id);
         return <fieldset key={item.id} id={`rfa-treatment-${item.id}`} tabIndex={-1}><legend>{index + 1}. {item.serviceDescription}</legend>
@@ -87,25 +96,29 @@ function TrackingContent({ rfa: provided, options, permissions = [], onUpdated, 
             {item.effectiveFrom || item.effectiveTo ? <p>Authorization dates: {item.effectiveFrom ?? "Not specified"} through {item.effectiveTo ?? "Not specified"}</p> : null}
             {item.decisionReason ? <p>{item.decisionReason}</p> : null}{item.reviewerName ? <p>Reviewer: {item.reviewerName}{item.reviewerPhone ? ` · ${item.reviewerPhone}` : ""}</p> : null}
             {evidence(item.currentResponseDocumentId, "View decision evidence")} {evidence(item.currentImrDocumentId, "View independent medical review form")}</> : null}
-          {loading ? <p>Loading appointment…</p> : appointment ? <AppointmentForm key={`${item.id}:${appointment.version}:${appointment.authorizationToken}`} appointment={appointment} editable={permissions.includes("edit")} disabled={disabled} onError={setError} onSave={input => run(`appointment:${item.id}`, input, async key => { await client.updateScheduling(rfa.id, item.id, input, key); return records.get(rfa.id); })} /> : null}
+          {loading ? <p>Loading appointment…</p> : appointment ? <AppointmentForm key={`${item.id}:${appointment.version}:${appointment.authorizationToken}`} appointment={appointment} editable={permissions.includes("edit")} disabled={disabled || loadErrors.some(value => value.startsWith("Appointments"))} onError={setError} onSave={input => run(`appointment:${item.id}`, input, async key => { await client.updateScheduling(rfa.id, item.id, input, key); return records.get(rfa.id); })} /> : null}
           {canCorrect && item.currentDecisionEventId && item.outcome !== "pending" ? <details><summary>Correct this decision</summary><p>The original decision and its evidence remain in history. Corrections require a reason and response evidence. Requests already used for a bill or a scheduled appointment cannot be corrected.</p>
             <CorrectionForm key={`${item.id}:${item.currentDecisionEventId}`} item={item} documents={rfa.documents} disabled={disabled || loading || loadErrors.length > 0 || scheduling.some(value => value.disposition === "scheduled")} onError={setError} onSave={input => run(`correction:${item.id}`, input, key => client.correctDecision(rfa.id, input, key))} />
           </details> : null}
         </fieldset>;
       })}
-      <details open><summary>Delivery evidence ({rfa.transmissions.length})</summary>
+      </div>
+      <div hidden={view === "treatments"} className="mbrfa-history-content">
+      <details className="mbrfa-delivery-evidence"><summary>Delivery evidence ({rfa.transmissions.length})</summary>
         {rfa.transmissions.length ? rfa.transmissions.map(transmission => <article key={transmission.id} style={{ paddingBlock: 8 }}><strong>{words(transmission.channel)} · {words(transmission.status)}</strong><p>{words(transmission.direction)}{transmission.purpose ? ` · ${words(transmission.purpose)}` : ""} · {date(transmission.occurredAt)}</p>{transmission.destination ? <p>Recipient: {transmission.destination}</p> : null}{transmission.providerMessageId ? <p>Delivery reference: {transmission.providerMessageId}</p> : null}{transmission.receivedAt ? <p>Confirmed receipt: {date(transmission.receivedAt)}</p> : null}{evidence(transmission.proofDocumentId, "Download transmission receipt")}</article>) : <p>No transmission evidence has been recorded.</p>}
       </details>
-      <details open><summary>History and notes</summary>
-        {permissions.includes("edit") ? <form onSubmit={event => {
+      <section className="mbrfa-history-card" aria-label="History and notes"><h3>History and notes</h3>
+        {permissions.includes("edit") ? <details className="mbrfa-note-form"><summary>Add a note</summary><form onSubmit={event => {
           event.preventDefault(); const form = event.currentTarget;
           try { const note = required(new FormData(form), "note", "a note"); void run("note", note, async key => { await client.addNote(rfa.id, note, key); return records.get(rfa.id); }).then(saved => { if (saved && alive.current) form.reset(); }); }
           catch (reason) { setError(reason instanceof Error ? reason.message : "Enter a note."); }
-        }}><fieldset disabled={disabled}><legend>Add a note</legend><label>Note<textarea name="note" required maxLength={10000} /></label><button type="submit">Save note</button></fieldset></form> : null}
-        {loading ? <p>Loading history…</p> : history.length ? <ol>{history.map(event => <RfaHistoryEntry key={event.id} event={event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />)}</ol> : !loadErrors.some(value => value.startsWith("History")) ? <p>No history entries have been recorded.</p> : null}
-      </details>
+        }}><fieldset disabled={disabled}><legend>Add a note</legend><label>Note<textarea name="note" required maxLength={10000} /></label><button type="submit">Save note</button></fieldset></form></details> : null}
+        {loading ? <p>Loading history…</p> : history.length ? <div className="mbrfa-table-scroll"><table className="mbrfa-history-table"><thead><tr><th scope="col">Date</th><th scope="col">Action</th><th scope="col">User</th><th scope="col">Details</th></tr></thead><tbody>{history.map(event => <RfaHistoryEntry key={event.id} event={event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />)}</tbody></table></div> : !loadErrors.some(value => value.startsWith("History")) ? <p>No history entries have been recorded.</p> : null}
+      </section>
+      </div>
     </div>
-  </TreatmentDraftShell>;
+  </>;
+  return embedded ? <div className="mbrfa-tracking">{content}</div> : <TreatmentDraftShell {...appearance} title="Treatments and history" description="Review each treatment's authorization, appointments, delivery evidence, and notes."><style>{rfaDetailCss}</style>{content}</TreatmentDraftShell>;
 }
 function AppointmentForm({ appointment, editable, disabled, onError, onSave }: { appointment: RfaScheduling; editable: boolean; disabled: boolean; onError: (message: string) => void; onSave: (input: RfaSchedulingInput) => Promise<boolean> }): ReactElement {
   const [disposition, setDisposition] = useState(appointment.disposition === "canceled" && appointment.version > 0 ? "canceled" : appointment.eligible && appointment.disposition === "no_appointment" ? "no_appointment" : appointment.eligible ? "scheduled" : "canceled");

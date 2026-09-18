@@ -55,7 +55,7 @@ it("edits retained service rows without losing metadata, invalidates the signed 
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["edit"]})));
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());
  await act(async()=>button("Review request").click());await act(async()=>button("Edit request draft").click());
- expect(container.textContent).toContain("clears its signature");expect(button("Refresh request").disabled).toBe(true);
+ expect(container.textContent).toContain("clears its signature");expect(button("Refresh request")).toBeUndefined();
  const input=[...container.querySelectorAll("input")].find(x=>x.parentElement?.textContent==="Frequency")!;
  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"Twice weekly");input.dispatchEvent(new Event("input",{bubbles:true}));});
  await act(async()=>container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
@@ -75,4 +75,35 @@ it("does not expose content editing without permission or after submission",asyn
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Review request")!.click());expect(container.textContent).not.toContain("Edit request draft");
  }}finally{await act(async()=>root.unmount());container.remove();}
+});
+
+it("organizes status, details, and history into accessible tabs while automatically updating",async()=>{
+ const current={...record,status:"submitted",submittedAt:"2026-09-15T09:00:00Z"};
+ const fetcher=vi.fn<typeof fetch>(async(input)=>{
+  const url=String(input);
+  if(url.endsWith("/events"))return Response.json({data:[{id:"event_one",sequence:1,eventType:"rfa.created",actor:"native-user:synthetic",occurredAt:"2026-09-15T09:00:00Z",payload:{}}]});
+  if(url.endsWith("/scheduling")||url.endsWith("/packets"))return Response.json({data:[]});
+  return url.includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{submitted:1}},nextCursor:null}):Response.json({data:current});
+ });
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text)!;
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["edit"]})));
+  await act(async()=>button("RFAs").click());await act(async()=>button("Review request").click());
+  expect(container.querySelector('[aria-label="Authorization progress"] [aria-current="step"]')?.textContent).toContain("Sent");
+  expect(button("Refresh request")).toBeUndefined();
+  const details=button("RFA details");const history=button("History & activity");
+  await act(async()=>details.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true})));
+  expect(history.getAttribute("aria-selected")).toBe("true");expect(document.activeElement).toBe(history);
+  expect(document.getElementById(details.getAttribute("aria-controls")!)?.hidden).toBe(true);
+  expect([...container.querySelectorAll(".mbrfa-history-table th")].map(x=>x.textContent)).toEqual(["Date","Action","User","Details"]);
+  expect(container.querySelector(".mbrfa-history-table")?.textContent).toContain("Team member");
+  expect(container.querySelector(".mbrfa-history-table")?.textContent).not.toContain("native-user:");
+  const note=container.querySelector<HTMLTextAreaElement>('textarea[name="note"]')!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")!.set!.call(note,"Unsaved synthetic note");note.dispatchEvent(new Event("input",{bubbles:true}));});
+  const reads=fetcher.mock.calls.length;
+  await act(async()=>window.dispatchEvent(new Event("focus")));
+  expect(fetcher.mock.calls.length).toBeGreaterThan(reads);expect(note.isConnected).toBe(true);expect(note.value).toBe("Unsaved synthetic note");
+  expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
+ }finally{await act(async()=>root.unmount());container.remove();}
 });
