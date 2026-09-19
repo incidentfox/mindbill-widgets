@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import type {
   BillEorDocument,
   BillHistoryEntry,
@@ -453,7 +453,33 @@ export type BillExplanationOfReviewProps = SurfaceProps & {
   eors: readonly BillEorDocument[];
   payments: readonly BillPaymentRecord[];
   submittedAt?: string | null;
+  /**
+   * Immutable submission attempts for one logical bill. When omitted, the
+   * component presents the legacy single-submission view from `eors` and
+   * `payments`.
+   */
+  submissions?: readonly BillEorSubmission[];
+  /** Optional host-supplied reconciliation context, such as payer and payee. */
+  context?: readonly BillEorContextItem[];
+  /** Optional host action, for example a link to the detailed EOR view. */
+  headerActions?: ReactNode;
   onOpenEor?: (document: BillEorDocument) => void | Promise<void>;
+};
+
+/** Payer evidence and payments associated with one submission attempt. */
+export type BillEorSubmission = {
+  id: string;
+  label: string;
+  submittedAt?: string | null;
+  payerReportedPaid?: number | null;
+  eors: readonly BillEorDocument[];
+  payments: readonly BillPaymentRecord[];
+};
+
+/** A compact, non-financial detail shown above the EOR totals. */
+export type BillEorContextItem = {
+  label: string;
+  value: ReactNode;
 };
 
 /**
@@ -465,16 +491,41 @@ export function BillExplanationOfReview({
   eors,
   payments,
   submittedAt,
+  submissions,
+  context,
+  headerActions,
   onOpenEor,
   appearance,
   className,
   style,
 }: BillExplanationOfReviewProps): ReactElement {
-  const rows = payments.length ? payments : [null];
+  const submissionRows: readonly BillEorSubmission[] = submissions?.length
+    ? submissions
+    : [{
+      id: "current-submission",
+      label: "Original bill",
+      ...(submittedAt === undefined ? {} : { submittedAt }),
+      payerReportedPaid: remittance.payerReportedPaid,
+      eors,
+      payments,
+    }];
+  const rows = submissionRows.flatMap((submission) => {
+    const rowCount = Math.max(1, submission.payments.length, submission.eors.length);
+    return Array.from({ length: rowCount }, (_, index) => ({
+      submission,
+      payment: submission.payments[index] ?? null,
+      eor: submission.eors[index] ?? null,
+      index,
+    }));
+  });
+  const submissionDescription = submissionRows.length > 1
+    ? `Payer responses and payment reconciliation across ${submissionRows.length} submissions.`
+    : "Payer response and payment reconciliation.";
   return (
     <section className={classes("mb-surface mb-eor-review", className)} style={mindBillAppearanceStyle(appearance, style)} aria-label="Explanation of Review and payments">
       <style>{lifecycleSurfaceStyles}</style>
-      <header className="mb-surface-heading"><div><strong>Explanation of Review</strong><span>Payer response and payment reconciliation.</span></div></header>
+      <header className="mb-surface-heading"><div><strong>Explanation of Review</strong><span>{submissionDescription}</span></div>{headerActions ? <div className="mb-eor-heading-actions">{headerActions}</div> : null}</header>
+      {context?.length ? <dl className="mb-eor-context">{context.map((item) => <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl> : null}
       <dl className="mb-eor-metrics">
         <div><dt>Amount billed</dt><dd>{currency(remittance.billedAmount)}</dd></div>
         <div><dt>Payer allowed</dt><dd>{remittance.payerAllowedAmount === null ? "—" : currency(remittance.payerAllowedAmount)}</dd></div>
@@ -492,11 +543,10 @@ export function BillExplanationOfReview({
             <tr className="mb-eor-groups"><th colSpan={2}>Submission</th><th colSpan={5}>EOR payment information</th><th colSpan={2}>EOR post</th><th>EOR</th></tr>
             <tr><th>Submission</th><th>Submission payment</th><th>Payment method</th><th>Reference</th><th>Effective date</th><th>Payment total</th><th>Deposit date</th><th>Post date</th><th>Source</th><th>Document</th></tr>
           </thead>
-          <tbody>{rows.map((payment, index) => {
-            const eor = eors[index] ?? eors[0];
-            return <tr key={payment?.id ?? `empty-${index}`}>
-              <td data-label="Submission"><strong>Original bill</strong>{submittedAt ? <span>Sent {defaultFormatDate(submittedAt)}</span> : null}</td>
-              <td data-label="Submission payment">{remittance.payerReportedPaid === null ? "—" : currency(remittance.payerReportedPaid)}</td>
+          <tbody>{rows.map(({ submission, payment, eor, index }) => {
+            return <tr key={`${submission.id}-${payment?.id ?? eor?.id ?? index}`}>
+              <td data-label="Submission"><strong>{submission.label}</strong>{submission.submittedAt ? <span>Sent {defaultFormatDate(submission.submittedAt)}</span> : null}</td>
+              <td data-label="Submission payment">{submission.payerReportedPaid == null ? "—" : currency(submission.payerReportedPaid)}</td>
               <td data-label="Payment method">{payment ? humanize(payment.method) : "—"}</td>
               <td data-label="Reference">{payment?.checkNumber || "—"}</td>
               <td data-label="Effective date">{payment ? payment.receivedDate || payment.depositDate || defaultFormatDate(payment.postedAt) : "—"}</td>
@@ -509,7 +559,6 @@ export function BillExplanationOfReview({
           })}</tbody>
         </table>
       </div>
-      {eors.length > rows.length ? <div className="mb-eor-documents">{eors.slice(rows.length).map((eor) => <button type="button" key={eor.id} onClick={() => void onOpenEor?.(eor)}>{eor.filename}</button>)}</div> : null}
     </section>
   );
 }
@@ -608,7 +657,7 @@ const lifecycleSurfaceStyles = `
 .mb-rejection-notice{border:1px solid color-mix(in srgb,var(--mb-danger) 30%,var(--mb-border));border-left:4px solid var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 5%,var(--mb-surface));box-shadow:0 14px 38px color-mix(in srgb,var(--mb-danger) 9%,transparent);padding:26px 28px 18px}.mb-rejection-overview{display:grid;grid-template-columns:minmax(230px,.72fr) minmax(360px,1.28fr);align-items:start;gap:38px}.mb-rejection-heading{display:flex;align-items:flex-start;gap:14px}.mb-rejection-heading>div{display:grid;gap:5px}.mb-rejection-heading strong{color:var(--mb-danger);font-size:19px;line-height:1.25}.mb-rejection-heading span{color:color-mix(in srgb,var(--mb-danger) 48%,var(--mb-text));font-size:14px;line-height:1.45}.mb-rejection-icon{display:grid;place-items:center;flex:0 0 auto;width:42px;height:42px;border-radius:50%;background:var(--mb-danger);box-shadow:0 5px 14px color-mix(in srgb,var(--mb-danger) 25%,transparent);color:#fff;font-size:21px;font-weight:900}.mb-rejection-progress{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));list-style:none;margin:5px 0 24px;padding:0}.mb-rejection-progress li{display:grid;grid-template-rows:34px auto auto;gap:4px;position:relative;text-align:center;color:var(--mb-text);font-size:12px}.mb-rejection-progress li:first-child::after{content:"";position:absolute;left:calc(50% + 17px);right:calc(-50% + 17px);top:16px;height:2px;background:color-mix(in srgb,var(--mb-danger) 48%,var(--mb-border))}.mb-rejection-progress li>span{display:grid;place-items:center;justify-self:center;position:relative;z-index:1;width:34px;height:34px;border:2px solid color-mix(in srgb,var(--mb-danger) 32%,var(--mb-border));border-radius:50%;background:var(--mb-surface);color:var(--mb-danger);font-size:16px;font-weight:900}.mb-rejection-progress li.is-rejected>span{border-color:var(--mb-danger);background:var(--mb-danger);color:#fff}.mb-rejection-progress b{font-size:13px}.mb-rejection-progress small{color:var(--mb-muted);font-size:11px;line-height:1.3}.mb-rejection-issues{border:1px solid color-mix(in srgb,var(--mb-danger) 19%,var(--mb-border));border-radius:12px;background:color-mix(in srgb,var(--mb-danger) 2%,var(--mb-surface));overflow:hidden}.mb-rejection-issues-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:12px 16px;border-bottom:1px solid color-mix(in srgb,var(--mb-danger) 14%,var(--mb-border))}.mb-rejection-issues-heading strong{display:flex;align-items:center;gap:8px;font-size:13px}.mb-rejection-issues-heading strong>span{color:var(--mb-danger);font-size:17px}.mb-rejection-issues-heading>span{color:var(--mb-muted);font-size:12px;text-align:right}.mb-rejection-issues ol{display:grid;gap:7px;list-style:none;margin:0;padding:10px 12px}.mb-rejection-issues li{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:11px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--mb-danger) 11%,var(--mb-border));border-radius:8px;background:color-mix(in srgb,var(--mb-danger) 1%,var(--mb-surface));box-shadow:0 1px 3px rgba(23,39,48,.04)}.mb-rejection-bullet{width:7px;height:7px;border-radius:50%;background:var(--mb-danger)}.mb-rejection-issues p{margin:0;font-size:14px;line-height:1.45}.mb-rejection-code{justify-self:end;border:1px solid color-mix(in srgb,var(--mb-danger) 20%,var(--mb-border));border-radius:999px;background:color-mix(in srgb,var(--mb-danger) 6%,var(--mb-surface));color:var(--mb-danger);font-size:11px;font-weight:850;line-height:1.2;padding:4px 8px}.mb-rejection-code-note{display:flex;align-items:center;gap:7px;margin:0;padding:1px 16px 13px;color:var(--mb-muted);font-size:11px}.mb-rejection-code-note>span{display:grid;place-items:center;width:16px;height:16px;border:1px solid currentColor;border-radius:50%;font-size:10px;font-weight:850}
 .mb-snapshot dl,.mb-remittance dl,.mb-contacts dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:0}.mb-remittance dl{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:1px;background:var(--mb-border)}.mb-snapshot dl>div,.mb-remittance dl>div,.mb-contacts dl>div{display:grid;gap:3px;padding:10px 14px;border-left:1px solid var(--mb-border)}.mb-remittance dl>div{border:0;background:var(--mb-surface)}.mb-snapshot dl>div:nth-child(3n+1),.mb-contacts dl>div:first-child{border-left:0}.mb-snapshot dt,.mb-remittance dt,.mb-contacts dt,.mb-payment-list dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-snapshot dd,.mb-remittance dd,.mb-contacts dd,.mb-payment-list dd{font-size:14px;font-weight:750;margin:0;overflow-wrap:anywhere}.mb-contacts a{color:var(--mb-accent)}.mb-denial{margin-top:16px;border-left:4px solid var(--mb-danger);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 8%,var(--mb-surface));padding:12px 14px}.mb-denial p{margin:4px 0 0}
 .mb-payment-list{display:grid}.mb-payment-list article{display:grid;grid-template-columns:minmax(120px,.35fr) 1fr;gap:14px 24px;padding:16px 0;border-top:1px solid var(--mb-border)}.mb-payment-list article:first-child{border-top:0}.mb-payment-amount{display:grid;align-content:start;gap:2px}.mb-payment-amount strong{font-size:1.2rem}.mb-payment-list article>dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0}.mb-payment-list article>dl>div{display:grid;align-content:start;gap:3px}.mb-payment-list article span{color:var(--mb-muted);font-size:12px}.mb-payment-list article p{grid-column:1/-1;margin:0;color:var(--mb-muted);font-size:13px}
-.mb-eor-review{border-top:4px solid var(--mb-accent);padding-top:17px}.mb-eor-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 18px;border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}.mb-eor-metrics>div{display:grid;gap:4px;padding:13px 15px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border)}.mb-eor-metrics>div:nth-child(-n+4){border-top:0}.mb-eor-metrics>div:nth-child(4n+1){border-left:0}.mb-eor-metrics dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-eor-metrics dd{margin:0;font-size:15px;font-weight:800}.mb-eor-metrics .is-balance{background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface))}.mb-eor-table-wrap{overflow-x:auto;border:1px solid var(--mb-border);border-radius:10px}.mb-eor-table{width:100%;min-width:1080px;border-collapse:collapse;font-size:12px}.mb-eor-table th,.mb-eor-table td{padding:10px 12px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border);text-align:left;vertical-align:top}.mb-eor-table th:first-child,.mb-eor-table td:first-child{border-left:0}.mb-eor-table thead th{background:var(--mb-soft);color:var(--mb-muted);font-weight:800}.mb-eor-table .mb-eor-groups th{border-top:0;background:color-mix(in srgb,var(--mb-accent) 13%,var(--mb-surface));color:var(--mb-text);text-align:center}.mb-eor-table td>strong,.mb-eor-table td>span{display:block}.mb-eor-table td>span{margin-top:3px;color:var(--mb-muted)}.mb-eor-link,.mb-eor-documents button{border:0;background:transparent;color:var(--mb-accent);font:inherit;font-weight:750;padding:0;text-align:left;text-decoration:underline;cursor:pointer;overflow-wrap:anywhere}.mb-eor-documents{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}
+.mb-eor-review{border-top:4px solid var(--mb-accent);padding-top:17px}.mb-eor-heading-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.mb-eor-context{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;margin:0 0 18px;border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}.mb-eor-context>div{display:grid;gap:4px;padding:12px 15px;border-left:1px solid var(--mb-border)}.mb-eor-context>div:first-child{border-left:0}.mb-eor-context dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-eor-context dd{margin:0;font-size:14px;font-weight:750;overflow-wrap:anywhere}.mb-eor-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 18px;border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}.mb-eor-metrics>div{display:grid;gap:4px;padding:13px 15px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border)}.mb-eor-metrics>div:nth-child(-n+4){border-top:0}.mb-eor-metrics>div:nth-child(4n+1){border-left:0}.mb-eor-metrics dt{color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.mb-eor-metrics dd{margin:0;font-size:15px;font-weight:800}.mb-eor-metrics .is-balance{background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface))}.mb-eor-table-wrap{overflow-x:auto;border:1px solid var(--mb-border);border-radius:10px}.mb-eor-table{width:100%;min-width:1080px;border-collapse:collapse;font-size:12px}.mb-eor-table th,.mb-eor-table td{padding:10px 12px;border-left:1px solid var(--mb-border);border-top:1px solid var(--mb-border);text-align:left;vertical-align:top}.mb-eor-table th:first-child,.mb-eor-table td:first-child{border-left:0}.mb-eor-table thead th{background:var(--mb-soft);color:var(--mb-muted);font-weight:800}.mb-eor-table .mb-eor-groups th{border-top:0;background:color-mix(in srgb,var(--mb-accent) 13%,var(--mb-surface));color:var(--mb-text);text-align:center}.mb-eor-table td>strong,.mb-eor-table td>span{display:block}.mb-eor-table td>span{margin-top:3px;color:var(--mb-muted)}.mb-eor-link{border:0;background:transparent;color:var(--mb-accent);font:inherit;font-weight:750;padding:0;text-align:left;text-decoration:underline;cursor:pointer;overflow-wrap:anywhere}
 .mb-history-table{border:1px solid var(--mb-border);border-radius:10px;overflow:hidden}
 .mb-history-head{display:grid;grid-template-columns:96px 160px 140px minmax(0,1fr);gap:12px;padding:8px 14px;background:var(--mb-soft);color:var(--mb-muted);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .mb-history-rows{list-style:none;margin:0;padding:0}.mb-history-row{border-top:1px solid var(--mb-border)}

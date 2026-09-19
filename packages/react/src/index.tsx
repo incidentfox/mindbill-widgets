@@ -310,6 +310,8 @@ export {
 export type {
   BillActivityEvent,
   BillActivityTimelineProps,
+  BillEorSubmission,
+  BillEorContextItem,
   BillHistoryTableProps,
   BillExplanationOfReviewProps,
   BillLifecycleActionsProps,
