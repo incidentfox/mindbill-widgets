@@ -411,7 +411,7 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     this.duplicateDeliveryError = "";
     if (this.duplicateDelivery) return;
     try {
-      const delivery = await this.store.getDeliveryOptions();
+      const delivery = await this.store.getDeliveryOptions({ action: "send_duplicate" });
       this.duplicateDelivery = delivery;
       this.duplicate.route = delivery.recommended.route;
       this.duplicate.faxNumber = delivery.contacts.faxNumber || "";

@@ -16,6 +16,7 @@ import {
   type OrganizationClientOptions,
   createBillReferenceClient,
   createBillSubmissionClient,
+  type BillDeliveryAction,
   type BillDeliveryOptions,
   type BillFeeQuote,
   type BilledDrug,
@@ -370,6 +371,8 @@ export type BillSubmissionFormProps = {
    * directly on MindBill's recommended route.
    */
   deliveryRoutePicker?: "auto" | "required" | "off";
+  /** Restricts the route picker to delivery methods valid for this lifecycle action. */
+  deliveryRouteAction?: BillDeliveryAction;
   /** Heading for the delivery confirmation dialog. */
   deliveryRouteDialogTitle?: ReactNode;
   /** Auto hides and forces J4 for med-legal bills; treatment bills show the full report-type directory. */
@@ -945,7 +948,7 @@ export function BillSubmissionForm({
   profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteAction, deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -1353,6 +1356,7 @@ export function BillSubmissionForm({
           claimsAdministratorId: complete.claim.claimsAdministrator.id,
           ...(complete.claim.claimsAdministrator.payerId ? { payerId: complete.claim.claimsAdministrator.payerId } : {}),
           ...(complete.claim.injuryState ? { injuryState: complete.claim.injuryState } : {}),
+          ...(deliveryRouteAction ? { action: deliveryRouteAction } : {}),
         });
         setSubmitting(false);
         setRouteError(null);
@@ -1620,6 +1624,7 @@ export function BillSubmissionForm({
         <SendRouteDialog
           title={deliveryRouteDialogTitle}
           delivery={routeDialog.delivery}
+          restrictToDeliveryOptions={deliveryRouteAction === "send_duplicate"}
           submitting={submitting}
           error={routeError}
           onCancel={() => { if (!submitting) { setRouteDialog(null); setRouteError(null); } }}

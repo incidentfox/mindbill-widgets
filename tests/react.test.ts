@@ -796,10 +796,10 @@ describe("pre-submission reference data", () => {
       .mockResolvedValueOnce(jsonResponse(preview));
     const client = createBillReferenceClient({ fetch: fetcher });
 
-    await expect(client.getDeliveryPreview({ claimsAdministratorId: "pd:zurich", payerId: "pd:zurich/branch", injuryState: "CA" }))
+    await expect(client.getDeliveryPreview({ claimsAdministratorId: "pd:zurich", payerId: "pd:zurich/branch", injuryState: "CA", action: "send_duplicate" }))
       .resolves.toMatchObject({ payerName: "Zurich American Insurance Company", recommended: { route: "ebill" } });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/delivery-preview?claimsAdministratorId=pd%3Azurich&payerId=pd%3Azurich%2Fbranch&injuryState=CA",
+      "https://app.mindbill.org/partner/v2/delivery-preview?claimsAdministratorId=pd%3Azurich&payerId=pd%3Azurich%2Fbranch&injuryState=CA&action=send_duplicate",
     );
   });
 
@@ -1792,6 +1792,12 @@ describe("connected bill lifecycle", () => {
     expect(handler.indexOf("setPanel(\"\")")).toBeGreaterThan(handler.indexOf("throw cause;"));
     expect(handler).toContain("...(value.submission ? { submission: value.submission } : {})");
     expect(source).toContain('deliveryRoutePicker="required"');
+    expect(source).toContain('deliveryRouteAction="send_duplicate"');
+    const formSource = readFileSync(
+      new URL("../packages/react/src/bill-submission-form.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(formSource).toContain('restrictToDeliveryOptions={deliveryRouteAction === "send_duplicate"}');
     expect(source).toContain(
       "{correctionError ? <div className=\"mb-lifecycle-message error\" role=\"alert\">{correctionError}</div> : null}",
     );
@@ -2034,9 +2040,9 @@ describe("connected bill lifecycle", () => {
       fetch: fetcher,
     });
 
-    await expect(client.getDeliveryOptions()).resolves.toEqual(deliveryOptions);
+    await expect(client.getDeliveryOptions({ action: "send_duplicate" })).resolves.toEqual(deliveryOptions);
     expect(fetcher.mock.calls[1]?.[0]).toBe(
-      "https://app.mindbill.org/partner/v2/bills/bill_789/delivery-options",
+      "https://app.mindbill.org/partner/v2/bills/bill_789/delivery-options?action=send_duplicate",
     );
   });
 

@@ -344,7 +344,7 @@ export function useBillLifecycle({
     listMedicalProviderNetworks: client.listMedicalProviderNetworks,
     searchClaimsAdministrators: (query, claimNumber) => client.searchClaimsAdministrators(query, claimNumber),
     getClaimsAdministratorDirectory: (id, injuryState) => client.getClaimsAdministratorDirectory(id, injuryState),
-    getDeliveryOptions: () => client.getDeliveryOptions(),
+    getDeliveryOptions: (input) => client.getDeliveryOptions(input),
     getAttachment: (attachmentId) => client.getAttachment(attachmentId),
     openAttachment,
     openEor,
@@ -1011,6 +1011,7 @@ export function ConnectedBillLifecycle({
       attentionMessage="Confirm every carried-over value. You may edit any field before sending this duplicate."
       submitLabel={lifecycle.isMutating ? "Sending…" : "Send duplicate"}
       deliveryRoutePicker="required"
+      deliveryRouteAction="send_duplicate"
       deliveryRouteDialogTitle="Confirm duplicate bill delivery"
       heading="Duplicate bill information"
       description="The submitted original remains immutable. This form creates and sends a linked duplicate."

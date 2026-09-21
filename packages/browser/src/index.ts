@@ -1096,6 +1096,15 @@ export type BillSubmissionClient = {
   clearSession: () => void;
 };
 
+/** A lifecycle action that has a restricted set of delivery routes. */
+export type BillDeliveryAction = "send_duplicate";
+
+/** Optional delivery-context request used to filter the selectable routes. */
+export type BillDeliveryOptionsInput = {
+  /** Restricts the response to routes that are valid for the lifecycle action. */
+  action?: BillDeliveryAction;
+};
+
 /** Input for the pre-submission delivery preview keyed on a payer-directory id. */
 export type BillDeliveryPreviewInput = {
   claimsAdministratorId: string;
@@ -1103,7 +1112,7 @@ export type BillDeliveryPreviewInput = {
   payerId?: string;
   /** Two-letter state; defaults to CA server-side. */
   injuryState?: string;
-};
+} & BillDeliveryOptionsInput;
 
 export type BillProcedureCodeSearchInput = {
   query?: string;
@@ -1376,7 +1385,7 @@ export type BillLifecycleClient = {
   quoteFee: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
   quoteClaimFees: (input: CaClaimFeeQuoteInput) => Promise<CaClaimFeeQuoteResult>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
-  getDeliveryOptions: () => Promise<BillDeliveryOptions>;
+  getDeliveryOptions: (input?: BillDeliveryOptionsInput) => Promise<BillDeliveryOptions>;
   getDeliveryPreview: (input: BillDeliveryPreviewInput) => Promise<BillDeliveryOptions>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
@@ -1891,8 +1900,10 @@ export function createBillLifecycleClient({
     quoteFee,
     quoteClaimFees,
     lookupPostalCode,
-    async getDeliveryOptions() {
-      const response = await request(billPath("/delivery-options"));
+    async getDeliveryOptions(input = {}) {
+      const params = new URLSearchParams();
+      if (input.action) params.set("action", input.action);
+      const response = await request(`${billPath("/delivery-options")}${params.size ? `?${params.toString()}` : ""}`);
       if (!response.ok) throw await responseError(response, "Delivery options could not be loaded.");
       const body = await response.json() as { data?: unknown };
       return normalizeDeliveryOptions(body.data ?? body);
@@ -1901,6 +1912,7 @@ export function createBillLifecycleClient({
       const params = new URLSearchParams({ claimsAdministratorId: input.claimsAdministratorId.trim() });
       if (input.payerId?.trim()) params.set("payerId", input.payerId.trim());
       if (input.injuryState?.trim()) params.set("injuryState", input.injuryState.trim());
+      if (input.action) params.set("action", input.action);
       const response = await request(`/partner/v2/delivery-preview?${params.toString()}`);
       if (!response.ok) throw await responseError(response, "Delivery routes could not be loaded.");
       const body = await response.json() as { data?: unknown };

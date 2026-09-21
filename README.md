@@ -194,6 +194,13 @@ preview uses the administrator and subpayor selected in the edited form, so a
 biller who corrects a rejected wrong-payor submission can inspect the new route
 and deliberately switch to fax, email, mail, or e-bill before anything is sent.
 
+Duplicate bills must instead request `deliveryRouteAction="send_duplicate"`.
+MindBill then returns only fax and claims-email choices; e-bill and mail are not
+valid duplicate-delivery routes. When no payer fax or claims email is on file,
+the picker provides a manual fax field for an approved number on the recipient's
+letter. `ConnectedBillLifecycle` and the Angular lifecycle component set this
+automatically.
+
 ## 2. Render the submitted lifecycle
 
 `ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, rejection details, EORs, remittance, and payments directly from MindBill. React and Angular both show rejected bills as an action-required surface with the full ordered issue list and acknowledgement codes; both also export that rejection notice for custom layouts. Do not pass or maintain lifecycle seed data in your application. Authenticated packet previews open the PDF directly in a new tab.

@@ -4,6 +4,7 @@ import {
   type BillLifecycleClient,
   type BillLifecycleClientOptions,
   type BillLifecycleData,
+  type BillDeliveryOptionsInput,
   type CloseBillInput,
   type PostBillPaymentInput,
   type ReportBillStatusInput,
@@ -59,7 +60,7 @@ export class MindBillLifecycleStore {
     }
   }
 
-  getDeliveryOptions() { return this.requireClient().getDeliveryOptions(); }
+  getDeliveryOptions(input?: BillDeliveryOptionsInput) { return this.requireClient().getDeliveryOptions(input); }
   getAttachment(id: string) { return this.requireClient().getAttachment(id); }
   getEor(id: string) { return this.requireClient().getEor(id); }
   async prepareIbrPacket() {
