@@ -538,7 +538,7 @@ function CorrectionVerificationContact({ delivery }: { delivery: BillLifecycleDa
   </aside>;
 }
 
-function correctionBill(data: BillLifecycleData): BillSubmissionInput {
+export function correctionBill(data: BillLifecycleData): BillSubmissionInput {
   const billing = data.bill.billingSnapshot?.billingProvider;
   const rendering = data.bill.billingSnapshot?.renderingProvider;
   const location = data.bill.billingSnapshot?.placeOfService;
@@ -617,7 +617,7 @@ function correctionBill(data: BillLifecycleData): BillSubmissionInput {
       units: line.units,
       charge: line.charge,
       ...(line.serviceDate ? { serviceDate: line.serviceDate } : {}),
-      ...(line.serviceDateEnd !== undefined ? { serviceDateEnd: line.serviceDateEnd } : {}),
+      ...(line.serviceDateEnd != null ? { serviceDateEnd: line.serviceDateEnd } : {}),
       ...(line.diagnosisPointers ? { diagnosisPointers: [...line.diagnosisPointers] } : {}),
     })),
   };
