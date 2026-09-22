@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import type { BillLifecycleData } from "../packages/browser/src/index";
-import { ConnectedBillLifecycle, billLifecycleValidationIssues } from "../packages/react/src/connected-bill-lifecycle";
+import { ConnectedBillLifecycle, billLifecycleValidationIssues, correctionBill } from "../packages/react/src/connected-bill-lifecycle";
 const data = {
   bill: { id: "synthetic_bill", billingMode: "professional", dos: "", attachments: [], lineItems: [] },
   patient: { name: "Synthetic Patient" }, injury: {},
@@ -23,6 +23,21 @@ it("does not apply current submission requirements to paid, imported or nonedita
     expect(billLifecycleValidationIssues({ ...data, lifecycle: { ...data.lifecycle, state } })).toBeUndefined();
   }
   expect(billLifecycleValidationIssues({ ...data, lifecycle: { ...data.lifecycle, actions: [] } })).toBeUndefined();
+});
+it("omits a blank service-line end date from duplicate submissions", () => {
+  const submission = correctionBill({
+    ...data,
+    bill: {
+      ...data.bill,
+      lineItems: [
+        { code: "ML201", modifiers: [], units: 1, charge: 100, serviceDate: "2026-09-08", serviceDateEnd: null },
+        { code: "ML201", modifiers: [], units: 1, charge: 100, serviceDate: "2026-09-09", serviceDateEnd: "2026-09-10" },
+      ],
+    },
+  } as unknown as BillLifecycleData);
+
+  expect(submission.serviceLines[0]).not.toHaveProperty("serviceDateEnd");
+  expect(submission.serviceLines[1]?.serviceDateEnd).toBe("2026-09-10");
 });
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
