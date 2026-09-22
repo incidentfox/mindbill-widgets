@@ -54,8 +54,6 @@ export type SendRouteDialogProps = {
   /** Dialog heading, e.g. "Send bill". */
   title?: ReactNode;
   delivery: BillDeliveryOptions;
-  /** Show only the routes returned for a restricted lifecycle action. */
-  restrictToDeliveryOptions?: boolean;
   submitting?: boolean;
   /** Disables the confirm button while the caller uploads documents. */
   disabled?: boolean;
@@ -197,7 +195,6 @@ function RecipientChoice({
 export function SendRouteDialog({
   title = "Send bill",
   delivery,
-  restrictToDeliveryOptions = false,
   submitting = false,
   disabled = false,
   error = null,
@@ -207,18 +204,12 @@ export function SendRouteDialog({
   const ebillOption = delivery.options.find((option) => option.route === "ebill");
   const mailOption = delivery.options.find((option) => option.route === "mail");
   const recommendedRoute = delivery.recommended.route;
-  const allowedRoutes = new Set(delivery.options.map((option) => option.route));
-  const isRouteAvailable = (candidate: BillSubmissionRoute) =>
-    !restrictToDeliveryOptions || allowedRoutes.has(candidate);
-  const initialRoute = isRouteAvailable(recommendedRoute)
-    ? recommendedRoute
-    : delivery.options[0]?.route ?? recommendedRoute;
   const onFileEmail = extractSendRouteEmail(delivery.contacts.claimsEmail);
   const onFileFax = delivery.contacts.faxNumber?.trim() || null;
   const onFileFaxDisplay = formatSendRouteFax(onFileFax);
   const onFileMail = delivery.contacts.mailingAddress?.trim() || "";
 
-  const [route, setRoute] = useState<BillSubmissionRoute>(initialRoute);
+  const [route, setRoute] = useState<BillSubmissionRoute>(recommendedRoute);
   const [emailMode, setEmailMode] = useState<"onfile" | "alt">(onFileEmail ? "onfile" : "alt");
   const [faxMode, setFaxMode] = useState<"onfile" | "alt">(onFileFax ? "onfile" : "alt");
   const [emailTo, setEmailTo] = useState("");
@@ -230,11 +221,11 @@ export function SendRouteDialog({
   const [mailTo, setMailTo] = useState(onFileMail);
 
   useEffect(() => {
-    setRoute(initialRoute);
+    setRoute(recommendedRoute);
     setEmailMode(onFileEmail ? "onfile" : "alt");
     setFaxMode(onFileFax ? "onfile" : "alt");
     setMailTo(onFileMail);
-  }, [initialRoute, onFileEmail, onFileFax, onFileMail]);
+  }, [recommendedRoute, onFileEmail, onFileFax, onFileMail]);
 
   // Close on Escape (unless a submit is in flight — the caller owns that state).
   useEffect(() => {
@@ -298,7 +289,7 @@ export function SendRouteDialog({
 
         <div className="mbrd-cards" role="radiogroup" aria-label="Delivery method">
           {(() => {
-            const ebillCard = ebillOption && isRouteAvailable("ebill") ? (
+            const ebillCard = ebillOption ? (
               <RouteCard
                 key="ebill"
                 selected={route === "ebill"}
@@ -421,15 +412,15 @@ export function SendRouteDialog({
               </RouteCard>
             );
 
-            // Preference order: e-bill (only when the payer has an e-route) → fax
-            // and email WITH a contact on file → mail (when allowed) → the rest last.
+            // Preference order: ebill (only when the payer has an e-route) → fax
+            // and email WITH a contact on file → mail (always) → the rest last.
             const cards: ReactNode[] = [];
             if (ebillCard) cards.push(ebillCard);
-            if (isRouteAvailable("fax") && onFileFax) cards.push(faxCard);
-            if (isRouteAvailable("email") && onFileEmail) cards.push(emailCard);
-            if (isRouteAvailable("mail")) cards.push(mailCard);
-            if (isRouteAvailable("fax") && !onFileFax) cards.push(faxCard);
-            if (isRouteAvailable("email") && !onFileEmail) cards.push(emailCard);
+            if (onFileFax) cards.push(faxCard);
+            if (onFileEmail) cards.push(emailCard);
+            cards.push(mailCard);
+            if (!onFileFax) cards.push(faxCard);
+            if (!onFileEmail) cards.push(emailCard);
             return cards;
           })()}
         </div>
