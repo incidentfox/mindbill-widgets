@@ -108,6 +108,16 @@ export const BILL_SUBMISSION_REPORT_TYPES: readonly BillSubmissionReportTypeOpti
   { code: "RX", label: "Renewable Oxygen Content Averaging Report" }, { code: "SG", label: "Symptoms Document" },
   { code: "V5", label: "Death Notification" }, { code: "XP", label: "Photographs" },
 ] as const;
+const BILL_SUBMISSION_REPORT_TYPE_CODES = new Set(BILL_SUBMISSION_REPORT_TYPES.map(({ code }) => code));
+
+/** Normalize a supported report-type code and reject labels or unknown values. */
+export function normalizeBillSubmissionReportTypeCode(value: unknown): string {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (BILL_SUBMISSION_REPORT_TYPE_CODES.has(normalized)) return normalized;
+  throw new Error(
+    `Unsupported attachment report type code ${JSON.stringify(value)}. Use a code from BILL_SUBMISSION_REPORT_TYPES, not its display label.`,
+  );
+}
 export type BillSubmissionEvaluationType = "qme" | "ame" | "psych_qme" | "psych_ame";
 export type BillSubmissionAddress = { line1: string; line2?: string; city: string; state: string; postalCode: string };
 export type BillSubmissionDiagnosisOption = { code: string; description: string };
@@ -464,8 +474,11 @@ export async function prepareBillSubmissionDocuments({
   fetch?: typeof globalThis.fetch;
 }): Promise<BrowserBillSubmissionDocument[]> {
   const fetcher = fetchOverride ?? globalThis.fetch;
+  const reportTypeCode = (value: string | undefined): string | undefined =>
+    value === undefined ? undefined : normalizeBillSubmissionReportTypeCode(value);
   const selected = selectedIds.map((id) => attachments.find((item) => item.id === id)).filter((item): item is BillSubmissionSourceAttachment => Boolean(item));
   const sourceDocuments = await Promise.all(selected.map(async (attachment) => {
+    const selectedReportTypeCode = reportTypeCode(reportTypeCodeByAttachmentId[attachment.id] || attachment.reportTypeCode || defaultReportTypeCode);
     let blob: Blob;
     if (attachment.loadBlob) blob = await attachment.loadBlob();
     else {
@@ -479,16 +492,19 @@ export async function prepareBillSubmissionDocuments({
       externalId: attachment.id,
       filename: attachment.fileName,
       documentType: attachment.documentType,
-      ...((reportTypeCodeByAttachmentId[attachment.id] || attachment.reportTypeCode || defaultReportTypeCode) ? { reportTypeCode: reportTypeCodeByAttachmentId[attachment.id] || attachment.reportTypeCode || defaultReportTypeCode } : {}),
+      ...(selectedReportTypeCode ? { reportTypeCode: selectedReportTypeCode } : {}),
       ...(attachment.description ? { description: attachment.description } : {}),
     });
   }));
-  const uploadedDocuments = await Promise.all(uploads.map(({ file, documentType, description, reportTypeCode }) => pdfDocument(file, {
-    filename: file.name,
-    documentType,
-    ...((reportTypeCode || defaultReportTypeCode) ? { reportTypeCode: reportTypeCode || defaultReportTypeCode } : {}),
-    ...(description ? { description } : {}),
-  })));
+  const uploadedDocuments = await Promise.all(uploads.map(({ file, documentType, description, reportTypeCode: uploadReportTypeCode }) => {
+    const selectedReportTypeCode = reportTypeCode(uploadReportTypeCode || defaultReportTypeCode);
+    return pdfDocument(file, {
+      filename: file.name,
+      documentType,
+      ...(selectedReportTypeCode ? { reportTypeCode: selectedReportTypeCode } : {}),
+      ...(description ? { description } : {}),
+    });
+  }));
   return [...sourceDocuments, ...uploadedDocuments];
 }
 
