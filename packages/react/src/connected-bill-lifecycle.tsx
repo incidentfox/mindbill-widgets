@@ -41,6 +41,7 @@ import {
   BillHistoryTable,
   BillLifecycleProgress,
   BillRejectionNotice,
+  billRejectionIssues,
 } from "./bill-lifecycle-surfaces";
 import { BillReadOnlyForm, type BillReadOnlyFormProps, type BillDetailNavigationProps } from "./bill-read-only-form";
 import {
@@ -444,6 +445,16 @@ export type CorrectionRejectionSummary = {
 };
 
 export function correctionRejectionSummary(rejection: BillRejection): CorrectionRejectionSummary {
+  const issues = billRejectionIssues(rejection);
+  const readableFallback = issues[0];
+  if (!rejection.issues?.length && readableFallback && readableFallback.description !== rejection.reason) {
+    return {
+      code: readableFallback.code?.trim() || null,
+      clearinghouseDetail: null,
+      description: readableFallback.description,
+    };
+  }
+
   const reason = rejection.reason.trim();
   const encodedReason = reason.match(/^([A-Z0-9]+:[A-Z0-9-]+)(?:\s+(\d{8}\s+[A-Z]\s+\d{4}))?\s*[:-]?\s+(.+)$/i);
   if (encodedReason?.[1] && encodedReason[3]) {
@@ -467,10 +478,10 @@ export function correctionRejectionSummary(rejection: BillRejection): Correction
 
 function CorrectionRejectionReason({ rejection }: { rejection: BillRejection }): ReactElement {
   const summary = correctionRejectionSummary(rejection);
-  const details = rejection.issues?.filter((issue) => (
+  const details = billRejectionIssues(rejection).filter((issue) => (
     issue.description.trim() !== summary.description
     || Boolean(issue.code?.trim() && issue.code.trim() !== summary.code)
-  )) ?? [];
+  ));
 
   return <div className="mb-lifecycle-correction-reason" role="alert">
     {summary.code ? <div className="mb-lifecycle-correction-reason-code">
