@@ -60,6 +60,7 @@ const mock = http.createServer(async (request, response) => {
     if (path === "/partner/v2/claims-administrators/" + PAYER.id) return send({ data: directory });
     if (path === "/partner/v2/diagnosis-codes") return send({ results: [{ code: "M25.512", description: "Pain in left shoulder" }] });
     if (path === "/partner/v2/procedure-codes") return send({ results: [{ code: "ML201" }], total: 1 });
+    if (path === "/partner/v2/medical-provider-networks") return send({ data: [] });
     if (path === "/partner/v2/postal-codes") return send({ city: "Pasadena", state: "CA" });
     if (path === "/partner/v2/delivery-preview") return send({ data: deliveryOptions });
     if (path === "/partner/v2/bills" && request.method === "POST") {
@@ -69,6 +70,7 @@ const mock = http.createServer(async (request, response) => {
       assert.equal(request.headers["idempotency-key"], row.creationKey);
       assert.equal(body.bill.externalId, row.externalId);
       assert.deepEqual(body.documents.map(document => document.documentType).sort(), ["final_report", "w9"]);
+      assert.equal(body.documents.find(document => document.documentType === "final_report").reportTypeCode, "OZ:J4");
       for (const document of body.documents) assert.equal(Buffer.from(document.contentBase64, "base64").subarray(0, 5).toString(), "%PDF-");
       created.push(body);
       state.input = body.bill; state.lifecycle = makeLifecycle(body.bill, body.documents);
@@ -156,8 +158,9 @@ try {
   await page.getByRole("button", { name: "Close bill", exact: true }).waitFor();
   assert.equal(await page.getByText("Loading bill…", { exact: true }).count(), 0);
   await page.getByRole("tab", { name: "Bill history", exact: true }).click();
-  await page.getByText("Demo submission", { exact: true }).waitFor();
-  await page.getByText("Created locally. No payer was contacted.", { exact: true }).waitFor();
+  const billHistory = page.getByRole("region", { name: "Bill history" });
+  await billHistory.getByText("Demo submission", { exact: true }).waitFor();
+  await billHistory.getByText("Created locally. No payer was contacted.", { exact: true }).waitFor();
   await page.evaluate(() => globalThis.scrollTo(0, 0));
   await page.screenshot({ path: "/tmp/review-desk-bill-history.png", fullPage: true });
   await page.getByRole("tab", { name: "Bill details", exact: true }).click();
