@@ -9,6 +9,7 @@ import type {
   BillLifecycleDelivery,
   BillPaymentRecord,
   BillRejection,
+  BillRejectionIssue,
   BillRemittanceSummary,
 } from "@mindbill/browser";
 import type { MindBillReactAppearance } from "./appearance";
@@ -386,11 +387,42 @@ export function billRejectionIssueSummary(rejection: BillRejection, count: numbe
   return `${count} ${noun} returned by ${source}.`;
 }
 
+/**
+ * Turns the terse 999 acknowledgement location for a claim-paperwork segment
+ * into an actionable explanation. The original acknowledgement stays on the
+ * bill record; this only improves the fallback presentation when the source
+ * did not provide structured issues.
+ */
+function x12PaperworkRejectionIssue(reason: string): BillRejectionIssue | null {
+  const acknowledgement = reason.match(/^\s*999\s+rejected\s+\([A-Z]\)\s*:\s*(.+?)\s*$/i);
+  if (!acknowledgement?.[1]) return null;
+
+  const locations = acknowledgement[1]
+    .split(";")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const paperworkLocations = [...new Set(locations.filter((value) => /^PWK:\d+:2300(?::\d+)?$/i.test(value)))];
+  if (!paperworkLocations.length) return null;
+
+  return {
+    code: "999 · PWK · 2300",
+    description: "The clearinghouse could not validate the attachment or paperwork information in this claim. Review the duplicate submission’s attachment details, then resubmit.",
+    fieldPaths: ["attachments"],
+  };
+}
+
+/** Returns structured source issues, or a safe readable fallback for known X12 acknowledgements. */
+export function billRejectionIssues(rejection: BillRejection): BillRejectionIssue[] {
+  if (rejection.issues?.length) return [...rejection.issues];
+  return [x12PaperworkRejectionIssue(rejection.reason) ?? {
+    code: rejection.code ?? null,
+    description: rejection.reason,
+  }];
+}
+
 /** A prominent, end-user-readable explanation of a rejected submission. */
 export function BillRejectionNotice({ rejection, title = "Rejected — action required", submittedAt, appearance, className, style, formatDate = defaultFormatDate }: BillRejectionNoticeProps): ReactElement {
-  const issues = rejection.issues?.length
-    ? rejection.issues
-    : [{ code: rejection.code, description: rejection.reason }];
+  const issues = billRejectionIssues(rejection);
   const hasCodes = issues.some((issue) => Boolean(issue.code));
 
   return (

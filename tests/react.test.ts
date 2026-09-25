@@ -46,6 +46,7 @@ import {
 } from "../packages/react/src/send-route-dialog";
 import {
   billActivityEventLabel,
+  billRejectionIssues,
   billRejectionIssueSummary,
   billLifecycleDisplayLabel,
   billLifecycleProgressSteps,
@@ -1098,6 +1099,26 @@ describe("bill lifecycle surfaces", () => {
     }, 4)).toBe("4 clearinghouse validation errors.");
   });
 
+  it("makes a terse X12 paperwork acknowledgement actionable without changing its source data", () => {
+    expect(billRejectionIssues({
+      reason: "999 rejected (E): PWK:29:2300:8; PWK:29:2300:8; E:5",
+    })).toEqual([{
+      code: "999 · PWK · 2300",
+      description: "The clearinghouse could not validate the attachment or paperwork information in this claim. Review the duplicate submission’s attachment details, then resubmit.",
+      fieldPaths: ["attachments"],
+    }]);
+  });
+
+  it("leaves unrelated unstructured acknowledgements unchanged", () => {
+    expect(billRejectionIssues({
+      code: "999",
+      reason: "999 rejected (E): N4:12:2300:8",
+    })).toEqual([{
+      code: "999",
+      description: "999 rejected (E): N4:12:2300:8",
+    }]);
+  });
+
   it("uses human labels while preserving immutable API states", () => {
     expect(billLifecycleDisplayLabel("submitted", "SENT")).toBe("Sent");
     expect(billLifecycleDisplayLabel("second_review", "appealing")).toBe("Second Review sent");
@@ -1507,6 +1528,13 @@ describe("connected bill lifecycle", () => {
       code: "A7:488",
       clearinghouseDetail: null,
       description: "Invalid diagnosis code",
+    });
+    expect(correctionRejectionSummary({
+      reason: "999 rejected (E): PWK:29:2300:8; PWK:29:2300:8; E:5",
+    })).toEqual({
+      code: "999 · PWK · 2300",
+      clearinghouseDetail: null,
+      description: "The clearinghouse could not validate the attachment or paperwork information in this claim. Review the duplicate submission’s attachment details, then resubmit.",
     });
   });
 
