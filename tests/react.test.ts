@@ -75,6 +75,7 @@ import {
   claimsAdministratorRecommendations,
   exactClaimsAdministratorMatch,
   MED_LEGAL_REPORT_TYPE_CODE,
+  normalizeBillSubmissionReportTypeCode,
   parseBillSubmissionDate,
   prepareBillSubmissionDocuments,
   submittedClaimsAdministrator,
@@ -941,6 +942,28 @@ describe("connected bill submission", () => {
       { code: "RR", label: "Radiology Reports" },
       { code: "XP", label: "Photographs" },
     ]));
+  });
+
+  it("normalizes every catalog code and rejects labels before loading documents", async () => {
+    for (const { code } of BILL_SUBMISSION_REPORT_TYPES) {
+      expect(normalizeBillSubmissionReportTypeCode(` ${code.toLowerCase()} `)).toBe(code);
+    }
+    expect(() => normalizeBillSubmissionReportTypeCode("Med-Legal Report")).toThrow(/not its display label/);
+
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(prepareBillSubmissionDocuments({
+      attachments: [{
+        id: "source_123",
+        fileName: "source.pdf",
+        documentType: "final_report",
+        previewUrl: "/source.pdf",
+        reportTypeCode: "Med-Legal Report",
+      }],
+      selectedIds: ["source_123"],
+      uploads: [],
+      fetch: fetcher,
+    })).rejects.toThrow(/Unsupported attachment report type code/);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });
 
