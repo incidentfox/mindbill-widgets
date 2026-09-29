@@ -4,10 +4,13 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { BillSubmissionForm, type BillSubmissionInput } from "../packages/react/src/bill-submission-form";
 
-const { submitBill } = vi.hoisted(() => ({ submitBill: vi.fn().mockResolvedValue({ bill: { id: "synthetic-bill" } }) }));
+const { submitBill, previewCms1500 } = vi.hoisted(() => ({
+  submitBill: vi.fn().mockResolvedValue({ bill: { id: "synthetic-bill" } }),
+  previewCms1500: vi.fn().mockResolvedValue(new Blob(["synthetic pdf"], { type: "application/pdf" })),
+}));
 vi.mock("@mindbill/browser", async (original) => ({
   ...await original<typeof import("@mindbill/browser")>(),
-  createBillSubmissionClient: () => ({ submitBill }),
+  createBillSubmissionClient: () => ({ submitBill, previewCms1500 }),
 }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const validBill = {
@@ -83,5 +86,35 @@ it("forwards a persisted host key when the connected form is submitted and retri
     expect(fetcher.mock.calls.some(([url]) => String(url).includes("billing-profile"))).toBe(false);
   } finally {
     await act(async () => root.unmount()); container.remove();
+  }
+});
+
+it("previews the current CMS-1500 above submit without submitting", async () => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const previewTab = { document: { title: "", body: { textContent: "" } }, location: { href: "" }, close: vi.fn() };
+  const open = vi.spyOn(window, "open").mockReturnValue(previewTab as unknown as Window);
+  const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-preview");
+  try {
+    submitBill.mockClear(); previewCms1500.mockClear();
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: validBill,
+      profileOptions: {},
+      getSession: async () => ({ token: "synthetic-token" }),
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [] })),
+      deliveryRoutePicker: "off",
+    })));
+    const previewButton = [...container.querySelectorAll("button")].find(button => button.textContent === "Preview CMS-1500");
+    const submitButton = container.querySelector("button[type=submit]");
+    expect(previewButton).toBeDefined();
+    expect(submitButton).not.toBeNull();
+    expect(previewButton!.compareDocumentPosition(submitButton!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await act(async () => previewButton!.click());
+    expect(previewCms1500).toHaveBeenCalledWith(expect.objectContaining({ externalId: validBill.externalId }));
+    expect(submitBill).not.toHaveBeenCalled();
+    expect(previewTab.location.href).toBe("blob:synthetic-preview");
+  } finally {
+    await act(async () => root.unmount()); container.remove();
+    open.mockRestore(); createObjectURL.mockRestore();
   }
 });
