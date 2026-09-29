@@ -81,7 +81,7 @@ import { ConnectedBillStatus } from "@mindbill/react";
 
 Use `useBillStatus({ billId })` when you want to render custom status UI. It returns `data`, `error`, `isLoading`, `isRefreshing`, and `refresh`. Use `createBillStatusClient` outside React.
 
-The public lifecycle is `Submitted → Accepted → Processed → Closed`. Rejections and denials remain detailed states inside the Processed stage so the progress rail stays stable while the sticky action bar explains what the user can do next. Partner APIs and components do not expose draft or queued states. Once the payer responds, the Details tab leads with one consolidated Explanation of Review reconciliation surface: billed, allowed, payer-reported payment, posted payment, penalty and interest, balance, denial reason, payment records, and the EOR document.
+The public lifecycle is `Submitted → Accepted → Processed → Closed`. Rejections and denials remain detailed states inside the Processed stage so the progress rail stays stable while the sticky action bar explains what the user can do next. Partner APIs and components do not expose draft or queued states. Once the payer responds, the Details tab leads with one consolidated Explanation of Review reconciliation surface. It keeps payer response history separate from the payment ledger so each check or EFT appears exactly once, labels the fee-schedule expectation separately from the payer-allowed amount, and accepts `onPostPayment` to place the payment action directly in the component.
 
 ## Read-only bill details
 
