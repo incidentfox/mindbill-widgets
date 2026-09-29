@@ -85,6 +85,21 @@ const submission = {
 } satisfies BrowserBillSubmissionInput;
 
 describe("customer submission wire contract", () => {
+  it("previews CMS-1500 without invoking bill submission", async () => {
+    const pdf = new Blob(["%PDF-1.4 synthetic preview"], { type: "application/pdf" });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(pdf, { headers: { "content-type": "application/pdf" } }));
+    const client = createBillSubmissionClient({
+      getSession: async () => ({ token: "synthetic-customer-token", expiresAt: "2099-01-01T00:00:00Z" }), fetch: fetcher,
+    });
+    const result = await client.previewCms1500(submission.bill);
+    expect(await result.text()).toContain("%PDF-1.4");
+    expect(fetcher).toHaveBeenCalledOnce();
+    const [url, request] = fetcher.mock.calls[0]!;
+    expect(String(url)).toContain("/partner/v2/bills/preview-cms1500");
+    expect(request?.method).toBe("POST");
+    expect(JSON.parse(String(request?.body))).toEqual(submission.bill);
+  });
+
   it("keeps the trusted customer reference at the top-level server submission", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ id: "bill-synthetic" }));
     await new MindBillClient({ apiKey: "synthetic-key", fetch: fetcher }).createAndSubmitBill(submission, "synthetic-retry");

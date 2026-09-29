@@ -4,6 +4,8 @@ The integration has one durable object: a bill. Your application keeps its own c
 
 MindBill stores the frozen bill snapshot, payer documents, submissions, EORs, payments, denials, reviews, and lifecycle history.
 
+In the connected React bill form, **Preview CMS-1500** opens a PDF of the current form values before submission. It does not save or submit a bill. The submission-time claim identifier is blank until a bill is submitted; the existing Submit action is unchanged. The browser client also exposes `previewCms1500(bill)` for custom form layouts.
+
 `ConnectedBillLifecycle` also includes shared workspace team notes and a preview-first courtesy-copy email form. Hosts can supply case-scoped recipient choices without enrolling contacts in notifications. See [bill communications](docs/bill-communications.md) for recipient-option props, scopes, sandbox simulation, retry safety, and custom React integration.
 
 `NotificationSettings` / `ConnectedNotificationSettings` adds a default-off notification settings section for any partner's users, with explicit consent, assigned-bill or practice-wide scope, quiet hours and unsubscribe. Its host-server adapter keeps verified identity and access out of browser mutations. See [notification settings](docs/notification-settings.md).

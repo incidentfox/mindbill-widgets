@@ -1089,6 +1089,7 @@ export type BillReferenceClientOptions = Omit<BillLifecycleClientOptions, "billI
 export type BillSubmissionClientOptions = BillReferenceClientOptions;
 
 export type BillSubmissionClient = {
+  previewCms1500: (bill: BrowserBillSubmissionInput["bill"]) => Promise<Blob>;
   submitBill: (
     input: BrowserBillSubmissionInput,
     options?: { idempotencyKey?: string },
@@ -1577,7 +1578,36 @@ export function createBillSubmissionClient({
     return { billId: bill.id, bill };
   };
 
+  const previewCms1500 = async (bill: BrowserBillSubmissionInput["bill"]): Promise<Blob> => {
+    const controller = new AbortController();
+    let browserSession = await mintSession(controller.signal);
+    const perform = (current: BillLifecycleSession) => {
+      const base = (current.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
+      return fetcher(`${base}/partner/v2/bills/preview-cms1500`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${current.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(bill),
+        signal: controller.signal,
+      });
+    };
+    let response = await perform(browserSession);
+    if (response.status === 401) {
+      session = null;
+      browserSession = await mintSession(controller.signal, true);
+      response = await perform(browserSession);
+    }
+    if (!response.ok) throw await responseError(response, "The CMS-1500 preview could not be generated.");
+    if (!response.headers.get("content-type")?.includes("application/pdf")) {
+      throw new Error("The billing service returned an invalid CMS-1500 preview.");
+    }
+    return response.blob();
+  };
+
   return {
+    previewCms1500,
     submitBill,
     clearSession() { session = null; sessionRequest = null; },
   };
