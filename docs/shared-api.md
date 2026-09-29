@@ -5,12 +5,15 @@ The React components use the same `/partner/v2` business APIs as server integrat
 | SDK operation | Canonical endpoint |
 | --- | --- |
 | Submit a complete bill | `POST /partner/v2/bills` |
+| Preview the current CMS-1500 as an inline PDF without saving | `POST /partner/v2/bills/preview-cms1500` |
 | List dashboard bills and totals | `GET /partner/v2/bill-dashboard` |
 | Search claims administrators | `GET /partner/v2/claims-administrators` |
 | Read a bill lifecycle | `GET /partner/v2/bills/{billId}/lifecycle` |
 | Read saved bill-entry choices | `GET /partner/v2/organization/billing-profile` |
 
 Other business URLs drop the `/browser` segment. The old URLs remain compatible for installed SDK versions. The dashboard retains its page/pageSize response; the cursor-based `GET /partner/v2/bills` retains its own contract, available with either authentication method.
+
+`createBillSubmissionClient().previewCms1500(bill)` accepts the same complete bill object as submission and returns a PDF `Blob`. A `bills:create` browser session is required. This operation does not create or submit a bill; the claim identifier allocated during submission is blank in the preview.
 
 Mint sessions with `POST /partner/v2/browser-sessions` from your trusted server. Session issuance and key management do not accept browser tokens. Preserve host authentication, customer/case authorization, role checks, and origin validation in your session endpoint. Use one server workspace key; default requests need no organization ID. Set `resource.customerExternalId` from trusted host customer records for customer collections and creation. Add `resource.billId` for an existing case bill; both restrictions apply when both are present. A customer token cannot read shared organization profiles or edit shared settings.
 

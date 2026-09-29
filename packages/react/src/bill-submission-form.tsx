@@ -788,6 +788,7 @@ const css = `
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
 .mbsf-lines{min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{min-width:0;position:relative}.mbsf-diagnosis-select{min-width:0}.mbsf-diagnosis-select .mbsf-chip{max-width:100%;align-items:flex-start}.mbsf-diagnosis-select .mbsf-chip>span{min-width:0;overflow-wrap:anywhere}.mbsf-diagnosis-toggle{display:flex;align-items:flex-start;gap:10px;margin:18px 0;line-height:1.5}.mbsf-diagnosis-toggle input{margin-top:4px}.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) 100px 120px 42px}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{min-width:0;grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-fee-details details[open]{display:grid;gap:12px}.mbsf-fee-details>.mbsf-field{max-width:320px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
 .mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-type{width:min(360px,32vw);flex:0 1 360px}.mbsf-attach-type .mbsf-label{display:block;margin-bottom:6px;font-size:12px}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
+.mbsf-actions{flex-direction:column;align-items:flex-end}.mbsf-actions>.mbsf-secondary{min-width:180px}
 .mbsf-lines[data-stacked=true] .mbsf-line-head,.mbsf-lines[data-stacked=true][data-shared-diagnoses=true]>.mbsf-line-head{display:none}.mbsf-lines[data-stacked=true] .mbsf-line,.mbsf-lines[data-stacked=true][data-shared-diagnoses=true]>.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-lines[data-stacked=true] .mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-lines[data-stacked=true] .mbsf-line>div:nth-child(1),.mbsf-lines[data-stacked=true] .mbsf-line>div:nth-child(2),.mbsf-lines[data-stacked=true] .mbsf-line>.mbsf-line-diagnoses{grid-column:1/-1}.mbsf-lines[data-stacked=true] .mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-lines[data-stacked=true] .mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-lines[data-stacked=true] .mbsf-total{padding:16px 18px;gap:24px}
 @media(max-width:820px){.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{display:none}.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2),.mbsf-line>.mbsf-line-diagnoses{grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-payer-option{align-items:flex-start}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start;flex-basis:calc(100% - 150px)}.mbsf-attach-type{width:100%;flex-basis:100%;order:3}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf.mbsf-lifecycle-correction .mbsf-actions{position:static;bottom:auto}.mbsf-submit{width:100%}}
 `;
@@ -979,6 +980,7 @@ export function BillSubmissionForm({
   const [sourceAttachmentReportTypes, setSourceAttachmentReportTypes] = useState<Record<string, string>>(() => Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : [])));
   const [validationActive, setValidationActive] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   // The delivery-method dialog staged with the validated bill.
   const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; value: BillSubmissionFormValue } | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -1032,6 +1034,7 @@ export function BillSubmissionForm({
   const connected = !onSubmit;
   const referenceClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const submissionClient = useMemo(() => connected ? createBillSubmissionClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
+  const previewClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillSubmissionClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const profileClient = useMemo(() => profileOptions === undefined && (getSession || sessionEndpoint || connected)
     ? createOrganizationClient({ ...(getSession ? { getSession } : {}), ...(sessionEndpoint ? { sessionEndpoint } : {}), ...(apiBaseUrl ? { apiBaseUrl } : {}), ...(fetchOverride ? { fetch: fetchOverride } : {}) }) : null,
   [profileOptions, getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
@@ -1389,6 +1392,52 @@ export function BillSubmissionForm({
     await performSubmit(value);
   }
 
+  async function previewCms1500(): Promise<void> {
+    const validation = validateBillSubmission(clean);
+    const fieldErrors = { ...validation.fieldErrors };
+    delete fieldErrors.attachments;
+    setValidationActive(true); setErrors(fieldErrors); setFormError(null);
+    if (Object.keys(fieldErrors).length) {
+      const count = Object.keys(fieldErrors).length;
+      setFormError(`Fix ${count} highlighted field${count === 1 ? "" : "s"} before previewing.`);
+      window.requestAnimationFrame(() => { if (formRef.current) focusFirstInvalid(formRef.current); });
+      return;
+    }
+    if (!previewClient) {
+      setFormError("A billing session is needed to preview the CMS-1500.");
+      return;
+    }
+    const tab = window.open("", "_blank");
+    if (!tab) {
+      setFormError("Allow pop-ups to open the CMS-1500 preview.");
+      return;
+    }
+    tab.document.title = "Generating CMS-1500 preview…";
+    tab.document.body.textContent = "Generating CMS-1500 preview…";
+    const administrator = clean.claim.claimsAdministrator;
+    const complete = {
+      ...clean,
+      ...(clean.billingProvider?.savedProviderId ? { billingProvider: { savedProviderId: clean.billingProvider.savedProviderId } } : {}),
+      ...(clean.billingProvider?.sourceBillId ? { billingProvider: { sourceBillId: clean.billingProvider.sourceBillId } } : {}),
+      claim: {
+        ...clean.claim,
+        ...(administrator ? { claimsAdministrator: submittedClaimsAdministrator(administrator) } : {}),
+      },
+    } as CompleteBillSubmissionInput;
+    setPreviewing(true);
+    try {
+      const pdf = await previewClient.previewCms1500(complete);
+      const url = URL.createObjectURL(pdf);
+      tab.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
+    } catch (caught) {
+      tab.close();
+      setFormError(caught instanceof Error ? caught.message : "The CMS-1500 preview could not be generated.");
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   async function performSubmit(value: BillSubmissionFormValue): Promise<void> {
     setSubmitting(true);
     try {
@@ -1606,7 +1655,7 @@ export function BillSubmissionForm({
       {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div><label className="mbsf-attach-type">Document purpose<select aria-label={`Document purpose for ${upload.file.name}`} value={upload.description ?? ""} onChange={(event) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))}><option value="">Supporting document</option><option value="Authorization / UR response">Authorization / UR response</option><option value="MPN / network documentation">MPN / network documentation</option></select></label>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
     </div>{errors.attachments ? <p className="mbsf-error" role="alert">{errors.attachments}</p> : null}<input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
 
-  const actionsSection = <>{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions"><button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
+  const actionsSection = <>{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions">{(!clean.claimForm || clean.claimForm === "cms1500") ? <button className="mbsf-secondary" type="button" disabled={locked || previewing || !previewClient} onClick={() => void previewCms1500()}>{previewing ? "Generating preview…" : "Preview CMS-1500"}</button> : null}<button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
   const sections: BillSubmissionSections = {
     header: headerSection,
     patient: patientSection,
