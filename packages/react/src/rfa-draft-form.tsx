@@ -1,7 +1,8 @@
 "use client";
 import type { BillDiagnosisCode, OrganizationProfileData, RfaContact } from "@mindbill/browser";
+import { RfaContactPicker, type RfaContactDirectoryProps } from "./rfa-contact-picker";
 import { RfaContactFields, RfaDiagnosisFields } from "./rfa-draft-fields";
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
 export type RfaDraftItemInput = {
@@ -20,7 +21,7 @@ export type RfaDraftInput = {
   claimNumber?: string; dateOfInjury?: string; rationale?: string; materialChange?: string;
   items: RfaDraftItemInput[]; metadata?: Record<string, unknown>;
 };
-export type RfaDraftFormProps = TreatmentDraftAppearance & {
+export type RfaDraftFormProps = TreatmentDraftAppearance & RfaContactDirectoryProps & {
   /** Remount with a different React key when switching requests. Use mode="edit" when replacing existing content; saving invalidates its signature. */
   initialDraft: RfaDraftInput;
   mode?: "create" | "edit";
@@ -84,11 +85,15 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, identity, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, identity, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [savedDraft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   useEffect(() => {
     if (identity) setDraft(current => { const next = { ...current }; delete next.providerPhone; delete next.providerFax; return next; });
   }, [identity?.renderingProviderId]);
+  const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
+  const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
+  const previousClaim = useRef(identityKey);
+  useEffect(() => { if (previousClaim.current !== identityKey) { setAdministratorOverride(null); setDraft(current => ({ ...current, authorizationContact: null })); previousClaim.current = identityKey; } }, [identityKey]);
   const draft = { ...savedDraft };
   if (identity) {
     for (const key of ["claimId", "patientId", "renderingProviderId", "employeeName", "providerName", "claimNumber", "dateOfInjury", "claimsAdminId", "providerNpi"] as const) {
@@ -97,6 +102,7 @@ export function RfaDraftForm({ initialDraft, identity, embedded = false, onSave,
       else draft[key] = value;
     }
   }
+  if (administratorOverride) { if (administratorOverride.id) draft.claimsAdminId = administratorOverride.id; else delete draft.claimsAdminId; }
   const action = useDraftSave(onSave), locked = disabled || action.busy;
   const billingProviders = Array.isArray(organizationProfile?.billingProviders) ? organizationProfile.billingProviders : [];
   const locations = Array.isArray(organizationProfile?.locations) ? organizationProfile.locations : [];
@@ -126,7 +132,7 @@ export function RfaDraftForm({ initialDraft, identity, embedded = false, onSave,
         {organizationProfile ? <div className="mbtd-grid"><label>Use saved billing provider<select defaultValue="" onChange={event => { const provider = billingProviders.find(value => value.id === event.target.value); if (provider) update({ requestingPractice: { ...draft.requestingPractice, name: provider.name, address: provider.billingStreet ?? "", city: provider.billingCity ?? "", state: provider.billingState ?? "", zip: provider.billingZip ?? "", phone: provider.phone ?? "" } }); }}><option value="">Choose a saved practice…</option>{billingProviders.map(provider => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></label>
         <label>Use saved practice location<select defaultValue="" onChange={event => { const location = locations.find(value => value.id === event.target.value); if (location) update({ requestingPractice: { ...draft.requestingPractice, address: location.street, city: location.city, state: location.state, zip: location.zip }, ...(location.posCode ? { placeOfServiceCode: location.posCode } : {}) }); }}><option value="">Choose a saved location…</option>{locations.filter(location => location.active !== false).map(location => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label></div> : null}
         <RfaContactFields title="Requesting practice" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} />
-        <RfaContactFields title="Claims administrator authorization contact" value={draft.authorizationContact} onChange={authorizationContact => update({ authorizationContact })} />
+        <RfaContactPicker {...(searchClaimsAdministrators ? { searchClaimsAdministrators } : {})} {...(getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory } : {})} {...(draft.claimsAdminId ? { administratorId: draft.claimsAdminId } : {})} {...(draft.claimNumber ? { claimNumber: draft.claimNumber } : {})} contextKey={draft.claimId} value={draft.authorizationContact} disabled={locked} onChange={(id, authorizationContact) => { setAdministratorOverride({ id }); update({ authorizationContact }); }} />
         <p>Confirm the authorization contact for this injury. These details are saved on this request and included in its signing review.</p>
       </fieldset>
       {draft.items.map((item, index) => <fieldset key={index} disabled={locked}><legend>Requested service {index + 1}</legend><div className="mbtd-grid">

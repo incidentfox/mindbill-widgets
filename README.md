@@ -12,7 +12,7 @@ In the connected React bill form, **Preview CMS-1500** opens a PDF of the curren
 
 `NotificationRecipientsSettings` lets practice administrators invite **any email address** to those alerts, with no console account required. Recipients remain off until the email owner confirms. See [recipient invitations](docs/notification-recipients.md) for the host-server adapter, consent, scope and retry contract.
 
-`DentalDraftEditor` and `RfaDraftForm` add host-managed dental and unsigned authorization preparation. Dental saves preserve host-supplied clinical details, recorded attestations, and service-specific diagnosis pointers. See [treatment drafts](docs/treatment-drafts.md) for saving, charge semantics, and delivery boundaries.
+`DentalDraftEditor` and `RfaDraftForm` add host-managed dental and unsigned authorization preparation. Dental saves preserve host-supplied clinical details, recorded attestations, and service-specific diagnosis pointers. See [treatment drafts](docs/treatment-drafts.md) for saving, charge semantics, and delivery boundaries. RFA create/edit forms support searchable claims administrators and authorization-office contact autofill; see [RFA directory selection](docs/rfa-directory.md).
 
 `FeeScheduleCalculator` provides multi-line California fee estimates with modifiers, provider and service context, documented imaging sessions and technical service facts, claim edits, calculation details, and regulation sources. See [claim fee calculator](docs/claim-fee-calculator.md) for sessions, inputs, and review outcomes.
 

@@ -2437,6 +2437,7 @@ export type RfaProvisionClaimResult = { patientId: string; claimId: string; pati
 export type RfaClient = {
   provisionClaim?: (input: RfaProvisionClaimInput, options?: { idempotencyKey?: string }) => Promise<RfaProvisionClaimResult>;
   searchClaimsAdministrators?: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
+  getClaimsAdministratorDirectory?: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
   saveProviderSignature?: (providerId: string, input: { contentBase64: string; physicianAuthorized: true; actorReference: string }, options?: { idempotencyKey?: string }) => Promise<{ providerId: string; signatureConfigured: true }>;
 
   getCreationContext: (query?: RfaCreationContextQuery) => Promise<RfaCreationContext>;
@@ -2502,6 +2503,7 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
       return body;
     },
     searchClaimsAdministrators: (query, claimNumber) => createBillReferenceClient({ sessionEndpoint, ...(getSession ? { getSession } : {}), apiBaseUrl, ...(fetchOverride ? { fetch: fetchOverride } : {}) }).searchClaimsAdministrators(query, claimNumber),
+    getClaimsAdministratorDirectory: (id, injuryState) => createBillReferenceClient({ sessionEndpoint, ...(getSession ? { getSession } : {}), apiBaseUrl, ...(fetchOverride ? { fetch: fetchOverride } : {}) }).getClaimsAdministratorDirectory(id, injuryState),
     saveProviderSignature: async (providerId, input, options) => {
       const response = await request(`/providers/${encodeURIComponent(providerId)}/signature`, mutation(input, options?.idempotencyKey ?? globalThis.crypto.randomUUID()), true);
       const body = await response.json() as { data: { providerId: string; signatureConfigured: true } };

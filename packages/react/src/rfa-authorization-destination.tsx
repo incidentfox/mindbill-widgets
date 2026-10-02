@@ -11,11 +11,12 @@ export type RfaAuthorizationDestinationProps = {
   error?: string | null;
   disabled?: boolean;
   /** Selection only: the host owns signing, destination confirmation, and delivery. */
+  onSelectionStart?: () => void;
   onChange: (destination: RfaAuthorizationDestinationOption | null) => void;
 };
 
 /** Choose a destination without sending an RFA or treating email as fax. */
-export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange }: RfaAuthorizationDestinationProps): ReactElement {
+export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart }: RfaAuthorizationDestinationProps): ReactElement {
   const options = loading || error ? [] : rfaAuthorizationDestinations(directory);
   const fax = savedContact?.fax ? normalizeRfaFax(savedContact.fax) : null;
   const savedLabel = savedContact?.contactName || savedContact?.name || "Saved request contact";
@@ -31,6 +32,7 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
   useEffect(() => { setSelection(""); setManual(""); setContactName(""); callback.current(null); }, [signature]);
   const chosen = selection !== "" ? options[Number(selection)] : undefined;
   const emit = (nextSelection: string, value: string, name: string) => {
+    onSelectionStart?.();
     const recipientName = name.trim();
     if (needsAdjuster && !recipientName) { onChange(null); return; }
     const selected = nextSelection === "manual"
