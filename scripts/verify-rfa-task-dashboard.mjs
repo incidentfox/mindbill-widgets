@@ -88,7 +88,7 @@ try {
   await page.getByRole('region',{name:'Response document review',exact:true}).waitFor();
   assert.equal(await page.getByRole('region',{name:'Response document review',exact:true}).locator('select').inputValue(),'response_exact');
   await page.getByRole('tab',{name:'RFA details',exact:true}).click();
-  await page.screenshot({path:resolve(output,'rfa-detail-desktop.png'),fullPage:true});
+  await page.screenshot({path:resolve(output,'rfa-response-review-desktop.png'),fullPage:true});
   await page.getByRole('tab',{name:'History & activity',exact:true}).click();
   await page.screenshot({path:resolve(output,'rfa-history-desktop.png'),fullPage:true});
   assert.equal(await page.getByRole('heading',{name:'RFA #RFA-SAMPLE-1001',exact:true}).count(),0);
@@ -99,6 +99,12 @@ try {
   await page.locator('label').filter({hasText:/^RFA status/}).locator('select').waitFor();
   await page.getByRole('columnheader',{name:'Claims administrator',exact:true}).waitFor();
   await page.screenshot({path:resolve(output,'rfa-list-desktop.png'),fullPage:true});
+  await page.getByRole('region',{name:'RFA table',exact:true}).locator('tbody tr').first().getByRole('button').first().click();
+  const reviewTools = page.locator('details').filter({has:page.locator('summary').filter({hasText:/^Receipt, responses and follow-up$/})});
+  assert.equal(await reviewTools.getAttribute('open'),null);
+  await page.screenshot({path:resolve(output,'rfa-detail-desktop.png'),fullPage:true});
+  await page.getByRole('button',{name:'← All requests',exact:true}).click();
+  await page.getByRole('button',{name:'All RFAs',exact:true}).click();
   await page.locator('.mbrfa-list-mode select').selectOption('treatments');
   await page.getByRole('region',{name:'Requested treatments table',exact:true}).locator('tbody tr').nth(1).waitFor();
   assert.equal(await page.getByRole('region',{name:'Requested treatments table',exact:true}).locator('tbody tr').count(),2);
