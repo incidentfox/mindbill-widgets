@@ -14,8 +14,10 @@ function mount(fetcher: typeof fetch) { const container = document.createElement
 it("opens with global lifecycle and aging counts and drills into scoped server-filtered requests", async () => {
  const urls: URL[] = []; const h = mount(async input => { const empty = taskResponse(input); if (empty) return empty; urls.push(new URL(String(input))); return Response.json(result); });
  try { await h.render(); expect(h.container.textContent).toContain("150 total requests"); expect(h.container.textContent).not.toContain("Synthetic Patient"); expect(h.container.textContent).not.toContain("Refresh requests");
+ expect(h.container.querySelector('.mbrfa-finished-links')).toBeNull();
+ expect(h.container.textContent).not.toContain("Incomplete"); expect(h.container.textContent).not.toContain("Canceled");
  await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since submission: 150 requests"]')!.click());
- expect(urls.at(-1)!.searchParams.get("lifecycleStatus")).toBe("received"); expect(urls.at(-1)!.searchParams.get("agingBucket")).toBe("15_30"); expect(urls.at(-1)!.searchParams.get("claimId")).toBe("claim_synthetic"); expect(h.container.textContent).toContain("15–30 days since submission");
+ expect(urls.at(-1)!.searchParams.get("lifecycleStatus")).toBe("received"); expect(urls.at(-1)!.searchParams.get("agingBucket")).toBe("15_30"); expect(urls.at(-1)!.searchParams.get("claimId")).toBe("claim_synthetic"); expect(h.container.textContent).toContain("15–30 days since submission"); expect(h.container.textContent).toContain("RFA status"); expect(h.container.querySelector('option[value="incomplete"]')).not.toBeNull();
  await act(async () => { const select = h.container.querySelector<HTMLSelectElement>('.mbrfa-list-mode select')!; select.value = "treatments"; select.dispatchEvent(new Event("change", { bubbles: true })); }); expect(h.container.textContent).toContain("Decision no longer required"); expect(h.container.textContent).not.toContain("9/10/2026");
  } finally { await h.cleanup(); }
 });

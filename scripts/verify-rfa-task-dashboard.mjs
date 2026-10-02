@@ -66,10 +66,12 @@ try {
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()+" "+message.location().url); });
   await page.route("**/*", route => route.request().url().startsWith(origin) || ['blob:','chrome://','chrome-extension://'].some(prefix=>route.request().url().startsWith(prefix)) ? route.continue() : route.abort());
   await page.goto(origin);
-  await page.getByRole('button', {name:'Due (9)',exact:true}).waitFor();
+  await page.getByRole('button', {name:'Due (8)',exact:true}).waitFor();
   assert.equal(await page.locator('.mbrfa-task-group').count(),5);
   for (const name of ['Delivery issues','Decision deadlines','Responses to process','Treatment scheduling']) await page.getByRole('region',{name,exact:true}).waitFor();
-  await page.getByText('No delivery receipt yet. Verify whether the recipient received the RFA.',{exact:true}).waitFor();
+  assert.equal(await page.getByText('Delivery unconfirmed',{exact:true}).count(),0);
+  assert.equal(await page.locator('.mbrfa-finished-links').count(),0);
+  await page.getByText('Task status',{exact:true}).waitFor();
   await page.getByText('The decision deadline passed without a recorded decision.',{exact:true}).waitFor();
   for (const copy of ['Delivery failed. Correct the issue before sending again.','The deadline cannot yet be calculated confidently. Review receipt and timing details.','Record the treatment decisions in a received utilization review response.','Provide the additional information requested by the reviewer.','Arrange treatment after approval.']) await page.getByText(copy,{exact:true}).waitFor();
   await page.getByRole('region',{name:'Delivery issues',exact:true}).screenshot({path:resolve(output,'rfa-delivery-labels.png')});
@@ -89,6 +91,7 @@ try {
   await page.getByRole('button',{name:'All RFAs',exact:true}).click();
   await page.getByRole('region',{name:'RFA table',exact:true}).locator('tbody tr').first().waitFor();
   await page.waitForFunction(() => document.querySelectorAll('[aria-label="RFA table"] tbody tr').length === 1);
+  await page.locator('label').filter({hasText:/^RFA status/}).locator('select').waitFor();
   await page.locator('.mbrfa-list-mode select').selectOption('treatments');
   await page.getByRole('region',{name:'Requested treatments table',exact:true}).locator('tbody tr').nth(1).waitFor();
   assert.equal(await page.getByRole('region',{name:'Requested treatments table',exact:true}).locator('tbody tr').count(),2);
@@ -101,9 +104,11 @@ try {
   await page.getByRole('button',{name:'RFA tasks',exact:true}).click();
   await page.getByRole('button',{name:'Scheduled (1)',exact:true}).click();
   assert.equal(await page.locator('.mbrfa-task-group').count(),1);
+  await page.getByText('Open tasks with a future follow-up date. This does not mean a treatment appointment is scheduled.',{exact:true}).waitFor();
+  await page.screenshot({path:resolve(output,'rfa-scheduled-desktop.png'),fullPage:true});
   await page.getByRole('button',{name:'Completed (1)',exact:true}).click();
   assert.equal(await page.locator('.mbrfa-task-group').count(),1);
-  await page.getByRole('button',{name:'Due (9)',exact:true}).click();
+  await page.getByRole('button',{name:'Due (8)',exact:true}).click();
   await page.getByText('Match UR · Incoming responses (1)',{exact:true}).click();
   await page.getByRole('button',{name:'Review fax',exact:true}).waitFor();
   await page.getByText('Match UR · Incoming responses (1)',{exact:true}).click();

@@ -90,9 +90,14 @@ it("drills into exactly the chosen age and kind without mixing scheduled or comp
     { ...task, id: "post", kind: "post_ur_decision", createdAt: old, responseDocumentId: "document_synthetic" },
     { ...task, id: "scheduled", createdAt: old, snoozedUntil: "2099-01-01T00:00:00Z" },
     { ...task, id: "resolved", createdAt: old, status: "resolved" },
+    ...[{}, { snoozedUntil: "2099-01-01T00:00:00Z" }, { status: "resolved" }].map((state, i) => ({ ...task, ...state, id: `hidden_${i}`, kind: "transmission_unconfirmed", createdAt: old })),
   ], nextCursor: null }));
   try {
     await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, claimId: "claim_synthetic", onSelect })));
+    expect(h.container.textContent).toContain("Task status");
+    expect(h.container.textContent).toContain("Tasks that need attention now");
+    expect(h.container.textContent).not.toContain("Delivery unconfirmed");
+    expect(h.container.textContent).not.toContain("transmission_unconfirmed");
     expect(h.container.textContent).toContain("Due (2)");
     expect(h.container.textContent).toContain("Scheduled (1)");
     expect(h.container.textContent).toContain("Completed (1)");
@@ -102,6 +107,9 @@ it("drills into exactly the chosen age and kind without mixing scheduled or comp
     expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "document_synthetic");
     await act(async () => h.button("Scheduled (1)").click());
     expect(h.container.querySelector('[aria-label="Selected tasks"]')).toBeNull();
+    expect(h.container.textContent).toContain("Open tasks with a future follow-up date");
+    await act(async () => h.button("Completed (1)").click());
+    expect(h.container.textContent).toContain("Completing a task does not necessarily close its RFA");
   } finally { await h.close(); }
 });
 

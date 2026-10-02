@@ -59,10 +59,10 @@ it("requires IMR evidence for denied treatment and surfaces server scope errors"
 });
 it("follows claim pagination, isolates this RFA's tasks, and never reconciles notification queues", async () => {
   const task = { id: "task_one", rfaId: record.id, claimId: record.claimId, kind: "decision_follow_up", status: "pending", dueAt: "2026-09-16T00:00:00Z", responseDocumentId: null, responseFilename: null, assigneeReference: null, snoozedUntil: null, lastOutcome: null, lastNote: "Synthetic matching task", createdAt: "", updatedAt: "", resolvedAt: null };
-  const fetcher = vi.fn<typeof fetch>(async url => String(url).includes("cursor=page_two") ? Response.json({ data: [task], nextCursor: null }) : Response.json({ data: [{ ...task, id: "foreign_task", rfaId: "other_rfa", lastNote: "Other request note" }], nextCursor: "page_two" }));
+  const fetcher = vi.fn<typeof fetch>(async url => String(url).includes("cursor=page_two") ? Response.json({ data: [task, { ...task, id: "hidden_task", kind: "transmission_unconfirmed", lastNote: "Hidden delivery task" }], nextCursor: null }) : Response.json({ data: [{ ...task, id: "foreign_task", rfaId: "other_rfa", lastNote: "Other request note" }], nextCursor: "page_two" }));
   const view = await setup({ fetch: fetcher });
   try {
-    expect(view.container.textContent).toContain("Synthetic matching task"); expect(view.container.textContent).not.toContain("Other request note");
+    expect(view.container.textContent).toContain("Synthetic matching task"); expect(view.container.textContent).not.toContain("Other request note"); expect(view.container.textContent).not.toContain("Hidden delivery task"); expect(view.container.textContent).not.toContain("transmission_unconfirmed");
     expect(fetcher).toHaveBeenCalledTimes(2); expect(fetcher.mock.calls.every(call => !call[1]?.method)).toBe(true);
   } finally { await view.close(); }
 });
