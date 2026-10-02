@@ -371,6 +371,15 @@ The detail view lists retained packet PDFs and their transmission history. Openi
 
 The dashboard opens on **RFA tasks**, combining follow-up work and incoming responses with the request overview. **Due**, **Scheduled**, and **Completed** work is grouped by next action and calendar days since the task opened. Select a count to see that group of tasks. One RFA can have several tasks; task totals are not request totals. Requests awaiting decisions appear below, aged separately by calendar days since submission. **All RFAs** opens the searchable list. Its **Show** selector switches between one row per request and one row per treatment; several treatments can belong to the same RFA and receive independent decisions. Patient, claim, and physician filters also scope task results. Opening a task leads to the corresponding request; follow-up assignments, notes, and next-contact dates stay in its history. An unanswered treatment remains pending after another treatment receives a decision.
 
+Task group labels explain the work to do:
+
+- **Delivery issues**: **Submission failed** means delivery explicitly failed; **Delivery unconfirmed** means there is no receipt yet and delivery needs verification.
+- **Decision deadlines**: **Decision overdue** means a known decision deadline passed without a recorded decision; **Deadline needs review** means receipt or timing details need review before a deadline can be calculated confidently.
+- **Responses to process**: **Post UR** records treatment decisions from a received utilization review response; **Respond to information request** provides additional information requested by the reviewer.
+- **Treatment scheduling**: arrange treatment after approval.
+
+These labels describe existing tasks; they do not change delivery evidence, deadline calculations, or treatment decisions.
+
 The organization-wide RFA tasks view includes **Match UR · Incoming responses**, with a visible unmatched-response count. Review the authenticated incoming fax PDF, choose a request, and explicitly confirm the patient, claim, and treatment match. OCR suggestions help find candidates but never select a tenant or post decisions. Matching opens **Post UR** with the retained response PDF. Record verified receipt when required, then decisions for each treatment addressed by the response. Complete the review only after confirming all decisions in that document were recorded, or explicitly mark a duplicate/no-new-decision response with a note. Partial responses leave the remaining treatments and No Response follow-up open.
 
 `RfaTaskBoard` is available separately with the usual session and appearance props, optional `patientId`, `claimId`, and `renderingProviderId`, `permissions={["act"]}` for matching, and `onSelect(rfaId, responseDocumentId?)` for navigation. Set `embedded` to hide its heading when composing it inside another dashboard. Read-only users can inspect tasks and PDFs. The unmatched inbox appears only in the organization-wide view because unmatched faxes have no verified patient/claim association yet.

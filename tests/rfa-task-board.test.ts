@@ -20,7 +20,8 @@ it("loads all task pages with host filters and excludes the unassigned inbox in 
   const fetcher = vi.fn<typeof fetch>(async url => Response.json(String(url).includes("cursor=two") ? { data: [{ ...task, id: "post_synthetic", kind: "post_ur_decision", responseDocumentId: "ur_synthetic" }], nextCursor: null } : { data: [task], nextCursor: "two" }));
   try {
     await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, patientId: "patient_synthetic", renderingProviderId: "provider_synthetic", onSelect })));
-    expect(h.container.textContent).toContain("Due (2)"); expect(h.container.textContent).toContain("No response");
+    expect(h.container.textContent).toContain("Due (2)"); expect(h.container.textContent).toContain("Decision overdue");
+    expect(h.container.textContent).toContain("The decision deadline passed without a recorded decision.");
     expect(fetcher).toHaveBeenCalledTimes(2); expect(fetcher.mock.calls.every(call => String(call[0]).includes("patientId=patient_synthetic") && String(call[0]).includes("renderingProviderId=provider_synthetic"))).toBe(true);
     expect(h.container.querySelector('[aria-label="Match UR"]')).toBeNull();
     await act(async () => h.button("View all due tasks (2)").click());
