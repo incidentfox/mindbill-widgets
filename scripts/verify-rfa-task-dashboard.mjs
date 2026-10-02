@@ -68,6 +68,12 @@ try {
   await page.goto(origin);
   await page.getByRole('button', {name:'Due (9)',exact:true}).waitFor();
   assert.equal(await page.locator('.mbrfa-task-group').count(),5);
+  for (const name of ['Delivery issues','Decision deadlines','Responses to process','Treatment scheduling']) await page.getByRole('region',{name,exact:true}).waitFor();
+  await page.getByText('No delivery receipt yet. Verify whether the recipient received the RFA.',{exact:true}).waitFor();
+  await page.getByText('The decision deadline passed without a recorded decision.',{exact:true}).waitFor();
+  for (const copy of ['Delivery failed. Correct the issue before sending again.','The deadline cannot yet be calculated confidently. Review receipt and timing details.','Record the treatment decisions in a received utilization review response.','Provide the additional information requested by the reviewer.','Arrange treatment after approval.']) await page.getByText(copy,{exact:true}).waitFor();
+  await page.getByRole('region',{name:'Delivery issues',exact:true}).screenshot({path:resolve(output,'rfa-delivery-labels.png')});
+  await page.getByRole('region',{name:'Decision deadlines',exact:true}).screenshot({path:resolve(output,'rfa-deadline-labels.png')});
   await page.getByText('Match UR · Incoming responses (1)',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Received · 15–30 days since submission: 2 requests',exact:true}).waitFor();
   await page.screenshot({path:resolve(output,'rfa-tasks-desktop.png'),fullPage:true});
@@ -82,7 +88,7 @@ try {
   await page.getByRole('button',{name:'← All requests',exact:true}).click();
   await page.getByRole('button',{name:'All RFAs',exact:true}).click();
   await page.getByRole('region',{name:'RFA table',exact:true}).locator('tbody tr').first().waitFor();
-  assert.equal(await page.getByRole('region',{name:'RFA table',exact:true}).locator('tbody tr').count(),1);
+  await page.waitForFunction(() => document.querySelectorAll('[aria-label="RFA table"] tbody tr').length === 1);
   await page.locator('.mbrfa-list-mode select').selectOption('treatments');
   await page.getByRole('region',{name:'Requested treatments table',exact:true}).locator('tbody tr').nth(1).waitFor();
   assert.equal(await page.getByRole('region',{name:'Requested treatments table',exact:true}).locator('tbody tr').count(),2);
