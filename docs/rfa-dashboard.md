@@ -453,3 +453,22 @@ The endpoint is `PATCH /partner/v2/rfas/{id}/items/{itemId}/closure` (or its
 scope. Keep the same idempotency key when retrying an uncertain result. A stale
 version is rejected; reload the request before reviewing and retrying the action.
 The response is the updated RFA, with `decisionClosure` on the affected item.
+
+### Host routing and related records
+
+Provide `selectedRfaId` (or `null` for the list) to control selection from your route.
+`onSelectRfa(id, context)` receives optional `treatmentId` and `responseDocumentId`
+when a treatment or response task is opened. `getRfaHref(id, context)` supplies
+real links, including support for opening requests in another tab. Pass
+`selectedTreatmentId` and `selectedResponseDocumentId` back from the route to
+focus the relevant workflow. Uncontrolled embedded selection remains supported.
+
+`getPatientHref(record)`, `getClaimHref(record)`, and `getProviderHref(record)`
+may return a host URL or `undefined`. `formPreviewUrl` supplies a read-only DWC
+Form RFA preview; without it the dashboard can open an attached form matching
+the current content revision. `hideHeading` and `hideBackButton` let a host with
+its own page title and breadcrumbs avoid duplicate navigation.
+
+Request links use requested treatment descriptions. Optional `displayReference`
+is secondary; opaque record IDs remain routing keys. `claimsAdminName` supplies
+the administrator name, and `injuryDescription` supplies related injury context.

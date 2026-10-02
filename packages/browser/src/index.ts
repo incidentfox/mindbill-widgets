@@ -2386,6 +2386,10 @@ export type RfaUpdateDraftInput = Omit<RfaCreateDraftInput, "externalId" | "clai
   items: Array<Omit<RfaCreateDraftInput["items"][number], "externalId"> & { id?: string }>;
 };
 export type RfaRecord = {
+  /** Optional human-readable references supplied by the source system. */
+  displayReference?: string;
+  claimsAdminName?: string;
+  injuryDescription?: string;
   contentRevision: number; id: string; claimId: string; patientId: string; renderingProviderId: string; claimsAdminId: string | null;
   employeeName: string; providerName: string; claimNumber: string | null; status: string;
   /** Delivery/review lifecycle, separate from the clinical status and item outcomes. */

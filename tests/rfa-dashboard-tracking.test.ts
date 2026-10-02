@@ -36,7 +36,7 @@ it("filters and sorts lifecycle status while retaining treatment outcomes", asyn
   await act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher })));
   expect(container.querySelector('[aria-label="Closed: 2 requests"]')).toBeNull(); expect(container.textContent).toContain("RFA tasks");
   await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "All RFAs")!.click());
-  expect(container.textContent).toContain("Clinical review: approved");
+  expect(container.textContent).not.toContain("Clinical review: approved");
   const select = container.querySelector<HTMLSelectElement>(".mbrfa-filters select")!;
   await act(async () => { select.value = "failed"; select.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(urls.at(-1)!.searchParams.get("lifecycleStatus")).toBe("failed"); expect(urls.at(-1)!.searchParams.has("status")).toBe(false);
