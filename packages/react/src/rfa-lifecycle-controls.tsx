@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement
 import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaFollowUp, type RfaFollowUpUpdate, type RfaTreatmentDecisionInput, type RfaReceiptInput } from "@mindbill/browser";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaPdfReview } from "./rfa-delivery-panel";
-import { rfaTaskLabel, rfaTaskState } from "./rfa-task-board";
+import { isStaffRfaTask, rfaTaskLabel, rfaTaskState } from "./rfa-task-board";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
 export type RfaLifecycleControlsProps = OrganizationClientOptions & TreatmentDraftAppearance & {
@@ -54,7 +54,7 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
       const found: RfaFollowUp[] = []; const seen = new Set<string>(); let cursor: string | undefined;
       do {
         const page = await client.listFollowUps({ claimId: rfa.claimId, includeResolved: true, limit: 200, ...(cursor ? { cursor } : {}) });
-        found.push(...page.data.filter(task => task.rfaId === rfa.id));
+        found.push(...page.data.filter(task => task.rfaId === rfa.id && isStaffRfaTask(task)));
         cursor = page.nextCursor ?? undefined;
         if (cursor && seen.has(cursor)) throw new Error("Follow-up pagination could not be completed. Refresh to try again.");
         if (cursor) seen.add(cursor);

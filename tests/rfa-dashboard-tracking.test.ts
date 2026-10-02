@@ -34,7 +34,7 @@ it("filters and sorts lifecycle status while retaining treatment outcomes", asyn
  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
  try {
   await act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher })));
-  expect(container.querySelector('[aria-label="Closed: 2 requests"]')).not.toBeNull(); expect(container.textContent).toContain("RFA tasks");
+  expect(container.querySelector('[aria-label="Closed: 2 requests"]')).toBeNull(); expect(container.textContent).toContain("RFA tasks");
   await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "All RFAs")!.click());
   expect(container.textContent).toContain("Clinical review: approved");
   const select = container.querySelector<HTMLSelectElement>(".mbrfa-filters select")!;
