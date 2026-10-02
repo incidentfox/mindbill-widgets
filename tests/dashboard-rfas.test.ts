@@ -13,6 +13,7 @@ function connection() {
   const getSession = vi.fn(async () => ({ token: "synthetic_token" }));
   const fetcher = vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input), "https://synthetic.example.test");
+    if (url.pathname.endsWith("/rfa-follow-ups") || url.pathname.endsWith("/rfa-inbound-faxes")) return Response.json({ data: [], nextCursor: null, hasMore: false });
     if (url.pathname === "/rfa-session") return Response.json({ token: "synthetic_rfa_token" });
     if (url.pathname.endsWith("/bill-dashboard")) return Response.json({ data: { items: [], total: 0, balanceTotal: 0, page: 1, pageSize: 25 } });
     if (url.pathname.endsWith("/bill-tasks")) return Response.json({ data: { dashboard: { sections: [], grandTotals: [], grandTotal: 0 }, filters: { claimsAdministrators: [], renderingProviders: [] } } });
@@ -43,13 +44,13 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s RF
       expect(options.fetch).not.toHaveBeenCalled();
       await act(async () => tab(container, "Requests for authorization")!.click());
       expect(container.textContent).toContain("Clinical review counts");
-      await act(async () => button(container, "RFAs")!.click());
+      await act(async () => button(container, "All RFAs")!.click());
       expect(container.textContent).toContain("Synthetic patient");
       const selected = tab(container, "Requests for authorization")!;
       expect(selected.getAttribute("aria-selected")).toBe("true");
       expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(selected.id);
-      expect(options.getSession).toHaveBeenCalledTimes(1);
-      expect(button(container, "New authorization request")).toBeUndefined();
+      expect(options.getSession).toHaveBeenCalledTimes(3);
+      expect(button(container, "+ Add RFA")).toBeUndefined();
       await render(surface({ ...props, showRfas: false }));
       expect(container.textContent).not.toContain("Synthetic patient");
       expect(tab(container, "Requests for authorization")).toBeUndefined();
@@ -59,7 +60,7 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s RF
     const options = connection(); const onCreated = vi.fn();
     await mounted(surface({ showRfas: true, rfaDashboard: { ...options, initialDraft, permissions: ["create", "send"], onCreated } }), async container => {
       await act(async () => tab(container, "Requests for authorization")!.click());
-      await act(async () => button(container, "New authorization request")!.click());
+      await act(async () => button(container, "+ Add RFA")!.click());
       await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
       expect(onCreated).toHaveBeenCalledExactlyOnceWith(record);
       const mutations = options.fetch.mock.calls.filter(([, init]) => init?.method === "POST");
@@ -73,7 +74,7 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s RF
   it("requires create permission even with a prefilled draft", async () => {
     await mounted(surface({ showRfas: true, rfaDashboard: { ...connection(), initialDraft } }), async container => {
       await act(async () => tab(container, "Requests for authorization")!.click());
-      expect(button(container, "New authorization request")).toBeUndefined();
+      expect(button(container, "+ Add RFA")).toBeUndefined();
     });
   });
 });
@@ -82,10 +83,9 @@ it("inherits the workspace connection and can start on RFAs", async () => {
   const options = connection();
   await mounted(createElement(ConnectedBillingWorkspace, { ...options, showRfas: true, initialView: "rfas" }), async container => {
     expect(container.textContent).toContain("Clinical review counts");
-    expect(options.getSession).toHaveBeenCalledTimes(1);
-    expect(options.fetch.mock.calls).toHaveLength(1);
-    expect(String(options.fetch.mock.calls[0]?.[0])).toContain("/rfas?");
-    await act(async () => button(container, "RFAs")!.click());
+    expect(options.getSession).toHaveBeenCalledTimes(3);
+    expect(options.fetch.mock.calls.filter(([url]) => String(url).includes("/rfas?"))).toHaveLength(1);
+    await act(async () => button(container, "All RFAs")!.click());
     expect(container.textContent).toContain("Synthetic patient");
   });
 });
@@ -94,11 +94,13 @@ it("uses a dedicated RFA endpoint instead of the workspace credential callback",
   const options = connection();
   await mounted(createElement(ConnectedBillingWorkspace, { ...options, showRfas: true, initialView: "rfas", rfaDashboard: { sessionEndpoint: "/rfa-session" } }), async container => {
     expect(container.textContent).toContain("Clinical review counts");
-    await act(async () => button(container, "RFAs")!.click());
+    await act(async () => button(container, "All RFAs")!.click());
     expect(container.textContent).toContain("Synthetic patient");
     expect(options.getSession).not.toHaveBeenCalled();
     expect(options.fetch.mock.calls[0]?.[0]).toBe("/rfa-session");
-    expect(new Headers(options.fetch.mock.calls[1]?.[1]?.headers).get("Authorization")).toBe("Bearer synthetic_rfa_token");
+    const dataCalls = options.fetch.mock.calls.filter(([url]) => String(url) !== "/rfa-session");
+    expect(dataCalls.length).toBeGreaterThan(0);
+    expect(dataCalls.every(([, init]) => new Headers(init?.headers).get("Authorization") === "Bearer synthetic_rfa_token")).toBe(true);
   });
 });
 

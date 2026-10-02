@@ -4,24 +4,28 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaDashboard } from "../packages/react/src/rfa-dashboard";
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
+function taskResponse(input: RequestInfo | URL): Response | undefined {
+ const url = String(input);
+ if (url.includes("/rfa-follow-ups") || url.includes("/rfa-inbound-faxes")) return Response.json({ data: [], nextCursor: null, hasMore: false });
+}
 const record={id:"rfa_synthetic",contentRevision:1,claimId:"claim_synthetic",patientId:"patient_synthetic",renderingProviderId:"provider_synthetic",claimsAdminId:null,employeeName:"Synthetic patient",providerName:"Synthetic physician",claimNumber:"SYNTHETIC-001",status:"ready",reviewType:"prospective",expedited:false,signedAt:"2026-09-01T00:00:00Z",submittedAt:null,receivedAt:null,createdAt:null,updatedAt:null,decisionDueAt:null,decisionDeadlineBasis:null,incompleteReason:null,deferredReason:null,closedReason:null,readiness:{ready:true,missing:[]},items:[],documents:[{id:"form_synthetic",documentType:"rfa_form",filename:"Synthetic form.pdf",contentUrl:"",contentRevision:1,createdAt:null},{id:"clinical_synthetic",documentType:"clinical_report",filename:"Synthetic report.pdf",contentUrl:"",contentRevision:1,createdAt:null}],transmissions:[],informationRequests:[],events:[]};
 it("keeps sandbox delivery disabled and clears selected records when the claim filter changes",async()=>{
- const fetcher=vi.fn<typeof fetch>(async(input)=>String(input).includes("?")?Response.json({data:[record],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:record}));
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? (String(input).includes("?")?Response.json({data:[record],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:record})));
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const getSession=async()=>({token:"synthetic_token"});
  const render=async(claimId:string)=>act(async()=>root.render(createElement(RfaDashboard,{getSession,fetch:fetcher,claimId,permissions:["send"]})));
  try{
- await render("claim_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());const review=[...container.querySelectorAll("button")].find(x=>x.textContent==="Review request")!;
+ await render("claim_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());const review=[...container.querySelectorAll("button")].find(x=>x.textContent==="Review request")!;
  await act(async()=>review.click());expect(container.textContent).toContain("External fax delivery is disabled");expect(container.textContent).not.toContain("Send authorization fax");
- await render("claim_other_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());expect(container.textContent).not.toContain("Review packet and send");expect(container.textContent).toContain("Review request");
+ await render("claim_other_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());expect(container.textContent).not.toContain("Review packet and send");expect(container.textContent).toContain("Review request");
  expect(fetcher.mock.calls.every(x=>(x[1]?.method??"GET")==="GET")).toBe(true);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 it("requires packet review and deliberate recipient confirmation before live send",async()=>{
- const fetcher=vi.fn<typeof fetch>(async(input)=>String(input).includes("?")?Response.json({data:[record],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:record}));
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? (String(input).includes("?")?Response.json({data:[record],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:record})));
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  try{
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,environment:"live",permissions:["send"]})));
- await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Review request")!.click());
  const send=[...container.querySelectorAll("button")].find(x=>x.textContent==="Send authorization fax")!;expect(send.disabled).toBe(true);
  await act(async()=>send.click());expect(fetcher.mock.calls.some(x=>String(x[0]).endsWith("/fax"))).toBe(false);
@@ -29,11 +33,11 @@ it("requires packet review and deliberate recipient confirmation before live sen
 });
 it("selects only the newest signed form for the current content revision",async()=>{
  const current={...record,contentRevision:2,documents:[...record.documents,{id:"form_current_old",documentType:"rfa_form",filename:"Earlier current form.pdf",contentUrl:"",contentRevision:2,createdAt:"2026-09-01T00:00:00Z"},{id:"form_current",documentType:"rfa_form",filename:"Current form.pdf",contentUrl:"",contentRevision:2,createdAt:"2026-09-02T00:00:00Z"}]};
- const fetcher=vi.fn<typeof fetch>(async(input)=>String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current}));
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? (String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current})));
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  try{
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher})));
- await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Review request")!.click());
  const boxes=[...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
  const named=(name:string)=>boxes.find(box=>box.parentElement?.textContent?.includes(name))!;
@@ -46,6 +50,7 @@ it("edits retained service rows without losing metadata, invalidates the signed 
  const current={...record,metadata:{host:"request_context"},providerFax:"+18005550100",requestType:"new",items:[{id:"service_existing",diagnosisCode:"M54.5",serviceDescription:"Existing service",procedureCode:"97110",quantity:2,units:1,frequency:"Weekly",duration:"Two weeks",requestedFrom:"2026-09-01",requestedTo:"2026-09-15",metadata:{host:"service_context"},outcome:"pending",authorizationNumber:null,decisionReason:null}]};
  let stale=true;
  const fetcher=vi.fn<typeof fetch>(async(input,init)=>{
+  const empty = taskResponse(input); if (empty) return empty;
   if(init?.method==="PATCH")return stale?Response.json({error:{message:"Content revision changed"}},{status:409}):Response.json({data:{...current,...JSON.parse(String(init.body)),items:JSON.parse(String(init.body)).items.map((item:object)=>({...item,outcome:"pending"})),contentRevision:2,status:"draft",signedAt:null}});
   return String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current});
  });
@@ -53,7 +58,7 @@ it("edits retained service rows without losing metadata, invalidates the signed 
  const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text)!;
  try{
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["edit"]})));
- await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
  await act(async()=>button("Review request").click());await act(async()=>button("Edit request draft").click());
  expect(container.textContent).toContain("clears its signature");expect(button("Refresh request")).toBeUndefined();
  const input=[...container.querySelectorAll("input")].find(x=>x.parentElement?.textContent==="Frequency")!;
@@ -70,9 +75,9 @@ it("edits retained service rows without losing metadata, invalidates the signed 
 it("does not expose content editing without permission or after submission",async()=>{
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  try{for(const [permissions,current] of [[[],record],[["edit"],{...record,submittedAt:"2026-09-01T00:00:00Z"}]] as const){
- const fetcher=vi.fn<typeof fetch>(async(input)=>String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current}));
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? (String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current})));
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions})));
- await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="RFAs")!.click());
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Review request")!.click());expect(container.textContent).not.toContain("Edit request draft");
  }}finally{await act(async()=>root.unmount());container.remove();}
 });
@@ -80,6 +85,7 @@ it("does not expose content editing without permission or after submission",asyn
 it("organizes status, details, and history into accessible tabs while automatically updating",async()=>{
  const current={...record,status:"submitted",submittedAt:"2026-09-15T09:00:00Z"};
  const fetcher=vi.fn<typeof fetch>(async(input)=>{
+  const empty = taskResponse(input); if (empty) return empty;
   const url=String(input);
   if(url.endsWith("/events"))return Response.json({data:[{id:"event_one",sequence:1,eventType:"rfa.created",actor:"native-user:synthetic",occurredAt:"2026-09-15T09:00:00Z",payload:{}}]});
   if(url.endsWith("/scheduling")||url.endsWith("/packets"))return Response.json({data:[]});
@@ -89,7 +95,7 @@ it("organizes status, details, and history into accessible tabs while automatica
  const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text)!;
  try{
   await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["edit"]})));
-  await act(async()=>button("RFAs").click());await act(async()=>button("Review request").click());
+  await act(async()=>button("All RFAs").click());await act(async()=>button("Review request").click());
   expect(container.querySelector('[aria-label="Authorization progress"] [aria-current="step"]')?.textContent).toContain("Sent");
   expect(button("Refresh request")).toBeUndefined();
   const details=button("RFA details");const history=button("History & activity");
