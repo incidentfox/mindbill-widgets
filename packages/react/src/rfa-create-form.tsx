@@ -9,7 +9,7 @@ type Props = TreatmentDraftAppearance & {
   client: RfaClient;
   initialDraft?: RfaDraftInput;
   canCreateClaim?: boolean;
-  draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile">;
+  draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory">;
   claimId?: string;
   renderingProviderId?: string;
   onSave: (draft: RfaDraftInput, files: File[]) => Promise<void>;
@@ -22,7 +22,8 @@ export function RfaCreateForm({ initialDraft, draftFormProps, onSave, ...props }
     await onSave(draft, files);
   };
   const supportingDocuments = { files, onChange: setFiles };
-  return initialDraft ? <RfaDraftForm {...props} {...draftFormProps} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} {...(draftFormProps ? { draftFormProps } : {})} />;
+  const contactProps = { ...(props.client.searchClaimsAdministrators ? { searchClaimsAdministrators: props.client.searchClaimsAdministrators } : {}), ...(props.client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: props.client.getClaimsAdministratorDirectory } : {}), ...draftFormProps };
+  return initialDraft ? <RfaDraftForm {...props} {...contactProps} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} draftFormProps={contactProps} />;
 }
 function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
   const [addingClaim, setAddingClaim] = useState(false);

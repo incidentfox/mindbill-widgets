@@ -32,3 +32,24 @@ The component starts with no destination. `onChange` receives `{method, destinat
 When using this standalone destination control, the host owns provider signing, required documents, confirmation of the selected destination, and transmission. For embedded draft editing, signing, packet review, and fax controls use [RfaDashboard](rfa-dashboard.md). Only `method === "fax"` may populate a fax recipient. Email selections do not send email. Download the signed packet, send it through the host email service, and record delivery. `RfaDraftForm.providerFax` remains the provider's return fax, not the recipient.
 
 For API-only workflows, `rfaAuthorizationDestinations(directory)` returns the same eligible choices and `normalizeRfaFax` validates manual input. Never automatically choose the first contact.
+
+### Choose contacts while creating or editing a draft
+
+`RfaDashboard` and `RfaCreateForm` use the client's optional
+`searchClaimsAdministrators(query, claimNumber?)` and
+`getClaimsAdministratorDirectory(id, injuryState?)` methods for a searchable
+claims administrator picker. `createRfaClient` implements both methods using the
+existing payer directory endpoints. Custom clients may supply these methods;
+standalone `RfaDraftForm` accepts the same callbacks as props.
+
+The injury's claims administrator is initially selected. Search by name, then
+choose an authorization office or destination to fill the saved contact. The
+picker supports arrow keys, Enter, and Escape. Adjuster-specific instructions and
+custom fax/email entry remain available. Additional contact fields are collapsed
+under “Edit contact details or enter a custom contact.”
+
+Changing the claim or claims administrator clears the previous contact explicitly
+with `authorizationContact: null`. Loading the directory preserves an existing
+custom contact while editing. Directory lookup failures and late responses never
+select a new destination. Saving this information only changes the unsigned draft;
+it does not send an RFA or alter the organization's routing settings.
