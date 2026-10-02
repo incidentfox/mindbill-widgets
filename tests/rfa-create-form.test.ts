@@ -26,7 +26,7 @@ it("creates an unsigned draft from confirmed saved identities without a host ini
  try {
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],onCreated})));
   expect(fetcher.mock.calls.some(([url])=>String(url).includes("creation-context"))).toBe(false);
-  await act(async()=>h.button("New authorization request").click());
+  await act(async()=>h.button("+ Add RFA").click());
   expect(h.button("Save RFA draft").disabled).toBe(true);
   await select(h.container,"Saved patient claim","claim_synthetic"); await select(h.container,"Saved rendering provider","provider_synthetic");
   expect(h.container.textContent).toContain("claim TEST-001");
@@ -45,9 +45,9 @@ it("keeps host-prepared drafts compatible and hides creation without permission"
  const getSession=async()=>({token:"synthetic_token"});
  try{
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession,fetch:fetcher})));
-  expect(h.button("New authorization request")).toBeUndefined();
+  expect(h.button("+ Add RFA")).toBeUndefined();
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession,fetch:fetcher,permissions:["create"],initialDraft:{...context.claims[0]!,renderingProviderId:"provider_synthetic",providerName:"Synthetic Physician",items:[]}})));
-  await act(async()=>h.button("New authorization request").click());
+  await act(async()=>h.button("+ Add RFA").click());
   expect(h.button("Save RFA draft")).toBeDefined(); expect(fetcher.mock.calls.some(([url])=>String(url).includes("creation-context"))).toBe(false);
  }finally{await h.close();}
 });
@@ -56,7 +56,7 @@ it("recovers load failures and explains empty choices",async()=>{
  const fetcher=vi.fn<typeof fetch>(async(input)=>String(input).includes("creation-context") ? ++attempts===1 ? Response.json({}, {status:503}) : Response.json({data:{...context,claims:[],renderingProviders:[]}}) : Response.json(list));
  try{
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"]})));
-  await act(async()=>h.button("New authorization request").click()); expect(h.container.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
+  await act(async()=>h.button("+ Add RFA").click()); expect(h.container.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
   expect(h.button("Save RFA draft").disabled).toBe(true); await act(async()=>h.button("Try again").click());
   expect(h.container.textContent).toContain("Add a patient claim"); expect(h.container.textContent).toContain("Add a rendering provider in Settings"); expect(h.button("Save RFA draft").disabled).toBe(true);
  }finally{await h.close();}
@@ -70,7 +70,7 @@ it("ignores older searches and paginates claims and physicians independently",as
  });
  try{
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"]})));
-  await act(async()=>h.button("New authorization request").click());
+  await act(async()=>h.button("+ Add RFA").click());
   await select(h.container,"Saved patient claim","claim_synthetic"); await select(h.container,"Saved rendering provider","provider_synthetic");
   expect(h.button("Save RFA draft").disabled).toBe(false);
   await type(h.container,"Search patients or claim numbers","Old");await act(async()=>new Promise(resolve=>setTimeout(resolve,350)));
@@ -88,7 +88,7 @@ it("preloads injury diagnoses, copies per-service choices, and clears treatment 
  const fetcher=vi.fn<typeof fetch>(async input=>String(input).includes("creation-context")?Response.json({data:{...context,claims}}):Response.json(list));
  try{
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"]})));
-  await act(async()=>h.button("New authorization request").click());
+  await act(async()=>h.button("+ Add RFA").click());
   await select(h.container,"Saved patient claim","claim_synthetic");await select(h.container,"Saved rendering provider","provider_synthetic");
   const diagnosis=()=>[...h.container.querySelectorAll("input")].filter(input=>input.parentElement?.textContent?.startsWith("Diagnosis code"));
   expect(diagnosis()[0]?.value).toBe("M54.5");
@@ -117,7 +117,7 @@ it.each([false,true])("creates once and preserves revision-safe uploads (partial
  });
  try{
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],onCreated,initialDraft:{...context.claims[0]!,renderingProviderId:"provider_synthetic",providerName:"Synthetic Physician",items:[{diagnosisCode:"M54.5",serviceDescription:"Synthetic therapy",quantity:1}]}})));
-  await act(async()=>h.button("New authorization request").click());
+  await act(async()=>h.button("+ Add RFA").click());
   const input=h.container.querySelector<HTMLInputElement>('input[type="file"]')!;
   await act(async()=>{Object.defineProperty(input,"files",{value:[new File(["%PDF-synthetic one"],"report-one.pdf",{type:"application/pdf"}),new File(["%PDF-synthetic two"],"report-two.pdf",{type:"application/pdf"})]});input.dispatchEvent(new Event("change",{bubbles:true}));});
   await act(async()=>h.container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
