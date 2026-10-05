@@ -62,6 +62,13 @@ filtering, and `procedureCodes` to search codes. The optional `updatedAt` field 
 also searchable. Dates use their recorded calendar day, without conversion to
 the viewer's time zone. `payerName` is the claims-administrator search field.
 
+For a MedLegal bill, supply `isMedicalLegal: true` and its actual `submittedAt`.
+The bill list then displays an operational collection follow-up 60 calendar days
+after submission while a balance remains open. The public
+`medLegalCollectionFollowUpDueAt` helper returns the same date for other views.
+This reminder is distinct from the statutory payment clock, which starts when
+the employer receives the written bill, report, and required documentation.
+
 Status search includes raw states (such as `accepted_no_response`) and display
 labels. `response overdue` also finds that accepted-without-response state.
 `initialSearch` prepopulates the search field. `hideFilters` hides search and

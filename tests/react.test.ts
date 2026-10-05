@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -93,8 +95,10 @@ import {
 } from "../packages/react/src/billing-catalog";
 import {
   billAgingBucket,
+  BillList,
   buildBillingReportCsv,
   buildBillingReportRows,
+  medLegalCollectionFollowUpDueAt,
   summarizeBillingDashboard,
   type BillingDashboardBill,
 } from "../packages/react/src/billing-dashboard";
@@ -589,6 +593,19 @@ describe("billing dashboard and reports", () => {
         { id: "91+", count: 0, balance: 0 },
       ],
     });
+  });
+
+  it("shows a MedLegal collection follow-up 60 days after submission for an open balance", () => {
+    expect(medLegalCollectionFollowUpDueAt("2026-01-01T00:00:00.000Z")?.toISOString()).toBe("2026-03-02T00:00:00.000Z");
+    expect(medLegalCollectionFollowUpDueAt("invalid")).toBeNull();
+    expect(medLegalCollectionFollowUpDueAt(null)).toBeNull();
+
+    const medLegalBill = { ...bills[0]!, isMedicalLegal: true, submittedAt: "2026-01-01T00:00:00.000Z" };
+    const active = renderToStaticMarkup(createElement(BillList, { bills: [medLegalBill] }));
+    expect(active).toContain("Collection follow-up");
+    expect(active).toContain("2026-03-02");
+    expect(renderToStaticMarkup(createElement(BillList, { bills: [{ ...medLegalBill, state: "paid", balanceDue: 0 }] }))).not.toContain("2026-03-02");
+    expect(renderToStaticMarkup(createElement(BillList, { bills }))).not.toContain("Collection follow-up");
   });
 
   it("groups reporting data and exports spreadsheet-ready CSV", () => {

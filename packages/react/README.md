@@ -348,6 +348,10 @@ const bills: BillingDashboardBill[] = apiBills.map((bill) => ({
   // Supply agingDays from your status/lifecycle response, or submittedAt when
   // your server-side bill summary includes it.
   agingDays: agingByBillId[bill.id] ?? 0,
+  // For medical-legal bills, pass the actual submission timestamp to display
+  // an operational collection follow-up 60 calendar days later.
+  submittedAt: bill.submittedAt,
+  isMedicalLegal: bill.isMedicalLegal,
   totalCharge: bill.amounts.charged,
   totalPaid: bill.amounts.paid,
   balanceDue: bill.amounts.balance,
@@ -367,6 +371,7 @@ Use the smaller pieces independently when a page already has its own shell:
 
 - `BillAgingSummary` — outstanding balance, open count, collected, total billed, and 0–30 / 31–60 / 61–90 / 91+ buckets;
 - `BillList` — responsive desktop table and mobile cards;
+- `medLegalCollectionFollowUpDueAt` — 60 calendar days after submission; `BillList` shows this for an open MedLegal bill with `isMedicalLegal: true` and `submittedAt`;
 - `BillingReport` — grouped totals by `status`, `payer`, or `aging`;
 - `BillStatusAgingMatrix` — the management view billers expect: one row per lifecycle status, one column per aging bucket, clickable counts with outstanding balances, and row/column totals;
 - `summarizeBillingDashboard`, `buildBillingReportRows`, and `buildBillStatusAgingMatrix` — presentation-free aggregates;
