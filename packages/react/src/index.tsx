@@ -188,6 +188,7 @@ export {
   BillList,
   billAgingBucket,
   billAgingDays,
+  medLegalCollectionFollowUpDueAt,
   buildBillingReportCsv,
   buildBillingReportRows,
   summarizeBillingDashboard,

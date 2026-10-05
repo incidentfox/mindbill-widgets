@@ -29,6 +29,8 @@ export type BillingDashboardBill = {
   dateOfService?: string;
   procedureCodes?: string[];
   submittedAt?: string;
+  /** Opt in to a MedLegal collection follow-up 60 days after submission. */
+  isMedicalLegal?: boolean;
   updatedAt?: string;
   agingDays?: number;
   totalCharge: number;
@@ -111,13 +113,14 @@ const css = `
 .mbdash-panel{display:grid;gap:20px;min-width:0}.mbdash-tabs{display:flex;gap:4px;border-bottom:1px solid var(--mb-border);overflow:auto}.mbdash-tab{border:0;border-bottom:3px solid transparent;background:transparent;color:var(--mb-muted);padding:10px 13px;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.mbdash-tab.active{color:var(--mb-text);border-bottom-color:var(--mb-accent)}
 .mbdash-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.mbdash-head h2{font-size:24px}.mbdash-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden}.mbdash-stat{display:grid;gap:7px;padding:20px 22px;border-right:1px solid var(--mb-border)}.mbdash-stat:last-child{border:0}.mbdash-label{color:var(--mb-muted);font-size:12px;font-weight:760;letter-spacing:.06em;text-transform:uppercase}.mbdash-value{font-size:24px;font-weight:780;font-variant-numeric:tabular-nums}.mbdash-aging{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden}.mbdash-aging-item{display:grid;gap:5px;padding:16px 20px;border-right:1px solid var(--mb-border)}.mbdash-aging-item:last-child{border:0}.mbdash-aging-item strong{font-size:18px;font-variant-numeric:tabular-nums}.mbdash-aging-item span:last-child{color:var(--mb-muted);font-size:13px}
 .mbdash-filters{display:grid;grid-template-columns:minmax(240px,1fr) minmax(180px,260px);gap:12px}.mbdash-control{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-input);color:var(--mb-text);font:inherit}.mbdash-control:focus{outline:3px solid color-mix(in srgb,var(--mb-accent) 22%,transparent);border-color:var(--mb-accent)}
-.mbdash-table-wrap{overflow:auto}.mbdash-table{width:100%;border-collapse:collapse}.mbdash-table th{padding:13px 16px;border-bottom:1px solid var(--mb-border);color:var(--mb-muted);font-size:12px;letter-spacing:.04em;text-align:left;text-transform:uppercase;white-space:nowrap}.mbdash-table td{padding:16px;border-bottom:1px solid var(--mb-border);vertical-align:top}.mbdash-table tr:last-child td{border-bottom:0}.mbdash-table tbody tr[data-clickable=true]{cursor:pointer}.mbdash-table tbody tr[data-clickable=true]:hover{background:color-mix(in srgb,var(--mb-accent) 5%,var(--mb-surface))}.mbdash-primary{display:block;color:var(--mb-text);font-weight:720;text-decoration:none}.mbdash-secondary{display:block;margin-top:4px;color:var(--mb-muted);font-size:13px}.mbdash-state{display:inline-flex;padding:4px 9px;border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-text);font-size:12px;font-weight:720}.mbdash-money{text-align:right!important;font-variant-numeric:tabular-nums;white-space:nowrap}.mbdash-empty{padding:46px 22px;color:var(--mb-muted);text-align:center}.mbdash-mobile-list{display:none}.mbdash-mobile-card{display:grid;gap:14px;padding:18px;border-bottom:1px solid var(--mb-border)}.mbdash-mobile-card:last-child{border:0}.mbdash-mobile-top,.mbdash-mobile-money{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mbdash-mobile-money>span{display:grid;gap:3px}.mbdash-mobile-money small{color:var(--mb-muted)}
+.mbdash-table-wrap{overflow:auto}.mbdash-table{width:100%;border-collapse:collapse}.mbdash-table th{padding:13px 16px;border-bottom:1px solid var(--mb-border);color:var(--mb-muted);font-size:12px;letter-spacing:.04em;text-align:left;text-transform:uppercase;white-space:nowrap}.mbdash-table td{padding:16px;border-bottom:1px solid var(--mb-border);vertical-align:top}.mbdash-table tr:last-child td{border-bottom:0}.mbdash-table tbody tr[data-clickable=true]{cursor:pointer}.mbdash-table tbody tr[data-clickable=true]:hover{background:color-mix(in srgb,var(--mb-accent) 5%,var(--mb-surface))}.mbdash-primary{display:block;color:var(--mb-text);font-weight:720;text-decoration:none}.mbdash-secondary{display:block;margin-top:4px;color:var(--mb-muted);font-size:13px}.mbdash-state{display:inline-flex;padding:4px 9px;border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-text);font-size:12px;font-weight:720}.mbdash-money{text-align:right!important;font-variant-numeric:tabular-nums;white-space:nowrap}.mbdash-empty{padding:46px 22px;color:var(--mb-muted);text-align:center}.mbdash-mobile-list{display:none}.mbdash-mobile-card{display:grid;gap:14px;padding:18px;border-bottom:1px solid var(--mb-border)}.mbdash-mobile-card:last-child{border:0}.mbdash-mobile-top,.mbdash-mobile-money{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mbdash-mobile-money--follow-up{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.mbdash-mobile-money>span{display:grid;gap:3px}.mbdash-mobile-money small{color:var(--mb-muted)}
 .mbdash-report-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 22px;border-bottom:1px solid var(--mb-border)}.mbdash-report-total td{font-weight:780;background:var(--mb-soft)}
 @media(max-width:900px){.mbdash-summary{grid-template-columns:repeat(2,1fr)}.mbdash-stat:nth-child(2){border-right:0}.mbdash-stat:nth-child(-n+2){border-bottom:1px solid var(--mb-border)}.mbdash-aging{grid-template-columns:repeat(2,1fr)}.mbdash-aging-item:nth-child(2){border-right:0}.mbdash-aging-item:nth-child(-n+2){border-bottom:1px solid var(--mb-border)}}
 @media(max-width:700px){.mbdash{gap:16px}.mbdash-head{align-items:flex-start;flex-direction:column}.mbdash-filters{grid-template-columns:1fr}.mbdash-table-wrap{display:none}.mbdash-mobile-list{display:block}.mbdash-value{font-size:20px}.mbdash-stat,.mbdash-aging-item{padding:16px}.mbdash-report .mbdash-table-wrap{display:block}.mbdash-report .mbdash-table th:nth-child(2),.mbdash-report .mbdash-table td:nth-child(2),.mbdash-report .mbdash-table th:nth-child(3),.mbdash-report .mbdash-table td:nth-child(3){display:none}}
 `;
 
 const terminalStates = new Set(["closed", "voided", "cancelled"]);
+const collectionSettledStates = new Set(["closed", "voided", "cancelled", "paid", "written_off"]);
 const money = (value: number) => Number(value || 0).toLocaleString(undefined, { style: "currency", currency: "USD" });
 const stateLabel = (state: string) => acceptedNoResponseLabel(state) ?? state.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
@@ -127,6 +130,18 @@ export function billAgingDays(bill: BillingDashboardBill, now = new Date()): num
   const submitted = new Date(bill.submittedAt);
   if (Number.isNaN(submitted.valueOf())) return 0;
   return Math.max(0, Math.floor((now.valueOf() - submitted.valueOf()) / 86_400_000));
+}
+
+/** Operational follow-up date; the statutory payment clock starts on receipt of a complete bill. */
+export function medLegalCollectionFollowUpDueAt(submittedAt: string | Date | null | undefined): Date | null {
+  if (!submittedAt) return null;
+  const time = new Date(submittedAt).valueOf();
+  return Number.isFinite(time) ? new Date(time + 60 * 86_400_000) : null;
+}
+
+function billCollectionFollowUpDueAt(bill: BillingDashboardBill): Date | null {
+  if (!bill.isMedicalLegal || bill.balanceDue <= 0 || collectionSettledStates.has(bill.state.toLowerCase())) return null;
+  return medLegalCollectionFollowUpDueAt(bill.submittedAt);
 }
 
 export function billAgingBucket(bill: BillingDashboardBill, now = new Date()): BillAgingBucketId {
@@ -167,11 +182,12 @@ function BillIdentity({ bill }: { bill: BillingDashboardBill }): ReactElement {
 
 function BillListContent({ bills, onSelectBill, emptyState = "No bills match these filters." }: BillListProps): ReactElement {
   if (!bills.length) return <div className="mbdash-card mbdash-empty">{emptyState}</div>;
+  const showCollectionFollowUp = bills.some((bill) => bill.isMedicalLegal);
   return <div className="mbdash-card">
-    <div className="mbdash-table-wrap"><table className="mbdash-table"><thead><tr><th>Bill</th><th>Payer</th><th>Status</th><th>Age</th><th className="mbdash-money">Billed</th><th className="mbdash-money">Paid</th><th className="mbdash-money">Balance</th></tr></thead><tbody>
-      {bills.map((bill) => <tr key={bill.id} data-clickable={Boolean(onSelectBill)} onClick={() => onSelectBill?.(bill)}><td><BillIdentity bill={bill} /></td><td>{bill.payerName || "—"}</td><td><span className="mbdash-state">{stateLabel(bill.state)}</span></td><td>{billAgingDays(bill)} days</td><td className="mbdash-money">{money(bill.totalCharge)}</td><td className="mbdash-money">{money(bill.totalPaid)}</td><td className="mbdash-money"><strong>{money(bill.balanceDue)}</strong></td></tr>)}
+    <div className="mbdash-table-wrap"><table className="mbdash-table"><thead><tr><th>Bill</th><th>Payer</th><th>Status</th><th>Age</th>{showCollectionFollowUp && <th>Collection follow-up</th>}<th className="mbdash-money">Billed</th><th className="mbdash-money">Paid</th><th className="mbdash-money">Balance</th></tr></thead><tbody>
+      {bills.map((bill) => <tr key={bill.id} data-clickable={Boolean(onSelectBill)} onClick={() => onSelectBill?.(bill)}><td><BillIdentity bill={bill} /></td><td>{bill.payerName || "—"}</td><td><span className="mbdash-state">{stateLabel(bill.state)}</span></td><td>{billAgingDays(bill)} days</td>{showCollectionFollowUp && <td>{billCollectionFollowUpDueAt(bill)?.toISOString().slice(0, 10) ?? "—"}</td>}<td className="mbdash-money">{money(bill.totalCharge)}</td><td className="mbdash-money">{money(bill.totalPaid)}</td><td className="mbdash-money"><strong>{money(bill.balanceDue)}</strong></td></tr>)}
     </tbody></table></div>
-    <div className="mbdash-mobile-list">{bills.map((bill) => <article className="mbdash-mobile-card" key={bill.id} onClick={() => onSelectBill?.(bill)}><div className="mbdash-mobile-top"><div><BillIdentity bill={bill} /></div><span className="mbdash-state">{stateLabel(bill.state)}</span></div><div className="mbdash-mobile-money"><span><small>Age</small>{billAgingDays(bill)} days</span><span><small>Paid</small>{money(bill.totalPaid)}</span><span><small>Balance</small><strong>{money(bill.balanceDue)}</strong></span></div></article>)}</div>
+    <div className="mbdash-mobile-list">{bills.map((bill) => { const followUpDueAt = billCollectionFollowUpDueAt(bill); return <article className="mbdash-mobile-card" key={bill.id} onClick={() => onSelectBill?.(bill)}><div className="mbdash-mobile-top"><div><BillIdentity bill={bill} /></div><span className="mbdash-state">{stateLabel(bill.state)}</span></div><div className={`mbdash-mobile-money${followUpDueAt ? " mbdash-mobile-money--follow-up" : ""}`}><span><small>Age</small>{billAgingDays(bill)} days</span>{followUpDueAt && <span><small>Collection follow-up</small>{followUpDueAt.toISOString().slice(0, 10)}</span>}<span><small>Paid</small>{money(bill.totalPaid)}</span><span><small>Balance</small><strong>{money(bill.balanceDue)}</strong></span></div></article>; })}</div>
   </div>;
 }
 
