@@ -30,7 +30,7 @@ export type MindBillBrowserPermission = (typeof MINDBILL_BROWSER_PERMISSIONS)[nu
 export type MindBillClientOptions = {
   /** A server credential. Never expose this value to browser code. */
   apiKey: string;
-  /** Optional explicit routing for existing practice connections. Omit for workspace billing. */
+  /** Fixed organization for this client. Account keys can instead select one per browser session. */
   organizationId?: string;
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
@@ -608,6 +608,8 @@ export type BrowserSessionResource =
   | { customerExternalId?: string; billId: string };
 
 export type BrowserSessionRequest = {
+  /** Server-resolved organization for this session; required when an account key has no default organization. */
+  organizationId?: string;
   /** Stable ID for the signed-in user in your system. */
   subject: string;
   /** Exact HTTPS origin, without path, query, fragment, or credentials. */
@@ -639,7 +641,7 @@ export class MindBillError extends Error {
   }
 }
 
-type RequestOptions = { idempotencyKey?: string };
+type RequestOptions = { idempotencyKey?: string; organizationId?: string };
 
 async function parseJson(response: Response): Promise<Record<string, unknown>> {
   if (response.status === 204) return {};
@@ -669,11 +671,12 @@ export class MindBillClient {
   }
 
   private headers(options: RequestOptions, json = false): Record<string, string> {
+    const organizationId = options.organizationId ?? this.options.organizationId;
     return {
       authorization: `Bearer ${this.options.apiKey}`,
       accept: "application/json",
       ...(json ? { "content-type": "application/json" } : {}),
-      ...(this.options.organizationId ? { "x-mindbill-org-id": this.options.organizationId } : {}),
+      ...(organizationId ? { "x-mindbill-org-id": organizationId } : {}),
       ...(options.idempotencyKey ? { "idempotency-key": options.idempotencyKey } : {}),
     };
   }
@@ -787,6 +790,11 @@ export class MindBillClient {
   }
 
   createBrowserSession(input: BrowserSessionRequest): Promise<BrowserSession> {
+    const { organizationId, ...sessionInput } = input;
+    if (organizationId !== undefined && (!organizationId.trim() || organizationId !== organizationId.trim()))
+      throw new Error("organizationId must be a non-empty organization ID without surrounding whitespace");
+    if (organizationId && this.options.organizationId && organizationId !== this.options.organizationId)
+      throw new Error("organizationId conflicts with this client's fixed organization");
     const subject = input.subject.trim();
     if (!subject) throw new Error("subject is required");
     if (input.permissions.length === 0) throw new Error("permissions must include at least one permission");
@@ -816,11 +824,11 @@ export class MindBillClient {
       throw new Error("expiresIn must be an integer from 60 through 3600 seconds");
     }
     return this.request("POST", "/partner/v2/browser-sessions", {
-      ...input,
+      ...sessionInput,
       subject,
       allowedOrigin,
       ...(input.resource ? { resource: { ...(customerExternalId ? { customerExternalId } : {}), ...(billId ? { billId } : {}) } } : {}),
-    });
+    }, organizationId ? { organizationId } : {});
   }
 }
 

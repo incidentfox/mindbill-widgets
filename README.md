@@ -280,6 +280,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Origin not allowed" }, { status: 403 });
 
   const session = await mindbill.createBrowserSession({
+    organizationId: customer.mindbillOrganizationId, // Resolve from server-owned customer records.
     subject: user.id,
     allowedOrigin,
     permissions,
@@ -291,7 +292,7 @@ export async function POST(request: Request) {
 }
 ```
 
-This route uses your existing authentication and customer-access functions. The API key owns the workspace; `resource.customerExternalId` restricts the browser to the authorized customer. `subject` is an audit identity, not an access boundary. For an existing case bill, send `{ customerExternalId, billId }`; both restrictions apply. MindBill stamps customer scope on creation and enforces it on collections, documents, and bill actions. Shared settings need a separate workspace-admin session with `organization:manage` and no resource restriction. Never issue that session to ordinary customer users.
+This route uses your existing authentication and customer-access functions. With an account-scoped API key, `organizationId` selects the linked customer organization for this session; the SDK sends it as `X-MindBill-Org-Id`, outside the JSON body. With a key fixed to one organization, omit it or supply the same ID. MindBill binds the resulting browser token to that organization and rejects attempts to switch it. `resource.customerExternalId` can further restrict the token within that organization. `subject` is an audit identity, not an access boundary. For an existing case bill, send `{ customerExternalId, billId }`; both restrictions apply. MindBill stamps customer scope on creation and enforces it on collections, documents, and bill actions. Shared settings need a separate administrator session with `organization:manage` and no resource restriction. Never issue that session to ordinary customer users.
 
 After `BillSubmissionForm` returns `billId`, render this component with that ID. For a compact read-only surface, use `ConnectedBillStatus` with the same session endpoint. For a custom interface, use `useBillLifecycle` or `useBillStatus`. Store the canonical `billId` for navigation and webhook correlation while retaining `externalId` as the host case reference and a separate stable idempotency key for retries. Signed webhooks remain the durable source of truth.
 
