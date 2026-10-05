@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@mindbill/node':
-        specifier: 0.18.0
-        version: 0.18.0
+        specifier: 0.18.1
+        version: 0.18.1
       '@mindbill/react':
         specifier: 0.77.12
         version: 0.77.12(react@19.2.8)
@@ -194,8 +194,8 @@ packages:
   '@mindbill/embed@0.6.0':
     resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==}
 
-  '@mindbill/node@0.18.0':
-    resolution: {integrity: sha512-vyfT44+7PcYmhJ4h//IeRfGqbRB6kpB0g5WcWQhfGECZi3hXL15jc/RQQUf01qLMxiwAcI2Yz3I/YluvOVWl8w==}
+  '@mindbill/node@0.18.1':
+    resolution: {integrity: sha512-a+fJlL8UT9vza30nJNzoqmeFtz1xW83nH2oT53h1uTJdNM9Kr+zwi+Gn9fdbNwo7c5KkkXUIpyXFwcL29H4GBQ==}
     engines: {node: '>=20'}
 
   '@mindbill/react@0.77.12':
@@ -491,7 +491,7 @@ snapshots:
 
   '@mindbill/embed@0.6.0': {}
 
-  '@mindbill/node@0.18.0': {}
+  '@mindbill/node@0.18.1': {}
 
   '@mindbill/react@0.77.12(react@19.2.8)':
     dependencies:

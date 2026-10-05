@@ -321,6 +321,38 @@ describe("@mindbill/node v2", () => {
     });
   });
 
+  it("selects an organization only for the requested browser session", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+      sessionId: "session_1", token: "short-lived-token", organizationId: "org_1",
+      subject: "user_1", permissions: ["bills:read"], resource: null,
+      expiresAt: "2026-08-28T12:15:00.000Z",
+    }));
+    const client = new MindBillClient({ apiKey: "mb_account_test", fetch: fetcher });
+    await client.createBrowserSession({
+      organizationId: "org_1", subject: "user_1", allowedOrigin: "https://partner.example.test",
+      permissions: ["bills:read"],
+    });
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({ "x-mindbill-org-id": "org_1" });
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).not.toHaveProperty("organizationId");
+
+    await client.listEvents();
+    expect(fetcher.mock.calls[1]?.[1]?.headers).not.toHaveProperty("x-mindbill-org-id");
+    expect(() => client.createBrowserSession({
+      organizationId: " ", subject: "user_1", allowedOrigin: "https://partner.example.test",
+      permissions: ["bills:read"],
+    })).toThrow("organizationId must be a non-empty organization ID");
+  });
+
+  it("rejects a browser session that conflicts with the client's fixed organization", () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const client = new MindBillClient({ apiKey: "mb_org_test", organizationId: "org_1", fetch: fetcher });
+    expect(() => client.createBrowserSession({
+      organizationId: "org_2", subject: "user_1", allowedOrigin: "https://partner.example.test",
+      permissions: ["bills:read"],
+    })).toThrow("organizationId conflicts with this client's fixed organization");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("rejects create permission on a bill-restricted browser session", () => {
     const client = new MindBillClient({ apiKey: "mb_test", fetch: vi.fn<typeof fetch>() });
 
