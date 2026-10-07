@@ -208,6 +208,8 @@ and deliberately switch to fax, email, mail, or e-bill before anything is sent.
 
 `ConnectedBillLifecycle` starts after submission. Its only bill input is the MindBill bill ID; after the session provider returns a short-lived browser token, the component fetches the immutable snapshot, lifecycle, history, rejection details, EORs, remittance, and payments directly from MindBill. React and Angular both show rejected bills as an action-required surface with the full ordered issue list and acknowledgement codes; both also export that rejection notice for custom layouts. Do not pass or maintain lifecycle seed data in your application. Authenticated packet previews open the PDF directly in a new tab.
 
+The React EOR section includes **Download EOR PDF**. It exports recorded payer adjudication, including service-line amounts, adjustment and remark codes, and remittance references. Pending payer-reported amounts remain separate from confirmed cash. This generated PDF is identified as a rendering of recorded advice, rather than the payer's original document. Custom browser integrations can call `client.getElectronicEorPdf()` to receive the PDF as a `Blob`; the existing `eors:read` browser permission is required.
+
 A rejection does not end the logical bill or require the partner to create a
 replacement bill. React and Angular reopen their complete submission form with
 the submitted snapshot and documents, call attention to fields implicated by
