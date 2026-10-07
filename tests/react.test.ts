@@ -13,6 +13,7 @@ import { createBillStatusClient } from "../packages/react/src/connected-bill-sta
 import {
   correctionRejectionSummary,
   createBillLifecycleClient,
+  lifecycleAttachmentReportTypeCode,
   openPdfFromUserGesture,
   shouldShowSandboxControls,
 } from "../packages/react/src/connected-bill-lifecycle";
@@ -981,6 +982,29 @@ describe("connected bill submission", () => {
       fetch: fetcher,
     })).rejects.toThrow(/Unsupported attachment report type code/);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("converts saved lifecycle report labels to submission codes without guessing ambiguous labels", async () => {
+    expect(lifecycleAttachmentReportTypeCode("Med-Legal Report")).toBe("OZ:J4");
+    expect(lifecycleAttachmentReportTypeCode("Med-Legal Report (OZ:J4)")).toBe("OZ:J4");
+    expect(lifecycleAttachmentReportTypeCode("oz:j4")).toBe("OZ:J4");
+    expect(lifecycleAttachmentReportTypeCode("Plan of Treatment")).toBe("Plan of Treatment");
+
+    const pdf = new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" });
+    await expect(prepareBillSubmissionDocuments({
+      attachments: [{
+        id: "synthetic_report",
+        fileName: "synthetic-report.pdf",
+        documentType: "final_report",
+        reportTypeCode: lifecycleAttachmentReportTypeCode("Med-Legal Report")!,
+        loadBlob: async () => pdf,
+      }],
+      selectedIds: ["synthetic_report"],
+      uploads: [],
+    })).resolves.toEqual([expect.objectContaining({
+      externalId: "synthetic_report",
+      reportTypeCode: "OZ:J4",
+    })]);
   });
 });
 
