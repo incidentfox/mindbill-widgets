@@ -472,3 +472,23 @@ its own page title and breadcrumbs avoid duplicate navigation.
 Request links use requested treatment descriptions. Optional `displayReference`
 is secondary; opaque record IDs remain routing keys. `claimsAdminName` supplies
 the administrator name, and `injuryDescription` supplies related injury context.
+
+## Focused layout
+
+Set `layout="simple"` to start on the searchable **All RFAs** list and organize each
+request into four tabs:
+
+- **Request:** patient and claim context, treatments, and the next action. Draft
+  signing and delivery controls open under **Review, sign and send**.
+- **Responses:** receipt dates, review deadlines, decisions, and follow-up actions.
+- **Documents:** supporting PDFs, document selection, and retained delivery packets.
+- **History:** activity, notes, and delivery evidence.
+
+The default is `layout="classic"`. Both layouts use the same authorization,
+signing attestations, delivery confirmation, and sandbox restrictions. Switching
+tabs preserves unsaved control values. `selectedTreatmentId` opens Request;
+`selectedResponseDocumentId` opens Responses. Viewing a PDF opens Documents.
+Hosts can enable the simple layout for selected organizations without changing
+other integrations. `initialView="create"` continues to open creation directly.
+
+The simple Request tab places treatment decisions first. Request information follows, with patient, physician, practice and claims administrator details available in a collapsed disclosure.
