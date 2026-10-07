@@ -1328,6 +1328,10 @@ export type BillFeeQuote =
     /** Total for the service line in cents, already accounting for units. */
     amountCents: number;
     scheduleMaximumCents: number;
+    /** Practice or entered billed charge, distinct from estimated reimbursement. */
+    chargeAmountCents?: number;
+    /** California statutory maximum when the quoted basis is a payer contract. */
+    statutoryMaximumCents?: number;
     basis: BillFeeQuoteBasis;
     anesthesia?: { actualMinutes: number; baseUnits: number; timeUnitsTenths: number; conversionFactorCents: number; locality: string; medicalDirection?: { concurrentCases: number; baseReductionPercent: number; physicianPaymentPercent: 50 } };
     provenance: BillFeeSource[];

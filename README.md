@@ -170,7 +170,10 @@ Pass `treatmentBilling` to include treatment procedures in the existing procedur
 and obtain dated standard fee estimates through the browser session. The form displays
 the assumptions and requires applicable provider and therapy-minute inputs. Select
 “Requires adjustment” for a nonstandard case; unavailable rates and incomplete service
-details also require review before submission.
+details also require review before submission. Pass `editableTreatmentCharges` to opt in
+to a separate billed-charge field on treatment lines when it differs from the fee
+estimate. Imported charges are preserved when units or modifiers change and cleared
+when the procedure changes. The default treatment form behavior remains unchanged.
 Treatment modifier choices include `25`, `GP/GO/GN` and `CQ/CO`; `93/95` labels
 follow the line’s treatment or medical-legal context and service date. The evaluator
 selector appears for medical-legal lines. See [modifier meanings](./docs/evaluation-modifiers.md)

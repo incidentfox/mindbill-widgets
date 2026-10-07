@@ -48,9 +48,84 @@ it.each([...BILL_FEE_QUOTE_BASES, "unknown_fee_family"])("renders the API result
     } else {
       expect(container.querySelector(".mbsf-money")?.textContent).toBe("$282.46");
       expect(container.textContent).toContain("Fee estimate for this service date and the details above.");
+      expect(container.querySelector('[aria-label="Billed charge for line 1"]')).toBeNull();
       expect(container.textContent).not.toContain("Fee lookup is unavailable");
       expect(container.textContent).not.toContain("$564.92");
     }
+  } finally {
+    await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
+  }
+});
+
+it("preserves an imported treatment charge separately from the fee estimate and allows editing it", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const fetcher = vi.fn<typeof fetch>(async (url) => Response.json({ data: String(url).endsWith("/partner/v2/fee-quotes")
+    ? { status: "priced", amountCents: 28246, scheduleMaximumCents: 30000, basis: "ca_physician_rbrvs", provenance: [], notes: [] } : [] }));
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: { ...bill, serviceLines: [{ ...bill.serviceLines[0]!, charge: 75 }] },
+      getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher,
+      treatmentBilling: true, editableTreatmentCharges: true, deliveryRoutePicker: "off",
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    const charge = container.querySelector<HTMLInputElement>('[aria-label="Billed charge for line 1"]')!;
+    expect(charge.value).toBe("75");
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("$75.00");
+    expect(container.textContent).toContain("OMFS maximum: $300.00. Estimated reimbursement: $282.46.");
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(charge, "90"); charge.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("$90.00");
+    expect(container.textContent).toContain("OMFS maximum: $300.00. Estimated reimbursement: $282.46.");
+    const units = container.querySelector<HTMLInputElement>('[aria-label="Units 1"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(units, "3"); units.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Billed charge for line 1"]')?.value).toBe("90");
+  } finally {
+    await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
+  }
+});
+
+it("distinguishes a configured billed charge, OMFS maximum, and reimbursement estimate", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const fetcher = vi.fn<typeof fetch>(async (url) => Response.json({ data: String(url).endsWith("/partner/v2/fee-quotes")
+    ? { status: "priced", amountCents: 12000, scheduleMaximumCents: 15000, chargeAmountCents: 20000,
+        basis: "ca_physician_rbrvs", provenance: [], notes: [] } : [] }));
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: bill, getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher,
+      treatmentBilling: true, editableTreatmentCharges: true, deliveryRoutePicker: "off",
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    const charge = container.querySelector<HTMLInputElement>('[aria-label="Billed charge for line 1"]')!;
+    expect(charge.value).toBe("");
+    expect(charge.placeholder).toBe("200.00");
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("Needs review");
+    expect(container.textContent).toContain("OMFS maximum: $150.00. Estimated reimbursement: $120.00.");
+    expect(container.textContent).not.toContain("Fee schedule estimate: $120.00");
+  } finally {
+    await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
+  }
+});
+
+it("keeps imported treatment charges out of the default fee display", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const fetcher = vi.fn<typeof fetch>(async (url) => Response.json({ data: String(url).endsWith("/partner/v2/fee-quotes")
+    ? { status: "priced", amountCents: 28246, scheduleMaximumCents: 30000, basis: "ca_physician_rbrvs", provenance: [], notes: [] } : [] }));
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: { ...bill, serviceLines: [{ ...bill.serviceLines[0]!, charge: 75 }] },
+      getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher,
+      treatmentBilling: true, deliveryRoutePicker: "off",
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(container.querySelector('[aria-label="Billed charge for line 1"]')).toBeNull();
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("$282.46");
+    expect(container.querySelector(".mbsf-money")?.getAttribute("data-label")).toBe("Allowed");
+    expect(container.textContent).toContain("Fee estimate for this service date and the details above.");
   } finally {
     await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
   }
