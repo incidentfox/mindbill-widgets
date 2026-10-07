@@ -45,6 +45,7 @@ import {
 } from "./bill-lifecycle-surfaces";
 import { BillReadOnlyForm, type BillReadOnlyFormProps, type BillDetailNavigationProps } from "./bill-read-only-form";
 import {
+  BILL_SUBMISSION_REPORT_TYPES,
   BILL_SUBMISSION_DOCUMENT_TYPES,
   BillSubmissionForm,
   prepareBillSubmissionDocuments,
@@ -105,6 +106,21 @@ export type {
 } from "@mindbill/browser";
 
 const DEFAULT_REFRESH_INTERVAL = 60_000;
+
+/** The lifecycle snapshot stores display text; submissions require a PWK code. */
+export function lifecycleAttachmentReportTypeCode(reportType: string | null | undefined): string | undefined {
+  const value = reportType?.trim();
+  if (!value) return undefined;
+  const code = BILL_SUBMISSION_REPORT_TYPES.find((option) => option.code.toLowerCase() === value.toLowerCase());
+  if (code) return code.code;
+  const labelMatches = BILL_SUBMISSION_REPORT_TYPES.filter((option) => option.label.toLowerCase() === value.toLowerCase());
+  if (labelMatches.length === 1) return labelMatches[0]?.code;
+  // Some saved records include the code after the label, for example "Med-Legal Report (OZ:J4)".
+  const withCode = BILL_SUBMISSION_REPORT_TYPES.find((option) => value.toLowerCase() === `${option.label} (${option.code})`.toLowerCase());
+  if (withCode) return withCode.code;
+  // Preserve strict validation for unknown or ambiguous labels instead of guessing a code.
+  return value;
+}
 
 /** Canonical team notes plus legacy API notes, without rendering their audit mirror twice. */
 export function billTeamNotes(data: Pick<BillLifecycleData, "notes" | "history">) {
@@ -719,12 +735,13 @@ export function ConnectedBillLifecycle({
   const correctionAttachments = useMemo<BillSubmissionSourceAttachment[]>(() => data ? data.bill.attachments.map((attachment) => {
     const documentType = correctionDocumentType(attachment.documentType);
     const isW9 = documentType === "w9";
+    const reportTypeCode = lifecycleAttachmentReportTypeCode(attachment.reportType);
     return {
       id: attachment.id,
       fileName: attachment.filename,
       documentType,
       ...(attachment.description ? { description: attachment.description } : {}),
-      ...(attachment.reportType ? { reportTypeCode: attachment.reportType } : {}),
+      ...(reportTypeCode ? { reportTypeCode } : {}),
       loadBlob: () => lifecycle.getAttachment(attachment.id),
       ...(isW9 ? { autoAttached: true, removable: false } : { removable: true }),
     };
