@@ -543,6 +543,19 @@ export function replaceBillSubmissionServiceLines(
   return { ...bill, service, serviceLines };
 }
 
+/** Keep a single-day bill's inherited line dates aligned with an edited service date. */
+export function setBillSubmissionServiceDate(bill: BillSubmissionInput, date: string): BillSubmissionInput {
+  const populated = bill.serviceLines.filter(lineHasContent);
+  const dates = new Set(populated.map((line) => line.serviceDate || bill.service.date));
+  const singleDay = dates.size <= 1 && populated.every((line) => !line.serviceDateEnd || line.serviceDateEnd === (line.serviceDate || bill.service.date));
+  return { ...bill, service: { ...bill.service, date }, serviceLines: bill.serviceLines.map((line) => {
+    const start = line.serviceDate || bill.service.date;
+    if (!singleDay && start !== bill.service.date) return line;
+    return { ...line, ...(line.serviceDate ? { serviceDate: date } : {}),
+      ...(line.serviceDateEnd && line.serviceDateEnd === start ? { serviceDateEnd: date } : {}) };
+  }) };
+}
+
 export function parseBillSubmissionDate(value: string): string | undefined {
   const trimmed = value.trim();
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
@@ -790,6 +803,7 @@ const css = `
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
 .mbsf-lines{min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{min-width:0;position:relative}.mbsf-diagnosis-select{min-width:0}.mbsf-diagnosis-select .mbsf-chip{max-width:100%;align-items:flex-start}.mbsf-diagnosis-select .mbsf-chip>span{min-width:0;overflow-wrap:anywhere}.mbsf-diagnosis-toggle{display:flex;align-items:flex-start;gap:10px;margin:18px 0;line-height:1.5}.mbsf-diagnosis-toggle input{margin-top:4px}.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) 100px 120px 42px}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{min-width:0;grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-fee-details details[open]{display:grid;gap:12px}.mbsf-fee-details>.mbsf-field{max-width:320px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}
 .mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-type{width:min(360px,32vw);flex:0 1 360px}.mbsf-attach-type .mbsf-label{display:block;margin-bottom:6px;font-size:12px}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
+.mbsf-cms-preview{padding:16px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);min-width:0}.mbsf-cms-preview header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mbsf-cms-preview h3{margin:0}.mbsf-preview-details{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0}.mbsf-cms-preview iframe{width:100%;height:600px;max-height:75vh;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-preview-stale{padding:20px 0;color:var(--mb-muted)}
 .mbsf-actions{flex-direction:column;align-items:flex-end}.mbsf-actions>.mbsf-secondary{min-width:180px}
 .mbsf-lines[data-stacked=true] .mbsf-line-head,.mbsf-lines[data-stacked=true][data-shared-diagnoses=true]>.mbsf-line-head{display:none}.mbsf-lines[data-stacked=true] .mbsf-line,.mbsf-lines[data-stacked=true][data-shared-diagnoses=true]>.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-lines[data-stacked=true] .mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-lines[data-stacked=true] .mbsf-line>div:nth-child(1),.mbsf-lines[data-stacked=true] .mbsf-line>div:nth-child(2),.mbsf-lines[data-stacked=true] .mbsf-line>.mbsf-line-diagnoses{grid-column:1/-1}.mbsf-lines[data-stacked=true] .mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-lines[data-stacked=true] .mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-lines[data-stacked=true] .mbsf-total{padding:16px 18px;gap:24px}
 @media(max-width:820px){.mbsf{gap:16px}.mbsf-grid{grid-template-columns:1fr}.mbsf-span{grid-column:auto}.mbsf-card{padding:18px 16px}.mbsf-line-head,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{display:none}.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:14px;padding:18px 16px}.mbsf-line>div:before{display:block;margin-bottom:6px;color:var(--mb-muted);font-size:12px;font-weight:700;content:attr(data-label)}.mbsf-line>div:nth-child(1),.mbsf-line>div:nth-child(2),.mbsf-line>.mbsf-line-diagnoses{grid-column:1/-1}.mbsf-money{align-self:end;padding:0 0 12px;text-align:right}.mbsf-line .mbsf-icon-btn{position:absolute;right:8px;bottom:3px}.mbsf-total{padding:16px 18px;gap:24px}.mbsf-head{align-items:flex-start}.mbsf-segments{grid-template-columns:repeat(3,minmax(0,1fr))}.mbsf-segment{min-width:0;padding:8px 4px;border-right:1px solid var(--mb-border);border-bottom:0;font-size:13px}.mbsf-segment:last-child{border-right:0}.mbsf-payer-option{align-items:flex-start}.mbsf-attach-row{align-items:flex-start;flex-wrap:wrap}.mbsf-attach-main{align-items:flex-start;flex-basis:calc(100% - 150px)}.mbsf-attach-type{width:100%;flex-basis:100%;order:3}.mbsf-attach-actions{margin-left:auto}.mbsf-drop{min-height:190px;padding:24px 18px}.mbsf-actions{position:sticky;bottom:86px;z-index:10}.mbsf.mbsf-lifecycle-correction .mbsf-actions{position:static;bottom:auto}.mbsf-submit{width:100%}}
@@ -983,6 +997,12 @@ export function BillSubmissionForm({
   const [validationActive, setValidationActive] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [cmsPreview, setCmsPreview] = useState<{ url: string; billKey: string } | null>(null);
+  const previewRequest = useRef(0);
+  useEffect(() => () => { previewRequest.current++; }, []);
+  useEffect(() => {
+    return () => { if (cmsPreview) URL.revokeObjectURL(cmsPreview.url); };
+  }, [cmsPreview]);
   // The delivery-method dialog staged with the validated bill.
   const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; value: BillSubmissionFormValue } | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -1347,6 +1367,8 @@ export function BillSubmissionForm({
     return next;
   }).filter(lineHasContent);
   const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: pricedLines.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
+  const previewBillKey = JSON.stringify(clean);
+  const previewCurrent = cmsPreview?.billKey === previewBillKey;
   const liveErrors = JSON.stringify(validateBillSubmission(clean).fieldErrors);
   useEffect(() => {
     if (!validationActive) return;
@@ -1424,13 +1446,6 @@ export function BillSubmissionForm({
       setFormError("A billing session is needed to preview the CMS-1500.");
       return;
     }
-    const tab = window.open("", "_blank");
-    if (!tab) {
-      setFormError("Allow pop-ups to open the CMS-1500 preview.");
-      return;
-    }
-    tab.document.title = "Generating CMS-1500 preview…";
-    tab.document.body.textContent = "Generating CMS-1500 preview…";
     const administrator = clean.claim.claimsAdministrator;
     const complete = {
       ...clean,
@@ -1441,17 +1456,16 @@ export function BillSubmissionForm({
         ...(administrator ? { claimsAdministrator: submittedClaimsAdministrator(administrator) } : {}),
       },
     } as CompleteBillSubmissionInput;
+    const requestId = ++previewRequest.current;
     setPreviewing(true);
     try {
       const pdf = await previewClient.previewCms1500(complete);
-      const url = URL.createObjectURL(pdf);
-      tab.location.href = url;
-      window.setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
+      if (requestId !== previewRequest.current) return;
+      setCmsPreview({ url: URL.createObjectURL(pdf), billKey: previewBillKey });
     } catch (caught) {
-      tab.close();
-      setFormError(caught instanceof Error ? caught.message : "The CMS-1500 preview could not be generated.");
+      if (requestId === previewRequest.current) setFormError(caught instanceof Error ? caught.message : "The CMS-1500 preview could not be generated.");
     } finally {
-      setPreviewing(false);
+      if (requestId === previewRequest.current) setPreviewing(false);
     }
   }
 
@@ -1537,7 +1551,7 @@ export function BillSubmissionForm({
     </div></fieldset>;
 
   const claimSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Injury &amp; claim</legend><div className="mbsf-grid">
-      <Field path="service.date" label="Date of service" required error={errors["service.date"]}><TextDateInput ariaLabel="Date of service" value={bill.service.date} disabled={locked} required onChange={(date) => setBill((c) => ({ ...c, service: { ...c.service, date } }))} /></Field>
+      <Field path="service.date" label="Date of service" required error={errors["service.date"]}><TextDateInput ariaLabel="Date of service" value={bill.service.date} disabled={locked} required onChange={(date) => setBill((c) => setBillSubmissionServiceDate(c, date))} /></Field>
       <Field label="Treatment authorization # (optional)">{text(bill.service.authorizationNumber, (authorizationNumber) => setBill((c) => ({ ...c, service: { ...c.service, authorizationNumber } })), { placeholder: "Utilization-review authorization number" })}<small className="mbsf-help">If the approval has no authorization number, leave this blank and attach the approval.</small></Field>
       <Field path="claim.dateOfInjury" label="Date of injury" required error={errors["claim.dateOfInjury"]}><TextDateInput ariaLabel="Date of injury" value={bill.claim.dateOfInjury} disabled={locked} required onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
       <Field path="claim.employer" label="Employer name" required error={errors["claim.employer"]}>{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
@@ -1661,6 +1675,7 @@ export function BillSubmissionForm({
           <div data-label={treatmentBilling && isAnesthesiaCandidate(line.code) ? "Services" : "Units"} data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} max={treatmentBilling && isAnesthesiaCandidate(line.code) ? 1 : undefined} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
           <div className="mbsf-money" data-label={editableTreatmentCharges && treatmentBilling ? "Billed charge" : "Allowed"} data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || (isTherapyEditorCode(line.code) && !quoteInputs[index]?.therapyContext) || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
           <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
+          {lineHasContent(line) ? <div className="mbsf-fee-details"><div className="mbsf-grid"><Field path={`serviceLines.${index}.serviceDate`} label="Service date" error={errors[`serviceLines.${index}.serviceDate`]}><TextDateInput ariaLabel={`Service date for line ${index + 1}`} value={line.serviceDate || bill.service.date} disabled={locked} onChange={(serviceDate) => setLine(index, { serviceDate })} /></Field><Field path={`serviceLines.${index}.serviceDateEnd`} label="Through date (optional)" error={errors[`serviceLines.${index}.serviceDateEnd`]}><TextDateInput ariaLabel={`Through date for line ${index + 1}`} value={line.serviceDateEnd || ""} disabled={locked} onChange={(serviceDateEnd) => setLine(index, { serviceDateEnd: serviceDateEnd || null })} /></Field></div></div> : null}
           {feeDetailsFor(line, index)}
         </div>)}
         <div className="mbsf-total"><span>Total</span><span>{total.toLocaleString(undefined, { style: "currency", currency: "USD" })}</span></div>
@@ -1672,7 +1687,7 @@ export function BillSubmissionForm({
       {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div><label className="mbsf-attach-type">Document purpose<select aria-label={`Document purpose for ${upload.file.name}`} value={upload.description ?? ""} onChange={(event) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))}><option value="">Supporting document</option><option value="Authorization / UR response">Authorization / UR response</option><option value="MPN / network documentation">MPN / network documentation</option></select></label>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
     </div>{errors.attachments ? <p className="mbsf-error" role="alert">{errors.attachments}</p> : null}<input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
 
-  const actionsSection = <>{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions">{(!clean.claimForm || clean.claimForm === "cms1500") ? <button className="mbsf-secondary" type="button" disabled={locked || previewing || !previewClient} onClick={() => void previewCms1500()}>{previewing ? "Generating preview…" : "Preview CMS-1500"}</button> : null}<button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
+  const actionsSection = <>{cmsPreview ? <section className="mbsf-cms-preview" aria-label="CMS-1500 preview"><header><div><h3>CMS-1500 preview</h3><p className="mbsf-help">{previewCurrent ? "Generated from the current bill edits. Nothing has been sent." : "Bill details changed. Refresh the preview to review your latest edits."}</p></div><button type="button" className="mbsf-secondary" onClick={() => setCmsPreview(null)}>Close preview</button></header>{previewCurrent ? <><div className="mbsf-preview-details"><span>Service dates: <strong>{[...new Set(clean.serviceLines.map((line) => `${line.serviceDate || clean.service.date}${line.serviceDateEnd && line.serviceDateEnd !== (line.serviceDate || clean.service.date) ? ` – ${line.serviceDateEnd}` : ""}`))].join(", ") || "Not entered"}</strong></span><span>Claims administrator: <strong>{clean.claim.claimsAdministrator?.name || "Not selected"}</strong></span><a className="mbsf-secondary" href={cmsPreview.url} target="_blank" rel="noopener noreferrer">Open PDF in new tab</a><a className="mbsf-secondary" href={cmsPreview.url} download="cms-1500-preview.pdf">Download PDF</a></div><iframe title="CMS-1500 PDF preview" src={cmsPreview.url} /></> : <div role="status" className="mbsf-preview-stale">Preview out of date — select Refresh CMS-1500 preview below.</div>}</section> : null}{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions">{(!clean.claimForm || clean.claimForm === "cms1500") ? <button className="mbsf-secondary" type="button" disabled={locked || previewing || !previewClient} onClick={() => void previewCms1500()}>{previewing ? "Generating preview…" : cmsPreview ? "Refresh CMS-1500 preview" : "Preview CMS-1500"}</button> : null}<button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
   const sections: BillSubmissionSections = {
     header: headerSection,
     patient: patientSection,

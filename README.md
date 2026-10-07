@@ -179,6 +179,11 @@ follow the line’s treatment or medical-legal context and service date. The eva
 selector appears for medical-legal lines. See [modifier meanings](./docs/evaluation-modifiers.md)
 and [procedure search and fee quotes](./docs/procedure-fees.md).
 
+Select **Preview CMS-1500** to review the current bill inside the editor, including
+the Send Duplicate editor. Editing bill details hides the old PDF until the preview
+is refreshed. The preview can also be opened in a new tab or downloaded; generating
+a preview does not send or save the bill.
+
 When the biller submits, the form shows a delivery-method dialog by default: the
 verified e-bill route with its payer ID (shown only when the payer has an e-route),
 then fax and email with the payer contacts on file, then physical mail — channels
