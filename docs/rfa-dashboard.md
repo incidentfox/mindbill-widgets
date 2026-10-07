@@ -490,3 +490,5 @@ tabs preserves unsaved control values. `selectedTreatmentId` opens Request;
 `selectedResponseDocumentId` opens Responses. Viewing a PDF opens Documents.
 Hosts can enable the simple layout for selected organizations without changing
 other integrations. `initialView="create"` continues to open creation directly.
+
+The simple Request tab places treatment decisions first. Request information follows, with patient, physician, practice and claims administrator details available in a collapsed disclosure.

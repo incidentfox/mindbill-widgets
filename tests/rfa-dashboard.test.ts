@@ -139,6 +139,11 @@ it("offers an opt-in focused layout while retaining deliberate sandbox delivery 
   expect([...container.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)).toEqual(["Request","Responses","Documents","History"]);
   expect(container.querySelector('[aria-label="Authorization progress"]')).toBeNull();
   expect(panel("Request").hidden).toBe(false);expect(panel("Documents").hidden).toBe(true);
+  const contacts=[...container.querySelectorAll("details")].find(element=>element.querySelector("summary")?.textContent==="Patient, physician & claim details")!;
+  expect(contacts.open).toBe(false);expect(contacts.textContent).toContain("Patient and injury");
+  const tracking=panel("Request").querySelector(".mbrfa-treatment-list");
+  expect(tracking).not.toBeNull();
+  expect(tracking!.compareDocumentPosition(contacts)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const review=container.querySelector<HTMLDetailsElement>('details[id$="-review"]')!;
   expect(review.open).toBe(false);
   await act(async()=>button("Review & send").click());expect(review.open).toBe(true);
