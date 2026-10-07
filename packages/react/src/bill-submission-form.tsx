@@ -368,6 +368,8 @@ export type BillSubmissionFormProps = {
   procedureOptions?: BillSubmissionProcedureOption[];
   /** Extend the existing procedure picker with treatment codes and authoritative fee quotes. */
   treatmentBilling?: boolean;
+  /** Opt in to editable treatment billed charges; fee quotes remain separate estimates. */
+  editableTreatmentCharges?: boolean;
   onSearchProcedureCodes?: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
   onQuoteFee?: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
   modifierOptions?: BillSubmissionModifierOption[];
@@ -962,7 +964,7 @@ export function BillSubmissionForm({
   profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, treatmentBilling = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, treatmentBilling = false, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -1116,7 +1118,7 @@ export function BillSubmissionForm({
         const next = { ...line, ...patch };
         if (patch.code != null && patch.code !== line.code) { delete next.rfaItemId; delete next.feeContext; delete next.drug; }
         if (treatmentBilling && next.code && !isMedicalLegalCode(next.code)) {
-          if (patch.code != null && patch.code !== line.code) delete next.charge;
+          if (!editableTreatmentCharges || (patch.code != null && patch.code !== line.code)) delete next.charge;
           return next;
         }
         const charge = calculateBillSubmissionAllowedAmount(next, procedures);
@@ -1277,7 +1279,7 @@ export function BillSubmissionForm({
   }, [quoteBatch, quoteFee, feeRetry, supportedFeeJurisdiction]);
   const lineCharge = (line: BillSubmissionInput["serviceLines"][number], index: number) => {
     if (treatmentBilling && line.code && !isMedicalLegalCode(line.code)) {
-      if (Number.isFinite(line.charge)) return Number(line.charge);
+      if (editableTreatmentCharges) return Number.isFinite(line.charge) ? Number(line.charge) : undefined;
       const key = quoteKeys[index]; const quote = key ? feeQuotes[key] : undefined;
       return supportedFeeJurisdiction && detailsForLine(index).basis !== "adjustment" && quote?.status === "priced" ? quote.amountCents / 100 : undefined;
     }
@@ -1285,7 +1287,7 @@ export function BillSubmissionForm({
   };
   const feeDetailsFor = (line: BillSubmissionInput["serviceLines"][number], index: number): ReactNode => {
     const key = quoteKeys[index];
-    if (!key && !(treatmentBilling && line.code && !isMedicalLegalCode(line.code))) return null;
+    if (!key && !(editableTreatmentCharges && treatmentBilling && line.code && !isMedicalLegalCode(line.code))) return null;
     const quote = supportedFeeJurisdiction && key ? feeQuotes[key] : undefined;
     const details = detailsForLine(index);
     const prolonged = isProlongedCode(line.code);
@@ -1298,7 +1300,7 @@ export function BillSubmissionForm({
     const therapy = isTherapyEditorCode(line.code);
     const equipment = supportedFeeJurisdiction ? equipmentFields(line.code, line.modifiers) : { residence: false, rental: false, priorPayments: false };
     return <div className="mbsf-fee-details">
-      {treatmentBilling && !isMedicalLegalCode(line.code) ? <label className="mbsf-field"><span>Billed charge ($)</span><input className="mbsf-input" aria-label={`Billed charge for line ${index + 1}`} type="number" min="0.01" step="0.01" inputMode="decimal" value={line.charge ?? ""} placeholder={quote?.status === "priced" ? (quote.amountCents / 100).toFixed(2) : undefined} onChange={(event) => setLineCharge(index, event.target.value === "" ? undefined : Number(event.target.value))} /></label> : null}
+      {editableTreatmentCharges && treatmentBilling && !isMedicalLegalCode(line.code) ? <label className="mbsf-field"><span>Billed charge ($)</span><input className="mbsf-input" aria-label={`Billed charge for line ${index + 1}`} disabled={locked} type="number" min="0.01" step="0.01" inputMode="decimal" value={line.charge ?? ""} placeholder={quote?.status === "priced" ? (quote.amountCents / 100).toFixed(2) : undefined} onChange={(event) => setLineCharge(index, event.target.value === "" ? undefined : Number(event.target.value))} /></label> : null}
       <label className="mbsf-field"><span>Fee basis</span><select className="mbsf-input" aria-label={`Fee basis for line ${index + 1}`} value={details.basis ?? "standard"} onChange={(event) => update({ basis: event.target.value as NonNullable<FeeDetails["basis"]> })}><option value="standard">Fee schedule estimate</option><option value="adjustment">Requires adjustment</option></select></label>
       <p className="mbsf-help">{details.basis === "adjustment" ? "This service needs fee review before submission." : anesthesia ? "The fee uses documented anesthesia minutes and the service location. Contracted anesthesia rates require review of their rate basis." : office ? "Estimate assumes a standalone office visit with no incident-to service, global-period adjustment, HPSA bonus, or unrecorded fee agreement. Saved practice rates apply when available. Choose Requires adjustment if any assumption does not apply." : therapy ? "The therapy estimate uses the service record and pricing basis below. Include all same-day services in this bill; timed treatments also require actual minutes. Unsupported arrangements remain available for fee review." : "Standard fee estimate for the service date. Choose Requires adjustment for a nonstandard service. Saved practice rates apply when available."}</p>
       {prolonged ? <div className="mbsf-grid" aria-label={`Prolonged-service details for line ${index + 1}`}>
@@ -1325,7 +1327,7 @@ export function BillSubmissionForm({
       {therapy && !isInitialPtEvaluationCode(line.code) ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: event.target.value ? Number(event.target.value) : undefined })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: event.target.value ? Number(event.target.value) : undefined })} /></label></div> : null}
       {therapy ? <TherapyLineFields code={line.code} index={index} details={details} update={update} /> : null}
       </details> : null}
-      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : therapy && missingTherapyDetails(details, line.code).length ? `Enter therapy details: ${missingTherapyDetails(details, line.code).join(", ")}.` : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? `Fee schedule estimate: ${(quote.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}. The billed charge can differ.` : feeReviewMessage(quote?.reason)}</p>
+      <p className="mbsf-help" role="status">{details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : therapy && missingTherapyDetails(details, line.code).length ? `Enter therapy details: ${missingTherapyDetails(details, line.code).join(", ")}.` : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? editableTreatmentCharges ? `Fee schedule estimate: ${(quote.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}. The billed charge can differ.` : "Fee estimate for this service date and the details above." : feeReviewMessage(quote?.reason)}</p>
       {quote?.status === "priced" && <AnesthesiaCalculationDetails quote={quote} />}
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
     </div>;
@@ -1648,7 +1650,7 @@ export function BillSubmissionForm({
       <p className="mbsf-help">Choose up to 4 diagnosis codes per service line and 12 across the bill.</p>
       {!sharedDiagnoses && errors.diagnoses ? <p className="mbsf-error" role="alert">{errors.diagnoses}</p> : null}
       {procedureError ? <p className="mbsf-error" role="alert">{procedureError}</p> : null}
-      <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span>{!sharedDiagnoses ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span><span>{treatmentBilling ? "Billed charge" : "Allowed"}</span><span /> </div>
+      <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span>{!sharedDiagnoses ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span><span>{editableTreatmentCharges && treatmentBilling ? "Billed charge" : "Allowed"}</span><span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
           <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id, ...(switched ? { modifiers: (line.modifiers ?? []).filter((value) => !["94", "95", "96"].includes(value.replace(/^-/, ""))) } : {}) }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedures.find((item) => item.code === line.code)?.description ?? "Custom CPT, HCPCS, or medical-legal code"}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={billSubmissionModifierOptions(isMedicalLegalCode(line.code) || (!line.code.trim() && !treatmentBilling), line.serviceDate || bill.service?.date, modifierOptions).filter((item) => !(line.modifiers ?? []).includes(item.code)).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
@@ -1657,7 +1659,7 @@ export function BillSubmissionForm({
             {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
           </div> : null}
           <div data-label={treatmentBilling && isAnesthesiaCandidate(line.code) ? "Services" : "Units"} data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} max={treatmentBilling && isAnesthesiaCandidate(line.code) ? 1 : undefined} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
-          <div className="mbsf-money" data-label={treatmentBilling ? "Billed charge" : "Allowed"} data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || (isTherapyEditorCode(line.code) && !quoteInputs[index]?.therapyContext) || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
+          <div className="mbsf-money" data-label={editableTreatmentCharges && treatmentBilling ? "Billed charge" : "Allowed"} data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || (isTherapyEditorCode(line.code) && !quoteInputs[index]?.therapyContext) || feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>
           <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
           {feeDetailsFor(line, index)}
         </div>)}

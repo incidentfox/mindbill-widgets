@@ -11,6 +11,7 @@ service-line, attachment, and submission workflow:
 <BillSubmissionForm
   initialBill={bill}
   treatmentBilling
+  editableTreatmentCharges
   getSession={getMindBillSession}
   onSubmitted={({ billId }) => saveBillLink(billId)}
 />
@@ -25,8 +26,9 @@ The bill supports twelve unique diagnoses and four unique diagnosis pointers per
 Treatment procedures use the existing procedure picker. The form quotes California
 fees for the service date and location. Standard visit estimates display their
 assumptions; the biller supplies the applicable provider type and therapy minutes
-in the line's fee details. Enter the actual billed charge separately from the fee
-schedule estimate. Imported billed charges remain editable and survive changes to
+in the line's fee details. With the opt-in `editableTreatmentCharges` prop, enter the
+actual billed charge separately from the fee schedule estimate. Imported billed
+charges remain editable and survive changes to
 units or modifiers; changing the procedure clears the old charge so the biller can
 verify a new one. “Requires adjustment” clears the automatic estimate and requires
 review before submission, while still allowing an actual billed charge. Quotes for
