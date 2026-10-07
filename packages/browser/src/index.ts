@@ -1385,6 +1385,7 @@ export type BillLifecycleClient = {
   getDeliveryPreview: (input: BillDeliveryPreviewInput) => Promise<BillDeliveryOptions>;
   getAttachment: (attachmentId: string) => Promise<Blob>;
   getEor: (documentId: string) => Promise<Blob>;
+  getElectronicEorPdf: () => Promise<Blob>;
   getPacket: () => Promise<Blob>;
   getSubmissionArtifact: (attemptId: string, artifactId: string) => Promise<Blob>;
   /** Prepare a self-filing packet. Does not file IBR or send anything to a payer. */
@@ -1948,6 +1949,11 @@ export function createBillLifecycleClient({
     async getEor(documentId) {
       const response = await request(billPath(`/eors/${encodeURIComponent(documentId)}`));
       if (!response.ok) throw await responseError(response, "EOR could not be opened.");
+      return response.blob();
+    },
+    async getElectronicEorPdf() {
+      const response = await request(billPath("/eor/pdf"));
+      if (!response.ok) throw await responseError(response, "EOR PDF could not be downloaded.");
       return response.blob();
     },
     async getPacket() {

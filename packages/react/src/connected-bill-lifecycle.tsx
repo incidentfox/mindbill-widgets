@@ -170,6 +170,7 @@ export type UseBillLifecycleResult = {
   openAttachment: (attachment: Pick<BillReviewAttachment, "id">) => Promise<void>;
   openEor: (document: BillEorDocument) => Promise<void>;
   downloadPacket: () => Promise<void>;
+  downloadElectronicEor: () => Promise<void>;
   downloadSubmissionArtifact: (attemptId: string, artifactId: string, label: string) => Promise<void>;
   downloadIbrPacket: () => Promise<void>;
   addNote: BillLifecycleClient["addNote"];
@@ -313,6 +314,25 @@ export function useBillLifecycle({
   const openEor = useCallback(async (document: BillEorDocument) => {
     await openPdfFromUserGesture(() => client.getEor(document.id));
   }, [client]);
+  const downloadElectronicEor = useCallback(async () => {
+    setError(null);
+    setIsMutating(true);
+    try {
+      const blob = await client.getElectronicEorPdf();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Electronic-EOR.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error("EOR PDF could not be downloaded.");
+      if (mounted.current) setError(nextError);
+      throw nextError;
+    } finally { if (mounted.current) setIsMutating(false); }
+  }, [client]);
   const downloadPacket = useCallback(async () => {
     setError(null);
     try {
@@ -366,6 +386,7 @@ export function useBillLifecycle({
     openAttachment,
     openEor,
     downloadPacket,
+    downloadElectronicEor,
     downloadSubmissionArtifact,
     downloadIbrPacket,
     addNote: (input) => mutate(() => client.addNote(input)),
@@ -923,7 +944,7 @@ export function ConnectedBillLifecycle({
     </div>
 
     {tab === "details" ? <div className="mb-lifecycle-tabpanel" role="tabpanel">
-      {!historical && (data.eors.length || data.payments.length || ["processed", "denied", "partially_paid"].includes(data.lifecycle.state)) ? <BillExplanationOfReview remittance={data.remittance} eors={data.eors} payments={data.payments} submittedAt={data.lifecycle.submittedAt ?? null} onOpenEor={lifecycle.openEor} {...(appearance ? { appearance } : {})} /> : null}
+      {!historical && (data.eors.length || data.payments.length || ["processed", "denied", "partially_paid"].includes(data.lifecycle.state)) ? <BillExplanationOfReview remittance={data.remittance} eors={data.eors} payments={data.payments} submittedAt={data.lifecycle.submittedAt ?? null} onOpenEor={lifecycle.openEor} headerActions={<button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadElectronicEor().catch(() => undefined)}>Download EOR PDF</button>} {...(appearance ? { appearance } : {})} /> : null}
 
       {showSandboxControls ? <section className="mb-lifecycle-simulator" aria-label="Sandbox lifecycle simulator"><div><span>Sandbox demo controls</span><h3>Simulate the next payer response</h3><p>This changes sandbox data only. The host receives the result through the same lifecycle API and components partners use.</p></div>{simulations.length ? <div className="mb-lifecycle-simulator-actions">{simulations.map((scenario) => <button type="button" key={scenario.id} disabled={lifecycle.isMutating} onClick={() => void complete(`${scenario.label} simulated.`, () => lifecycle.simulateSandbox({ scenario: scenario.id }))}><strong>{scenario.label}</strong><span>{scenario.detail}</span></button>)}</div> : <p className="mb-lifecycle-simulator-idle">No simulated payer transition is needed at this stage. Use the bill action below to continue.</p>}</section> : null}
 
