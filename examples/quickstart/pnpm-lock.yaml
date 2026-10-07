@@ -189,7 +189,7 @@ packages:
     os: [win32]
 
   '@mindbill/browser@0.50.3':
-    resolution: {integrity: sha512-H0eiPXKe5Si7Rtq9ik0E5zYU36WVu1y/+UVFiNVYj82dQVRcwI9BdCIX9hA0jwnXU6DG0PiucEU7JXdHjU5R9A==}
+    resolution: {integrity: sha512-VdM3fpEskp84udwSJp58uLojl/UAZvbz9b2f5CF4mRXE6aCwP8xR3pG9djiJzfQrLRfK0Tfw1VhLXdMLp54D/A==}
 
   '@mindbill/embed@0.6.0':
     resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==}
@@ -199,7 +199,7 @@ packages:
     engines: {node: '>=20'}
 
   '@mindbill/react@0.77.14':
-    resolution: {integrity: sha512-93G842Q/eYcSP9cdJKMWzztELakjZkSDz4DNT+1fcDqI2/KbTTjNVhZPfk3fWerpj6Y0BFf5ZbcIxO7GY+r3sg==}
+    resolution: {integrity: sha512-ZtsbgOGz47ynU4rE5sMck6KDC+TltKXGiIx9/psUFs6aNePC3YQ3MaLRk/Jr/uzyeOtY4sIyTBG5hoYsNUMJ9w==}
     peerDependencies:
       react: '>=18'
 

@@ -73,13 +73,37 @@ it("preserves an imported treatment charge separately from the fee estimate and 
     const charge = container.querySelector<HTMLInputElement>('[aria-label="Billed charge for line 1"]')!;
     expect(charge.value).toBe("75");
     expect(container.querySelector(".mbsf-money")?.textContent).toBe("$75.00");
-    expect(container.textContent).toContain("Fee schedule estimate: $282.46");
+    expect(container.textContent).toContain("OMFS maximum: $300.00. Estimated reimbursement: $282.46.");
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(charge, "90"); charge.dispatchEvent(new Event("input", { bubbles: true })); });
     expect(container.querySelector(".mbsf-money")?.textContent).toBe("$90.00");
-    expect(container.textContent).toContain("Fee schedule estimate: $282.46");
+    expect(container.textContent).toContain("OMFS maximum: $300.00. Estimated reimbursement: $282.46.");
     const units = container.querySelector<HTMLInputElement>('[aria-label="Units 1"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(units, "3"); units.dispatchEvent(new Event("input", { bubbles: true })); });
     expect(container.querySelector<HTMLInputElement>('[aria-label="Billed charge for line 1"]')?.value).toBe("90");
+  } finally {
+    await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
+  }
+});
+
+it("distinguishes a configured billed charge, OMFS maximum, and reimbursement estimate", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const fetcher = vi.fn<typeof fetch>(async (url) => Response.json({ data: String(url).endsWith("/partner/v2/fee-quotes")
+    ? { status: "priced", amountCents: 12000, scheduleMaximumCents: 15000, chargeAmountCents: 20000,
+        basis: "ca_physician_rbrvs", provenance: [], notes: [] } : [] }));
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: bill, getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher,
+      treatmentBilling: true, editableTreatmentCharges: true, deliveryRoutePicker: "off",
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    const charge = container.querySelector<HTMLInputElement>('[aria-label="Billed charge for line 1"]')!;
+    expect(charge.value).toBe("");
+    expect(charge.placeholder).toBe("200.00");
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("Needs review");
+    expect(container.textContent).toContain("OMFS maximum: $150.00. Estimated reimbursement: $120.00.");
+    expect(container.textContent).not.toContain("Fee schedule estimate: $120.00");
   } finally {
     await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
   }
