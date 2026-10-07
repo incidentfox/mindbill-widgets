@@ -102,3 +102,26 @@ historical bills.
 Submission ribbons also accept optional `outcomeLabel`, `outcomeAt`, `outcomeDateLabel`,
 and `outcomeWorkingDays` fields on `BillAttemptSummary`. Supply authoritative values;
 do not infer payment receipt from an EOR or calculate regulatory deadlines in the host.
+
+## Editing and reviewing submission dates
+
+The initial, correction, and Send Duplicate forms expose each populated service line's
+service date and optional through date. Editing the main service date aligns inherited
+single-day med-legal dates. Distinct line dates and explicit ranges remain separately
+editable. Review the displayed line dates before sending.
+
+**Preview CMS-1500** displays a PDF inside the edit form using the current submission
+values, with the effective line dates and claims administrator above it. Editing any bill
+field hides the previous PDF and offers **Refresh CMS-1500 preview**. **Open PDF in new
+tab** and **Download PDF** are available for the current preview. Previewing neither saves
+the bill nor submits it.
+
+## Electronic EOR PDF
+
+When the bill lifecycle includes an electronic Explanation of Review (EOR),
+**Download EOR PDF** exports the recorded review as a PDF using
+`createBillLifecycleClient(options).getElectronicEorPdf()`. The authenticated read-only endpoint is
+`GET /partner/v2/bills/{billId}/eor/pdf` (also available through the browser route).
+The PDF includes recorded service lines, adjustments, remarks, and remittance references.
+Payer-reported amounts are labeled separately from confirmed payments. No new EOR or
+payment is created by downloading.

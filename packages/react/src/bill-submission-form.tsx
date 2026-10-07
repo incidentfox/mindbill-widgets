@@ -547,9 +547,10 @@ export function replaceBillSubmissionServiceLines(
 export function setBillSubmissionServiceDate(bill: BillSubmissionInput, date: string): BillSubmissionInput {
   const populated = bill.serviceLines.filter(lineHasContent);
   const dates = new Set(populated.map((line) => line.serviceDate || bill.service.date));
-  const singleDay = dates.size <= 1 && populated.every((line) => !line.serviceDateEnd || line.serviceDateEnd === (line.serviceDate || bill.service.date));
+  const singleDay = bill.billingMode !== "professional" && dates.size <= 1 && populated.every((line) => !line.serviceDateEnd || line.serviceDateEnd === (line.serviceDate || bill.service.date));
   return { ...bill, service: { ...bill.service, date }, serviceLines: bill.serviceLines.map((line) => {
     const start = line.serviceDate || bill.service.date;
+    if (line.serviceDateEnd && line.serviceDateEnd !== start) return line;
     if (!singleDay && start !== bill.service.date) return line;
     return { ...line, ...(line.serviceDate ? { serviceDate: date } : {}),
       ...(line.serviceDateEnd && line.serviceDateEnd === start ? { serviceDateEnd: date } : {}) };

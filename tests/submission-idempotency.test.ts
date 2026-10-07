@@ -136,9 +136,18 @@ it("preserves distinct service dates and ranges when editing the bill date", () 
   const bill = { ...validBill, serviceLines: [
     { code: "ML201", units: 1, serviceDate: validBill.service.date },
     { code: "ML203", units: 1, serviceDate: "2026-08-20", serviceDateEnd: "2026-08-22" },
+    { code: "ML203", units: 1, serviceDate: validBill.service.date, serviceDateEnd: "2026-08-27" },
   ] };
   const next = setBillSubmissionServiceDate(bill, "2026-08-25");
   expect(next.serviceLines[0]!.serviceDate).toBe("2026-08-25");
   expect(next.serviceLines[1]).toEqual(bill.serviceLines[1]);
+  expect(next.serviceLines[2]).toEqual(bill.serviceLines[2]);
   expect(bill.service.date).toBe("2026-08-24");
+});
+
+it("preserves a professional bill's explicit date override", () => {
+  const bill = { ...validBill, billingMode: "professional" as const, serviceLines: [
+    { code: "99213", units: 1, charge: 100, serviceDate: "2026-08-20" },
+  ] };
+  expect(setBillSubmissionServiceDate(bill, "2026-08-25").serviceLines).toEqual(bill.serviceLines);
 });
