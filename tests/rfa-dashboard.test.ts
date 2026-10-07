@@ -126,3 +126,41 @@ it("supports routed detail pages with readable links and a read-only DWC preview
  expect(fetcher.mock.calls.every(([,init])=>!init?.method||init.method==="GET")).toBe(true);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+
+it("offers an opt-in focused layout while retaining deliberate sandbox delivery controls",async()=>{
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? (String(input).includes("?")?Response.json({data:[record],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:record})));
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text)!;
+ const panel=(text:string)=>document.getElementById(button(text).getAttribute("aria-controls")!)!;
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",permissions:["send"]})));
+  expect(button("Request for authorization")).toBeDefined();
+  await act(async()=>button("Request for authorization").click());
+  expect([...container.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)).toEqual(["Request","Responses","Documents","History"]);
+  expect(container.querySelector('[aria-label="Authorization progress"]')).toBeNull();
+  expect(panel("Request").hidden).toBe(false);expect(panel("Documents").hidden).toBe(true);
+  const review=container.querySelector<HTMLDetailsElement>('details[id$="-review"]')!;
+  expect(review.open).toBe(false);
+  await act(async()=>button("Review & send").click());expect(review.open).toBe(true);
+  expect(review.textContent).toContain("External fax delivery is disabled");expect(button("Send authorization fax")).toBeUndefined();
+  await act(async()=>button("Documents").click());expect(panel("Documents").hidden).toBe(false);expect(panel("Request").hidden).toBe(true);
+  expect(panel("Documents").textContent).toContain("Synthetic report.pdf");
+  await act(async()=>button("Documents").dispatchEvent(new KeyboardEvent("keydown",{key:"End",bubbles:true})));
+  expect(button("History").getAttribute("aria-selected")).toBe("true");expect(document.activeElement).toBe(button("History"));
+  await act(async()=>button("Request").click());expect(review.open).toBe(true);
+  expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+
+it("opens response and treatment deep links in the appropriate focused tab",async()=>{
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:record}));
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const base={getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple" as const,selectedRfaId:record.id};
+ const selected=()=>container.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{...base,selectedResponseDocumentId:"response_synthetic"})));
+  expect(selected()).toBe("Responses");
+  await act(async()=>root.render(createElement(RfaDashboard,{...base,selectedTreatmentId:"treatment_synthetic"})));
+  expect(selected()).toBe("Request");
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
