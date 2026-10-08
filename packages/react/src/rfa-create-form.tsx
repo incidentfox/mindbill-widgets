@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, type ReactElement } from "react";
 import type { RfaClient, RfaCreationContext } from "@mindbill/browser";
+import { RfaIdentitySelect } from "./rfa-identity-select";
 import { RfaClaimSetup } from "./rfa-claim-setup";
 import { RfaDraftForm, type RfaDraftInput, type RfaDraftFormProps } from "./rfa-draft-form";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
@@ -9,6 +10,7 @@ type Props = TreatmentDraftAppearance & {
   client: RfaClient;
   initialDraft?: RfaDraftInput;
   canCreateClaim?: boolean;
+  searchableSelectors?: boolean;
   draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory">;
   claimId?: string;
   renderingProviderId?: string;
@@ -25,7 +27,7 @@ export function RfaCreateForm({ initialDraft, draftFormProps, onSave, ...props }
   const contactProps = { ...(props.client.searchClaimsAdministrators ? { searchClaimsAdministrators: props.client.searchClaimsAdministrators } : {}), ...(props.client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: props.client.getClaimsAdministratorDirectory } : {}), ...draftFormProps };
   return initialDraft ? <RfaDraftForm {...props} {...contactProps} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} draftFormProps={contactProps} />;
 }
-function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
+function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, searchableSelectors = false, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
   const [addingClaim, setAddingClaim] = useState(false);
   const [createdClaimId, setCreatedClaimId] = useState<string>();
   const effectiveClaimId = claimId ?? createdClaimId;
@@ -69,21 +71,30 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     {addingClaim ? <RfaClaimSetup client={client} disabled={disabled} onCancel={() => setAddingClaim(false)} onCreated={result => { supportingDocuments.onChange([]); setSearchInput(""); setCreatedClaimId(result.claimId); setSelectedClaim(result.claimId); setAddingClaim(false); setQuery(value => ({ ...value, search: "", cursor: "" })); }} /> : null}
     <div className="mbtd-grid">
       <fieldset disabled={disabled}><legend>Patient and claim</legend>
+        {searchableSelectors ? <RfaIdentitySelect label="Patient and claim" placeholder="Choose a patient claim" searchPlaceholder="Search patients or claim numbers" query={searchInput} searchable={!claimId} disabled={disabled} loading={loading || query.search !== searchInput.trim()} error={error} value={claim?.claimId ?? ""}
+          options={(context?.claims ?? []).map(value => ({ id: value.claimId, label: value.employeeName, detail: `${value.claimNumber || "Claim number not recorded"}${value.dateOfInjury ? ` · Injury ${value.dateOfInjury}` : ""}` }))}
+          onSearch={value => { setSearchInput(value); supportingDocuments.onChange([]); setSelectedClaim(""); setCreatedClaimId(undefined); }}
+          onSelect={value => { setSelectedClaim(value); supportingDocuments.onChange([]); }} /> : <>
         {!claimId ? <label>Search patients or claim numbers<input type="search" maxLength={200} value={searchInput} onChange={event => { setSearchInput(event.target.value); supportingDocuments.onChange([]); setSelectedClaim(""); setCreatedClaimId(undefined); }} /></label> : null}
         <label>Saved patient claim<select disabled={locked || !!error} value={claim?.claimId ?? ""} onChange={event => { setSelectedClaim(event.target.value); supportingDocuments.onChange([]); }}>
           <option value="">Choose a patient claim</option>
           {context?.claims.map(value => <option key={value.claimId} value={value.claimId}>{value.employeeName} · {value.claimNumber || "Claim number not recorded"}{value.dateOfInjury ? ` · Injury ${value.dateOfInjury}` : ""}</option>)}
         </select></label>
+        </>}
         {!loading && !error && context?.claims.length === 0 ? <p>{query.search ? "No claims match this search. Try another patient name or claim number." : "No saved claims are available. Add a patient claim to start an authorization request; no bill is required."}</p> : null}
         {!claimId && canCreateClaim && client.provisionClaim && client.searchClaimsAdministrators ? <button type="button" disabled={locked || addingClaim} onClick={() => setAddingClaim(true)}>New patient and injury</button> : null}
         <div className="mbtd-actions">{query.cursor ? <button type="button" disabled={locked} onClick={() => { setSelectedClaim(""); supportingDocuments.onChange([]); setQuery(value => ({ ...value, cursor: "" })); }}>First claims page</button> : null}{context?.nextCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedClaim(""); supportingDocuments.onChange([]); setQuery(value => ({ ...value, cursor: context.nextCursor! })); }}>Next claims page</button> : null}</div>
       </fieldset>
       <fieldset disabled={disabled}><legend>Requesting physician</legend>
+        {searchableSelectors ? <RfaIdentitySelect label="Requesting physician" placeholder="Choose a rendering provider" searchPlaceholder="Search physicians by name or NPI" query={providerSearchInput} searchable={!renderingProviderId} disabled={disabled} loading={loading || query.providerSearch !== providerSearchInput.trim()} error={error} value={provider?.id ?? ""}
+          options={(context?.renderingProviders ?? []).map(value => ({ id: value.id, label: value.name, detail: value.npi ? `NPI ${value.npi}` : "" }))}
+          onSearch={value => { setProviderSearchInput(value); setSelectedProvider(""); }} onSelect={setSelectedProvider} /> : <>
         {!renderingProviderId ? <label>Search physicians by name or NPI<input type="search" maxLength={200} value={providerSearchInput} onChange={event => { setProviderSearchInput(event.target.value); setSelectedProvider(""); }} /></label> : null}
         <label>Saved rendering provider<select disabled={locked || !!error} value={provider?.id ?? ""} onChange={event => setSelectedProvider(event.target.value)}>
           <option value="">Choose a rendering provider</option>
           {context?.renderingProviders.map(value => <option key={value.id} value={value.id}>{value.name}{value.npi ? ` · NPI ${value.npi}` : ""}</option>)}
         </select></label>
+        </>}
         {!loading && !error && context?.renderingProviders.length === 0 ? <p>{query.providerSearch ? "No physicians match this search. Try another name or NPI." : "No saved rendering providers are available. Add a rendering provider in Settings, then reopen this form."}</p> : null}
         <div className="mbtd-actions">{query.providerCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: "" })); }}>First physicians page</button> : null}{context?.renderingProvidersNextCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: context.renderingProvidersNextCursor! })); }}>Next physicians page</button> : null}</div>
       </fieldset>
