@@ -2,7 +2,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
 import { rfaTitle, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
-import { RfaTaskBoard } from "./rfa-task-board";
+import { RfaTaskBoard, type RfaTaskQuery } from "./rfa-task-board";
 import { RfaTrackingContent } from "./rfa-tracking-panel";
 import { RfaDetailHeader, rfaDetailCss, rfaPolishCss, rfaSimpleCss } from "./rfa-detail-header";
 import { RfaRequestSummary } from "./rfa-request-summary";
@@ -21,6 +21,7 @@ import { RfaProviderSignatureSetup } from "./rfa-provider-signature-setup";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
 export type RfaDashboardNavigation = {
+  getTaskHref?: (query: RfaTaskQuery) => string;
   createHref?: string;
   allRfasHref?: string;
   tasksHref?: string;
@@ -50,6 +51,9 @@ export type RfaDashboardProps = OrganizationClientOptions & TreatmentDraftAppear
   initialView?: "overview" | "create";
   /** Select the initial overview independently from the detail layout. */
   initialOverviewView?: "tasks" | "list";
+  taskPresentation?: "dashboard" | "list";
+  taskQuery?: RfaTaskQuery;
+  renderTaskIdentity?: import("./rfa-task-board").RfaTaskBoardProps["renderTaskIdentity"];
   initialStatus?: string;
   initialAgingBucket?: RfaListQuery["agingBucket"] | "";
   /** Host routes for task, list, creation and return navigation; omitted routes keep embedded behavior. */
@@ -87,7 +91,7 @@ export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: f
   const identity = useMemo(() => ({ client, signatureClient, key: key() }), [client, signatureClient]);
   return <RfaDashboardContent key={`${identity.key}:${patientId ?? ""}:${claimId ?? ""}:${renderingProviderId ?? ""}`} {...props} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} client={client} signatureClient={signatureClient} options={options} />;
 }
-function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", initialOverviewView, initialStatus = "", initialAgingBucket = "", navigation, permissions = [], canCreateClaim = false, renderClaimSelector, renderProviderSelector, officialForm = false, managePracticeHref, manageLocationsHref, onPreviewRequest, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
+function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", initialOverviewView, initialStatus = "", initialAgingBucket = "", taskPresentation, taskQuery, renderTaskIdentity, navigation, permissions = [], canCreateClaim = false, renderClaimSelector, renderProviderSelector, officialForm = false, managePracticeHref, manageLocationsHref, onPreviewRequest, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const references = useMemo(() => createBillReferenceClient(options), [options]);
@@ -156,11 +160,11 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     if (!navigation?.onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); navigation.onNavigate(href);
   }}>{text}</a>;
-  return <TreatmentDraftShell {...appearance} hideHeading={hideHeading} title={selected || creating ? "Requests for authorization" : view === "overview" ? "RFA Tasks" : "All RFAs"} description={selected || creating ? "Review the request, supporting documents, and treatment decisions." : view === "overview" ? "Open follow-up work, grouped by next action and age, plus requests awaiting treatment decisions below." : "Find a request or review the individual treatments it contains."}>
+  return <TreatmentDraftShell {...appearance} hideHeading={hideHeading} title={selected || creating ? "Requests for authorization" : view === "overview" ? taskPresentation === "list" ? "RFA task list" : "RFA Tasks" : "All RFAs"} description={selected || creating ? "Review the request, supporting documents, and treatment decisions." : view === "overview" ? taskPresentation === "list" ? "Requests with follow-up tasks matching your selection." : "Open follow-up work, grouped by next action and age, plus requests awaiting treatment decisions below." : "Find a request or review the individual treatments it contains."}>
     <style>{`.mbrfa-list{display:grid;gap:10px;margin:16px 0}.mbrfa-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:16px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface)}.mbrfa-card strong{display:block}.mbrfa-card small{color:var(--mb-muted)}.mbrfa-status{text-transform:capitalize}.mbrfa-stack{display:grid;gap:16px}.mbrfa-check{display:flex!important;align-items:flex-start;gap:8px!important}.mbrfa-check input{min-height:20px;flex-shrink:0}.mbrfa-summary{display:flex;flex-wrap:wrap;gap:12px;padding:12px;background:var(--mb-soft);border-radius:var(--mb-control-radius)}@media(max-width:520px){.mbrfa-card{grid-template-columns:1fr}}`}</style>
     <style>{rfaDashboardCss}</style>
     {selected || creating ? !hideBackButton ? navigation?.backHref ? routeLink(navigation.backHref, navigation.backLabel ?? "← All requests") : <button type="button" onClick={back}>← All requests</button> : null : <>
-      <div className="mbrfa-dashboard-heading"><span className="mbrfa-update-note">Updates automatically</span><div className="mbtd-actions">{view === "overview" && navigation?.allRfasHref ? routeLink(navigation.allRfasHref, "All RFAs") : view !== "overview" && navigation?.tasksHref ? routeLink(navigation.tasksHref, "← RFA Tasks") : null}{permissions.includes("create") ? navigation?.createHref && !appearance.disabled ? routeLink(navigation.createHref, "+ Add RFA", true) : <button type="button" className="mbtd-primary" disabled={appearance.disabled} onClick={() => setCreating(true)}>+ Add RFA</button> : null}</div></div>
+      <div className="mbrfa-dashboard-heading"><span className="mbrfa-update-note">Updates automatically</span><div className="mbtd-actions">{view === "overview" && taskPresentation === "list" && navigation?.tasksHref ? routeLink(navigation.tasksHref, "← RFA Tasks") : view === "overview" && navigation?.allRfasHref ? routeLink(navigation.allRfasHref, "All RFAs") : view !== "overview" && navigation?.tasksHref ? routeLink(navigation.tasksHref, "← RFA Tasks") : null}{permissions.includes("create") ? navigation?.createHref && !appearance.disabled ? routeLink(navigation.createHref, "+ Add RFA", true) : <button type="button" className="mbtd-primary" disabled={appearance.disabled} onClick={() => setCreating(true)}>+ Add RFA</button> : null}</div></div>
       {!navigation?.allRfasHref || !navigation?.tasksHref ? <nav className="mbrfa-nav" aria-label="Authorization views">{([ ["overview", "RFA tasks"], ["rfas", "All RFAs"] ] as const).map(([value, title]) => <button key={value} type="button" aria-current={(value === "overview" ? view === "overview" : view !== "overview") ? "page" : undefined} onClick={() => { setView(value); resetPage(); }}>{title}</button>)}</nav> : null}
     </>}
     {creationWarning ? <p role="alert">{creationWarning}</p> : null}
@@ -180,13 +184,13 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
       if (!active.current) return; setCreating(false); selectRfa(saved.id); onCreated?.(saved);
       if (intent === "preview" && attached === files.length && onPreviewRequest) { try { await onPreviewRequest(saved.id); } catch { if (active.current) setCreationWarning("Draft saved. Preview could not be opened; open the request to try again."); } }
     }} /> : selected ? <RfaDetail layout={layout} key={selected} {...relatedLinks} {...(formPreviewUrl ? { formPreviewUrl } : {})} id={selected} selectedItem={selectedItem} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { selectRfa(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : <>
-      {view === "overview" ? <RfaTaskBoard embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : <div className="mbrfa-filters">
+      {view === "overview" ? <RfaTaskBoard {...(taskPresentation ? { presentation: taskPresentation } : {})} {...(taskQuery ? { query: taskQuery } : {})} {...(renderTaskIdentity ? { renderTaskIdentity } : {})} {...(navigation?.getTaskHref ? { getTaskHref: navigation.getTaskHref } : {})} {...(navigation?.onNavigate ? { onNavigate: navigation.onNavigate } : {})} embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : <div className="mbrfa-filters">
         <label className="mbrfa-search">Search requests<input type="search" maxLength={200} value={searchInput} placeholder="Patient, physician, claim, RFA, service or code" onChange={event => setSearchInput(event.target.value)} /></label>
         <label>{lifecycleAvailable ? "RFA status" : "Clinical status"}<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{(lifecycleAvailable ? Object.keys(RFA_LIFECYCLE_LABELS) : CLINICAL_STATUSES).map(value => <option key={value} value={value}>{lifecycleAvailable ? RFA_LIFECYCLE_LABELS[value as keyof typeof RFA_LIFECYCLE_LABELS] : label(value)}</option>)}</select></label>
         {searchInput || status || agingBucket ? <button type="button" className="mbrfa-clear" onClick={() => { setSearchInput(""); setSearch(""); setStatus(""); setAgingBucket(""); resetPage(); }}>Clear filters</button> : null}
       </div>}
       {error ? <p role="alert">{error}</p> : null}{loading ? <p className="mbrfa-loading" role="status">Loading authorization requests…</p> : null}
-      {!loading && resultVisible && result ? view === "overview" ? <RfaOverview combined summary={result.summary} onSelect={(nextStatus, bucket) => {
+      {!loading && resultVisible && result ? view === "overview" ? taskPresentation === "list" ? null : <RfaOverview combined summary={result.summary} onSelect={(nextStatus, bucket) => {
           if (navigation?.allRfasHref) {
             const url = new URL(navigation.allRfasHref, window.location.href);
             if (nextStatus) url.searchParams.set("status", nextStatus); else url.searchParams.delete("status");

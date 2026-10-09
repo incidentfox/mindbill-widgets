@@ -169,3 +169,19 @@ it("opens response and treatment deep links in the appropriate focused tab",asyn
   expect(selected()).toBe("Request");
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+
+it("composes an opt-in routed task list without the dashboard summary or inbox", async () => {
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const onSelectRfa=vi.fn();
+ const fetcher=vi.fn<typeof fetch>(async input => String(input).includes("rfa-follow-ups") ? Response.json({data:[{id:"task_synthetic",rfaId:record.id,claimId:record.claimId,kind:"post_ur_decision",status:"open",createdAt:"2020-01-01",dueAt:"2020-01-01",responseDocumentId:"response_synthetic"}],nextCursor:null}) : Response.json({data:[record],summary:{total:1,byStatus:{ready:1}},nextCursor:null}));
+ try {
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",initialOverviewView:"tasks",taskPresentation:"list",taskQuery:{state:"Due",kind:"post_ur_decision",bucket:"31+"},onSelectRfa,navigation:{tasksHref:"/tasks/rfas",getTaskHref:()=>"/tasks/rfas/list"},renderTaskIdentity:()=>createElement("small",{},"Synthetic patient")})));
+  expect(container.querySelector("h2")?.textContent).toBe("RFA task list");
+  expect(container.querySelector('a[href="/tasks/rfas"]')?.textContent).toBe("← RFA Tasks");
+  expect(container.querySelectorAll('[aria-label="Selected tasks"] tbody tr')).toHaveLength(1);
+  expect(container.querySelector(".mbrfa-task-group")).toBeNull();
+  expect(container.querySelector(".mbrfa-match-disclosure")).toBeNull();
+  expect(container.textContent).not.toContain("Requests awaiting decisions");
+  await act(async()=>[...container.querySelectorAll("button")].find(button=>button.textContent==="Review response")!.click());
+  expect(onSelectRfa).toHaveBeenCalledWith(record.id,{responseDocumentId:"response_synthetic"});
+ } finally {await act(async()=>root.unmount());container.remove();}
+});

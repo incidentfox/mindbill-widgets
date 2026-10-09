@@ -442,6 +442,6 @@ export { RfaPacketsPanel } from "./rfa-packets";
 export type { RfaPacketsPanelProps } from "./rfa-packets";
 
 export { RfaTaskBoard } from "./rfa-task-board";
-export type { RfaTaskBoardProps } from "./rfa-task-board";
+export type { RfaTaskBoardProps, RfaTaskQuery, RfaTaskState, RfaTaskAge } from "./rfa-task-board";
 
 export type { RfaClaimSelectorProps, RfaProviderSelectorProps } from "./rfa-create-form";

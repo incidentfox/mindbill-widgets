@@ -405,6 +405,71 @@ The organization-wide RFA tasks view includes **Match UR · Incoming responses**
 
 `RfaTaskBoard` is available separately with the usual session and appearance props, optional `patientId`, `claimId`, and `renderingProviderId`, `permissions={["act"]}` for matching, and `onSelect(rfaId, responseDocumentId?)` for navigation. Set `embedded` to hide its heading when composing it inside another dashboard. Read-only users can inspect tasks and PDFs. The unmatched inbox appears only in the organization-wide view because unmatched faxes have no verified patient/claim association yet.
 
+### Separate task list pages
+
+The default task board continues to open an inline list below its matrices. Hosts
+can opt into separate pages by supplying `navigation.getTaskHref(query)` on
+`RfaDashboard`, or `getTaskHref(query)` on standalone `RfaTaskBoard`. Counts, group
+age totals, group totals and **View all** become real links. Optional
+`navigation.onNavigate(href)` / `onNavigate(href)` supports a client router while
+modified clicks still use the browser's normal new-tab behavior.
+
+`RfaTaskQuery` is exported with `state?: "Due" | "Scheduled" | "Completed"`,
+`kind?: string`, `kinds?: readonly string[]`, `bucket?: "0-5" | "6-14" | "15-30" |
+"31+" | "unknown"`, and optional display-only `title?: string`. Both kind filters
+apply when both are present. Encode these values in host URLs and validate them
+on read. Task state is a staff follow-up filter, **not** an RFA lifecycle or
+clinical status. Ages use the viewer's calendar dates since task opening, with an
+explicit unknown-age bucket. Delivery reconciliation tasks remain server-managed
+and excluded from staff lists.
+
+```tsx
+import { RfaDashboard, type RfaTaskQuery } from "@mindbill/react";
+
+const getTaskHref = (query: RfaTaskQuery) => {
+  const params = new URLSearchParams({ taskState: query.state ?? "Due" });
+  if (query.kind) params.set("taskKind", query.kind);
+  if (query.kinds) params.set("taskKinds", query.kinds.join(","));
+  if (query.bucket) params.set("taskAge", query.bucket);
+  return `/rfas/tasks/list?${params}`;
+};
+
+// Dashboard route: counts navigate to the host's filtered list route.
+<RfaDashboard
+  sessionEndpoint="/api/mindbill/session"
+  initialOverviewView="tasks"
+  navigation={{ getTaskHref, onNavigate: href => router.push(href) }}
+/>;
+
+// Separate route, with a validated query read from its URL.
+<RfaDashboard
+  sessionEndpoint="/api/mindbill/session"
+  initialOverviewView="tasks"
+  taskPresentation="list"
+  taskQuery={{ state: "Due", kind: "post_ur_decision", bucket: "31+" }}
+  navigation={{ tasksHref: "/rfas/tasks", getTaskHref, onNavigate: href => router.push(href) }}
+  onSelectRfa={(id, context) => openRequest(id, context)}
+/>;
+```
+
+List presentation omits matrices, the overview summary, and the unmatched fax
+inbox. It immediately displays matching tasks with a selection heading and count.
+Changing **Due / Scheduled / Completed** preserves the kind and age selection.
+Standalone props are `presentation="list"` and `query={validatedQuery}`. Request
+selection preserves `responseDocumentId` for **Review response**.
+
+List rows load each visible request once through the existing scoped RFA read API
+and show its employee name, claim number and requested services. Reads are bounded
+to ten concurrent requests; unavailable or mismatched records fall back to opaque
+request and claim references without disabling task actions. Dashboard presentation
+does not add these reads. Hosts with patient and claim labels already loaded may supply
+`renderTaskIdentity={(task) => <small>{knownIdentityFor(task.rfaId)}</small>}` to
+both components to replace the built-in identity and its additional request reads.
+Keep all host reads within the existing session scope. The unstyled
+`span.mbrfa-task-age` inside age headers provides a host CSS hook; SDK typography
+and default appearance remain unchanged.
+
+
 `createRfaLifecycleClient` exposes `listInboundFaxes({limit, cursor, includeMatched})`, `getInboundFaxContent(faxId)`, and `matchInboundFax(faxId, rfaId, idempotencyKey)`. Inbox reads use `rfas:read`; matching uses `rfas:act`. RFA-attached document previews still require `documents:read`. Follow `nextCursor` until null and reset pagination when changing filters. These endpoints require an organization-wide session; customer-scoped or bill-scoped sessions cannot access the response inbox.
 
 New-request preparation includes supporting PDF selection in the same form. Creating the request uploads the selected files in sequence, preserving the latest revision. If an upload fails, the saved draft remains available and identifies the incomplete upload for retry. Signing remains blocked until required supporting documents are present. Creating and uploading needs both `rfas:create` and `rfas:edit`.
