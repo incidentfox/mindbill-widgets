@@ -2069,6 +2069,7 @@ export type OrganizationBillingProviderInput = {
 };
 
 export type OrganizationLocationInput = {
+  billingProviderId?: string;
   id?: string; externalId?: string; name: string; street: string; city: string;
   state: string; zip: string; nickname?: string; posCode?: string;
   isPrimary?: boolean; active?: boolean;

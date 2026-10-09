@@ -512,3 +512,11 @@ The simple Request tab places treatment decisions first. Request information fol
 ```
 
 The callback accepts a saved claim ID; call it with `""` immediately when changing patients or when the selected patient has no claim. Selecting or clearing a claim clears the previous request's treatment fields and supporting files. The SDK resolves saved patient/claim identity through `getCreationContext({ claimId })` and keeps saving disabled while loading, on failure, or without a valid claim and physician. The host cannot supply replacement patient identity or bypass server permissions. Respect `disabled`; a dashboard scoped with `claimId` cannot switch claims through the callback. Host-prepared `initialDraft` behavior is unchanged and does not render this picker. `RfaClaimSelectorProps` is exported for host components.
+
+## Official form creation
+
+Hosts can opt into `officialForm` to show the DWC-RFA request checkboxes, unified diagnosis lookup, and a single **Other Information (Frequency, Duration, Quantity, etc.)** field. Existing integrations retain their current form by default. Other Information is saved as `items[].metadata.otherInformation` (up to 2,000 characters); an empty string explicitly clears this field. Legacy structured service data is preserved.
+
+Saved practice and location lookups fill editable physician contact fields. Locations can specify `billingProviderId`; only the chosen practice's locations are offered, with a unique or primary location selected automatically. `managePracticeHref` and `manageLocationsHref` open host settings in a new tab. A refresh action reloads the profile without discarding the request.
+
+`officialForm` creation offers **Review & submit** and **Save draft**. Both persist an unsigned draft and supporting documents; review continues into the existing signature and delivery workflow. Providing `onPreviewRequest: async (id) => { ... }` adds **Preview**. It runs after draft creation and all document uploads, after `onCreated`, with the saved request selected. The host should open its read-only packet preview for that ID. The creation form is closed after saving, so previewing again uses the existing request rather than creating another. `formPreviewUrl` supplies the preview action on request detail. None of these callbacks bypass signature or delivery confirmation.
