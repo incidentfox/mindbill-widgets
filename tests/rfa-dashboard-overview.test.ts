@@ -30,3 +30,28 @@ it("debounces search, refreshes quietly on focus, and hides stale results after 
  fail=false; await act(async () => vi.advanceTimersByTime(30_000)); expect(h.container.textContent).toContain("Synthetic Patient");
  } finally { await h.cleanup(); vi.useRealTimers(); }
 });
+it("opens simple task overview with native links and preserves filters in routed drilldowns", async () => {
+ const h=mount(async input=>taskResponse(input)??Response.json(result)); const onNavigate=vi.fn();
+ const navigation={createHref:"/tasks/rfas/new?claimId=claim_synthetic",allRfasHref:"/tasks/rfas/all?claimId=claim_synthetic",tasksHref:"/tasks/rfas",backHref:"/tasks/rfas/all",onNavigate};
+ try {
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:async input=>taskResponse(input)??Response.json(result),layout:"simple",initialOverviewView:"tasks",permissions:["create"],navigation})));
+  expect(h.container.querySelector('.mbrfa-nav')).toBeNull(); expect(h.container.textContent).toContain("150 total requests");
+  const link=h.container.querySelector<HTMLAnchorElement>('a[href="/tasks/rfas/new?claimId=claim_synthetic"]')!;
+  expect(link.textContent).toBe("+ Add RFA");
+  await act(async()=>link.dispatchEvent(new MouseEvent("click",{bubbles:true,cancelable:true,ctrlKey:true}))); expect(onNavigate).not.toHaveBeenCalled();
+  await act(async()=>link.click()); expect(onNavigate).toHaveBeenLastCalledWith("/tasks/rfas/new?claimId=claim_synthetic");
+  expect(h.container.textContent).not.toContain("New authorization request");
+  await act(async()=>h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since submission: 150 requests"]')!.click());
+  expect(onNavigate).toHaveBeenLastCalledWith("/tasks/rfas/all?claimId=claim_synthetic&status=received&agingBucket=15_30");
+ } finally {await h.cleanup();}
+});
+it("restores native list filters and links creation back to the supplied route", async () => {
+ const urls:URL[]=[];const h=mount(async input=>{urls.push(new URL(String(input)));return taskResponse(input)??Response.json(result);}); const fetcher=async(input:RequestInfo|URL)=>{urls.push(new URL(String(input)));return taskResponse(input)??Response.json(result);}; const getSession=async()=>({token:"synthetic_token"});
+ try {
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession,fetch:fetcher,layout:"simple",initialOverviewView:"list",initialStatus:"received",initialAgingBucket:"15_30",navigation:{allRfasHref:"/tasks/rfas/all",tasksHref:"/tasks/rfas"}})));
+  expect(urls.some(url=>url.searchParams.get("lifecycleStatus")==="received"&&url.searchParams.get("agingBucket")==="15_30")).toBe(true);
+  expect(h.container.querySelector('a[href="/tasks/rfas"]')?.textContent).toBe("← RFA Tasks");
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,initialView:"create",permissions:["create"],navigation:{backHref:"/tasks/rfas",backLabel:"← RFA Tasks"}})));
+  expect(h.container.querySelector('a[href="/tasks/rfas"]')?.textContent).toBe("← RFA Tasks");
+ } finally {await h.cleanup();}
+});

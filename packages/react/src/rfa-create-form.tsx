@@ -12,12 +12,28 @@ export type RfaClaimSelectorProps = {
   disabled: boolean;
 };
 
+export type RfaProviderSelectorProps = {
+  options: Array<{ id: string; label: string; npi?: string }>;
+  selectedProviderId: string;
+  onSelectProvider: (providerId: string) => void;
+  search: string;
+  onSearchProvider: (query: string) => void;
+  hasNext: boolean;
+  hasPrevious: boolean;
+  onNext: () => void;
+  onFirst: () => void;
+  loading: boolean;
+  error: string;
+  disabled: boolean;
+};
+
 type Props = TreatmentDraftAppearance & {
   client: RfaClient;
   initialDraft?: RfaDraftInput;
   canCreateClaim?: boolean;
   searchableSelectors?: boolean;
   renderClaimSelector?: (props: RfaClaimSelectorProps) => ReactNode;
+  renderProviderSelector?: (props: RfaProviderSelectorProps) => ReactNode;
   draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "manageLocationsHref" | "onRefreshProfile" | "onReview" | "onPreview">;
   claimId?: string;
   renderingProviderId?: string;
@@ -35,7 +51,7 @@ export function RfaCreateForm({ initialDraft, draftFormProps, onSave, previewAva
   const contactProps = { ...(props.client.searchClaimsAdministrators ? { searchClaimsAdministrators: props.client.searchClaimsAdministrators } : {}), ...(props.client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: props.client.getClaimsAdministratorDirectory } : {}), ...draftFormProps, ...(draftFormProps?.officialForm ? { onReview: (draft: RfaDraftInput) => save(draft, "review"), ...(previewAvailable ? { onPreview: (draft: RfaDraftInput) => save(draft, "preview") } : {}) } : {}) };
   return initialDraft ? <RfaDraftForm {...props} {...contactProps} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} draftFormProps={contactProps} />;
 }
-function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, searchableSelectors = false, renderClaimSelector, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
+function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, searchableSelectors = false, renderClaimSelector, renderProviderSelector, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
   const [addingClaim, setAddingClaim] = useState(false);
   const [createdClaimId, setCreatedClaimId] = useState<string>();
   const [searchInput, setSearchInput] = useState("");
@@ -45,6 +61,13 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
   const [selectedClaim, setSelectedClaim] = useState("");
   const effectiveClaimId = claimId ?? (renderClaimSelector ? selectedClaim : createdClaimId);
   const [selectedProvider, setSelectedProvider] = useState("");
+  const effectiveProviderId = renderingProviderId ?? (renderProviderSelector ? selectedProvider : undefined);
+  const selectHostProvider = useCallback((value: string) => {
+    if (disabled || renderingProviderId) return;
+    setSelectedProvider(value);
+    setProviderSearchInput("");
+    setQuery(query => ({ ...query, providerSearch: "", providerCursor: "" }));
+  }, [disabled, renderingProviderId]);
   const onSupportingDocumentsChange = supportingDocuments.onChange;
   const selectHostClaim = useCallback((value: string) => {
     if (disabled || claimId || value === selectedClaim) return;
@@ -57,12 +80,31 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
-    client.getCreationContext({ ...query, limit: 50, ...(effectiveClaimId ? { claimId: effectiveClaimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}) })
-      .then(value => { if (active) { setContext(value); if (effectiveClaimId) setSelectedClaim(effectiveClaimId); if (renderingProviderId) setSelectedProvider(renderingProviderId); } })
-      .catch(() => { if (active) setError("Saved claims and providers could not be loaded. Try again."); })
-      .finally(() => { if (active) setLoading(false); });
+    const load = async () => {
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (!active) return;
+          const request = { ...query, limit: 50, ...(effectiveClaimId ? { claimId: effectiveClaimId } : {}) };
+          const [value, selectedContext] = await Promise.all([
+            client.getCreationContext({ ...request, ...(renderingProviderId ? { renderingProviderId } : {}) }),
+            effectiveProviderId && !renderingProviderId ? client.getCreationContext({ ...request, providerSearch: "", providerCursor: "", renderingProviderId: effectiveProviderId }) : Promise.resolve(null),
+          ]);
+          if (!active) return;
+          const selectedProvider = (selectedContext ?? value).renderingProviders.find(provider => provider.id === effectiveProviderId);
+          if (effectiveProviderId && !selectedProvider) {
+            if (attempt < 2) { await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1))); continue; }
+            setError("The selected rendering provider is not available yet. Try again after saving the provider.");
+            return;
+          }
+          setContext(selectedProvider && !value.renderingProviders.some(provider => provider.id === selectedProvider.id) ? { ...value, renderingProviders: [selectedProvider, ...value.renderingProviders] } : value); if (effectiveClaimId) setSelectedClaim(effectiveClaimId); if (renderingProviderId) setSelectedProvider(renderingProviderId);
+          return;
+        }
+      } catch { if (active) setError("Saved claims and providers could not be loaded. Try again."); }
+      finally { if (active) setLoading(false); }
+    };
+    void load();
     return () => { active = false; };
-  }, [client, query, effectiveClaimId, renderingProviderId, reload]);
+  }, [client, query, effectiveClaimId, effectiveProviderId, renderingProviderId, reload]);
   const claim = context?.claims.find(value => value.claimId === selectedClaim);
   const provider = context?.renderingProviders.find(value => value.id === selectedProvider);
   const locked = disabled || loading;
@@ -101,6 +143,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
         </>}
       </fieldset>
       <fieldset disabled={disabled}><legend>Requesting physician</legend>
+        {renderProviderSelector ? renderProviderSelector({ options: (context?.renderingProviders ?? []).map(value => ({ id: value.id, label: value.name, ...(value.npi ? { npi: value.npi } : {}) })), selectedProviderId: effectiveProviderId ?? "", search: providerSearchInput, onSearchProvider: value => { if (!disabled && !renderingProviderId) setProviderSearchInput(value); }, hasNext: !!context?.renderingProvidersNextCursor, hasPrevious: !!query.providerCursor, onNext: () => { if (!disabled && !renderingProviderId && context?.renderingProvidersNextCursor) setQuery(value => ({ ...value, providerCursor: context.renderingProvidersNextCursor! })); }, onFirst: () => { if (!disabled && !renderingProviderId) setQuery(value => ({ ...value, providerCursor: "" })); }, loading, error, disabled: disabled || !!renderingProviderId, onSelectProvider: selectHostProvider }) : <>
         {searchableSelectors ? <RfaIdentitySelect label="Requesting physician" placeholder="Choose a rendering provider" searchPlaceholder="Search physicians by name or NPI" query={providerSearchInput} searchable={!renderingProviderId} disabled={disabled} loading={loading || query.providerSearch !== providerSearchInput.trim()} error={error} value={provider?.id ?? ""}
           options={(context?.renderingProviders ?? []).map(value => ({ id: value.id, label: value.name, detail: value.npi ? `NPI ${value.npi}` : "" }))}
           onSearch={value => { setProviderSearchInput(value); setSelectedProvider(""); }} onSelect={setSelectedProvider} /> : <>
@@ -112,6 +155,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
         </>}
         {!loading && !error && context?.renderingProviders.length === 0 ? <p>{query.providerSearch ? "No physicians match this search. Try another name or NPI." : "No saved rendering providers are available. Add a rendering provider in Settings, then reopen this form."}</p> : null}
         <div className="mbtd-actions">{query.providerCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: "" })); }}>First physicians page</button> : null}{context?.renderingProvidersNextCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: context.renderingProvidersNextCursor! })); }}>Next physicians page</button> : null}</div>
+        </>}
       </fieldset>
     </div>
     {loading ? <p role="status">Loading saved claims and providers…</p> : null}

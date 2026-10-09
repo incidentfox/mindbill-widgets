@@ -521,4 +521,6 @@ The RFA dashboard opens on a combined task and response overview. Task counts dr
 
 Hosts can supply `RfaDashboard.renderClaimSelector` for patient-first RFA creation using their existing patient and injury forms. See [host patient selection](docs/rfa-dashboard.md#host-patient-and-claim-selection).
 
+Hosts can use native routes for RFA tasks, all requests, and creation, and provide a requesting-physician picker with provider creation. See [host navigation](docs/rfa-dashboard.md#host-navigation) and [host physician selection](docs/rfa-dashboard.md#host-physician-selection).
+
 Hosts may opt into `RfaDashboard.officialForm` for DWC-RFA labels, unified diagnosis selection, saved practice/location lookups, and Review & submit / Preview / Save draft actions. See [official form creation](docs/rfa-dashboard.md#official-form-creation) for preview callbacks and compatibility.

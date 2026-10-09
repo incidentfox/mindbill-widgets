@@ -490,3 +490,5 @@ pricing: unresolved quotes remain subject to fee review, with readable help text
 that wraps on mobile. See [modifier guidance](../../docs/evaluation-modifiers.md).
 
 RFA response workflows include a task board, reviewed incoming-fax matching, per-treatment Post UR decisions, and supporting PDFs during request creation. See the [RFA dashboard guide](../../docs/rfa-dashboard.md) for permissions and integration details.
+
+Use `initialOverviewView`, `initialStatus`, `initialAgingBucket`, and `navigation` to integrate separate task, list, and creation routes. `renderProviderSelector` supplies saved physician choices and resolves providers created by the host before saving. See [host navigation](../../docs/rfa-dashboard.md#host-navigation) and [host physician selection](../../docs/rfa-dashboard.md#host-physician-selection).
