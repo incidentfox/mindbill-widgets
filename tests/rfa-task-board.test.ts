@@ -125,3 +125,85 @@ it("keeps response review readable without exposing the matching write action", 
     expect(fetcher.mock.calls.some(call => call[1]?.method === "POST")).toBe(false);
   } finally { await h.close(); }
 });
+
+it("routes counts, group totals and all tasks with state, kind and age without inline drilldown", async () => {
+  const h = harness(); const onNavigate = vi.fn();
+  const getTaskHref = vi.fn((query: import("../packages/react/src/rfa-task-board").RfaTaskQuery) => `/rfa-tasks?${new URLSearchParams({ state: query.state!, ...(query.kind ? { kind: query.kind } : {}), ...(query.kinds ? { kinds: query.kinds.join(",") } : {}), ...(query.bucket ? { age: query.bucket } : {}) })}`);
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json({ data: [{ ...task, kind: "send_rfa", createdAt: "2020-01-01" }, { ...task, id: "unknown", kind: "document_required", createdAt: "" }, { ...task, id: "scheduled", kind: "send_rfa", createdAt: "2020-01-01", snoozedUntil: "2099-01-01" }], nextCursor: null }));
+  try {
+    await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, claimId: "claim_synthetic", onSelect: vi.fn(), getTaskHref, onNavigate })));
+    const link = h.container.querySelector<HTMLAnchorElement>('[aria-label="Send RFA, 31+ days: 1 due tasks"]')!;
+    expect(link.getAttribute("href")).toBe("/rfa-tasks?state=Due&kind=send_rfa&age=31%2B");
+    await act(async () => link.click());
+    expect(onNavigate).toHaveBeenCalledWith(link.getAttribute("href"));
+    expect(h.container.querySelector('[aria-label="Selected tasks"]')).toBeNull();
+    onNavigate.mockClear();
+    const modified = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
+    await act(async () => link.dispatchEvent(modified));
+    expect(modified.defaultPrevented).toBe(false); expect(onNavigate).not.toHaveBeenCalled();
+    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete RFAs, Unknown age: 1 due tasks"]')?.getAttribute("href")).toContain("kinds=document_required%2Csend_rfa&age=unknown");
+    const total = h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete RFAs, Total: 2 due tasks"]')!;
+    expect(total.getAttribute("href")).toBe("/rfa-tasks?state=Due&kinds=document_required%2Csend_rfa");
+    expect([...h.container.querySelectorAll("a")].find(a => a.textContent === "View all due tasks (2)")?.getAttribute("href")).toBe("/rfa-tasks?state=Due");
+    await act(async () => h.button("Scheduled (1)").click());
+    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Send RFA, 31+ days: 1 scheduled tasks"]')?.getAttribute("href")).toContain("state=Scheduled");
+  } finally { await h.close(); }
+});
+
+it("renders a separate filtered list, retaining response context and routed state changes", async () => {
+  const h = harness(); const onSelect = vi.fn(); const onNavigate = vi.fn();
+  const getTaskHref = vi.fn((query: import("../packages/react/src/rfa-task-board").RfaTaskQuery) => `/rfa-tasks?state=${query.state}&kind=${query.kind}&age=${query.bucket}`);
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json({ data: [
+    { ...task, id: "matching", kind: "post_ur_decision", responseDocumentId: "response_synthetic", createdAt: "", status: "resolved", resolvedAt: "2026-01-02", updatedAt: "2026-01-02" },
+    { ...task, id: "wrong_age", kind: "post_ur_decision", createdAt: "2020-01-01", status: "resolved" },
+    { ...task, id: "wrong_kind", createdAt: "", status: "resolved" },
+    { ...task, id: "wrong_state", kind: "post_ur_decision", createdAt: "" },
+    { ...task, id: "server_managed", kind: "transmission_unconfirmed", createdAt: "", status: "resolved" },
+  ], nextCursor: null }));
+  try {
+    await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, presentation: "list", query: { state: "Completed", kind: "post_ur_decision", bucket: "unknown" }, onSelect, getTaskHref, onNavigate, renderTaskIdentity: () => createElement("small", {}, "Synthetic patient · SYNTHETIC-001") })));
+    expect(h.container.querySelectorAll('[aria-label="Selected tasks"] tbody tr')).toHaveLength(1);
+    expect(h.container.textContent).toContain("Post UR · Unknown age (1)");
+    expect(h.container.textContent).toContain("Synthetic patient · SYNTHETIC-001");
+    expect(h.container.querySelector(".mbrfa-task-group")).toBeNull();
+    expect(h.container.querySelector(".mbrfa-match-disclosure")).toBeNull();
+    expect(fetcher.mock.calls.every(call => String(call[0]).includes("rfa-follow-ups"))).toBe(true);
+    expect(fetcher.mock.calls.some(call => /lifecycleStatus=|status=/.test(String(call[0])))).toBe(false);
+    await act(async () => h.button("Review response").click());
+    expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "response_synthetic");
+    await act(async () => h.button("Due (1)").click());
+    expect(getTaskHref).toHaveBeenLastCalledWith({ state: "Due", kind: "post_ur_decision", bucket: "unknown" });
+    expect(onNavigate).toHaveBeenCalledWith("/rfa-tasks?state=Due&kind=post_ur_decision&age=unknown");
+  } finally { await h.close(); }
+});
+
+it("enriches only visible requests once with scoped patient, claim and treatment identity", async () => {
+  const h = harness(); const onSelect = vi.fn();
+  const fetcher = vi.fn<typeof fetch>(async url => String(url).includes("rfa-follow-ups") ? Response.json({ data: [
+    { ...task, id: "visible_one", kind: "post_ur_decision", responseDocumentId: "response_synthetic" },
+    { ...task, id: "visible_two", kind: "post_ur_decision" },
+    { ...task, id: "hidden_task", rfaId: "rfa_hidden", kind: "send_rfa" },
+  ], nextCursor: null }) : Response.json({ data: { ...record, patientId: "patient_synthetic", claimNumber: "CLAIM-SYNTHETIC", items: [{ serviceDescription: "Synthetic therapeutic exercise" }] } }));
+  try {
+    await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, patientId: "patient_synthetic", presentation: "list", query: { state: "Due", kind: "post_ur_decision" }, onSelect })));
+    expect(h.container.textContent).toContain("Synthetic Patient");
+    expect(h.container.textContent).toContain("CLAIM-SYNTHETIC");
+    expect(h.container.textContent).toContain("Synthetic therapeutic exercise");
+    expect(fetcher.mock.calls.filter(call => !String(call[0]).includes("rfa-follow-ups"))).toHaveLength(1);
+    expect(fetcher.mock.calls.some(call => String(call[0]).includes("rfa_hidden"))).toBe(false);
+    expect(fetcher.mock.calls.every(call => !call[1]?.method || call[1].method === "GET")).toBe(true);
+    await act(async () => h.button("Review response").click());
+    expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "response_synthetic");
+  } finally { await h.close(); }
+});
+
+it("keeps task actions available without showing mismatched scoped request identity", async () => {
+  const h = harness();
+  const fetcher = vi.fn<typeof fetch>(async url => String(url).includes("rfa-follow-ups") ? Response.json({ data: [task], nextCursor: null }) : Response.json({ data: { ...record, patientId: "patient_other" } }));
+  try {
+    await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, patientId: "patient_synthetic", presentation: "list", onSelect: vi.fn() })));
+    expect(h.container.textContent).not.toContain("Synthetic Patient");
+    expect(h.container.textContent).toContain("Request rfa_synthetic · Claim claim_synthetic");
+    expect(h.button("Open request")).toBeDefined();
+  } finally { await h.close(); }
+});
