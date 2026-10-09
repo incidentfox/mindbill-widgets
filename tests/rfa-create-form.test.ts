@@ -126,3 +126,45 @@ it.each([false,true])("creates once and preserves revision-safe uploads (partial
   expect(fetcher.mock.calls.some(([url])=>/\/(sign|fax|submit)$/.test(String(url)))).toBe(false);
  }finally{await h.close();}
 });
+it("resolves a host-selected claim and clears prior patient treatment before the next claim loads", async () => {
+ const h=harness(); let resolveSecond: ((response:Response)=>void)|undefined;
+ const claims=[context.claims[0]!,{...context.claims[0]!,claimId:"claim_second",patientId:"patient_second",employeeName:"Second Synthetic",diagnosisCodes:["M54.2"]}];
+ const fetcher=vi.fn<typeof fetch>(async input=>{
+  const url=new URL(String(input)); if(!url.pathname.includes("creation-context"))return Response.json(list);
+  if(url.searchParams.get("claimId")==="claim_second") return new Promise<Response>(resolve=>{resolveSecond=resolve;});
+  return Response.json({data:{...context,claims:url.searchParams.get("claimId") ? [claims[0]] : []}});
+ });
+ try {
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],initialView:"create",renderClaimSelector:({onSelectClaim,selectedClaimId})=>createElement("div",null,
+   createElement("span",null,`Host patient picker: ${selectedClaimId}`),
+   createElement("button",{onClick:()=>onSelectClaim("claim_synthetic")},"First host claim"),
+   createElement("button",{onClick:()=>onSelectClaim("")},"Patient without a claim"),
+   createElement("button",{onClick:()=>onSelectClaim("claim_second")},"New host claim"))})));
+  expect(h.container.textContent).not.toContain("Saved patient claim");
+  expect(h.button("Save RFA draft").disabled).toBe(true);
+  await act(async()=>h.button("First host claim").click());
+  expect(fetcher.mock.calls.some(([url])=>String(url).includes("claimId=claim_synthetic"))).toBe(true);
+  await select(h.container,"Saved rendering provider","provider_synthetic");
+  await type(h.container,"Service description","First patient treatment");
+  expect(h.button("Save RFA draft").disabled).toBe(false);
+  await act(async()=>h.button("Patient without a claim").click());
+  expect(h.button("Save RFA draft").disabled).toBe(true);
+  expect([...h.container.querySelectorAll("textarea")].every(input=>input.value==="")).toBe(true);
+  await act(async()=>h.button("New host claim").click());
+  expect(h.button("Save RFA draft").disabled).toBe(true);
+  await act(async()=>resolveSecond!(Response.json({data:{...context,claims:[claims[1]]}})));
+  expect(h.container.textContent).toContain("Second Synthetic");
+  const diagnosis=[...h.container.querySelectorAll("input")].find(input=>input.parentElement?.textContent?.startsWith("Diagnosis code"));
+  expect(diagnosis?.value).toBe("M54.2");
+  expect(h.button("Save RFA draft").disabled).toBe(false);
+ } finally { await h.close(); }
+});
+it("keeps a scoped dashboard claim authoritative over a host selector callback", async () => {
+ const h=harness();
+ const fetcher=vi.fn<typeof fetch>(async input=>String(input).includes("creation-context") ? Response.json({data:context}) : Response.json(list));
+ try {
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],initialView:"create",claimId:"claim_synthetic",renderClaimSelector:({disabled,onSelectClaim})=>createElement("button",{onClick:()=>onSelectClaim("claim_other")},disabled ? "Scoped claim" : "Editable claim")})));
+  await act(async()=>h.button("Scoped claim").click());
+  expect(fetcher.mock.calls.filter(([url])=>String(url).includes("creation-context")).every(([url])=>new URL(String(url)).searchParams.get("claimId")==="claim_synthetic")).toBe(true);
+ } finally { await h.close(); }
+});
