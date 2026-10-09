@@ -520,3 +520,5 @@ The RFA dashboard opens on a combined task and response overview. Task counts dr
 `RfaDashboard` accepts `layout="simple"` for a list-first workspace with Request, Responses, Documents, and History tabs. The default `layout="classic"` preserves the existing interface. See [the RFA dashboard guide](docs/rfa-dashboard.md#focused-layout).
 
 Hosts can supply `RfaDashboard.renderClaimSelector` for patient-first RFA creation using their existing patient and injury forms. See [host patient selection](docs/rfa-dashboard.md#host-patient-and-claim-selection).
+
+Hosts may opt into `RfaDashboard.officialForm` for DWC-RFA labels, unified diagnosis selection, saved practice/location lookups, and Review & submit / Preview / Save draft actions. See [official form creation](docs/rfa-dashboard.md#official-form-creation) for preview callbacks and compatibility.

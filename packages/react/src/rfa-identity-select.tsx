@@ -1,11 +1,11 @@
 "use client";
 import { useId, useRef, useState, type ReactElement } from "react";
 
-type Option = { id: string; label: string; detail: string };
+type Option = { id: string; label: string; detail?: string };
 /** Search lives inside the choice menu, so results are visible as the user types. */
-export function RfaIdentitySelect({ label, placeholder, searchPlaceholder, query, searchable, disabled, loading, error, value, options, onSearch, onSelect }: {
+export function RfaIdentitySelect({ label, placeholder, searchPlaceholder, query, searchable, disabled = false, loading = false, error = "", value, options, onSearch, onSelect }: {
   label: string; placeholder: string; searchPlaceholder: string; query: string;
-  searchable: boolean; disabled: boolean; loading: boolean; error: string;
+  searchable: boolean; disabled?: boolean; loading?: boolean; error?: string;
   value: string; options: Option[]; onSearch: (value: string) => void; onSelect: (id: string) => void;
 }): ReactElement {
   const id = useId();

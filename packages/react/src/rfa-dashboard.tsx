@@ -27,6 +27,12 @@ export type RfaDashboardProps = OrganizationClientOptions & TreatmentDraftAppear
   onSelectRfa?: (id: string, context?: RfaSelectionContext) => void;
   getRfaHref?: (id: string, context?: RfaSelectionContext) => string;
   formPreviewUrl?: string;
+  /** Official DWC-RFA creation layout; defaults to false for existing integrations. */
+  officialForm?: boolean;
+  managePracticeHref?: string;
+  manageLocationsHref?: string;
+  /** Opens the actual saved packet. Creation first saves and attaches files, then selects its detail view. */
+  onPreviewRequest?: (id: string) => Promise<void>;
   hideBackButton?: boolean;
   hideHeading?: boolean;
   /** Opt in to a list-first workspace with focused Request, Responses, Documents and History tabs. */
@@ -64,12 +70,12 @@ export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: f
   const identity = useMemo(() => ({ client, signatureClient, key: key() }), [client, signatureClient]);
   return <RfaDashboardContent key={`${identity.key}:${patientId ?? ""}:${claimId ?? ""}:${renderingProviderId ?? ""}`} {...props} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} client={client} signatureClient={signatureClient} options={options} />;
 }
-function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", permissions = [], canCreateClaim = false, renderClaimSelector, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
+function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", permissions = [], canCreateClaim = false, renderClaimSelector, officialForm = false, managePracticeHref, manageLocationsHref, onPreviewRequest, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const references = useMemo(() => createBillReferenceClient(options), [options]);
   const [profile, setProfile] = useState<OrganizationProfileData | undefined>();
-  const draftFormProps = { ...(client.searchClaimsAdministrators ? { searchClaimsAdministrators: client.searchClaimsAdministrators } : {}), ...(client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: client.getClaimsAdministratorDirectory } : {}), searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
+  const draftFormProps = { officialForm, ...(managePracticeHref ? { managePracticeHref } : {}), ...(manageLocationsHref ? { manageLocationsHref } : {}), onRefreshProfile: async () => { const next = await createOrganizationClient(options).getBillingProfile(); if (active.current) setProfile(next); }, ...(client.searchClaimsAdministrators ? { searchClaimsAdministrators: client.searchClaimsAdministrators } : {}), ...(client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: client.getClaimsAdministratorDirectory } : {}), searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
   const [result, setResult] = useState<RfaListResult | null>(null);
   const [status, setStatus] = useState("");
   const lifecycleAvailable = result?.summary.byLifecycleStatus !== undefined;
@@ -137,7 +143,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
       <nav className="mbrfa-nav" aria-label="Authorization views">{([ ["overview", "RFA tasks"], ["rfas", "All RFAs"] ] as const).map(([value, title]) => <button key={value} type="button" aria-current={(value === "overview" ? view === "overview" : view !== "overview") ? "page" : undefined} onClick={() => { setView(value); resetPage(); }}>{title}</button>)}</nav>
     </>}
     {creationWarning ? <p role="alert">{creationWarning}</p> : null}
-    {creating && permissions.includes("create") ? <RfaCreateForm {...appearance} searchableSelectors={layout === "simple"} {...(renderClaimSelector ? { renderClaimSelector } : {})} client={client} canCreateClaim={canCreateClaim} draftFormProps={draftFormProps} {...(initialDraft ? { initialDraft } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} onSave={async (draft, files) => {
+    {creating && permissions.includes("create") ? <RfaCreateForm {...appearance} previewAvailable={!!onPreviewRequest} searchableSelectors={layout === "simple"} {...(renderClaimSelector ? { renderClaimSelector } : {})} client={client} canCreateClaim={canCreateClaim} draftFormProps={draftFormProps} {...(initialDraft ? { initialDraft } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} onSave={async (draft, files, intent) => {
       const fingerprint = JSON.stringify(draft); let idempotency = createKeys.current.get(fingerprint); if (!idempotency) { idempotency = key(); createKeys.current.set(fingerprint, idempotency); }
       let saved = await client.createDraft(draft, idempotency);
       let attached = 0;
@@ -151,6 +157,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
         if (active.current) setCreationWarning(`Draft saved. ${attached} of ${files.length} supporting documents attached. Add the remaining documents below before signing or sending.`);
       }
       if (!active.current) return; setCreating(false); setSelected(saved.id); onCreated?.(saved);
+      if (intent === "preview" && attached === files.length && onPreviewRequest) { try { await onPreviewRequest(saved.id); } catch { if (active.current) setCreationWarning("Draft saved. Preview could not be opened; open the request to try again."); } }
     }} /> : selected ? <RfaDetail layout={layout} key={selected} {...relatedLinks} {...(formPreviewUrl ? { formPreviewUrl } : {})} id={selected} selectedItem={selectedItem} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { selectRfa(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : <>
       {view === "overview" ? <RfaTaskBoard embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : <div className="mbrfa-filters">
         <label className="mbrfa-search">Search requests<input type="search" maxLength={200} value={searchInput} placeholder="Patient, physician, claim, RFA, service or code" onChange={event => setSearchInput(event.target.value)} /></label>
@@ -166,7 +173,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     </>}
   </TreatmentDraftShell>;
 }
-function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, client, signatureClient, options, permissions, environment, actorReference, onContinue, disabled, draftFormProps, canManageProviderSignatures, onCopied, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl }: RfaRelatedLinks & { layout: "classic" | "simple"; formPreviewUrl?: string; draftFormProps: Pick<import("./rfa-draft-form").RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory">; canManageProviderSignatures: boolean; onCopied: (rfa: RfaRecord) => void; id: string; selectedItem: string | null; selectedResponseDocumentId?: string; client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions; permissions: readonly string[]; environment: string; actorReference?: string; onContinue?: (rfa: RfaRecord) => void; disabled?: boolean }): ReactElement {
+function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, client, signatureClient, options, permissions, environment, actorReference, onContinue, disabled, draftFormProps, canManageProviderSignatures, onCopied, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl }: RfaRelatedLinks & { layout: "classic" | "simple"; formPreviewUrl?: string; draftFormProps: Pick<import("./rfa-draft-form").RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "manageLocationsHref" | "onRefreshProfile" | "onReview" | "onPreview">; canManageProviderSignatures: boolean; onCopied: (rfa: RfaRecord) => void; id: string; selectedItem: string | null; selectedResponseDocumentId?: string; client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions; permissions: readonly string[]; environment: string; actorReference?: string; onContinue?: (rfa: RfaRecord) => void; disabled?: boolean }): ReactElement {
   const [rfa, setRfa] = useState<RfaRecord | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(false);
   const tabId = useId();
