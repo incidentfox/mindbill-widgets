@@ -421,7 +421,7 @@ export type { RfaAuthorizationDestinationProps } from "./rfa-authorization-desti
 export type { BillClaimsAdministratorAuthorizationStatus, RfaAuthorizationDestinationOption } from "@mindbill/browser";
 
 export { RfaDashboard } from "./rfa-dashboard";
-export type { RfaDashboardProps } from "./rfa-dashboard";
+export type { RfaDashboardProps, RfaDashboardNavigation } from "./rfa-dashboard";
 export type { RfaRecord, RfaSigningPreview, RfaCreateDraftInput } from "@mindbill/browser";
 
 export { RfaLifecycleControls } from "./rfa-lifecycle-controls";
@@ -444,4 +444,4 @@ export type { RfaPacketsPanelProps } from "./rfa-packets";
 export { RfaTaskBoard } from "./rfa-task-board";
 export type { RfaTaskBoardProps } from "./rfa-task-board";
 
-export type { RfaClaimSelectorProps } from "./rfa-create-form";
+export type { RfaClaimSelectorProps, RfaProviderSelectorProps } from "./rfa-create-form";

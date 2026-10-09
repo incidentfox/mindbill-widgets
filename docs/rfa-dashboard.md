@@ -53,6 +53,27 @@ The UI `permissions` default is an empty array. PDF views require `documents:rea
 when the user has `rfas:read`; reading a retained delivery packet uses `rfas:read`. Directory failure leaves manual recipient confirmation
 available; it never substitutes a telephone number or silently picks a recipient.
 
+## Host navigation
+
+Hosts can give tasks, all requests, and creation their own URLs while reusing the same dashboard. `initialOverviewView="tasks"` opens the task overview, including with `layout="simple"`; `"list"` opens All RFAs. Omitting it preserves the chosen layout's default. `initialStatus` and `initialAgingBucket` restore list filters from the host URL. Aging buckets are `"0_5"`, `"6_14"`, `"15_30"`, and `"31_plus"`; an empty string clears the filter.
+
+```tsx
+<RfaDashboard
+  {...sessionOptions}
+  initialOverviewView="tasks"
+  navigation={{
+    createHref: "/rfas/new?claimId=claim_synthetic",
+    allRfasHref: "/rfas/all?claimId=claim_synthetic",
+    tasksHref: "/rfas",
+    backHref: "/rfas",
+    backLabel: "← RFA Tasks",
+    onNavigate: (href) => router.push(href),
+  }}
+/>
+```
+
+These options render **Add RFA**, **All RFAs**, **RFA Tasks**, and **All requests** as links where supplied. Supplying both `allRfasHref` and `tasksHref` hides the embedded task/list tabs. Task counts link to `allRfasHref` with `status` and `agingBucket` filters, preserving its other query parameters. `onNavigate` handles ordinary same-tab clicks; modified clicks retain normal browser link behavior. Omit it for browser navigation. Creation routes use `initialView="create"`; request routes use the existing `selectedRfaId`, `onSelectRfa`, and related navigation props. Successful creation calls `onSelectRfa` with the saved ID after supporting-document uploads, allowing the host to open the dedicated request route. `backLabel` customizes the back link to match its destination. These options do not change server permissions or request submission.
+
 ## Optional tab in the billing dashboard
 
 React 0.68.0 adds an opt-in **Requests for authorization** tab to
@@ -512,6 +533,12 @@ The simple Request tab places treatment decisions first. Request information fol
 ```
 
 The callback accepts a saved claim ID; call it with `""` immediately when changing patients or when the selected patient has no claim. Selecting or clearing a claim clears the previous request's treatment fields and supporting files. The SDK resolves saved patient/claim identity through `getCreationContext({ claimId })` and keeps saving disabled while loading, on failure, or without a valid claim and physician. The host cannot supply replacement patient identity or bypass server permissions. Respect `disabled`; a dashboard scoped with `claimId` cannot switch claims through the callback. Host-prepared `initialDraft` behavior is unchanged and does not render this picker. `RfaClaimSelectorProps` is exported for host components.
+
+## Host physician selection
+
+`renderProviderSelector` replaces the saved requesting-physician picker. The slot receives `options` from authorized creation context, each with `id`, `label`, and optional `npi`, plus `selectedProviderId`, `onSelectProvider`, `search`, `onSearchProvider`, `hasNext`, `hasPrevious`, `onNext`, `onFirst`, `loading`, `error`, and `disabled`. Search is debounced and searches saved physicians by name or NPI on the server; use the pagination callbacks for additional results. The selected physician remains in the options even when a search or page excludes that physician. Keep the search input enabled during loading to retain focus; `disabled` represents host or provider-scope restrictions. Use the slot to reuse a host dropdown that includes **Create new provider**.
+
+After a host provider dialog saves a record, call `onSelectProvider` with its saved ID. The SDK refreshes creation context for that ID and waits for it to resolve before enabling draft creation. A newly saved provider missing from the first response is retried twice, after 500 ms and 1,000 ms. If it remains unavailable, the form shows an error and keeps saving disabled; no second provider creation is attempted. Respect `disabled`; a dashboard scoped with `renderingProviderId` cannot change physician through the callback. `RfaProviderSelectorProps` is exported for host components. Host-prepared `initialDraft` continues to bypass saved selection.
 
 ## Official form creation
 

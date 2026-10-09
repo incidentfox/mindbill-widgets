@@ -20,11 +20,11 @@ async function type(container: HTMLElement, label: string, value: string) {
  await act(async () => { const prototype = input instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype; Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
 }
 it("creates an unsigned draft from confirmed saved identities without a host initialDraft", async () => {
- const h = harness(); const onCreated = vi.fn();
+ const h = harness(); const onCreated = vi.fn(); const onSelectRfa = vi.fn();
  const saved = { id:"rfa_synthetic", ...context.claims[0], renderingProviderId:"provider_synthetic",providerName:"Synthetic Physician",status:"draft",reviewType:"prospective",items:[],documents:[],transmissions:[],events:[],informationRequests:[],readiness:{ready:false,missing:[]},contentRevision:1 };
  const fetcher=vi.fn<typeof fetch>(async(input,init)=> String(input).includes("creation-context") ? Response.json({data:context}) : init?.method === "POST" || String(input).endsWith("rfa_synthetic") ? Response.json({data:saved}) : Response.json(list));
  try {
-  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],onCreated})));
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],onCreated,onSelectRfa})));
   expect(fetcher.mock.calls.some(([url])=>String(url).includes("creation-context"))).toBe(false);
   await act(async()=>h.button("+ Add RFA").click());
   expect(h.button("Save RFA draft").disabled).toBe(true);
@@ -36,7 +36,7 @@ it("creates an unsigned draft from confirmed saved identities without a host ini
   await act(async()=>h.container.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
   const posts=fetcher.mock.calls.filter(([,init])=>init?.method==="POST"); expect(posts).toHaveLength(1);
   const body=JSON.parse(String(posts[0]?.[1]?.body)); expect(body).toMatchObject({claimId:"claim_synthetic",patientId:"patient_synthetic",renderingProviderId:"provider_synthetic",employeeName:"Synthetic Patient",providerName:"Synthetic Physician",providerNpi:"1234567890",claimsAdminId:"admin_synthetic",dateOfInjury:"2026-09-01",items:[{diagnosisCode:"M54.5",serviceDescription:"Synthetic treatment service"}]});
-  expect(body).not.toHaveProperty("signedAt"); expect(onCreated).toHaveBeenCalledOnce();
+  expect(body).not.toHaveProperty("signedAt"); expect(onCreated).toHaveBeenCalledOnce(); expect(onSelectRfa).toHaveBeenCalledWith("rfa_synthetic",undefined);
   expect(fetcher.mock.calls.some(([url])=>/\/(sign|fax)$/.test(String(url)))).toBe(false);
  } finally { await h.close(); }
 });
@@ -167,4 +167,54 @@ it("keeps a scoped dashboard claim authoritative over a host selector callback",
   await act(async()=>h.button("Scoped claim").click());
   expect(fetcher.mock.calls.filter(([url])=>String(url).includes("creation-context")).every(([url])=>new URL(String(url)).searchParams.get("claimId")==="claim_synthetic")).toBe(true);
  } finally { await h.close(); }
+});
+it("resolves newly created host providers after bounded refresh without creating another record",async()=>{
+ const h=harness();let attempts=0;const createdProvider={id:"provider_new",name:"New Synthetic Physician",npi:"1098765432"};
+ const fetcher=vi.fn<typeof fetch>(async input=>{
+  const url=new URL(String(input));if(!url.pathname.includes("creation-context"))return Response.json(list);
+  if(url.searchParams.get("renderingProviderId")==="provider_new")return Response.json({data:{...context,renderingProviders:++attempts<2?context.renderingProviders:[createdProvider]}});
+  return Response.json({data:context});
+ });
+ try{
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],initialView:"create",claimId:"claim_synthetic",renderProviderSelector:({onSelectProvider,selectedProviderId,options,loading})=>createElement("div",null,createElement("span",null,options.map(option=>`${option.label} NPI ${option.npi}`).join(",")),createElement("span",null,`${selectedProviderId}:${loading}`),createElement("button",{onClick:()=>onSelectProvider("provider_new")},"Create new provider"))})));
+  expect(h.container.textContent).toContain("Synthetic Physician NPI 1234567890");expect(h.container.textContent).not.toContain("Saved rendering provider");
+  await act(async()=>h.button("Create new provider").click()); expect(h.button("Save RFA draft").disabled).toBe(true);
+  await act(async()=>new Promise(resolve=>setTimeout(resolve,550)));
+  expect(attempts).toBe(2);expect(h.container.textContent).toContain("New Synthetic Physician NPI 1098765432");expect(h.button("Save RFA draft").disabled).toBe(false);
+  expect(fetcher.mock.calls.some(([,init])=>init?.method==="POST")).toBe(false);
+ }finally{await h.close();}
+});
+it("keeps the provider scope authoritative and visibly blocks an unresolved host provider",async()=>{
+ const h=harness();const getSession=async()=>({token:"synthetic_token"});const fetcher=vi.fn<typeof fetch>(async input=>String(input).includes("creation-context")?Response.json({data:context}):Response.json(list));
+ const slot=({disabled,onSelectProvider}:{disabled:boolean;onSelectProvider:(id:string)=>void})=>createElement("button",{onClick:()=>onSelectProvider("provider_missing")},disabled?"Scoped provider":"Missing provider");
+ try{
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession,fetch:fetcher,permissions:["create"],initialView:"create",renderingProviderId:"provider_synthetic",renderProviderSelector:slot})));
+  await act(async()=>h.button("Scoped provider").click());
+  expect(fetcher.mock.calls.filter(([url])=>String(url).includes("creation-context")).every(([url])=>new URL(String(url)).searchParams.get("renderingProviderId")==="provider_synthetic")).toBe(true);
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession,fetch:fetcher,permissions:["create"],initialView:"create",renderProviderSelector:slot})));
+  await act(async()=>h.button("Missing provider").click());
+  await act(async()=>new Promise(resolve=>setTimeout(resolve,1600)));
+  expect(h.container.querySelector('[role="alert"]')?.textContent).toContain("not available yet");expect(h.button("Save RFA draft").disabled).toBe(true);
+  expect(fetcher.mock.calls.filter(([url])=>String(url).includes("renderingProviderId=provider_missing"))).toHaveLength(3);
+ }finally{await h.close();}
+});
+
+it("searches and pages host physician options while retaining the selected physician",async()=>{
+ const h=harness();const other={id:"provider_other",name:"Other Synthetic Physician"};
+ const fetcher=vi.fn<typeof fetch>(async input=>{
+  const url=new URL(String(input));if(!url.pathname.includes("creation-context"))return Response.json(list);
+  if(url.searchParams.get("renderingProviderId"))return Response.json({data:context});
+  if(url.searchParams.get("providerCursor"))return Response.json({data:{...context,renderingProviders:[],renderingProvidersNextCursor:null}});
+  if(url.searchParams.get("providerSearch"))return Response.json({data:{...context,renderingProviders:[other],renderingProvidersNextCursor:"next_physicians"}});
+  return Response.json({data:context});
+ });
+ try{
+  await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["create"],initialView:"create",claimId:"claim_synthetic",renderProviderSelector:({options,search,onSearchProvider,onSelectProvider,hasNext,hasPrevious,onNext,onFirst,disabled})=>createElement("div",null,createElement("span",null,options.map(option=>option.label).join(",")),createElement("span",null,search),createElement("button",{onClick:()=>onSelectProvider("provider_synthetic")},"Select physician"),createElement("button",{disabled,onClick:()=>onSearchProvider("Other")},"Search physicians"),hasNext?createElement("button",{onClick:onNext},"Next physicians"):null,hasPrevious?createElement("button",{onClick:onFirst},"First physicians"):null)})));
+  await act(async()=>h.button("Select physician").click());await act(async()=>h.button("Search physicians").click());
+  await act(async()=>new Promise(resolve=>setTimeout(resolve,350)));
+  expect(h.container.textContent).toContain("Other Synthetic Physician");expect(h.container.textContent).toContain("Synthetic Physician");expect(h.button("Save RFA draft").disabled).toBe(false);
+  await act(async()=>h.button("Next physicians").click());expect(h.container.textContent).not.toContain("Other Synthetic Physician");expect(h.container.textContent).toContain("Synthetic Physician");expect(h.button("Save RFA draft").disabled).toBe(false);
+  await act(async()=>h.button("First physicians").click());expect(h.container.textContent).toContain("Other Synthetic Physician");
+  expect(fetcher.mock.calls.some(([url])=>new URL(String(url)).searchParams.get("providerCursor")==="next_physicians")).toBe(true);
+ }finally{await h.close();}
 });
