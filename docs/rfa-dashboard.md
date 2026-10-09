@@ -492,3 +492,23 @@ Hosts can enable the simple layout for selected organizations without changing
 other integrations. `initialView="create"` continues to open creation directly.
 
 The simple Request tab places treatment decisions first. Request information follows, with patient, physician, practice and claims administrator details available in a collapsed disclosure.
+
+## Host patient and claim selection
+
+`renderClaimSelector` optionally replaces the creation form's combined patient/claim picker. Use it to search patients first (including patients without claims), then show only that patient's injuries / claims. The host can reuse its authorized patient and injury creation dialogs.
+
+```tsx
+<RfaDashboard
+  {...sessionOptions}
+  permissions={["create"]}
+  renderClaimSelector={({ selectedClaimId, onSelectClaim, disabled }) => (
+    <PatientThenClaimPicker
+      claimId={selectedClaimId}
+      onClaimChange={onSelectClaim}
+      disabled={disabled}
+    />
+  )}
+/>
+```
+
+The callback accepts a saved claim ID; call it with `""` immediately when changing patients or when the selected patient has no claim. Selecting or clearing a claim clears the previous request's treatment fields and supporting files. The SDK resolves saved patient/claim identity through `getCreationContext({ claimId })` and keeps saving disabled while loading, on failure, or without a valid claim and physician. The host cannot supply replacement patient identity or bypass server permissions. Respect `disabled`; a dashboard scoped with `claimId` cannot switch claims through the callback. Host-prepared `initialDraft` behavior is unchanged and does not render this picker. `RfaClaimSelectorProps` is exported for host components.

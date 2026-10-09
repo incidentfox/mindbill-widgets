@@ -443,3 +443,5 @@ export type { RfaPacketsPanelProps } from "./rfa-packets";
 
 export { RfaTaskBoard } from "./rfa-task-board";
 export type { RfaTaskBoardProps } from "./rfa-task-board";
+
+export type { RfaClaimSelectorProps } from "./rfa-create-form";
