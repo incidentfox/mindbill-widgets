@@ -5,10 +5,11 @@ import { RfaIdentitySelect } from "./rfa-identity-select";
 import { RfaPicker } from "./rfa-official-fields";
 
 /** Saved lookups fill the editable official physician contact fields. Renders two picker columns. */
-export function RfaPracticePicker({ profile, value, onChange, managePracticeHref, manageLocationsHref, onEditPractice, onEditLocation }: {
+export function RfaPracticePicker({ profile, value, onChange, managePracticeHref, manageLocationsHref, onEditPractice, onEditLocation, onChosen }: {
   profile: OrganizationProfileData | undefined; value: RfaContact | null | undefined; onChange: (value: RfaContact) => void;
   managePracticeHref?: string; manageLocationsHref?: string;
   onEditPractice?: ((practiceId: string) => void) | undefined; onEditLocation?: ((locationId: string | null, practiceId: string) => void) | undefined;
+  /** A saved practice or location was chosen, so its saved values are what should show. */ onChosen?: (() => void) | undefined;
 }) {
   const practices = profile?.billingProviders ?? [];
   // A reopened draft stores the printed values, not the lookup ids; show the matching saved choices.
@@ -31,13 +32,13 @@ export function RfaPracticePicker({ profile, value, onChange, managePracticeHref
   return <>
   <RfaPicker label="Practice"><RfaIdentitySelect label="Saved practice" placeholder="Choose a practice" searchPlaceholder="Search practices" query={practiceQuery} onSearch={setPracticeQuery} searchable value={practice} options={practices.filter(item => item.id === practice || item.name.toLowerCase().includes(practiceQuery.toLowerCase())).map(item => ({ id: item.id, label: item.name }))} onSelect={id => {
     const provider = practices.find(item => item.id === id); if (!provider) return;
-    setPractice(id); setPracticeQuery("");
+    setPractice(id); setPracticeQuery(""); onChosen?.();
     const matching = (profile?.locations ?? []).filter(item => item.active !== false && (item.billingProviderId === id || (!item.billingProviderId && practices.length === 1)));
     const primary = matching.filter(item => item.isPrimary); const chosen = matching.length === 1 ? matching[0] : primary.length === 1 ? primary[0] : undefined;
     setLocation(chosen?.id ?? "");
     onChange({ ...value, name: provider.name, phone: provider.phone ?? "", address: provider.billingStreet ?? "", city: provider.billingCity ?? "", state: provider.billingState ?? "", zip: provider.billingZip ?? "", ...(chosen ? located(chosen, provider.phone) : {}) });
   }} /><span className="mbrfa-picker-links">{onEditPractice && practice ? <button type="button" className="mbrfa-link" onClick={() => onEditPractice(practice)}>Edit practice</button> : null}{managePracticeHref ? <a className="mbrfa-link-out" href={managePracticeHref} target="_blank" rel="noopener noreferrer">{onEditPractice ? "Manage practices ↗" : "Add / manage practices"}</a> : null}</span></RfaPicker>
-  <RfaPicker label="Practice location"><RfaIdentitySelect label="Practice location" placeholder={practice ? "Choose a location" : "Choose a practice first"} searchPlaceholder="Search locations" query={locationQuery} onSearch={setLocationQuery} searchable disabled={!practice} value={location} options={locations.filter(item => item.id === location || item.name.toLowerCase().includes(locationQuery.toLowerCase())).map(item => ({ id: item.id, label: item.name, detail: `${item.street}, ${item.city}` }))} onSelect={id => { const chosen = locations.find(item => item.id === id); if (!chosen) return; setLocation(id); setLocationQuery(""); onChange({ ...value, ...located(chosen, practices.find(item => item.id === practice)?.phone) }); }} />
+  <RfaPicker label="Practice location"><RfaIdentitySelect label="Practice location" placeholder={practice ? "Choose a location" : "Choose a practice first"} searchPlaceholder="Search locations" query={locationQuery} onSearch={setLocationQuery} searchable disabled={!practice} value={location} options={locations.filter(item => item.id === location || item.name.toLowerCase().includes(locationQuery.toLowerCase())).map(item => ({ id: item.id, label: item.name, detail: `${item.street}, ${item.city}` }))} onSelect={id => { const chosen = locations.find(item => item.id === id); if (!chosen) return; setLocation(id); setLocationQuery(""); onChosen?.(); onChange({ ...value, ...located(chosen, practices.find(item => item.id === practice)?.phone) }); }} />
     <span className="mbrfa-picker-links">{onEditLocation && practice && location ? <button type="button" className="mbrfa-link" onClick={() => onEditLocation(location, practice)}>Edit location</button> : null}{onEditLocation && practice ? <button type="button" className="mbrfa-link" onClick={() => onEditLocation(null, practice)}>Add location</button> : null}{manageLocationsHref ? <a className="mbrfa-link-out" href={manageLocationsHref} target="_blank" rel="noopener noreferrer">{onEditLocation ? "Manage locations ↗" : "Add / manage locations"}</a> : null}</span></RfaPicker>
   </>;
 }

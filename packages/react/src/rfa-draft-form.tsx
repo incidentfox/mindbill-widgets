@@ -3,7 +3,7 @@ import type { BillDiagnosisCode, OrganizationProfileData, RfaContact } from "@mi
 import { RfaPracticePicker } from "./rfa-practice-picker";
 import { RfaContactPicker, type RfaContactDirectoryProps } from "./rfa-contact-picker";
 import { RfaContactFields, RfaDiagnosisFields } from "./rfa-draft-fields";
-import { RfaEmployeeFields, RfaOfficialContactFields, RfaPicker, RfaSavedField, type RfaFormDetails, type RfaFormSelectors } from "./rfa-official-fields";
+import { RfaEmployeeFields, RfaManualToggle, RfaOfficialContactFields, RfaPicker, RfaSavedField, type RfaFormDetails, type RfaFormSelectors } from "./rfa-official-fields";
 import { useEffect, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
@@ -135,6 +135,12 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
     window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [officialForm, onRefreshProfile]);
+  // The Requesting Physician block shows the chosen practice as information; typing is opt-in.
+  // With no saved practices to choose from, or a request whose practice was typed, it starts editable.
+  const [practiceManualChoice, setPracticeManual] = useState<boolean | null>(null);
+  const savedPractices = organizationProfile?.billingProviders ?? [];
+  const typedPractice = Object.values(savedDraft.requestingPractice ?? {}).some(value => value?.trim());
+  const practiceManual = practiceManualChoice ?? !(savedPractices.some(provider => provider.name === savedDraft.requestingPractice?.name) || (!typedPractice && savedPractices.length > 0));
   const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
   const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
   const previousClaim = useRef(identityKey);
@@ -169,7 +175,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   if (officialForm) return <TreatmentDraftShell {...appearance} hideHeading={embedded} title="Request for authorization" description="DWC Form RFA">
     {mode === "edit" ? <p className="mbtd-note">Saving replaces this draft, clears its signature, and requires a new signing review. It does not send the request or authorize treatment.</p> : null}
     {onBack ? <button type="button" disabled={locked} onClick={() => onBack(draft)}>Back to patient and physician</button> : null}
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className="mbrfa-official">
       <fieldset disabled={locked} className="mbrfa-request-details"><legend>Request type</legend><div className="mbtd-grid">
         <div className="mbrfa-request-types" role="group" aria-label="Request type"><label className="mbrfa-check"><input type="radio" name="request-type" checked={(draft.requestType ?? "new") === "new"} onChange={() => update({ requestType: "new" })} /><span><strong>New Request</strong></span></label><label className="mbrfa-check"><input type="radio" name="request-type" checked={draft.requestType === "resubmission_material_change"} onChange={() => update({ requestType: "resubmission_material_change" })} /><span><strong>Resubmission</strong> – Change in Material Facts</span></label></div>
         <label className="mbrfa-check"><input type="checkbox" checked={draft.expedited ?? false} onChange={event => update({ expedited: event.target.checked })} />Expedited Review: Check box if employee faces an imminent and serious threat to his or her health</label>
@@ -182,11 +188,12 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
       <fieldset><legend>Requesting Physician Information</legend>
         <div className="mbrfa-pickers" data-columns={selectors?.physician ? 3 : 2}>
           {selectors?.physician ? <RfaPicker label="Requesting physician">{selectors.physician}</RfaPicker> : null}
-          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} onEditPractice={onEditPractice} onEditLocation={onEditLocation} />
+          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} onEditPractice={onEditPractice} onEditLocation={onEditLocation} onChosen={() => setPracticeManual(false)} />
         </div>
-        <fieldset className="mbrfa-plain" disabled={locked}><RfaOfficialContactFields nameLabel="Practice Name" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} faxHint="Required to send. The decision is faxed back here. Save it on the practice location to fill it automatically."
+        <fieldset className="mbrfa-plain" disabled={locked}><RfaOfficialContactFields editable={practiceManual} nameLabel="Practice Name" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} faxHint="Required to send. The decision is faxed back here. Save it on the practice location to fill it automatically."
           before={<RfaSavedField span={6} label="Physician Name" value={draft.providerName} />}
           beforeEmail={<><RfaSavedField span={3} label="Specialty" value={formDetails?.physician?.specialty ?? savedPhysician?.specialty} /><RfaSavedField span={3} label="NPI Number" value={draft.providerNpi} /></>} /></fieldset>
+        <RfaManualToggle manual={practiceManual} onChange={setPracticeManual} disabled={locked} />
       </fieldset>
       <RfaContactPicker officialForm {...(searchClaimsAdministrators ? { searchClaimsAdministrators } : {})} {...(getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory } : {})} {...(draft.claimsAdminId ? { administratorId: draft.claimsAdminId } : {})} {...(draft.claimNumber ? { claimNumber: draft.claimNumber } : {})} contextKey={draft.claimId} value={draft.authorizationContact} disabled={locked} onChange={(id, authorizationContact) => { setAdministratorOverride({ id }); update({ authorizationContact }); }} />
       {draft.items.map((item, index) => <fieldset key={index} disabled={locked}><legend>Requested Treatment{draft.items.length > 1 ? ` ${index + 1}` : ""}</legend><div className="mbrfa-form-grid">

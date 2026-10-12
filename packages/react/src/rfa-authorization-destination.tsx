@@ -16,10 +16,12 @@ export type RfaAuthorizationDestinationProps = {
   onChange: (destination: RfaAuthorizationDestinationOption | null) => void;
   /** Render as a plain field group inside a host form section, without its own frame or legend. */
   compact?: boolean;
+  /** Compact mode: offer one "enter manually" choice that hands entry to the host's own fields. */
+  onManualEntry?: () => void;
 };
 
 /** Choose a destination without sending an RFA or treating email as fax. */
-export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart, compact = false }: RfaAuthorizationDestinationProps): ReactElement {
+export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart, compact = false, onManualEntry }: RfaAuthorizationDestinationProps): ReactElement {
   const options = loading || error ? [] : rfaAuthorizationDestinations(directory);
   const fax = savedContact?.fax ? normalizeRfaFax(savedContact.fax) : null;
   const savedLabel = savedContact?.contactName || savedContact?.name || "Saved request contact";
@@ -54,8 +56,8 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
   return <fieldset className={compact ? "mb-rfa-destination mbrfa-plain" : "mb-rfa-destination"} disabled={disabled || loading} style={compact ? { display: "grid", gap: 8, minWidth: 0, overflowWrap: "anywhere" } : { border: "1px solid var(--mb-border, #d7e0df)", borderRadius: 10, padding: 16, display: "grid", gap: 12, minWidth: 0, overflowWrap: "anywhere" }}>
     {compact ? null : <><legend>Authorization destination</legend>{guidance}</>}
     {compact ? <RfaIdentitySelect label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"} placeholder="Choose a destination" searchPlaceholder="Search offices, fax numbers or e-mail" query={query} onSearch={setQuery} searchable disabled={disabled || loading} value={selection}
-      options={[...options.map((option, index) => ({ id: String(index), label: option.label, detail: `${option.method === "fax" ? "Fax" : "E-mail"} ${option.destination}` })), { id: "manual", label: needsAdjuster ? "Enter the handling adjuster’s fax" : "Enter another confirmed authorization fax" }, { id: "manual-email", label: "Enter a confirmed authorization e-mail" }].filter(option => option.id === selection || `${option.label} ${"detail" in option ? option.detail : ""}`.toLowerCase().includes(query.trim().toLowerCase()))}
-      onSelect={value => { setQuery(""); pick(value); }} /> :
+      options={[...options.map((option, index) => ({ id: String(index), label: option.label, detail: `${option.method === "fax" ? "Fax" : "E-mail"} ${option.destination}` })), ...(onManualEntry ? [{ id: "manual-entry", label: needsAdjuster ? "Enter the handling adjuster’s contact manually" : "Enter a different contact manually" }] : [{ id: "manual", label: needsAdjuster ? "Enter the handling adjuster’s fax" : "Enter another confirmed authorization fax" }, { id: "manual-email", label: "Enter a confirmed authorization e-mail" }])].filter(option => option.id === selection || `${option.label} ${"detail" in option ? option.detail : ""}`.toLowerCase().includes(query.trim().toLowerCase()))}
+      onSelect={value => { setQuery(""); if (value === "manual-entry") { onManualEntry?.(); return; } pick(value); }} /> :
     <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
       <select value={selection} onChange={(event) => pick(event.target.value)} style={{ padding: 10, width: "100%", minWidth: 0, maxWidth: "100%", font: "inherit" }}>
         <option value="">Choose a destination…</option>

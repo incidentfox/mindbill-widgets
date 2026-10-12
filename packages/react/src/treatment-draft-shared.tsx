@@ -41,11 +41,35 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd .mbrfa-form-grid .mbrfa-picker{padding-bottom:2px}
 .mbtd .mbrfa-picker a,.mbtd .mbrfa-picker-links{font-size:12px}.mbtd .mbrfa-picker-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center;min-height:18px}
 .mbtd .mbrfa-picker p,.mbtd .mbrfa-guidance p{margin:0;font-size:12px}.mbtd .mbrfa-guidance{display:grid;gap:4px}
+.mbtd .mbrfa-section-actions{display:flex;gap:12px;align-items:center;margin-top:14px;font-size:12px;color:var(--mb-muted)}
 .mbtd .mbrfa-field-hint{font-size:12px;color:var(--mb-muted);font-weight:400}
 .mbtd .mbrfa-link-out{color:var(--mb-muted)!important;text-decoration:none}.mbtd .mbrfa-link-out:hover{text-decoration:underline}.mbtd .mbrfa-picker-links a{text-decoration:none}
 .mbtd button.mbrfa-link.mbrfa-link{border:0;background:none;padding:0;min-height:0;color:var(--mb-accent);font-size:12px;text-decoration:none}.mbtd button.mbrfa-link.mbrfa-link:hover,.mbtd .mbrfa-picker-links a:hover{text-decoration:underline}
 .mbtd fieldset.mbrfa-plain.mbrfa-plain{border:0;padding:0;margin:0;background:none;border-radius:0;min-width:0}
 .mbtd .mbrfa-visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.mbtd form.mbrfa-official{gap:18px;counter-reset:mbrfa-section}
+.mbtd form.mbrfa-official>fieldset{padding:0 20px 20px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:0 1px 2px #0000000a}
+.mbtd form.mbrfa-official>fieldset>legend{float:left;display:flex;align-items:center;gap:10px;width:calc(100% + 40px);margin:0 -20px;padding:13px 20px;border-bottom:1px solid var(--mb-border);font-size:14px;font-weight:600;letter-spacing:-.005em}
+.mbtd form.mbrfa-official>fieldset>legend+*{clear:both}.mbtd form.mbrfa-official>fieldset>legend+:not(.mbrfa-pickers){margin-top:18px}
+.mbtd form.mbrfa-official>fieldset>legend::before{counter-increment:mbrfa-section;content:counter(mbrfa-section);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:color-mix(in srgb,var(--mb-accent) 12%,var(--mb-surface));color:var(--mb-accent);font-size:12px;font-weight:600}
+.mbtd form.mbrfa-official .mbrfa-pickers{margin:0 -20px 18px;padding:16px 20px;border-bottom:1px solid var(--mb-border);background:var(--mb-soft)}
+.mbtd form.mbrfa-official .mbrfa-picker>span:first-child{font-size:12px;font-weight:600;letter-spacing:.01em}
+.mbtd form.mbrfa-official .mbrfa-form-grid{gap:14px 20px}
+.mbtd form.mbrfa-official .mbrfa-saved>span,.mbtd form.mbrfa-official .mbrfa-form-grid>label{font-size:12px;color:var(--mb-muted);font-weight:500}
+.mbtd form.mbrfa-official .mbrfa-form-grid>label>:is(input,textarea){color:var(--mb-text)}
+.mbtd form.mbrfa-official .mbrfa-saved>strong{font-size:14px;font-weight:500;color:var(--mb-text)}
+.mbtd form.mbrfa-official .mbrfa-request-details>.mbtd-grid{gap:4px}
+.mbtd form.mbrfa-official .mbrfa-request-types{display:inline-grid;grid-auto-flow:column;grid-template-columns:none;gap:0;padding:3px;margin-bottom:10px;border:1px solid var(--mb-border);border-radius:calc(var(--mb-control-radius) + 3px);background:var(--mb-soft);justify-self:start;width:fit-content;max-width:100%}
+.mbtd form.mbrfa-official .mbrfa-request-types .mbrfa-check{min-height:34px;padding:6px 16px;border-radius:var(--mb-control-radius);color:var(--mb-muted);font-size:13px}
+.mbtd form.mbrfa-official .mbrfa-request-types .mbrfa-check:has(input:checked){background:var(--mb-surface);color:var(--mb-text);box-shadow:0 1px 2px #00000014}
+.mbtd form.mbrfa-official .mbrfa-request-types input[type=radio]{position:absolute;opacity:0;width:1px;height:1px}
+.mbtd form.mbrfa-official .mbrfa-request-types .mbrfa-check:has(input:focus-visible){outline:2px solid var(--mb-accent);outline-offset:2px}
+.mbtd form.mbrfa-official .mbrfa-request-details .mbrfa-check{min-height:32px;font-size:13px}
+.mbtd form.mbrfa-official .mbrfa-section-actions{margin-top:16px;padding-top:12px;border-top:1px dashed var(--mb-border)}
+.mbtd form.mbrfa-official>div:has(>button:only-child)>button{border-style:dashed;color:var(--mb-accent);font-weight:500}
+.mbtd form.mbrfa-official>.mbtd-actions:last-child{position:sticky;bottom:12px;z-index:5;justify-content:flex-end;flex-direction:row-reverse;margin-top:0;padding:10px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:color-mix(in srgb,var(--mb-surface) 92%,transparent);backdrop-filter:blur(6px);box-shadow:0 6px 20px #00000014}
+.mbtd form.mbrfa-official>.mbtd-actions:last-child>[role=status]{margin-right:auto;order:9}
+@media(max-width:760px){.mbtd form.mbrfa-official>.mbtd-actions:last-child{position:static;flex-direction:row}.mbtd form.mbrfa-official .mbrfa-request-types{grid-auto-flow:row;width:100%}}
 @media(max-width:760px){.mbtd .mbrfa-pickers,.mbtd .mbrfa-pickers[data-columns="2"]{grid-template-columns:minmax(0,1fr)}.mbtd .mbrfa-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mbtd .mbrfa-form-grid>*{grid-column:1/-1}.mbtd .mbrfa-form-grid>.mbrfa-s1,.mbtd .mbrfa-form-grid>.mbrfa-s2{grid-column:span 1}}
 @media(max-width:640px){.mbtd .mbrfa-request-types{grid-template-columns:1fr;gap:4px}}
 @media(forced-colors:active){.mbtd .mbrfa-request-types input[type=radio]{appearance:auto}.mbtd .mbrfa-request-types input[type=radio]::after{display:none}}
