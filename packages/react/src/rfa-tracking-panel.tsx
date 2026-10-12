@@ -4,6 +4,7 @@ import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptio
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 import { rfaDetailCss } from "./rfa-detail-header";
 import { RfaHistoryEntry } from "./rfa-history-entry";
+import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaCard, RfaPill, rfaCalendarDate, rfaOutcome, rfaShortDate } from "./rfa-detail-cards";
 
 export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
@@ -19,6 +20,35 @@ const text = (data: FormData, key: string) => String(data.get(key) ?? "").trim()
 const required = (data: FormData, key: string, name: string) => { const value = text(data, key); if (!value) throw new Error(`Enter ${name}.`); return value; };
 const timestamp = (data: FormData, key: string) => { const value = new Date(required(data, key, "a date and time")); if (!Number.isFinite(value.getTime())) throw new Error("Enter a valid date and time."); return value.toISOString(); };
 const localTime = (value: string | null | undefined) => { if (!value) return ""; const parsed = new Date(value); return Number.isFinite(parsed.getTime()) ? new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""; };
+
+const rfaTimelineCss = `.mbrfa-timeline{list-style:none;margin:0;padding:0}.mbrfa-timeline>li{position:relative;padding:0 0 20px 28px}.mbrfa-timeline>li:last-child{padding-bottom:2px}
+.mbrfa-timeline>li::before{content:"";position:absolute;left:4px;top:4px;width:12px;height:12px;border-radius:50%;border:2px solid var(--mb-border);background:var(--mb-surface)}
+.mbrfa-timeline>li::after{content:"";position:absolute;left:10px;top:20px;bottom:0;width:1px;background:var(--mb-border)}.mbrfa-timeline>li:last-child::after{display:none}
+.mbrfa-timeline>li[data-kind=sent]::before{border-color:var(--mb-accent);background:var(--mb-accent)}.mbrfa-timeline>li[data-kind=decision]::before{border-color:#1a7f4b;background:#1a7f4b}.mbrfa-timeline>li[data-kind=late]::before{border-color:var(--mb-danger,#b42318);background:var(--mb-danger,#b42318)}.mbrfa-timeline>li[data-kind=due]::before,.mbrfa-timeline>li[data-kind=pending]::before{border-style:dashed}
+.mbrfa-timeline>li[data-kind=sent]{margin:0 -8px 12px;padding:10px 8px 12px 36px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface))}.mbrfa-timeline>li[data-kind=sent]::before{left:12px;top:14px}.mbrfa-timeline>li[data-kind=sent]::after{display:none}
+.mbrfa-tl-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px}.mbrfa-tl-head>strong{font-size:14px;font-weight:600}.mbrfa-tl-head>span{font-size:12px;color:var(--mb-muted)}
+.mbrfa-timeline>li[data-kind=pending] .mbrfa-tl-head>strong,.mbrfa-timeline>li[data-kind=due] .mbrfa-tl-head>strong{font-weight:500}.mbrfa-timeline>li[data-kind=late] .mbrfa-tl-head>strong{color:var(--mb-danger,#b42318)}
+.mbrfa-timeline p{margin:4px 0 0;font-size:13px}.mbrfa-timeline .mbrfa-tl-meta{color:var(--mb-muted);font-size:12px}.mbrfa-timeline ul{margin:6px 0 0;padding:0;list-style:none;font-size:13px}
+.mbrfa-tl-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.mbrfa-detail .mbrfa-tl-actions>button{min-height:32px;padding:4px 12px;font-size:13px}
+.mbrfa-tl-decisions{display:flex;flex-wrap:wrap;gap:6px}.mbrfa-tl-decisions>li{display:inline-flex;align-items:center;gap:6px;padding:2px 10px 2px 3px;border:1px solid var(--mb-border);border-radius:999px;font-size:12px;text-transform:capitalize}.mbrfa-tl-decisions>li>b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--mb-accent) 14%,var(--mb-surface));font-size:11px}
+.mbrfa-tl-decisions>li[data-outcome=denied]{border-color:var(--mb-danger,#b42318);color:var(--mb-danger,#b42318)}.mbrfa-tl-decisions>li[data-outcome=approved],.mbrfa-tl-decisions>li[data-outcome=authorized]{border-color:#1a7f4b;color:#1a7f4b}
+.mbrfa-timeline details{margin-top:6px;font-size:13px}.mbrfa-timeline details>summary{cursor:pointer;color:var(--mb-accent);font-size:12px}.mbrfa-timeline dl{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:2px 14px;margin:6px 0 0}.mbrfa-timeline dl>div{display:contents}.mbrfa-timeline dt{color:var(--mb-muted)}.mbrfa-timeline dd{margin:0}.mbrfa-timeline h4{margin:8px 0 2px;font-size:12px}`;
+
+type TimelineEntry = { event: RfaHistoryEvent } | { event?: undefined; key: string; state: "due" | "late" | "pending"; title: string; when: string; detail?: string };
+/** Recorded events oldest first, with the decision due date placed where it falls and what is still awaited at the end. */
+function timelineEntries(history: RfaHistoryEvent[], rfa: RfaRecord): TimelineEntry[] {
+  const events: TimelineEntry[] = [...history].sort((a, b) => (a.occurredAt ?? "").localeCompare(b.occurredAt ?? "")).map(event => ({ event }));
+  if (!rfa.submittedAt) return [...events, { key: "unsent", state: "pending", title: "Not sent yet", when: "", detail: "Sending applies the physician's saved signature and starts the decision clock on receipt." }];
+  const decided = rfa.items.filter(item => item.outcome !== "pending").length, open = decided < rfa.items.length;
+  if (rfa.decisionDueAt) {
+    const late = open && Date.parse(rfa.decisionDueAt) < Date.now();
+    const due: TimelineEntry = { key: "due", state: late ? "late" : "due", title: late ? "UR decision overdue" : "UR decision due", when: rfaDecisionDueText(rfa), ...(rfa.decisionDeadlineBasis ? { detail: capital(words(rfa.decisionDeadlineBasis)) } : {}) };
+    const at = events.findIndex(entry => entry.event && (entry.event.occurredAt ?? "") > rfa.decisionDueAt!);
+    events.splice(at < 0 ? events.length : at, 0, due);
+  } else events.push({ key: "receipt", state: "pending", title: "Waiting for confirmed receipt", when: "", detail: "The decision due date is set when receipt is confirmed." });
+  if (open) events.push({ key: "awaiting", state: "pending", title: decided ? `Awaiting decision on ${rfa.items.length - decided} of ${rfa.items.length} treatments` : "Awaiting UR decision", when: "" });
+  return events;
+}
 
 /** Treatment-level scheduling, evidence, and immutable history for an existing RFA. */
 export function RfaTrackingPanel(props: RfaTrackingPanelProps): ReactElement {
@@ -130,7 +160,9 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
     {view !== "treatments" ? <>
       <RfaCard title="History" action={permissions.includes("edit") && !noteOpen ? <button type="button" disabled={disabled} onClick={() => setNoteOpen(true)}>Add note</button> : null} flush>
         <div className="mbrfa-rows">{noteOpen ? noteForm : null}</div>
-        {loading ? <p className="mbrfa-sheet-body">Loading history…</p> : history.length ? <div className="mbrfa-table-scroll"><table className="mbrfa-history-table"><thead><tr><th scope="col">Date</th><th scope="col">Action</th><th scope="col">User</th><th scope="col">Details</th></tr></thead><tbody>{history.map(event => <RfaHistoryEntry key={event.id} event={event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />)}</tbody></table></div> : !loadErrors.some(value => value.startsWith("History")) ? <p className="mbrfa-sheet-body mbrfa-empty">No history entries have been recorded.</p> : null}
+        {loading ? <p className="mbrfa-sheet-body">Loading history…</p> : history.length ? <div className="mbrfa-sheet-body"><style>{rfaTimelineCss}</style><ol className="mbrfa-timeline" aria-label="Request history">{timelineEntries(history, rfa).map(entry => entry.event
+          ? <RfaHistoryEntry timeline key={entry.event.id} event={entry.event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />
+          : <li key={entry.key} data-kind={entry.state}><div className="mbrfa-tl-head"><strong>{entry.title}</strong><span>{entry.when}</span></div>{entry.detail ? <p className="mbrfa-tl-meta">{entry.detail}</p> : null}</li>)}</ol></div> : !loadErrors.some(value => value.startsWith("History")) ? <p className="mbrfa-sheet-body mbrfa-empty">No history entries have been recorded.</p> : null}
       </RfaCard>
       {rfa.transmissions.length ? <RfaCard title="Delivery" count={rfa.transmissions.length} flush><div className="mbrfa-table-scroll"><table className="mbrfa-grid-table"><thead><tr><th scope="col">Date</th><th scope="col">Method</th><th scope="col">Status</th><th scope="col">Recipient</th><th scope="col">Confirmed receipt</th><th scope="col"><span className="mbrfa-sr-only">Receipt</span></th></tr></thead><tbody>{rfa.transmissions.map(transmission => <tr key={transmission.id}>
         <td>{rfaShortDate(transmission.occurredAt)}</td><td>{capital(words(transmission.channel))}<small>{capital(words(transmission.direction))}{transmission.purpose ? ` · ${words(transmission.purpose)}` : ""}</small></td>
