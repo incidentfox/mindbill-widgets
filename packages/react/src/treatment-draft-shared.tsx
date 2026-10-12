@@ -43,6 +43,8 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd .mbrfa-picker p,.mbtd .mbrfa-guidance p{margin:0;font-size:12px}.mbtd .mbrfa-guidance{display:grid;gap:4px}
 .mbtd .mbrfa-section-actions{display:flex;gap:12px;align-items:center;margin-top:14px;font-size:12px;color:var(--mb-muted)}
 .mbtd .mbrfa-field-hint{font-size:12px;color:var(--mb-muted);font-weight:400}
+.mbtd .mbrfa-template-save{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin-top:10px}.mbtd .mbrfa-template-save>label{display:grid;gap:4px;font-size:12px;color:var(--mb-muted)}.mbtd .mbrfa-template-save>.mbrfa-check{display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer}.mbtd .mbrfa-template-save>.mbrfa-check>input{width:16px;height:16px;min-height:16px;margin:0;padding:0;flex:0 0 16px;accent-color:var(--mb-accent)}.mbtd .mbrfa-template-save>:is(.mbrfa-check,.mbrfa-section-actions){grid-column:1/-1;margin-top:0;padding-top:0;border-top:0}
+@media(max-width:760px){.mbtd .mbrfa-template-save{grid-template-columns:minmax(0,1fr)}}
 .mbtd .mbrfa-req{color:var(--mb-danger,#c0392b);font-weight:700}
 .mbtd .mbrfa-contact-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.mbtd .mbrfa-contact-grid>.mbrfa-s3{grid-column:span 2}.mbtd .mbrfa-contact-grid>:is(.mbrfa-s1,.mbrfa-s2){grid-column:span 1}
 .mbtd .mbrfa-link-out{color:var(--mb-muted)!important;text-decoration:none}.mbtd .mbrfa-link-out:hover{text-decoration:underline}.mbtd .mbrfa-picker-links a{text-decoration:none}

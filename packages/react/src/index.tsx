@@ -415,6 +415,8 @@ export { DentalDraftEditor, dentalDraftChargeSummary, parseDentalCharge, validat
 export type { DentalDraftContentInput, DentalDraftLineInput, DentalDraftEditorProps, DentalAttestationsInput, DentalConsentInput, DentalAdaFormInput, DentalOrthodonticsInput, DentalProsthesisInput } from "./dental-draft-editor";
 export { RfaDraftForm, normalizeRfaDraft, validateRfaDraft } from "./rfa-draft-form";
 export type { RfaDraftInput, RfaDraftItemInput, RfaDraftFormProps } from "./rfa-draft-form";
+export { applyRfaTemplate, rfaTemplateItems } from "./rfa-template-bar";
+export type { RfaTreatmentTemplate, RfaTreatmentTemplateInput } from "./rfa-template-bar";
 
 export { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 export type { RfaAuthorizationDestinationProps } from "./rfa-authorization-destination";
