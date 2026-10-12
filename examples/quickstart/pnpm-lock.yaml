@@ -188,8 +188,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@mindbill/browser@0.50.7':
-    resolution: {integrity: sha512-p7MIS7dJrtj5Oy0xxlDVT0OD0o+phts8cnpr1gC9M7L3l2CZR5xWGvoyL5cnErsvIsZUPY7OS6rAYTq7HkbhSQ==}
+  '@mindbill/browser@0.50.8':
+    resolution: {integrity: sha512-XAcSCa9mZNwEh/h0GXUF+0KR2nIkt7L3fNsvb1p9OOmhpDPoqdWXBc51W7iq+KU+UuRhW9VBw8xZdERNt+YjCQ==}
 
   '@mindbill/embed@0.6.0':
     resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==}
@@ -199,7 +199,7 @@ packages:
     engines: {node: '>=20'}
 
   '@mindbill/react@0.77.32':
-    resolution: {integrity: sha512-XfUrLE1rPh7QPzYJXYuh4PWiAQHRaPzyS2vTlh08BYFUE2MiTCdjERs+AfpcmJKjFL04ZW4RjSMj3gdq+eYkAg==}
+    resolution: {integrity: sha512-MTfaSSJMipKo69iTMUOeGM3crgbTOqODrsu7Kz+R93AGk4u3I8qvGqOoMGcACCWEIMc33GC5bUt1GpgRAa32+Q==}
     peerDependencies:
       react: '>=18'
 
@@ -487,7 +487,7 @@ snapshots:
   '@img/sharp-win32-x64@0.35.4':
     optional: true
 
-  '@mindbill/browser@0.50.7': {}
+  '@mindbill/browser@0.50.8': {}
 
   '@mindbill/embed@0.6.0': {}
 
@@ -495,7 +495,7 @@ snapshots:
 
   '@mindbill/react@0.77.32(react@19.2.8)':
     dependencies:
-      '@mindbill/browser': 0.50.7
+      '@mindbill/browser': 0.50.8
       '@mindbill/embed': 0.6.0
       react: 19.2.8
 
