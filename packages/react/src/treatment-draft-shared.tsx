@@ -39,7 +39,7 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd .mbrfa-pickers[data-columns="1"]{grid-template-columns:minmax(0,1fr)}.mbtd .mbrfa-pickers[data-columns="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
 .mbtd .mbrfa-picker{display:grid;gap:5px;min-width:0;font-size:13px;align-content:start}.mbtd .mbrfa-picker>span:first-child{font-weight:600}
 .mbtd .mbrfa-form-grid .mbrfa-picker{padding-bottom:2px}
-.mbtd .mbrfa-picker a,.mbtd .mbrfa-picker-links{font-size:12px}.mbtd .mbrfa-picker-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.mbtd .mbrfa-picker a,.mbtd .mbrfa-picker-links{font-size:12px}.mbtd .mbrfa-picker-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center;min-height:18px}
 .mbtd .mbrfa-picker p,.mbtd .mbrfa-guidance p{margin:0;font-size:12px}.mbtd .mbrfa-guidance{display:grid;gap:4px}
 .mbtd button.mbrfa-link.mbrfa-link{border:0;background:none;padding:0;min-height:0;color:var(--mb-accent);font-size:12px;text-decoration:underline}
 .mbtd fieldset.mbrfa-plain.mbrfa-plain{border:0;padding:0;margin:0;background:none;border-radius:0;min-width:0}

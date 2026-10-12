@@ -107,18 +107,17 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     return () => { active = false; };
   }, [client, query, effectiveClaimId, effectiveProviderId, renderingProviderId, reload]);
   // Saved records are edited in another tab; show the saved values again when the user returns.
-  const refreshProfile = draftFormProps?.officialForm ? draftFormProps.onRefreshProfile : undefined;
   const refreshOnReturn = !!draftFormProps?.officialForm;
   useEffect(() => {
     if (!refreshOnReturn) return;
     let last = Date.now();
     const refresh = () => {
       if (document.visibilityState === "hidden" || Date.now() - last < 2000) return;
-      last = Date.now(); setReload(value => value + 1); void refreshProfile?.().catch(() => undefined);
+      last = Date.now(); setReload(value => value + 1);
     };
     window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [refreshOnReturn, refreshProfile]);
+  }, [refreshOnReturn]);
   const claim = context?.claims.find(value => value.claimId === selectedClaim);
   const provider = context?.renderingProviders.find(value => value.id === selectedProvider);
   const locked = disabled || loading;
