@@ -157,7 +157,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
         {draft.requestType === "resubmission_material_change" ? <label>Material change (required)<textarea required maxLength={20000} value={draft.materialChange ?? ""} onChange={(event) => update({ materialChange: event.target.value })} /></label> : null}
       </div></fieldset>
       <fieldset><legend>Employee Information</legend>
-        {selectors?.claim ? <div className="mbrfa-pickers" data-columns="1"><RfaPicker label="Patient and claim">{selectors.claim}</RfaPicker></div> : null}
+        {selectors?.claim ? <div className="mbrfa-pickers" data-columns="1">{selectors.claim}</div> : null}
         <RfaEmployeeFields name={draft.employeeName} dateOfInjury={draft.dateOfInjury} claimNumber={draft.claimNumber} details={formDetails?.employee} />
       </fieldset>
       <fieldset><legend>Requesting Physician Information</legend>
