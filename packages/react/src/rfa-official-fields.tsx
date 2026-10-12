@@ -41,16 +41,24 @@ const contactRows = [
   ["zip", "Zip Code", 20, 2], ["phone", "Phone", 30, 2], ["fax", "Fax Number", 30, 2],
 ] as const;
 /** Contact fields in DWC Form RFA order; `before` and `beforeEmail` hold the section's saved values. */
-export function RfaOfficialContactFields({ nameLabel, value, onChange, before, beforeEmail, faxHint }: {
+export function RfaOfficialContactFields({ nameLabel, value, onChange, before, beforeEmail, faxHint, editable = true }: {
   nameLabel: "Practice Name" | "Company Name"; value: RfaContact | null | undefined; onChange: (value: RfaContact) => void;
   before?: ReactNode; beforeEmail?: ReactNode; /** Shown under an empty Fax Number. */ faxHint?: string;
+  /** False shows the values as information; they change through the section's lookups. */ editable?: boolean;
 }): ReactElement {
-  const field = (key: keyof RfaContact, label: string, max: number, span: number) => <label key={key} className={`mbrfa-s${span}`}>{label}<input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: event.target.value })} />{key === "fax" && faxHint && !value?.fax?.trim() ? <small className="mbrfa-field-hint">{faxHint}</small> : null}</label>;
+  const hint = (key: keyof RfaContact) => key === "fax" && faxHint && !value?.fax?.trim() ? <small className="mbrfa-field-hint">{faxHint}</small> : null;
+  const field = (key: keyof RfaContact, label: string, max: number, span: 1 | 2 | 3 | 6) => editable
+    ? <label key={key} className={`mbrfa-s${span}`}>{label}<input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: event.target.value })} />{hint(key)}</label>
+    : <div key={key} className={`mbrfa-s${span} mbrfa-saved`}><span>{label}</span><strong>{value?.[key]?.trim() || "—"}</strong>{hint(key)}</div>;
   return <div className="mbrfa-form-grid">
     {before}{field("name", nameLabel, 200, 3)}{field("contactName", "Contact Name", 200, 3)}
     {contactRows.map(([key, label, max, span]) => field(key, label, max, span))}
     {beforeEmail}{field("email", "E-mail Address", 254, 6)}
   </div>;
+}
+/** Switches a section between saved information and manual entry. */
+export function RfaManualToggle({ manual, onChange, disabled }: { manual: boolean; onChange: (manual: boolean) => void; disabled?: boolean }): ReactElement {
+  return <div className="mbrfa-section-actions"><button type="button" className="mbrfa-link" disabled={disabled} aria-pressed={manual} onClick={() => onChange(!manual)}>{manual ? "Done editing" : "Edit manually"}</button>{manual ? <span>These values are saved on this request only.</span> : null}</div>;
 }
 
 /** Loads the saved employee and physician values for a request that is already drafted. */

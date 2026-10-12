@@ -41,6 +41,7 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd .mbrfa-form-grid .mbrfa-picker{padding-bottom:2px}
 .mbtd .mbrfa-picker a,.mbtd .mbrfa-picker-links{font-size:12px}.mbtd .mbrfa-picker-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center;min-height:18px}
 .mbtd .mbrfa-picker p,.mbtd .mbrfa-guidance p{margin:0;font-size:12px}.mbtd .mbrfa-guidance{display:grid;gap:4px}
+.mbtd .mbrfa-section-actions{display:flex;gap:12px;align-items:center;margin-top:14px;font-size:12px;color:var(--mb-muted)}
 .mbtd .mbrfa-field-hint{font-size:12px;color:var(--mb-muted);font-weight:400}
 .mbtd .mbrfa-link-out{color:var(--mb-muted)!important;text-decoration:none}.mbtd .mbrfa-link-out:hover{text-decoration:underline}.mbtd .mbrfa-picker-links a{text-decoration:none}
 .mbtd button.mbrfa-link.mbrfa-link{border:0;background:none;padding:0;min-height:0;color:var(--mb-accent);font-size:12px;text-decoration:none}.mbtd button.mbrfa-link.mbrfa-link:hover,.mbtd .mbrfa-picker-links a:hover{text-decoration:underline}

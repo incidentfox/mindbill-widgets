@@ -31,9 +31,14 @@ it("practice selection prefers its unique location and excludes another practice
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,organizationProfile:profile})));
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Saved practice"]')!.click());
   await act(async()=>[...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')].find(el=>el.textContent==="Synthetic Practice A")!.click());
-  const address=[...container.querySelectorAll("input")].find(el=>el.parentElement?.textContent==="Address")!;expect(address.value).toBe("Clinic address");
-  const field=(label:string)=>[...container.querySelectorAll("input")].find(el=>el.parentElement?.textContent===label)!.value;
-  expect([field("Contact Name"),field("Fax Number"),field("E-mail Address")]).toEqual(["Synthetic Contact","(202) 555-0177","contact@example.test"]);
+  const physician=[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent==="Requesting Physician Information")!;
+  const shown=(label:string)=>[...physician.querySelectorAll(".mbrfa-saved")].find(el=>el.firstChild!.textContent===label)!.querySelector("strong")!.textContent;
+  // A chosen saved practice shows as information, not as boxes to type into.
+  expect(physician.querySelectorAll(".mbrfa-form-grid input")).toHaveLength(0);
+  expect([shown("Address"),shown("Contact Name"),shown("Fax Number"),shown("E-mail Address")]).toEqual(["Clinic address","Synthetic Contact","(202) 555-0177","contact@example.test"]);
+  await act(async()=>[...physician.querySelectorAll("button")].find(el=>el.textContent==="Edit manually")!.click());
+  expect([...physician.querySelectorAll<HTMLInputElement>(".mbrfa-form-grid input")].find(el=>el.parentElement!.firstChild!.textContent==="Address")!.value).toBe("Clinic address");
+  await act(async()=>[...physician.querySelectorAll("button")].find(el=>el.textContent==="Done editing")!.click());
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());
   expect([...container.querySelectorAll('[role="option"]')].map(el=>el.textContent).join(" ")).not.toContain("Synthetic Clinic B");
  }finally{await act(async()=>root.unmount());container.remove();}

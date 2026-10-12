@@ -4,7 +4,7 @@ import type { BillClaimsAdministratorDirectory, BillReviewPayer, RfaContact } fr
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { RfaIdentitySelect } from "./rfa-identity-select";
 import { RfaContactFields } from "./rfa-draft-fields";
-import { RfaOfficialContactFields, RfaPicker } from "./rfa-official-fields";
+import { RfaManualToggle, RfaOfficialContactFields, RfaPicker } from "./rfa-official-fields";
 export type RfaContactDirectoryProps = {
   searchClaimsAdministrators?: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory?: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
@@ -14,6 +14,8 @@ export function RfaContactPicker({ administratorId, claimNumber, contextKey, val
   disabled: boolean; onChange: (id: string | undefined, contact: RfaContact | null) => void;
 }): ReactElement {
   const listId = useId();
+  // Official form: the chosen administrator and contact show as information unless the user opts to type them.
+  const [manual, setManual] = useState(() => officialForm && !searchClaimsAdministrators);
   const [query, setQuery] = useState(""); const [options, setOptions] = useState<BillReviewPayer[]>([]);
   const [directory, setDirectory] = useState<BillClaimsAdministratorDirectory | null>(null);
   const [loading, setLoading] = useState(false); const [error, setError] = useState("");
@@ -40,13 +42,14 @@ export function RfaContactPicker({ administratorId, claimNumber, contextKey, val
     return <fieldset><legend>Claims Administrator Information</legend>
       <div className="mbrfa-pickers" data-columns="2">
         {searchClaimsAdministrators ? <RfaPicker label="Claims administrator"><RfaIdentitySelect label="Claims Administrator" placeholder="Choose a claims administrator" searchPlaceholder="Search claims administrators" query={query} onSearch={setQuery} searchable disabled={disabled} value={administratorId ?? ""} loading={searching} error={searchError} options={[...(administratorId && directory ? [{ id: administratorId, label: directory.name || "Saved claims administrator" }] : []), ...options.filter(item => item.id !== administratorId || !directory).map(item => ({ id: item.id, label: item.name || "Unnamed claims administrator" }))]} onSelect={id => { const option = options.find(item => item.id === id); if (option) choose(option); }} /></RfaPicker> : null}
-        <RfaPicker label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}><RfaAuthorizationDestination compact contextKey={`${contextKey}:${administratorId ?? ""}`} directory={directory} loading={loading} error={error} disabled={disabled} onChange={destination => {
+        <RfaPicker label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}><RfaAuthorizationDestination compact onManualEntry={() => setManual(true)} contextKey={`${contextKey}:${administratorId ?? ""}`} directory={directory} loading={loading} error={error} disabled={disabled} onChange={destination => {
           if (!destination) return;
           const kept = { ...shown }; delete kept.fax; delete kept.email;
           onChange(administratorId, { ...kept, name: directory?.name ?? shown.name ?? "", contactName: destination.recipientName ?? destination.label, ...(destination.phone ? { phone: destination.phone } : {}), ...(destination.method === "fax" ? { fax: destination.destination } : { email: destination.destination }) });
         }} /></RfaPicker>
       </div>
-      <fieldset className="mbrfa-plain" disabled={disabled}><RfaOfficialContactFields nameLabel="Company Name" value={shown} onChange={contact => onChange(administratorId, contact)} /></fieldset>
+      <fieldset className="mbrfa-plain" disabled={disabled}><RfaOfficialContactFields editable={manual} nameLabel="Company Name" value={shown} onChange={contact => onChange(administratorId, contact)} /></fieldset>
+      <RfaManualToggle manual={manual} onChange={setManual} disabled={disabled} />
     </fieldset>;
   }
   return <fieldset disabled={disabled}><legend>Claims administrator authorization contact</legend>
