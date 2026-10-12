@@ -2073,6 +2073,8 @@ export type OrganizationLocationInput = {
   id?: string; externalId?: string; name: string; street: string; city: string;
   state: string; zip: string; nickname?: string; posCode?: string;
   isPrimary?: boolean; active?: boolean;
+  /** Read-only: the practice contact saved for authorization requests sent from this location. */
+  contact?: { name?: string; phone?: string; fax?: string; email?: string };
 };
 
 export type OrganizationRenderingProviderInput = {

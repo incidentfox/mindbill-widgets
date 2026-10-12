@@ -25,12 +25,14 @@ it.each(["Review & submit", "Preview", "Save draft"])("official form preserves l
 });
 it("practice selection prefers its unique location and excludes another practice's locations", async()=>{
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const onSave=vi.fn().mockResolvedValue(undefined);
- const profile={organizationId:"org_synthetic",practiceIdentity:{},billingProviders:[{id:"practice_a",name:"Synthetic Practice A",npi:"1234567890",billingStreet:"Billing address"},{id:"practice_b",name:"Synthetic Practice B",npi:"1234567890"}],locations:[{id:"location_a",billingProviderId:"practice_a",name:"Synthetic Clinic A",street:"Clinic address",city:"Test City",state:"CA",zip:"90001"},{id:"location_b",billingProviderId:"practice_b",name:"Synthetic Clinic B",street:"Other address",city:"Test City",state:"CA",zip:"90002"}],w9:null,onboarding:{status:null,complete:false,checklist:[]}};
+ const profile={organizationId:"org_synthetic",practiceIdentity:{},billingProviders:[{id:"practice_a",name:"Synthetic Practice A",npi:"1234567890",billingStreet:"Billing address"},{id:"practice_b",name:"Synthetic Practice B",npi:"1234567890"}],locations:[{id:"location_a",billingProviderId:"practice_a",name:"Synthetic Clinic A",street:"Clinic address",city:"Test City",state:"CA",zip:"90001",contact:{name:"Synthetic Contact",fax:"(202) 555-0177",email:"contact@example.test"}},{id:"location_b",billingProviderId:"practice_b",name:"Synthetic Clinic B",street:"Other address",city:"Test City",state:"CA",zip:"90002"}],w9:null,onboarding:{status:null,complete:false,checklist:[]}};
  try{
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,organizationProfile:profile})));
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Saved practice"]')!.click());
   await act(async()=>[...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')].find(el=>el.textContent==="Synthetic Practice A")!.click());
   const address=[...container.querySelectorAll("input")].find(el=>el.parentElement?.textContent==="Address")!;expect(address.value).toBe("Clinic address");
+  const field=(label:string)=>[...container.querySelectorAll("input")].find(el=>el.parentElement?.textContent===label)!.value;
+  expect([field("Contact Name"),field("Fax Number"),field("E-mail Address")]).toEqual(["Synthetic Contact","(202) 555-0177","contact@example.test"]);
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());
   expect([...container.querySelectorAll('[role="option"]')].map(el=>el.textContent).join(" ")).not.toContain("Synthetic Clinic B");
  }finally{await act(async()=>root.unmount());container.remove();}
