@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaDraftForm } from "../packages/react/src/rfa-draft-form";
+import { RfaCreateForm } from "../packages/react/src/rfa-create-form";
 import type { RfaDraftInput } from "../packages/react/src/rfa-draft-form";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const initialDraft: RfaDraftInput = { claimId:"claim_synthetic", patientId:"patient_synthetic", renderingProviderId:"provider_synthetic", employeeName:"Synthetic Patient", providerName:"Synthetic Physician", items:[{diagnosisCode:"M54.2",diagnosisDescription:"Synthetic neck pain",serviceDescription:"Synthetic therapy",quantity:6,frequency:"Twice weekly", metadata:{preserved:"synthetic"}}] };
@@ -49,5 +50,20 @@ it("follows the DWC Form RFA order and shows every printed field with saved valu
   expect(fields("Requested Treatment").map(([label])=>label)).toEqual(["Diagnosis (Required)","ICD-Code (Required)","Service/Good Requested (Required)","CPT/HCPCS Code (If known)","Other Information: (Frequency, Duration, Quantity, etc.)"]);
   expect(section("Employee Information").querySelector("#claim-lookup")).not.toBeNull();
   expect([...section("Requesting Physician Information").querySelectorAll(".mbrfa-pickers > .mbrfa-picker > span:first-child")].map(el=>el.textContent)).toEqual(["Requesting physician","Practice","Practice location"]);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("official creation is usable before a claim or physician is chosen and saving asks for them", async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const onSave=vi.fn().mockResolvedValue(undefined);
+ const client={getCreationContext:async()=>({claims:[],renderingProviders:[],nextCursor:null,renderingProvidersNextCursor:null})} as never;
+ try{
+  await act(async()=>root.render(createElement(RfaCreateForm,{client,onSave,draftFormProps:{officialForm:true}})));
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});
+  const resubmission=[...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')][1]!;
+  expect(resubmission.matches(":disabled")).toBe(false);
+  await act(async()=>resubmission.click());expect(resubmission.checked).toBe(true);
+  expect([...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].every(input=>!input.matches(":disabled"))).toBe(true);
+  for (const field of container.querySelectorAll<HTMLInputElement|HTMLTextAreaElement>("[required]")) field.required=false;
+  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Save draft")!.click());
+  expect(onSave).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')!.textContent).toContain("Choose a patient claim and requesting physician");
  }finally{await act(async()=>root.unmount());container.remove();}
 });
