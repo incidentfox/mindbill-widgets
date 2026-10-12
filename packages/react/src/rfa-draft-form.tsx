@@ -3,6 +3,7 @@ import type { BillDiagnosisCode, OrganizationProfileData, RfaContact } from "@mi
 import { RfaPracticePicker } from "./rfa-practice-picker";
 import { RfaContactPicker, type RfaContactDirectoryProps } from "./rfa-contact-picker";
 import { RfaContactFields, RfaDiagnosisFields } from "./rfa-draft-fields";
+import { RfaTemplateBar, type RfaTreatmentTemplate, type RfaTreatmentTemplateInput } from "./rfa-template-bar";
 import { RfaEmployeeFields, RfaRequired, RfaOfficialContactFields, RfaPicker, RfaSavedField, type RfaFormDetails, type RfaFormSelectors } from "./rfa-official-fields";
 import { useEffect, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
@@ -36,6 +37,12 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & RfaContactDirectoryPr
   /** Open the host's in-place editor for the selected practice or location (null adds a location). The form reloads saved values when focus returns. */
   onEditPractice?: (practiceId: string) => void;
   onEditLocation?: (locationId: string | null, practiceId: string) => void;
+  /** Saved sets of requested treatments offered in the Requested Treatment section (official form). */
+  treatmentTemplates?: RfaTreatmentTemplate[] | undefined;
+  /** Save the current requested treatments as a template; reject to show an error. */
+  onSaveTreatmentTemplate?: ((template: RfaTreatmentTemplateInput) => void | Promise<void>) | undefined;
+  /** Open the host's template manager. */
+  onManageTreatmentTemplates?: (() => void) | undefined;
   managePracticeHref?: string;
   manageLocationsHref?: string;
   onRefreshProfile?: () => Promise<void>;
@@ -103,7 +110,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onEditLocation, managePracticeHref, manageLocationsHref, onRefreshProfile, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, managePracticeHref, manageLocationsHref, onRefreshProfile, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [savedDraft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   useEffect(() => {
     if (identity) setDraft(current => { const next = { ...current }; delete next.providerPhone; delete next.providerFax; return next; });
@@ -195,7 +202,9 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
           beforeEmail={<><RfaSavedField span={3} label="Specialty" value={formDetails?.physician?.specialty ?? savedPhysician?.specialty} /><RfaSavedField span={3} label="NPI Number" value={draft.providerNpi} /></>} /></fieldset>
       </fieldset>
       <RfaContactPicker officialForm {...(searchClaimsAdministrators ? { searchClaimsAdministrators } : {})} {...(getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory } : {})} {...(draft.claimsAdminId ? { administratorId: draft.claimsAdminId } : {})} {...(draft.claimNumber ? { claimNumber: draft.claimNumber } : {})} contextKey={draft.claimId} value={draft.authorizationContact} disabled={locked} onChange={(id, authorizationContact) => { setAdministratorOverride({ id }); update({ authorizationContact }); }} />
-      {draft.items.map((item, index) => <fieldset key={index} disabled={locked}><legend>Requested Treatment{draft.items.length > 1 ? ` ${index + 1}` : ""}</legend><div className="mbrfa-form-grid">
+      {draft.items.map((item, index) => <fieldset key={index} disabled={locked}><legend>Requested Treatment{draft.items.length > 1 ? ` ${index + 1}` : ""}</legend>
+        {index === 0 && (treatmentTemplates || onSaveTreatmentTemplate) ? <RfaTemplateBar templates={treatmentTemplates ?? []} items={draft.items} renderingProviderId={draft.renderingProviderId} physicianName={draft.providerName} disabled={locked} onApply={items => update({ items })} onSave={onSaveTreatmentTemplate} onManage={onManageTreatmentTemplates} /> : null}
+        <div className="mbrfa-form-grid">
         <RfaDiagnosisFields officialForm code={item.diagnosisCode} {...(item.diagnosisDescription !== undefined ? { description: item.diagnosisDescription } : {})} {...(searchDiagnosisCodes ? { search: searchDiagnosisCodes } : {})} onChange={value => updateItem(index, value)} />
         <label className="mbrfa-s4"><span>Service/Good Requested<RfaRequired /></span><textarea required maxLength={1000} value={item.serviceDescription} onChange={(event) => updateItem(index, { serviceDescription: event.target.value })} /></label>
         <label className="mbrfa-s2">CPT/HCPCS Code (If known)<input maxLength={16} value={item.procedureCode ?? ""} onChange={(event) => updateItem(index, { procedureCode: event.target.value })} /></label>

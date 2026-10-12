@@ -93,3 +93,25 @@ it("requires a requesting physician fax to review and fills it from the organiza
   expect(onReview).toHaveBeenCalledOnce();expect(onReview.mock.calls[0]![0].requestingPractice.fax).toBe("+12025550100");
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+it("fills requested treatments from a template and saves the current ones without the diagnosis", async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const onSave=vi.fn().mockResolvedValue(undefined),onSaveTreatmentTemplate=vi.fn().mockResolvedValue(undefined);
+ const treatmentTemplates=[{id:"template_a",name:"Synthetic MRI",description:"Shoulder",items:[{diagnosisCode:"",serviceDescription:"Synthetic MRI of the shoulder",procedureCode:"73221",metadata:{otherInformation:"One time"}}]},{id:"template_b",name:"Other physician only",renderingProviderId:"provider_other",items:[{diagnosisCode:"",serviceDescription:"Hidden"}]}];
+ try{
+  await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,treatmentTemplates,onSaveTreatmentTemplate})));
+  const click=async(text:string)=>act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent===text)!.click());
+  await click("Save as template");
+  const name=[...container.querySelectorAll<HTMLInputElement>(".mbrfa-template-save input")][0]!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(name,"Synthetic therapy plan");name.dispatchEvent(new Event("input",{bubbles:true}));});
+  await click("Save template");
+  expect(onSaveTreatmentTemplate).toHaveBeenCalledWith({name:"Synthetic therapy plan",items:[{diagnosisCode:"",serviceDescription:"Synthetic therapy",quantity:6,frequency:"Twice weekly"}]});
+  await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="RFA template"]')!.click());
+  const options=[...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')];
+  expect(options.map(el=>el.textContent).join(" ")).not.toContain("Other physician only");
+  await act(async()=>options.find(el=>el.textContent!.startsWith("Synthetic MRI"))!.click());
+  expect(container.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Synthetic MRI of the shoulder");
+  await click("Save draft");
+  // The claim's diagnosis stays; the template supplies what is requested.
+  expect(onSave.mock.calls[0]![0].items).toEqual([expect.objectContaining({diagnosisCode:"M54.2",diagnosisDescription:"Synthetic neck pain",serviceDescription:"Synthetic MRI of the shoulder",procedureCode:"73221"})]);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});

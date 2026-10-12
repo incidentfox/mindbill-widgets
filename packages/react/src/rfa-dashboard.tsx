@@ -1,4 +1,5 @@
 "use client";
+import type { RfaTreatmentTemplate, RfaTreatmentTemplateInput } from "./rfa-template-bar";
 import { useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
 import { RfaLink, rfaTitle, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
@@ -44,6 +45,10 @@ export type RfaDashboardProps = OrganizationClientOptions & TreatmentDraftAppear
   /** Host in-place editors for the selected practice or location (official form). */
   onEditPractice?: (practiceId: string) => void;
   onEditLocation?: (locationId: string | null, practiceId: string) => void;
+  /** Saved sets of requested treatments for the official form, with host-owned saving and management. */
+  treatmentTemplates?: RfaTreatmentTemplate[];
+  onSaveTreatmentTemplate?: (template: RfaTreatmentTemplateInput) => void | Promise<void>;
+  onManageTreatmentTemplates?: () => void;
   /** Practices or locations the host just saved; shown at once, ahead of the next profile reload. Pass a new object per save. */
   savedProfileChanges?: { billingProviders?: OrganizationProfileData["billingProviders"]; locations?: OrganizationProfileData["locations"] };
   managePracticeHref?: string;
@@ -100,7 +105,7 @@ export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: f
   const identity = useMemo(() => ({ client, signatureClient, key: key() }), [client, signatureClient]);
   return <RfaDashboardContent key={`${identity.key}:${patientId ?? ""}:${claimId ?? ""}:${renderingProviderId ?? ""}`} {...props} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} client={client} signatureClient={signatureClient} options={options} />;
 }
-function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", initialOverviewView, initialStatus = "", initialAgingBucket = "", taskPresentation, taskQuery, renderTaskIdentity, navigation, permissions = [], canCreateClaim = false, renderClaimSelector, renderProviderSelector, officialForm = false, managePracticeHref, onEditPractice, onEditLocation, savedProfileChanges, manageLocationsHref, onPreviewRequest, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
+function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", initialOverviewView, initialStatus = "", initialAgingBucket = "", taskPresentation, taskQuery, renderTaskIdentity, navigation, permissions = [], canCreateClaim = false, renderClaimSelector, renderProviderSelector, officialForm = false, managePracticeHref, onEditPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, savedProfileChanges, manageLocationsHref, onPreviewRequest, canManageProviderSignatures = false, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const references = useMemo(() => createBillReferenceClient(options), [options]);
@@ -110,7 +115,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     const merge = <T extends { id: string }>(current: T[], saved: T[] | undefined) => saved?.length ? [...current.map(item => saved.find(next => next.id === item.id) ?? item), ...saved.filter(next => !current.some(item => item.id === next.id))] : current;
     setProfile(current => current ? { ...current, billingProviders: merge(current.billingProviders, savedProfileChanges.billingProviders), locations: merge(current.locations, savedProfileChanges.locations) } : current);
   }, [savedProfileChanges]);
-  const draftFormProps = { officialForm, ...(onEditPractice ? { onEditPractice } : {}), ...(onEditLocation ? { onEditLocation } : {}), ...(managePracticeHref ? { managePracticeHref } : {}), ...(manageLocationsHref ? { manageLocationsHref } : {}), onRefreshProfile: async () => { const next = await createOrganizationClient(options).getBillingProfile(); if (active.current) setProfile(next); }, ...(client.searchClaimsAdministrators ? { searchClaimsAdministrators: client.searchClaimsAdministrators } : {}), ...(client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: client.getClaimsAdministratorDirectory } : {}), searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
+  const draftFormProps = { officialForm, ...(officialForm && (treatmentTemplates || onSaveTreatmentTemplate) ? { treatmentTemplates: treatmentTemplates ?? [], onSaveTreatmentTemplate, onManageTreatmentTemplates } : {}), ...(onEditPractice ? { onEditPractice } : {}), ...(onEditLocation ? { onEditLocation } : {}), ...(managePracticeHref ? { managePracticeHref } : {}), ...(manageLocationsHref ? { manageLocationsHref } : {}), onRefreshProfile: async () => { const next = await createOrganizationClient(options).getBillingProfile(); if (active.current) setProfile(next); }, ...(client.searchClaimsAdministrators ? { searchClaimsAdministrators: client.searchClaimsAdministrators } : {}), ...(client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: client.getClaimsAdministratorDirectory } : {}), searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
   const [result, setResult] = useState<RfaListResult | null>(null);
   const [status, setStatus] = useState(initialStatus);
   const lifecycleAvailable = result?.summary.byLifecycleStatus !== undefined;
