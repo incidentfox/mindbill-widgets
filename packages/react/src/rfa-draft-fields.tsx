@@ -17,16 +17,33 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
   search?: (query: string) => Promise<BillDiagnosisCode[]>;
 }) {
   const id = useId(); const [query, setQuery] = useState(""); const [results, setResults] = useState<BillDiagnosisCode[]>([]); const [error, setError] = useState("");
+  // Stays open once the user starts typing a diagnosis, so the field does not vanish under the cursor.
+  const [manualDiagnosis, setManualDiagnosis] = useState(false);
   useEffect(() => {
     let active = true; setResults([]); setError("");
     if (!search || query.trim().length < 2) return;
-    const timer = setTimeout(() => { void search(query.trim()).then(items => { if (active) setResults(items); }).catch(() => { if (active) setError("Diagnosis search is unavailable. Enter the code and description below."); }); }, 250);
+    const timer = setTimeout(() => { void search(query.trim()).then(items => { if (active) setResults(items); }).catch(() => { if (active) setError("Diagnosis search is unavailable."); }); }, 250);
     return () => { active = false; clearTimeout(timer); };
   }, [query, search]);
-  // DWC Form RFA column order: Diagnosis, then ICD-Code. The lookup fills both.
-  if (officialForm) return <>{search ? <div className="mbrfa-s6"><RfaPicker label="Find diagnosis"><RfaIdentitySelect label="Find diagnosis" placeholder="Search by ICD code or description" searchPlaceholder="Search ICD code or diagnosis" query={query} onSearch={setQuery} searchable value="" options={results.map(item => ({ id: item.code, label: `${item.code} — ${item.description}` }))} onSelect={value => { const item = results.find(item => item.code === value); if (item) onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); setQuery(""); }} error={error} /></RfaPicker></div> : null}
+  // One ICD-10 lookup fills both printed columns (Diagnosis and ICD-Code). A code the lookup
+  // does not know can still be entered, and then its diagnosis is typed beside it.
+  if (officialForm && search) {
+    const typed = query.trim().toUpperCase(), known = results.some(item => item.code.toUpperCase() === typed);
+    const options = [
+      ...(code && !typed && !results.some(item => item.code === code) ? [{ id: code, label: code, ...(description ? { detail: description } : {}) }] : []),
+      ...results.map(item => ({ id: item.code, label: item.code, detail: item.description })),
+      ...(/^[A-Z]\d[0-9A-Z](\.?[0-9A-Z]{1,4})?$/.test(typed) && !known && typed !== code ? [{ id: `entered:${typed}`, label: `Use ${typed}`, detail: "Enter the diagnosis yourself" }] : []),
+    ];
+    const listed = results.find(item => item.code === code);
+    return <>
+      <div className="mbrfa-s3"><RfaPicker required label="ICD-10 Code"><RfaIdentitySelect label="ICD-10 Code" placeholder="Enter code" searchPlaceholder="Search by code or diagnosis" query={query} onSearch={setQuery} searchable value={code} current={code ? { id: code, label: code, ...(description ? { detail: description } : {}) } : undefined} options={options} error={error}
+        onSelect={value => { const item = results.find(item => item.code === value); if (item) onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); else if (value.startsWith("entered:")) onChange({ diagnosisCode: value.slice(8), diagnosisDescription: "" }); setQuery(""); }} /></RfaPicker></div>
+      {code && !listed && (manualDiagnosis || !description) ? <label className="mbrfa-s3"><span>Diagnosis<RfaRequired /></span><input required autoFocus={manualDiagnosis} maxLength={1000} placeholder="Diagnosis for this code" value={description ?? ""} onFocus={() => setManualDiagnosis(true)} onChange={event => onChange({ diagnosisCode: code, diagnosisDescription: event.target.value })} /></label> : null}
+    </>;
+  }
+  if (officialForm) return <>
+    <label className="mbrfa-s2"><span>ICD-10 Code<RfaRequired /></span><input required maxLength={16} placeholder="Enter code" value={code} onChange={event => onChange({ diagnosisCode: event.target.value, diagnosisDescription: description ?? "" })} /></label>
     <label className="mbrfa-s4"><span>Diagnosis<RfaRequired /></span><input required maxLength={1000} value={description ?? ""} onChange={event => onChange({ diagnosisCode: code, diagnosisDescription: event.target.value })} /></label>
-    <label className="mbrfa-s2"><span>ICD-Code<RfaRequired /></span><input required maxLength={16} value={code} onChange={event => onChange({ diagnosisCode: event.target.value, diagnosisDescription: description ?? "" })} /></label>
   </>;
   return <>{search ? <label className="mbtd-wide">Find diagnosis by code or description<input value={query} aria-controls={id} onChange={event => setQuery(event.target.value)} />{error ? <small role="status">{error}</small> : null}<span id={id}>{results.map(item => <button type="button" key={item.code} onClick={() => { onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); setQuery(""); }}>{item.code} — {item.description}</button>)}</span></label> : null}
     <label>Diagnosis code<input required maxLength={16} value={code} onChange={event => onChange({ diagnosisCode: event.target.value, diagnosisDescription: "" })} /></label>
