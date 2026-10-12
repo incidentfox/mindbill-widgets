@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { RfaIdentitySelect } from "./rfa-identity-select";
 import { RfaPicker, RfaRequired } from "./rfa-official-fields";
 import type { BillDiagnosisCode, RfaContact } from "@mindbill/browser";
@@ -15,7 +15,8 @@ export function RfaContactFields({ title, value, onChange }: { title: string; va
 /** Repeated searches (retyping, a second treatment row) answer at once. Keyed by the host's search function. */
 const diagnosisCache = new WeakMap<object, Map<string, BillDiagnosisCode[]>>();
 
-export function RfaDiagnosisFields({ code, description, onChange, search, officialForm = false }: {
+export function RfaDiagnosisFields({ code, description, onChange, search, officialForm = false, savedCodes = [] }: {
+  /** ICD-10 codes saved on the injury, offered first. */ savedCodes?: string[];
   officialForm?: boolean; code: string; description?: string; onChange: (value: { diagnosisCode: string; diagnosisDescription: string }) => void;
   search?: (query: string) => Promise<BillDiagnosisCode[]>;
 }) {
@@ -36,20 +37,31 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
     }).catch(() => { if (active) { setError("Diagnosis search is unavailable."); setSearching(false); } }); }, 120);
     return () => { active = false; clearTimeout(timer); };
   }, [query, search]);
+  // A code chosen without its description (prefilled from the injury, or picked from the injury's saved
+  // codes) gets the description looked up once, so nobody has to retype a diagnosis the directory knows.
+  const resolved = useRef(new Set<string>()); const [resolving, setResolving] = useState(false);
+  useEffect(() => {
+    if (!officialForm || !search || !code || description || manualDiagnosis || resolved.current.has(code)) return;
+    resolved.current.add(code); let active = true; setResolving(true);
+    void search(code).then(items => { const match = items.find(item => item.code.replace(".", "").toUpperCase() === code.replace(".", "").toUpperCase()); if (active && match) onChange({ diagnosisCode: match.code, diagnosisDescription: match.description }); })
+      .catch(() => undefined).finally(() => { if (active) setResolving(false); });
+    return () => { active = false; };
+  }, [code, description, search, officialForm, manualDiagnosis]);
   // One ICD-10 lookup fills both printed columns (Diagnosis and ICD-Code). A code the lookup
   // does not know can still be entered, and then its diagnosis is typed beside it.
   if (officialForm && search) {
     const typed = query.trim().toUpperCase(), known = results.some(item => item.code.toUpperCase() === typed);
     const options = [
       ...(code && !typed && !results.some(item => item.code === code) ? [{ id: code, label: code, ...(description ? { detail: description } : {}) }] : []),
+      ...(!typed ? savedCodes.filter(saved => saved && saved !== code).map(saved => ({ id: `saved:${saved}`, label: saved, detail: "Saved on this injury" })) : []),
       ...results.map(item => ({ id: item.code, label: item.code, detail: item.description })),
       ...(/^[A-Z]\d[0-9A-Z](\.?[0-9A-Z]{1,4})?$/.test(typed) && !known && typed !== code ? [{ id: `entered:${typed}`, label: `Use ${typed}`, detail: "Enter the diagnosis yourself" }] : []),
     ];
     const listed = results.find(item => item.code === code);
     return <>
       <div className="mbrfa-s3"><RfaPicker required label="ICD-10 Code"><RfaIdentitySelect label="ICD-10 Code" placeholder="Enter code" searchPlaceholder="Search by code or diagnosis" query={query} onSearch={setQuery} searchable value={code} current={code ? { id: code, label: code, ...(description ? { detail: description } : {}) } : undefined} options={options} error={error} loading={searching && !results.length}
-        onSelect={value => { const item = results.find(item => item.code === value); if (item) onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); else if (value.startsWith("entered:")) onChange({ diagnosisCode: value.slice(8), diagnosisDescription: "" }); setQuery(""); }} /></RfaPicker></div>
-      {code && !listed && (manualDiagnosis || !description) ? <label className="mbrfa-s3"><span>Diagnosis<RfaRequired /></span><input required autoFocus={manualDiagnosis} maxLength={1000} placeholder="Diagnosis for this code" value={description ?? ""} onFocus={() => setManualDiagnosis(true)} onChange={event => onChange({ diagnosisCode: code, diagnosisDescription: event.target.value })} /></label> : null}
+        onSelect={value => { const item = results.find(item => item.code === value); if (item) onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); else if (value.startsWith("entered:")) onChange({ diagnosisCode: value.slice(8), diagnosisDescription: "" }); else if (value.startsWith("saved:")) onChange({ diagnosisCode: value.slice(6), diagnosisDescription: "" }); setQuery(""); }} /></RfaPicker></div>
+      {code && !listed && !resolving && (manualDiagnosis || !description) ? <label className="mbrfa-s3"><span>Diagnosis<RfaRequired /></span><input required autoFocus={manualDiagnosis} maxLength={1000} placeholder="Diagnosis for this code" value={description ?? ""} onFocus={() => setManualDiagnosis(true)} onChange={event => onChange({ diagnosisCode: code, diagnosisDescription: event.target.value })} /></label> : null}
     </>;
   }
   if (officialForm) return <>
