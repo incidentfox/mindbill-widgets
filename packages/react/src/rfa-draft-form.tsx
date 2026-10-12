@@ -175,7 +175,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   if (officialForm) return <TreatmentDraftShell {...appearance} hideHeading={embedded} title="Request for authorization" description="DWC Form RFA">
     {mode === "edit" ? <p className="mbtd-note">Saving replaces this draft, clears its signature, and requires a new signing review. It does not send the request or authorize treatment.</p> : null}
     {onBack ? <button type="button" disabled={locked} onClick={() => onBack(draft)}>Back to patient and physician</button> : null}
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className="mbrfa-official">
       <fieldset disabled={locked} className="mbrfa-request-details"><legend>Request type</legend><div className="mbtd-grid">
         <div className="mbrfa-request-types" role="group" aria-label="Request type"><label className="mbrfa-check"><input type="radio" name="request-type" checked={(draft.requestType ?? "new") === "new"} onChange={() => update({ requestType: "new" })} /><span><strong>New Request</strong></span></label><label className="mbrfa-check"><input type="radio" name="request-type" checked={draft.requestType === "resubmission_material_change"} onChange={() => update({ requestType: "resubmission_material_change" })} /><span><strong>Resubmission</strong> – Change in Material Facts</span></label></div>
         <label className="mbrfa-check"><input type="checkbox" checked={draft.expedited ?? false} onChange={event => update({ expedited: event.target.checked })} />Expedited Review: Check box if employee faces an imminent and serious threat to his or her health</label>
