@@ -59,17 +59,14 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd form.mbrfa-official .mbrfa-form-grid>label>:is(input,textarea){color:var(--mb-text)}
 .mbtd form.mbrfa-official .mbrfa-saved>strong{font-size:14px;font-weight:500;color:var(--mb-text)}
 .mbtd form.mbrfa-official .mbrfa-request-details>.mbtd-grid{gap:4px}
-.mbtd form.mbrfa-official .mbrfa-request-types{display:inline-grid;grid-auto-flow:column;grid-template-columns:none;gap:0;padding:3px;margin-bottom:10px;border:1px solid var(--mb-border);border-radius:calc(var(--mb-control-radius) + 3px);background:var(--mb-soft);justify-self:start;width:fit-content;max-width:100%}
-.mbtd form.mbrfa-official .mbrfa-request-types .mbrfa-check{min-height:34px;padding:6px 16px;border-radius:var(--mb-control-radius);color:var(--mb-muted);font-size:13px}
-.mbtd form.mbrfa-official .mbrfa-request-types .mbrfa-check:has(input:checked){background:var(--mb-surface);color:var(--mb-text);box-shadow:0 1px 2px #00000014}
-.mbtd form.mbrfa-official .mbrfa-request-types input[type=radio]{position:absolute;opacity:0;width:1px;height:1px}
-.mbtd form.mbrfa-official .mbrfa-request-types .mbrfa-check:has(input:focus-visible){outline:2px solid var(--mb-accent);outline-offset:2px}
+.mbtd form.mbrfa-official .mbrfa-request-types{display:flex;flex-wrap:wrap;gap:8px 28px;padding-bottom:0;margin-bottom:6px;border-bottom:0}
+.mbtd form.mbrfa-official .mbrfa-request-types input[type=radio]:not(:checked){border-color:var(--mb-muted)}
 .mbtd form.mbrfa-official .mbrfa-request-details .mbrfa-check{min-height:32px;font-size:13px}
 .mbtd form.mbrfa-official .mbrfa-section-actions{margin-top:16px;padding-top:12px;border-top:1px dashed var(--mb-border)}
 .mbtd form.mbrfa-official>div:has(>button:only-child)>button{border-style:dashed;color:var(--mb-accent);font-weight:500}
 .mbtd form.mbrfa-official>.mbtd-actions:last-child{position:sticky;bottom:12px;z-index:5;justify-content:flex-end;flex-direction:row-reverse;margin-top:0;padding:10px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:color-mix(in srgb,var(--mb-surface) 92%,transparent);backdrop-filter:blur(6px);box-shadow:0 6px 20px #00000014}
 .mbtd form.mbrfa-official>.mbtd-actions:last-child>[role=status]{margin-right:auto;order:9}
-@media(max-width:760px){.mbtd form.mbrfa-official>.mbtd-actions:last-child{position:static;flex-direction:row}.mbtd form.mbrfa-official .mbrfa-request-types{grid-auto-flow:row;width:100%}}
+@media(max-width:760px){.mbtd form.mbrfa-official>.mbtd-actions:last-child{position:static;flex-direction:row}}
 @media(max-width:760px){.mbtd .mbrfa-pickers,.mbtd .mbrfa-pickers[data-columns="2"]{grid-template-columns:minmax(0,1fr)}.mbtd .mbrfa-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mbtd .mbrfa-form-grid>*{grid-column:1/-1}.mbtd .mbrfa-form-grid>.mbrfa-s1,.mbtd .mbrfa-form-grid>.mbrfa-s2{grid-column:span 1}}
 @media(max-width:640px){.mbtd .mbrfa-request-types{grid-template-columns:1fr;gap:4px}}
 @media(forced-colors:active){.mbtd .mbrfa-request-types input[type=radio]{appearance:auto}.mbtd .mbrfa-request-types input[type=radio]::after{display:none}}
