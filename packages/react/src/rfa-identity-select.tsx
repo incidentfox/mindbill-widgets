@@ -3,16 +3,17 @@ import { useId, useRef, useState, type ReactElement } from "react";
 
 type Option = { id: string; label: string; detail?: string };
 /** Search lives inside the choice menu, so results are visible as the user types. */
-export function RfaIdentitySelect({ label, placeholder, searchPlaceholder, query, searchable, disabled = false, loading = false, error = "", value, options, onSearch, onSelect }: {
+export function RfaIdentitySelect({ label, placeholder, searchPlaceholder, query, searchable, disabled = false, loading = false, error = "", value, options, onSearch, onSelect, current }: {
   label: string; placeholder: string; searchPlaceholder: string; query: string;
   searchable: boolean; disabled?: boolean; loading?: boolean; error?: string;
   value: string; options: Option[]; onSearch: (value: string) => void; onSelect: (id: string) => void;
+  /** The chosen value to show when the filtered options no longer include it. */ current?: Option | undefined;
 }): ReactElement {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const selected = options.find(option => option.id === value);
+  const selected = options.find(option => option.id === value) ?? (current?.id === value ? current : undefined);
   const choose = (option: Option) => { onSelect(option.id); setOpen(false); trigger.current?.focus(); };
   return <div className="mbrfa-identity-select" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }} onKeyDown={event => {
     if (event.key === "Escape") { event.preventDefault(); setOpen(false); trigger.current?.focus(); }
