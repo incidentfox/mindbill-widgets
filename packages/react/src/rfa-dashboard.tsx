@@ -16,7 +16,6 @@ import { RfaCreateForm, type RfaClaimSelectorProps, type RfaProviderSelectorProp
 import { RfaDraftForm, type RfaDraftInput } from "./rfa-draft-form";
 import { formatRfaPhone, useRfaFormDetails } from "./rfa-official-fields";
 import { RfaSendDialog } from "./rfa-send-dialog";
-import { RfaMilestones, rfaMilestonesCss } from "./rfa-milestones";
 import { RfaCard, RfaFacts, RfaPill, RfaStatusCard, rfaAddress, rfaCalendarDate, rfaCardsCss, rfaLifecycleTone, rfaRequestTypeLabel, rfaShortDate } from "./rfa-detail-cards";
 import { canEditRfaDraft, rfaRecordToDraft, rfaDraftReplacement } from "./rfa-draft-edit";
 import { rfaDecisionDueText } from "./rfa-decision-due";
@@ -415,7 +414,6 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
       </div>
       </>}
       <div hidden={simple && detailTab !== "history"} id={`${tabId}-history-panel`} role={detailTab === "history" ? "tabpanel" : undefined} aria-labelledby={detailTab === "history" ? `${tabId}-history-tab` : undefined} onClick={event => { const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="#rfa-treatment-"]'); if (link) { event.preventDefault(); setDetailTab("details"); const target = link.hash.slice(1); setTimeout(() => { const element = document.getElementById(target); element?.scrollIntoView?.({ block: "start" }); element?.focus(); }, 0); } }}>
-      {simple && detailTab === "history" ? <div style={{ marginBottom: 16 }}><style>{rfaMilestonesCss}</style><RfaCard title="Timeline"><RfaMilestones rfa={rfa} /></RfaCard></div> : null}
       {!simple || detailTab === "history" ? <RfaTrackingContent embedded cards={simple} view={detailTab === "history" ? "history" : "treatments"} rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} /> : null}
       {simple && detailTab === "history" && !unsent && rfa.status !== "canceled" ? <div style={{ marginTop: 16 }}><RfaCard title="Saved Packets"><RfaPacketsPanel {...options} rfa={rfa} environment={environment === "live" ? "live" : "sandbox"} disabled={!!locked} permissions={permissions.includes("act") ? ["act"] : []} onForwarded={() => { void run(async () => adopt(await client.get(id))); }} /></RfaCard></div> : null}
       {detailTab === "history" && permissions.includes("send") && (!simple || rfa.transmissions.some(transmission => transmission.channel === "fax")) ? simple ? <div className="mbtd-actions" style={{ marginTop: 16 }}><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery status</button></div> : <details className="mbrfa-delivery-tools"><summary>Delivery tools</summary><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery with provider</button></details> : null}

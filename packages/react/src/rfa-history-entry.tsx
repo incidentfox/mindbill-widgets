@@ -44,9 +44,11 @@ function DefinitionList({ entries }: { entries: Array<[string, string]> }): Reac
 }
 
 /** Only display known clinical/workflow fields. Audit payloads may also contain private transport and concurrency metadata. */
-export function RfaHistoryEntry({ event, rfa, disabled, onDownload }: {
+export function RfaHistoryEntry({ event, rfa, disabled, onDownload, timeline = false }: {
   event: RfaHistoryEvent; rfa: RfaRecord; disabled: boolean;
   onDownload: (kind: "document" | "packet", id: string, filename: string) => void;
+  /** Render as a timeline item (documents as buttons on the entry) instead of a table row. */
+  timeline?: boolean;
 }): ReactElement {
   const payload = event.payload;
   const transmission = rfa.transmissions.find(value => value.id === payload.transmissionId);
@@ -88,6 +90,33 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload }: {
   const hasDetails = entries.length || appointment.length || decisionSections.length || evidence.length || changed.length;
   const actor = /^(system:|system$)/.test(event.actor) ? "System" : /^(native-user:|user:)/.test(event.actor) || /^partner:[^:]+:browser:/.test(event.actor) ? "Team member" : /^partner:/.test(event.actor) ? "Integration" : /^(developer:|integration:|api:)/.test(event.actor) ? "Integration" : event.actor;
   const action = string(payload.action) ?? event.eventType.replace(/^rfa\./, "");
+  if (timeline) {
+    const kind = /submitted|transmission|forward/.test(action) ? "sent" : /decision|decided|approved|denied|modified/.test(action) || decisionSections.length ? "decision" : /note/.test(action) ? "note" : "event";
+    const short: Record<string, string> = { "Download retained submission PDF": "View sent packet", "Download transmission receipt": "Fax receipt", "Download decision evidence": "View decision", "Download document": "View document" };
+    const details = entries.length || appointment.length || changed.length || decisionSections.some(group => group.value !== payload || group.decisions.some(value => rows(value).length));
+    return <li data-kind={kind}>
+      <div className="mbrfa-tl-head"><strong>{actions[action] ?? words(action).replace(/^./, letter => letter.toUpperCase())}</strong><span><time dateTime={event.occurredAt ?? undefined}>{date(event.occurredAt)}</time> · {actor}</span></div>
+      {["text", "reason", "requestText", "note"].map(key => string(payload[key]) ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{String(payload[key])}</p> : null)}
+      {transmission?.destination || string(payload.destination) ? <p className="mbrfa-tl-meta">{string(payload.channel) || transmission?.channel ? `${words(String(payload.channel ?? transmission?.channel)).replace(/^./, letter => letter.toUpperCase())} to ` : "To "}{String(payload.destination ?? transmission?.destination)}{string(payload.recipientName) ? ` · ${String(payload.recipientName)}` : ""}</p> : null}
+      {decisionSections.length ? <ul className="mbrfa-tl-decisions" aria-label="Decisions by treatment">{decisionSections[decisionSections.length - 1]!.decisions.map((value, index) => {
+        const position = rfa.items.findIndex(item => item.id === value.itemId), item = rfa.items[position];
+        return <li key={index} data-outcome={string(value.outcome) ?? ""} title={item?.serviceDescription}><b>{position >= 0 ? position + 1 : "?"}</b>{words(string(value.outcome) ?? "recorded")}{string(value.authorizationNumber) ? ` · #${String(value.authorizationNumber)}` : ""}</li>;
+      })}</ul> : ids.size ? <ul aria-label="Related treatments">{[...ids].map(id => <li key={id}>{treatment(id)}</li>)}</ul> : null}
+      {evidence.length ? <div className="mbrfa-tl-actions">{evidence.map(value => {
+        const filename = rfa.documents.find(document => document.id === value.id)?.filename;
+        return <button key={`${value.kind}:${value.id}`} type="button" disabled={disabled} title={filename} onClick={() => onDownload(value.kind, value.id, filename ?? (value.kind === "packet" ? "RFA submission.pdf" : "RFA evidence.pdf"))}>{short[value.label] ?? value.label.replace(/^Download /, "View ")}</button>;
+      })}</div> : null}
+      {details ? <details><summary>Details</summary>
+        {entries.length ? <DefinitionList entries={entries} /> : null}
+        {changed.length ? <p>Changed fields: {changed.join(", ")}</p> : null}
+        {appointment.length ? <section><h4>Appointment details</h4><DefinitionList entries={appointment} /></section> : null}
+        {decisionSections.map(group => <section key={group.title}><h4>{group.title}</h4>
+          {group.value !== payload ? <DefinitionList entries={rows(group.value, ["reason"])} /> : null}
+          {group.decisions.map((value, index) => <div key={index}>{string(value.itemId) ? treatment(String(value.itemId)) : null}<DefinitionList entries={rows(value)} /></div>)}
+        </section>)}
+      </details> : null}
+    </li>;
+  }
   return <tr>
     <td><time dateTime={event.occurredAt ?? undefined}>{date(event.occurredAt)}</time></td>
     <td className="mbrfa-history-action">{actions[action] ?? words(action)}</td>
