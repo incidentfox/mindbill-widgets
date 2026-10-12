@@ -143,11 +143,12 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [officialForm, onRefreshProfile]);
   // The Requesting Physician block shows the chosen practice as information; typing is opt-in.
-  // With no saved practices to choose from, or a request whose practice was typed, it starts editable.
+  // With no saved practices to choose from, or a request whose practice was typed, it is editable; otherwise it shows what the lookups chose.
   const [practiceManualChoice, setPracticeManual] = useState<boolean | null>(null);
   const savedPractices = organizationProfile?.billingProviders ?? [];
-  const typedPractice = Object.values(savedDraft.requestingPractice ?? {}).some(value => value?.trim());
-  const practiceManual = practiceManualChoice ?? !(savedPractices.some(provider => provider.name === savedDraft.requestingPractice?.name) || (!typedPractice && savedPractices.length > 0));
+  // A filled-in fax or e-mail default is not a typed practice; only its own name or address is.
+  const typedPractice = Boolean(savedDraft.requestingPractice?.name?.trim() || savedDraft.requestingPractice?.address?.trim());
+  const practiceManual = practiceManualChoice ?? (organizationProfile ? savedPractices.length === 0 || (typedPractice && !savedPractices.some(provider => provider.name === savedDraft.requestingPractice?.name)) : true);
   const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
   const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
   const previousClaim = useRef(identityKey);
