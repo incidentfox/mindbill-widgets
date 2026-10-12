@@ -36,9 +36,8 @@ it("practice selection prefers its unique location and excludes another practice
   // A chosen saved practice shows as information, not as boxes to type into.
   expect(physician.querySelectorAll(".mbrfa-form-grid input")).toHaveLength(0);
   expect([shown("Address"),shown("Contact Name"),shown("Fax Number"),shown("E-mail Address")]).toEqual(["Clinic address","Synthetic Contact","(202) 555-0177","contact@example.test"]);
-  await act(async()=>[...physician.querySelectorAll("button")].find(el=>el.textContent==="Edit manually")!.click());
-  expect([...physician.querySelectorAll<HTMLInputElement>(".mbrfa-form-grid input")].find(el=>el.parentElement!.firstChild!.textContent==="Address")!.value).toBe("Clinic address");
-  await act(async()=>[...physician.querySelectorAll("button")].find(el=>el.textContent==="Done editing")!.click());
+  // Saved records are edited through their own lookups, so this section has no manual-entry switch.
+  expect([...physician.querySelectorAll("button")].some(el=>el.textContent==="Edit manually")).toBe(false);
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());
   expect([...container.querySelectorAll('[role="option"]')].map(el=>el.textContent).join(" ")).not.toContain("Synthetic Clinic B");
  }finally{await act(async()=>root.unmount());container.remove();}
@@ -88,7 +87,7 @@ it("requires a requesting physician fax to review and fills it from the organiza
   await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Save draft")!.click());
   expect(onSave).toHaveBeenCalledOnce();
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:draft,officialForm:true,onSave,onReview,formDetails:{returnFax:"+12025550100",returnEmail:"synthetic-org@example.test"}})));
-  expect(fax().value).toBe("+12025550100");
+  expect(fax().value).toBe("(202) 555-0100");
   expect([...container.querySelectorAll("input")].find(el=>el.parentElement?.firstChild?.textContent==="E-mail Address")!.value).toBe("synthetic-org@example.test");
   await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Review & submit")!.click());
   expect(onReview).toHaveBeenCalledOnce();expect(onReview.mock.calls[0]![0].requestingPractice.fax).toBe("+12025550100");
