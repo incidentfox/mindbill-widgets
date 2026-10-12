@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
-import { rfaTitle, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
+import { RfaLink, rfaTitle, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
 import { RfaTaskBoard, type RfaTaskQuery } from "./rfa-task-board";
 import { RfaTrackingContent } from "./rfa-tracking-panel";
 import { RfaDetailHeader, rfaDetailCss, rfaPolishCss, rfaSimpleCss } from "./rfa-detail-header";
@@ -14,6 +14,7 @@ import { RfaOverview, rfaDashboardCss } from "./rfa-overview";
 import { RfaCreateForm, type RfaClaimSelectorProps, type RfaProviderSelectorProps } from "./rfa-create-form";
 import { RfaDraftForm, type RfaDraftInput } from "./rfa-draft-form";
 import { useRfaFormDetails } from "./rfa-official-fields";
+import { RfaCard, RfaFacts, RfaPill, RfaStatusCard, rfaAddress, rfaCalendarDate, rfaCardsCss, rfaLifecycleTone, rfaRequestTypeLabel, rfaShortDate } from "./rfa-detail-cards";
 import { canEditRfaDraft, rfaRecordToDraft, rfaDraftReplacement } from "./rfa-draft-edit";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaLifecycleControls } from "./rfa-lifecycle-controls";
@@ -82,6 +83,8 @@ export type RfaDashboardProps = OrganizationClientOptions & TreatmentDraftAppear
 };
 const CLINICAL_STATUSES = ["draft", "ready", "submitted", "received", "incomplete", "under_review", "information_requested", "deferred", "approved", "modified", "denied", "mixed", "canceled", "closed"];
 const label = (value: string) => value.replaceAll("_", " ");
+const sentence = (value: string) => { const text = label(value); return text.charAt(0).toUpperCase() + text.slice(1); };
+const documentTypeLabel = (type: string) => ({ rfa_form: "DWC Form RFA", clinical_report: "Clinical report", supporting_record: "Supporting record", ur_response: "Utilization review response", imr_form: "Independent medical review form", fax_cover: "Fax cover sheet" } as Record<string, string>)[type] ?? sentence(type);
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
 const key = () => `rfa-widget-${globalThis.crypto.randomUUID()}`;
 export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: fetchOverride, patientId, claimId, renderingProviderId, signatureSession, ...props }: RfaDashboardProps): ReactElement {
@@ -214,10 +217,12 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const formDetails = useRfaFormDetails(client, rfa?.claimId ?? "", rfa?.renderingProviderId ?? "", editing && !!draftFormProps.officialForm);
   const tabId = useId();
   const simple = layout === "simple";
-  const [detailTab, setDetailTab] = useState<"details" | "responses" | "documents" | "history">(simple && selectedResponseDocumentId ? "responses" : "details");
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const tabs = simple ? [["details", "Request"], ["responses", "Responses"], ["documents", "Documents"], ["history", "History"]] as const : [["details", "RFA details"], ["history", "History & activity"]] as const;
-  useEffect(() => { if (simple && selectedResponseDocumentId) setDetailTab("responses"); else if (selectedItem) setDetailTab("details"); }, [simple, selectedResponseDocumentId, selectedItem]);
+  const [detailTab, setDetailTab] = useState<"details" | "history">("details");
+  const tabs = simple ? [["details", "RFA Details"], ["history", "History & Activity"]] as const : [["details", "RFA details"], ["history", "History & activity"]] as const;
+  const reveal = (suffix: string) => { setDetailTab("details"); setTimeout(() => document.getElementById(`${tabId}-${suffix}`)?.scrollIntoView?.({ block: "start", behavior: "smooth" }), 0); };
+  useEffect(() => { if (selectedItem || selectedResponseDocumentId) setDetailTab("details"); }, [selectedResponseDocumentId, selectedItem]);
+  const responseFocused = useRef(false);
+  useEffect(() => { if (simple && rfa && selectedResponseDocumentId && !responseFocused.current) { responseFocused.current = true; document.getElementById(`${tabId}-review`)?.scrollIntoView?.({ block: "start" }); } }, [simple, rfa, selectedResponseDocumentId, tabId]);
   const alive = useRef(true); const pending = useRef(false); const loadGeneration = useRef(0); const keys = useRef(new Map<string, string>());
   const [descriptions, setDescriptions] = useState<Record<string, string>>({}); const [preview, setPreview] = useState<RfaSigningPreview | null>(null); const [previewPdf, setPreviewPdf] = useState<Blob | null>(null); const [attested, setAttested] = useState(false);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
@@ -279,13 +284,15 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const locked = busy || disabled;
   const canSign = permissions.includes("sign") && !!actorReference?.trim();
   const unsent = rfa && !rfa.submittedAt && ["draft", "ready", "incomplete", "deferred"].includes(rfa.status);
-  const openDocument = (documentId: string, title: string) => run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) { setOpenedDocument({ blob, title }); if (simple) setDetailTab("documents"); } });
+  const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
+  const openDocument = (documentId: string, title: string) => run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) { setOpenedDocument({ blob, title }); if (simple) reveal("documents"); } });
   return <div className={`mbrfa-detail mbrfa-stack${simple ? " mbrfa-simple" : ""}`} style={{ marginTop: 16 }}>
-    <style>{rfaDetailCss + rfaPolishCss + rfaSimpleCss}</style>
+    <style>{rfaDetailCss + rfaPolishCss + rfaSimpleCss + (simple ? rfaCardsCss : "")}</style>
     {error ? <p role="alert">{error}</p> : null}{busy ? <p role="status">Working…</p> : null}
     {!rfa ? (!error ? <p role="status">Loading request…</p> : null) : <>
-      <RfaDetailHeader compact={simple} rfa={rfa} {...(getPatientHref ? { getPatientHref } : {})} {...(getClaimHref ? { getClaimHref } : {})} {...(getProviderHref ? { getProviderHref } : {})} />
-      <div className="mbrfa-detail-toolbar"><div><h2>{rfaTitle(rfa)}</h2>{rfa.displayReference ? <span className="mbrfa-reference">{rfa.displayReference}</span> : null}<span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><span className="mbrfa-badge">{rfa.expedited ? "Expedited" : label(rfa.reviewType)}</span></div><div className="mbtd-actions">
+      {simple ? <RfaStatusCard rfa={rfa} /> : <RfaDetailHeader rfa={rfa} {...(getPatientHref ? { getPatientHref } : {})} {...(getClaimHref ? { getClaimHref } : {})} {...(getProviderHref ? { getProviderHref } : {})} />}
+      <div className="mbrfa-detail-toolbar"><div>{simple ? <><h2>{rfa.displayReference || "Request for Authorization"}</h2><RfaPill tone={rfaLifecycleTone(rfa)}>{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</RfaPill><RfaPill>{rfa.expedited ? "Expedited" : sentence(rfa.reviewType)}</RfaPill>{rfa.claimNumber ? <RfaPill tone="mono">Claim {rfa.claimNumber}</RfaPill> : null}</> : <><h2>{rfaTitle(rfa)}</h2>{rfa.displayReference ? <span className="mbrfa-reference">{rfa.displayReference}</span> : null}<span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><span className="mbrfa-badge">{rfa.expedited ? "Expedited" : label(rfa.reviewType)}</span></>}</div><div className="mbtd-actions">
+        {simple && permissions.includes("edit") && canEditRfaDraft(rfa) && !editing ? <button type="button" disabled={locked} onClick={() => { setDetailTab("details"); setEditing(true); }}>Edit request</button> : null}
         {formPreviewUrl ? <a className="mbrfa-form-link" href={formPreviewUrl} target="_blank" rel="noopener noreferrer">View DWC Form RFA</a> : rfa.documents.some(document => document.documentType === "rfa_form" && document.contentRevision === rfa.contentRevision) ? <button type="button" disabled={locked} onClick={() => { const document = [...rfa.documents].reverse().find(document => document.documentType === "rfa_form" && document.contentRevision === rfa.contentRevision); if (document) void openDocument(document.id, "DWC Form RFA"); }}>View DWC Form RFA</button> : null}
 
       </div></div>
@@ -309,26 +316,61 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
       </> : <>
       {simple ? <>
       <div id={`${tabId}-details-panel`} role="tabpanel" aria-labelledby={`${tabId}-details-tab`} hidden={detailTab !== "details"} className="mbrfa-stack">
-      <div className="mbrfa-next-action"><div><strong>{unsent ? (rfa.signedAt ? "Ready to review and send" : "Prepare this request") : rfa.status === "approved" ? "Treatment approved" : rfa.status === "closed" || rfa.status === "canceled" ? "Request closed" : "Track the review"}</strong><p>{unsent ? "Check the treatments and supporting documents before reviewing the request for delivery." : rfa.status === "approved" ? "Review the approved treatments below. Use the approved quantities and dates when preparing the associated bills." : "Record receipt and responses, then review each treatment decision."}</p></div>{unsent ? <button type="button" className="mbtd-primary" onClick={() => { setReviewOpen(true); setTimeout(() => document.getElementById(`${tabId}-review`)?.scrollIntoView?.({ block: "start" }), 0); }}>{rfa.signedAt ? "Review & send" : "Review & sign"}</button> : <button type="button" onClick={() => setDetailTab("responses")}>View responses</button>}</div>
-      {detailTab !== "history" ? <RfaTrackingContent embedded view="treatments" rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} /> : null}
-      <RfaRequestSummary rfa={rfa} hideTreatments collapseContacts {...(getPatientHref ? { getPatientHref } : {})} {...(getClaimHref ? { getClaimHref } : {})} {...(getProviderHref ? { getProviderHref } : {})} {...(rfa.claimsAdminId ? { onViewClaimsAdministrator: () => setDirectoryOpen(true) } : {})} />
+      <div className="mbrfa-cards-2">
+        <RfaCard title="Request Information"><RfaFacts entries={[
+          ["Request type", rfaRequestTypeLabel(rfa)],
+          ["Review", rfa.expedited ? "Expedited" : sentence(rfa.reviewType)],
+          ["Written confirmation", rfa.writtenConfirmation || rfa.requestType === "oral_authorization_confirmation" ? "Yes – confirms a prior oral request" : "No"],
+          ["Material change", rfa.materialChange],
+          ["Signed", rfa.signedAt ? rfaShortDate(rfa.signedAt) : "Not signed"],
+          ["Sent", rfa.submittedAt ? rfaShortDate(rfa.submittedAt) : "Not sent"],
+          ["Received", rfa.submittedAt ? (rfa.receivedAt ? rfaShortDate(rfa.receivedAt) : "Not confirmed") : null],
+          ["Decision due", rfa.submittedAt ? <>{rfaDecisionDueText(rfa)}{rfa.decisionDeadlineBasis ? <small> · {label(rfa.decisionDeadlineBasis)}</small> : null}</> : null],
+          ["Status note", [rfa.incompleteReason, rfa.deferredReason, rfa.closedReason].filter(Boolean).join("\n")],
+        ]} /></RfaCard>
+        <RfaCard title="Employee Information"><RfaFacts entries={[
+          ["Name", <RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink>],
+          ["Claim Number", <RfaLink href={getClaimHref?.(rfa)}>{rfa.claimNumber || "Not recorded"}</RfaLink>],
+          ["Date of Injury", rfaCalendarDate(rfa.dateOfInjury) || "Not recorded"],
+          ["Injury", rfa.injuryDescription],
+        ]} /></RfaCard>
+        <RfaCard title="Requesting Physician Information"><RfaFacts entries={[
+          ["Name", <RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink>],
+          ["NPI Number", rfa.providerNpi],
+          ["Practice Name", rfa.requestingPractice?.name],
+          ["Contact Name", rfa.requestingPractice?.contactName],
+          ["Address", rfaAddress(rfa.requestingPractice)],
+          ["Phone", rfa.requestingPractice?.phone ?? rfa.providerPhone],
+          ["Fax Number", rfa.requestingPractice?.fax ?? rfa.providerFax],
+          ["E-mail Address", rfa.requestingPractice?.email],
+        ]} /></RfaCard>
+        <RfaCard title="Claims Administrator Information"><RfaFacts entries={[
+          ["Company Name", <RfaLink onSelect={rfa.claimsAdminId ? () => setDirectoryOpen(true) : undefined}>{rfa.claimsAdminName || rfa.authorizationContact?.name || "Not recorded"}</RfaLink>],
+          ["Contact Name", rfa.authorizationContact?.contactName],
+          ["Address", rfaAddress(rfa.authorizationContact)],
+          ["Phone", rfa.authorizationContact?.phone],
+          ["Fax Number", rfa.authorizationContact?.fax],
+          ["E-mail Address", rfa.authorizationContact?.email],
+        ]} /></RfaCard>
+      </div>
       <ClaimsAdministratorDirectoryDialog open={directoryOpen} directory={directory} loading={directoryLoading} error={directoryError} onClose={() => setDirectoryOpen(false)} />
-      {unsent ? <details id={`${tabId}-review`} className="mbrfa-detail-card" open={reviewOpen} onToggle={event => setReviewOpen(event.currentTarget.open)}><summary>Review, sign and send</summary><div className="mbrfa-stack">
-      {unsent && !rfa.signedAt && canSign ? <fieldset><legend>Diagnosis descriptions for signing</legend>{rfa.items.map(item => <label key={item.id}>Diagnosis description for {item.diagnosisCode}<input value={descriptions[item.id] ?? ""} disabled={locked} onChange={event => { setDescriptions(value => ({ ...value, [item.id]: event.target.value })); setPreview(null); setPreviewPdf(null); setAttested(false); }} /></label>)}</fieldset> : null}
-      {unsent && !rfa.signedAt ? <fieldset><legend>Review and sign</legend><p>An authorized human must review and approve the exact form before applying the requesting physician’s saved signature.</p>{canManageProviderSignatures && canSign ? <>{settingSignature ? <RfaProviderSignatureSetup client={signatureClient} renderingProviderId={rfa.renderingProviderId} providerName={rfa.providerName} disabled={!!locked} onSaved={() => { setSettingSignature(false); setPreview(null); setPreviewPdf(null); setAttested(false); setReload(value => value + 1); }} onCancel={() => setSettingSignature(false)} /> : <button type="button" disabled={locked} onClick={() => setSettingSignature(true)}>Set up physician signature</button>}</> : null}{!canSign ? <p>Your integration needs signing permission and a signer identity to sign here.</p> : settingSignature ? null : <><button type="button" disabled={locked || rfa.items.some(item => !descriptions[item.id]?.trim())} onClick={() => void run(async () => { const body = { diagnosisDescriptions: descriptions }; const value = await client.prepareSigning(id, body, operationKey("preview", [body, rfa.contentRevision, reload])); const blob = await client.getDocument(id, value.previewDocumentId); if (alive.current) { setPreview(value); setPreviewPdf(blob); setAttested(false); } })}>Prepare signing preview</button>{preview && previewPdf ? <><PdfReview blob={previewPdf} title="DWC-RFA signing preview" /><label className="mbrfa-check"><input type="checkbox" checked={attested} disabled={locked} onChange={event => setAttested(event.target.checked)} />I reviewed this exact form and am authorized by the requesting physician to apply their saved signature.</label><button className="mbtd-primary" type="button" disabled={locked || !attested || Date.parse(preview.expiresAt) <= Date.now()} onClick={() => void run(async () => { const body = { snapshotId: preview.id, contentHash: preview.contentHash, renderingProviderId: preview.renderingProviderId, physicianAuthorized: true as const, actorReference: actorReference! }; adopt(await client.sign(id, body, operationKey("sign", body))); })}>Sign reviewed request</button><p>Preview expires {date(preview.expiresAt)}. Prepare a new preview after refreshing if it expires.</p></> : null}</>}</fieldset> : null}
-      {unsent ? <RfaDeliveryPanel key={`${rfa.id}:${rfa.contentRevision}:${rfa.signedAt ?? ""}:${rfa.submittedAt ?? ""}`} rfa={rfa} client={client} documentIds={documentIds} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} locked={!!locked} environment={environment} canSend={permissions.includes("send")} run={run} onUpdated={adopt} /> : null}
-
-      </div></details> : null}
-      </div>
-      <div id={`${tabId}-documents-panel`} role="tabpanel" aria-labelledby={`${tabId}-documents-tab`} hidden={detailTab !== "documents"} className="mbrfa-stack">
-      <fieldset><legend>Supporting documents</legend><p>{unsent ? "Include clinical substantiation. The signed DWC-RFA and cover sheet are assembled for you. Add one or more supporting PDFs." : "View the documents attached to this request. Saved packets preserve the exact files included with each submission."}</p>{rfa.documents.map(document => <div className="mbtd-actions" key={document.id}><label className="mbrfa-check">{unsent ? <input type="checkbox" disabled={locked || (document.documentType === "rfa_form" && document.contentRevision !== rfa.contentRevision)} checked={documentIds.includes(document.id)} onChange={event => { setDocumentIds(value => event.target.checked ? [...value.filter(item => document.documentType !== "rfa_form" || !rfa.documents.some(candidate => candidate.id === item && candidate.documentType === "rfa_form")), document.id] : value.filter(item => item !== document.id));  }} /> : null}{document.filename} ({label(document.documentType)})</label><button type="button" disabled={locked} onClick={() => void openDocument(document.id, document.filename)}>View PDF</button></div>)}{permissions.includes("edit") && unsent ? <div onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void uploadFiles(Array.from(event.dataTransfer.files)); }} style={{ marginTop: 12, padding: 16, border: "1px dashed var(--mb-border)", borderRadius: 8 }}><label>Add supporting documents (PDF, up to 25 MB each)<input type="file" multiple accept="application/pdf,.pdf" disabled={locked} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void uploadFiles(files); }} /></label><p>Choose files or drop them here.</p></div> : null}</fieldset>
-      {openedDocument ? <PdfReview blob={openedDocument.blob} title={openedDocument.title} /> : null}
-      <div className="mbrfa-detail-card"><RfaPacketsPanel {...options} rfa={rfa} environment={environment === "live" ? "live" : "sandbox"} disabled={!!locked} permissions={permissions.includes("act") ? ["act"] : []} onForwarded={() => { void run(async () => adopt(await client.get(id))); }} /></div>
-      </div>
-      <div id={`${tabId}-responses-panel`} role="tabpanel" aria-labelledby={`${tabId}-responses-tab`} hidden={detailTab !== "responses"} className="mbrfa-stack">
-      <fieldset><legend>Review timeline</legend><div className="mbtd-grid"><span>Signed: {date(rfa.signedAt)}</span><span>Submitted: {date(rfa.submittedAt)}</span><span>Confirmed receipt: {date(rfa.receivedAt)}</span><span>Decision due: {rfaDecisionDueText(rfa)}</span></div>{rfa.decisionDeadlineBasis ? <p>{label(rfa.decisionDeadlineBasis)}</p> : !rfa.decisionDueAt ? <p>The review deadline appears after the required receipt evidence is recorded.</p> : null}{[rfa.incompleteReason, rfa.deferredReason, rfa.closedReason].filter(Boolean).map((reason,index) => <p key={index}>{reason}</p>)}</fieldset>
-      {rfa.informationRequests.length ? <fieldset><legend>Information requested</legend>{rfa.informationRequests.map(item => <p key={item.id}>{item.requestText} · Due {date(item.dueAt)} · {item.respondedAt ? `Responded ${date(item.respondedAt)}` : "Awaiting response"}</p>)}</fieldset> : null}
-      <details className="mbrfa-detail-card" open><summary>Receipt, responses and follow-up</summary><RfaLifecycleControls {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} /></details>
+      <RfaTrackingContent embedded cards view="treatments" rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
+      <RfaCard id={`${tabId}-documents`} title="Documents" count={rfa.documents.length} flush action={permissions.includes("edit") && unsent ? <label className="mbrfa-file-button">+ Add documents<input type="file" multiple accept="application/pdf,.pdf" aria-label="Add supporting documents (PDF, up to 25 MB each)" disabled={locked} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void uploadFiles(files); }} /></label> : null}>
+        {rfa.documents.length ? <div className="mbrfa-table-scroll" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void uploadFiles(Array.from(event.dataTransfer.files)); }}><table className="mbrfa-grid-table"><thead><tr>{unsent ? <th scope="col">Send</th> : null}<th scope="col">Filename</th><th scope="col">Type</th><th scope="col">Added</th><th scope="col"><span className="mbrfa-sr-only">Actions</span></th></tr></thead><tbody>{rfa.documents.map(document => <tr key={document.id}>
+          {unsent ? <td><input type="checkbox" aria-label={`Include ${document.filename} in the packet`} disabled={locked || (document.documentType === "rfa_form" && document.contentRevision !== rfa.contentRevision)} checked={documentIds.includes(document.id)} onChange={event => { setDocumentIds(value => event.target.checked ? [...value.filter(item => document.documentType !== "rfa_form" || !rfa.documents.some(candidate => candidate.id === item && candidate.documentType === "rfa_form")), document.id] : value.filter(item => item !== document.id)); }} /></td> : null}
+          <td><button type="button" className="mbrfa-text-link" disabled={locked} onClick={() => void openDocument(document.id, document.filename)}>{document.filename}</button></td><td>{documentTypeLabel(document.documentType)}</td><td>{rfaShortDate(document.createdAt)}</td>
+          <td className="mbrfa-row-actions"><button type="button" disabled={locked} onClick={() => void openDocument(document.id, document.filename)}>View</button></td>
+        </tr>)}</tbody></table></div> : <p className="mbrfa-sheet-body mbrfa-empty">{unsent ? "Add the clinical reports that support this request (PDF, up to 25 MB each)." : "No documents are attached to this request."}</p>}
+        {openedDocument ? <div className="mbrfa-sheet-body"><PdfReview blob={openedDocument.blob} title={openedDocument.title} /></div> : null}
+      </RfaCard>
+      {unsent ? <RfaCard id={`${tabId}-review`} title={rfa.signedAt ? "Review and Send" : "Review and Sign"}><div className="mbrfa-stack">
+      {!rfa.signedAt && canSign && rfa.items.some(item => !item.diagnosisDescription?.trim()) ? <fieldset><legend>Diagnosis descriptions for signing</legend>{rfa.items.map(item => <label key={item.id}>Diagnosis description for {item.diagnosisCode}<input value={descriptions[item.id] ?? ""} disabled={locked} onChange={event => { setDescriptions(value => ({ ...value, [item.id]: event.target.value })); setPreview(null); setPreviewPdf(null); setAttested(false); }} /></label>)}</fieldset> : null}
+      {!rfa.signedAt ? <fieldset><legend>Review and sign</legend><p>An authorized human must review and approve the exact form before applying the requesting physician’s saved signature.</p>{canManageProviderSignatures && canSign ? <>{settingSignature ? <RfaProviderSignatureSetup client={signatureClient} renderingProviderId={rfa.renderingProviderId} providerName={rfa.providerName} disabled={!!locked} onSaved={() => { setSettingSignature(false); setPreview(null); setPreviewPdf(null); setAttested(false); setReload(value => value + 1); }} onCancel={() => setSettingSignature(false)} /> : null}</> : null}{!canSign ? <p>Your integration needs signing permission and a signer identity to sign here.</p> : settingSignature ? null : <><div className="mbtd-actions"><button type="button" className={preview ? undefined : "mbtd-primary"} disabled={locked || rfa.items.some(item => !descriptions[item.id]?.trim())} onClick={() => void run(async () => { const body = { diagnosisDescriptions: descriptions }; const value = await client.prepareSigning(id, body, operationKey("preview", [body, rfa.contentRevision, reload])); const blob = await client.getDocument(id, value.previewDocumentId); if (alive.current) { setPreview(value); setPreviewPdf(blob); setAttested(false); } })}>Prepare signing preview</button>{canManageProviderSignatures ? <button type="button" disabled={locked} onClick={() => setSettingSignature(true)}>Set up physician signature</button> : null}</div>{preview && previewPdf ? <><PdfReview blob={previewPdf} title="DWC-RFA signing preview" /><label className="mbrfa-check"><input type="checkbox" checked={attested} disabled={locked} onChange={event => setAttested(event.target.checked)} />I reviewed this exact form and am authorized by the requesting physician to apply their saved signature.</label><button className="mbtd-primary" type="button" disabled={locked || !attested || Date.parse(preview.expiresAt) <= Date.now()} onClick={() => void run(async () => { const body = { snapshotId: preview.id, contentHash: preview.contentHash, renderingProviderId: preview.renderingProviderId, physicianAuthorized: true as const, actorReference: actorReference! }; adopt(await client.sign(id, body, operationKey("sign", body))); })}>Sign reviewed request</button><p>Preview expires {date(preview.expiresAt)}. Prepare a new preview after refreshing if it expires.</p></> : null}</>}</fieldset> : null}
+      {rfa.signedAt ? <RfaDeliveryPanel key={`${rfa.id}:${rfa.contentRevision}:${rfa.signedAt ?? ""}:${rfa.submittedAt ?? ""}`} rfa={rfa} client={client} documentIds={documentIds} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} locked={!!locked} environment={environment} canSend={permissions.includes("send")} run={run} onUpdated={adopt} /> : null}
+      </div></RfaCard> : reviewable ? <RfaCard id={`${tabId}-review`} title="Utilization Review" flush>
+        {rfa.informationRequests.some(item => !item.respondedAt) ? <div className="mbrfa-rows">{rfa.informationRequests.filter(item => !item.respondedAt).map(item => <p key={item.id}><RfaPill tone="warn">Information requested</RfaPill> {item.requestText} · Due {date(item.dueAt)}</p>)}</div> : null}
+        <RfaLifecycleControls rows {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
+      </RfaCard> : null}
       </div>
       </> : <>
       <div id={`${tabId}-details-panel`} role="tabpanel" aria-labelledby={`${tabId}-details-tab`} hidden={detailTab !== "details"} className="mbrfa-stack">
@@ -347,15 +389,17 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
       </div>
       </>}
       <div hidden={simple && detailTab !== "history"} id={`${tabId}-history-panel`} role={detailTab === "history" ? "tabpanel" : undefined} aria-labelledby={detailTab === "history" ? `${tabId}-history-tab` : undefined} onClick={event => { const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="#rfa-treatment-"]'); if (link) { event.preventDefault(); setDetailTab("details"); const target = link.hash.slice(1); setTimeout(() => { const element = document.getElementById(target); element?.scrollIntoView?.({ block: "start" }); element?.focus(); }, 0); } }}>
-      {!simple || detailTab === "history" ? <RfaTrackingContent embedded view={detailTab === "history" ? "history" : "treatments"} rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} /> : null}
-      {detailTab === "history" && permissions.includes("send") ? <details className="mbrfa-delivery-tools"><summary>Delivery tools</summary><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery with provider</button></details> : null}
+      {!simple || detailTab === "history" ? <RfaTrackingContent embedded cards={simple} view={detailTab === "history" ? "history" : "treatments"} rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} /> : null}
+      {simple && detailTab === "history" && !unsent && rfa.status !== "canceled" ? <div style={{ marginTop: 16 }}><RfaCard title="Saved Packets"><RfaPacketsPanel {...options} rfa={rfa} environment={environment === "live" ? "live" : "sandbox"} disabled={!!locked} permissions={permissions.includes("act") ? ["act"] : []} onForwarded={() => { void run(async () => adopt(await client.get(id))); }} /></RfaCard></div> : null}
+      {detailTab === "history" && permissions.includes("send") && (!simple || rfa.transmissions.some(transmission => transmission.channel === "fax")) ? simple ? <div className="mbtd-actions" style={{ marginTop: 16 }}><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery status</button></div> : <details className="mbrfa-delivery-tools"><summary>Delivery tools</summary><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery with provider</button></details> : null}
       </div>
       </>}
-      <div className="mbrfa-bottom-actions"><span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><div className="mbtd-actions">
-        {permissions.includes("edit") && canEditRfaDraft(rfa) && !editing ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => { setDetailTab("details"); setEditing(true); }}>Edit request draft</button> : null}
+      {!editing || !simple ? <div className="mbrfa-bottom-actions">{simple ? <RfaPill tone={rfaLifecycleTone(rfa)}>{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}{unsent ? rfa.signedAt ? " — ready to send" : " — needs signature" : ""}</RfaPill> : <span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span>}<div className="mbtd-actions">
+        {!simple && permissions.includes("edit") && canEditRfaDraft(rfa) && !editing ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => { setDetailTab("details"); setEditing(true); }}>Edit request draft</button> : null}
         {onContinue ? <button type="button" disabled={locked} onClick={() => onContinue(rfa)}>Open in your application</button> : null}
         <RfaDraftActions {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} />
-      </div></div>
+        {simple && unsent ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => reveal("review")}>{rfa.signedAt ? "Review & send" : "Review & sign"}</button> : simple && reviewable && detailTab === "details" ? <button type="button" disabled={locked} onClick={() => reveal("review")}>Record response</button> : null}
+      </div></div> : null}
     </>}
   </div>;
 }

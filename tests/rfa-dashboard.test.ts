@@ -136,37 +136,32 @@ it("offers an opt-in focused layout while retaining deliberate sandbox delivery 
   await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",permissions:["send"]})));
   expect(button("Request for authorization")).toBeDefined();
   await act(async()=>button("Request for authorization").click());
-  expect([...container.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)).toEqual(["Request","Responses","Documents","History"]);
-  expect(container.querySelector('[aria-label="Authorization progress"]')).toBeNull();
-  expect(panel("Request").hidden).toBe(false);expect(panel("Documents").hidden).toBe(true);
-  const contacts=[...container.querySelectorAll("details")].find(element=>element.querySelector("summary")?.textContent==="Patient, physician & claim details")!;
-  expect(contacts.open).toBe(false);expect(contacts.textContent).toContain("Patient and injury");
-  const tracking=panel("Request").querySelector(".mbrfa-treatment-list");
-  expect(tracking).not.toBeNull();
-  expect(tracking!.compareDocumentPosition(contacts)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  const review=container.querySelector<HTMLDetailsElement>('details[id$="-review"]')!;
-  expect(review.open).toBe(false);
-  await act(async()=>button("Review & send").click());expect(review.open).toBe(true);
+  expect([...container.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)).toEqual(["RFA Details","History & Activity"]);
+  expect([...container.querySelectorAll('[aria-label="Authorization progress"] li')].map(step=>[step.textContent!.replace(/^[\d✓]+/,""),step.getAttribute("data-state")])).toEqual([["Draft","done"],["Signed","current"],["Sent","todo"],["Received","todo"],["Decided","todo"]]);
+  expect(panel("RFA Details").hidden).toBe(false);
+  expect([...panel("RFA Details").querySelectorAll(".mbrfa-sheet > header h3")].map(title=>title.firstChild!.textContent)).toEqual(["Request Information","Employee Information","Requesting Physician Information","Claims Administrator Information","Requested Treatment","Documents","Review and Send"]);
+  expect(container.querySelector("details")?.querySelector("summary")?.textContent).not.toBe("Patient, physician & claim details");
+  const review=container.querySelector<HTMLElement>('section[id$="-review"]')!;
   expect(review.textContent).toContain("External fax delivery is disabled");expect(button("Send authorization fax")).toBeUndefined();
-  await act(async()=>button("Documents").click());expect(panel("Documents").hidden).toBe(false);expect(panel("Request").hidden).toBe(true);
-  expect(panel("Documents").textContent).toContain("Synthetic report.pdf");
-  await act(async()=>button("Documents").dispatchEvent(new KeyboardEvent("keydown",{key:"End",bubbles:true})));
-  expect(button("History").getAttribute("aria-selected")).toBe("true");expect(document.activeElement).toBe(button("History"));
-  await act(async()=>button("Request").click());expect(review.open).toBe(true);
+  expect(button("Review & send")).toBeDefined();
+  expect(panel("RFA Details").textContent).toContain("Synthetic report.pdf");
+  await act(async()=>button("RFA Details").dispatchEvent(new KeyboardEvent("keydown",{key:"End",bubbles:true})));
+  expect(button("History & Activity").getAttribute("aria-selected")).toBe("true");expect(document.activeElement).toBe(button("History & Activity"));
+  expect(panel("RFA Details").hidden).toBe(true);
   expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 
-it("opens response and treatment deep links in the appropriate focused tab",async()=>{
+it("opens response and treatment deep links on the details tab",async()=>{
  const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:record}));
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  const base={getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple" as const,selectedRfaId:record.id};
  const selected=()=>container.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
  try{
   await act(async()=>root.render(createElement(RfaDashboard,{...base,selectedResponseDocumentId:"response_synthetic"})));
-  expect(selected()).toBe("Responses");
+  expect(selected()).toBe("RFA Details");
   await act(async()=>root.render(createElement(RfaDashboard,{...base,selectedTreatmentId:"treatment_synthetic"})));
-  expect(selected()).toBe("Request");
+  expect(selected()).toBe("RFA Details");
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 

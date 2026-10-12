@@ -12,6 +12,8 @@ export type RfaLifecycleControlsProps = OrganizationClientOptions & TreatmentDra
   /** Opt in only when your server grants rfas:act or rfas:edit, respectively. */
   permissions?: readonly ("act" | "edit")[];
   onUpdated?: (rfa: RfaRecord) => void;
+  /** Render as rows inside a host card, without the panel heading or summary notes. */
+  rows?: boolean;
 };
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
 const timestamp = (form: FormData, name: string) => {
@@ -27,7 +29,7 @@ export function RfaLifecycleControls({ sessionEndpoint, getSession, apiBaseUrl, 
   const identity = useMemo(() => crypto.randomUUID(), [options]);
   return <LifecycleContent key={`${identity}:${props.rfa.id}`} {...props} options={options} />;
 }
-function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdated, selectedResponseDocumentId, ...appearance }: Omit<RfaLifecycleControlsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
+function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdated, selectedResponseDocumentId, rows = false, ...appearance }: Omit<RfaLifecycleControlsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
   const [rfa, setRfa] = useState(providedRfa);
   useEffect(() => { setRfa(providedRfa); }, [providedRfa]);
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
@@ -91,9 +93,8 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
   const documentSelect = (name: string, title: string, types?: string[], required = true) => <label>{title}<select name={name} required={required} defaultValue=""><option value="">Choose a document</option>{docs(types).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>;
   const pendingItems = rfa.items.filter(item => item.outcome === "pending" && !item.decisionClosure?.closed);
   const decisionAllowed = ["received", "under_review", "information_requested"].includes(rfa.status);
-  return <TreatmentDraftShell {...appearance} title="Receipt and utilization review" description="Record evidence received from the claims administrator and track each requested treatment. Dates and deadlines come from MindBill.">
-    <div style={{ display: "grid", gap: 16 }}>
-      <div className="mbtd-note">Confirmed receipt: {displayDate(rfa.receivedAt)}<br />Decision due: {rfaDecisionDueText(rfa)}{rfa.decisionDeadlineBasis ? <><br />Basis: {label(rfa.decisionDeadlineBasis)}</> : null}</div>
+  const body = <>
+      {rows ? null : <div className="mbtd-note">Confirmed receipt: {displayDate(rfa.receivedAt)}<br />Decision due: {rfaDecisionDueText(rfa)}{rfa.decisionDeadlineBasis ? <><br />Basis: {label(rfa.decisionDeadlineBasis)}</> : null}</div>}
       {error ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
       {docs(["ur_response"]).length ? <section aria-label="Response document review"><label>Response to review<select value={responseDocument} onChange={event => setResponseDocument(event.target.value)}><option value="">Choose a response document</option>{docs(["ur_response"]).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>{previewError ? <div><p role="alert">{previewError}</p><button type="button" onClick={() => setPreviewReload(value => value + 1)}>Retry response preview</button></div> : null}{responsePdf ? <RfaPdfReview blob={responsePdf} title="Utilization review response" /> : responseDocument && !previewError ? <p role="status">Loading response preview…</p> : null}<p>Record each treatment decision below, then complete its Post UR response review. Treatments not addressed remain pending.</p></section> : null}
       {!act ? <p>Your session can view this record. Recording receipt, decisions, or follow-ups requires authorization from your administrator.</p> : null}
@@ -122,8 +123,11 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
         {act && decisionAllowed ? <form onSubmit={event => submit(event, "information-request", data => ({ requestedAt: timestamp(data, "requestedAt"), requestText: text(data, "requestText"), ...(text(data, "dueAt") ? { dueAt: timestamp(data, "dueAt") } : {}) }), (input, key) => client.recordInformationRequest(rfa.id, input, key))}><fieldset disabled={disabled}><legend>Record a request for information</legend><div className="mbtd-grid"><label>Requested at<input type="datetime-local" name="requestedAt" required /></label><label>Response due (optional)<input type="datetime-local" name="dueAt" /></label><label className="mbtd-wide">Requested information<textarea name="requestText" required /></label></div><button type="submit">Save information request</button></fieldset></form> : null}
       </div></details>
       <details open={Boolean(selectedResponseDocumentId)}><summary>Follow-up tasks</summary>{taskError ? <p role="alert">{taskError}</p> : null}{loading ? <p role="status">Loading follow-ups…</p> : tasks.length ? tasks.map(task => <FollowUpForm key={`${task.id}:${task.updatedAt}`} task={task} selected={Boolean(selectedResponseDocumentId && task.responseDocumentId === selectedResponseDocumentId)} hasRecordedDecisions={rfa.items.some(item => item.currentResponseDocumentId === task.responseDocumentId && item.outcome !== "pending")} onReview={task.responseDocumentId ? () => setResponseDocument(task.responseDocumentId!) : undefined} editable={act} disabled={Boolean(disabled)} onSave={input => run(`follow-up:${task.id}`, input, async key => { await client.updateFollowUp(task.id, input, key); return records.get(rfa.id); })} />) : !taskError ? <p>No follow-up tasks are recorded for this request.</p> : null}{taskError ? <button type="button" disabled={loading || disabled} onClick={() => setReload(value => value + 1)}>Retry follow-ups</button> : null}</details>
-      <p className="mbtd-note">Exceptional decision clocks require the explicit <a href="https://docs.mindbill.org/guides/rfas" target="_blank" rel="noopener noreferrer">RFA API review workflows</a>. Existing evidence remains in the request history.</p>
-    </div>
+      {rows ? null : <p className="mbtd-note">Exceptional decision clocks require the explicit <a href="https://docs.mindbill.org/guides/rfas" target="_blank" rel="noopener noreferrer">RFA API review workflows</a>. Existing evidence remains in the request history.</p>}
+  </>;
+  if (rows) return <div className="mbrfa-rows">{body}</div>;
+  return <TreatmentDraftShell {...appearance} title="Receipt and utilization review" description="Record evidence received from the claims administrator and track each requested treatment. Dates and deadlines come from MindBill.">
+    <div style={{ display: "grid", gap: 16 }}>{body}</div>
   </TreatmentDraftShell>;
 }
 function FollowUpForm({ task, selected, editable, disabled, onSave, onReview, hasRecordedDecisions }: { selected: boolean; onReview: (() => void) | undefined; hasRecordedDecisions: boolean; task: RfaFollowUp; editable: boolean; disabled: boolean; onSave: (input: RfaFollowUpUpdate) => Promise<void> }): ReactElement {
