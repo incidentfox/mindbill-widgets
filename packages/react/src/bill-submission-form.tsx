@@ -236,6 +236,20 @@ type FeeDetails = TherapyDetails & EquipmentDetails & ProfessionalComponentDetai
 };
 const isProlongedCode = (code: string) => /^9935[89]$/.test(code.trim());
 
+/**
+ * Provider type implied by the rendering provider's NUCC taxonomy. Physicians follow Labor Code § 3209.3
+ * (including psychologists, chiropractors, podiatrists, optometrists, dentists and acupuncturists).
+ */
+export function billSubmissionProviderKindForTaxonomy(taxonomy: string | undefined): NonNullable<BillFeeQuoteInput["physicianContext"]>["providerKind"] | undefined {
+  const code = taxonomy?.trim().toUpperCase() ?? "";
+  if (!/^[A-Z0-9]{10}$/.test(code)) return undefined;
+  if (/^(20|103[GT]|111N|213E|152W|1223|1711)/.test(code)) return "physician";
+  if (code.startsWith("363A")) return "physician_assistant";
+  if (code.startsWith("363L")) return "nurse_practitioner";
+  if (code.startsWith("364S")) return "clinical_nurse_specialist";
+  return undefined;
+}
+
 /** Standard estimate assumptions; prolonged-service facts require an explicit documentation selection. */
 export function billSubmissionEstimateContext(code: string, placeOfService: string, details: FeeDetails = {}): BillSubmissionFeeContext {
   if (details.basis === "adjustment") return {};
@@ -1255,7 +1269,7 @@ export function BillSubmissionForm({
     const detailsIndex = isProlongedCode(line.code) ? prolongedLeader(index) : index;
     const saved = bill.serviceLines[detailsIndex]?.feeContext;
     const prolonged = saved?.prolongedServiceContext;
-    return feeDetails[detailsIndex] ?? {
+    const details: FeeDetails = feeDetails[detailsIndex] ?? {
       ...drugDetailsFromSaved(line.drug, saved),
       ...anesthesiaDetailsFromSaved(saved),
       ...therapyDetailsFromSaved(saved),
@@ -1270,6 +1284,9 @@ export function BillSubmissionForm({
       relatedEvaluationDate: prolonged?.relatedEvaluationDate,
       prolongedTimeBasis: prolonged?.ongoingPatientManagement && prolonged.personallyPerformed && !prolonged.timeCountedInOtherServices && prolonged.completeSameDayServices ? "documented" : "",
     };
+    // The rendering provider already identifies the provider type; the line selector remains an override.
+    const impliedKind = isTherapyEditorCode(line.code) ? undefined : billSubmissionProviderKindForTaxonomy(bill.renderingProvider?.taxonomy);
+    return details.providerKind === undefined && impliedKind ? { ...details, providerKind: impliedKind } : details;
   };
   const quoteInputs = bill.serviceLines.map((line, index) => {
     if (!treatmentBilling || !line.code.trim() || isMedicalLegalCode(line.code)) return null;
