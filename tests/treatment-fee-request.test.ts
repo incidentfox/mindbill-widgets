@@ -5,6 +5,7 @@ import {
   billSubmissionQuoteContext,
   billSubmissionCalculationContext,
   billSubmissionEstimateContext,
+  billSubmissionProviderKindForTaxonomy,
   replaceBillSubmissionServiceLines,
   type BillSubmissionFeeContext,
   type BillSubmissionInput,
@@ -185,6 +186,18 @@ describe("RFA authorization after editing service lines", () => {
   });
 });
 
+
+describe("provider type from the rendering taxonomy", () => {
+  it("recognizes physicians and the 85 percent practitioners", () => {
+    for (const code of ["2084P0800X", "207X00000X", "103T00000X", "103G00000X", "111N00000X", "213E00000X"]) expect(billSubmissionProviderKindForTaxonomy(code)).toBe("physician");
+    expect(billSubmissionProviderKindForTaxonomy("363A00000X")).toBe("physician_assistant");
+    expect(billSubmissionProviderKindForTaxonomy(" 363lf0000x ")).toBe("nurse_practitioner");
+    expect(billSubmissionProviderKindForTaxonomy("364S00000X")).toBe("clinical_nurse_specialist");
+  });
+  it("leaves other or incomplete taxonomies for the biller to choose", () => {
+    for (const code of [undefined, "", "2084P", "1041C0700X", "163W00000X", "225100000X"]) expect(billSubmissionProviderKindForTaxonomy(code)).toBeUndefined();
+  });
+});
 
 describe("explicit estimate inputs", () => {
   it("never assumes the therapy provider type", () => {
