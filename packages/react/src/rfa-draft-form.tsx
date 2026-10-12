@@ -114,6 +114,14 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
     const previous = filledEmail.current; filledEmail.current = physicianEmail;
     setDraft(current => current.requestingPractice?.email && current.requestingPractice.email !== previous ? current : { ...current, requestingPractice: { ...current.requestingPractice, email: physicianEmail } });
   }, [officialForm, physicianEmail]);
+  // Practices and locations are managed in another tab; reload them when the user returns.
+  useEffect(() => {
+    if (!officialForm || !onRefreshProfile) return;
+    let last = Date.now();
+    const refresh = () => { if (document.visibilityState === "hidden" || Date.now() - last < 2000) return; last = Date.now(); void onRefreshProfile().catch(() => undefined); };
+    window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [officialForm, onRefreshProfile]);
   const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
   const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
   const previousClaim = useRef(identityKey);
@@ -161,7 +169,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
       <fieldset><legend>Requesting Physician Information</legend>
         <div className="mbrfa-pickers" data-columns={selectors?.physician ? 3 : 2}>
           {selectors?.physician ? <RfaPicker label="Requesting physician">{selectors.physician}</RfaPicker> : null}
-          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} {...(onRefreshProfile ? { onRefreshProfile } : {})} />
+          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} />
         </div>
         <fieldset className="mbrfa-plain" disabled={locked}><RfaOfficialContactFields nameLabel="Practice Name" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })}
           before={<RfaSavedField span={6} label="Name" value={draft.providerName} />}
