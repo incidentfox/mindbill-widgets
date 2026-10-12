@@ -33,6 +33,9 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & RfaContactDirectoryPr
   formDetails?: RfaFormDetails | undefined;
   /** Lookups rendered inside the Employee and Requesting Physician sections; they stay usable while the form is disabled. */
   selectors?: RfaFormSelectors;
+  /** Open the host's in-place editor for the selected practice or location (null adds a location). The form reloads saved values when focus returns. */
+  onEditPractice?: (practiceId: string) => void;
+  onEditLocation?: (locationId: string | null, practiceId: string) => void;
   managePracticeHref?: string;
   manageLocationsHref?: string;
   onRefreshProfile?: () => Promise<void>;
@@ -100,7 +103,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, managePracticeHref, manageLocationsHref, onRefreshProfile, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onEditLocation, managePracticeHref, manageLocationsHref, onRefreshProfile, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [savedDraft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   useEffect(() => {
     if (identity) setDraft(current => { const next = { ...current }; delete next.providerPhone; delete next.providerFax; return next; });
@@ -169,10 +172,10 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
       <fieldset><legend>Requesting Physician Information</legend>
         <div className="mbrfa-pickers" data-columns={selectors?.physician ? 3 : 2}>
           {selectors?.physician ? <RfaPicker label="Requesting physician">{selectors.physician}</RfaPicker> : null}
-          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} />
+          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} onEditPractice={onEditPractice} onEditLocation={onEditLocation} />
         </div>
         <fieldset className="mbrfa-plain" disabled={locked}><RfaOfficialContactFields nameLabel="Practice Name" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })}
-          before={<RfaSavedField span={6} label="Name" value={draft.providerName} />}
+          before={<RfaSavedField span={6} label="Physician Name" value={draft.providerName} />}
           beforeEmail={<><RfaSavedField span={3} label="Specialty" value={formDetails?.physician?.specialty ?? savedPhysician?.specialty} /><RfaSavedField span={3} label="NPI Number" value={draft.providerNpi} /></>} /></fieldset>
       </fieldset>
       <RfaContactPicker officialForm {...(searchClaimsAdministrators ? { searchClaimsAdministrators } : {})} {...(getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory } : {})} {...(draft.claimsAdminId ? { administratorId: draft.claimsAdminId } : {})} {...(draft.claimNumber ? { claimNumber: draft.claimNumber } : {})} contextKey={draft.claimId} value={draft.authorizationContact} disabled={locked} onChange={(id, authorizationContact) => { setAdministratorOverride({ id }); update({ authorizationContact }); }} />
