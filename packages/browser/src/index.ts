@@ -2436,8 +2436,9 @@ export type RfaSigningPreview = { id: string; contentHash: string; contentRevisi
 export type RfaSignInput = { snapshotId: string; contentHash: string; renderingProviderId: string; physicianAuthorized: true; actorReference: string };
 export type RfaFaxInput = { to: string; documentIds: string[]; nonBusinessDates?: string[] };
 export type RfaUploadDocumentInput = { file: File; documentType: "clinical_report" | "supporting_record" | "ur_response" | "imr_form" | "other"; contentRevision: number };
-export type RfaCreationClaim = { claimId: string; patientId: string; employeeName: string; claimNumber?: string; dateOfInjury?: string; claimsAdminId?: string; diagnosisCodes?: string[] };
-export type RfaCreationProvider = { id: string; name: string; npi?: string };
+/** `employeeFormName`, `dateOfBirth` and `employer` mirror the DWC Form RFA employee block. Date of birth and employer are returned only when the query names this `claimId`. */
+export type RfaCreationClaim = { claimId: string; patientId: string; employeeName: string; employeeFormName?: string; dateOfBirth?: string; employer?: string; claimNumber?: string; dateOfInjury?: string; claimsAdminId?: string; diagnosisCodes?: string[] };
+export type RfaCreationProvider = { id: string; name: string; npi?: string; specialty?: string };
 export type RfaCreationContext = { claims: RfaCreationClaim[]; renderingProviders: RfaCreationProvider[]; nextCursor: string | null; renderingProvidersNextCursor: string | null };
 export type RfaCreationContextQuery = { search?: string; cursor?: string; providerSearch?: string; providerCursor?: string; limit?: number; claimId?: string; renderingProviderId?: string };
 export type RfaProvisionClaimInput = {

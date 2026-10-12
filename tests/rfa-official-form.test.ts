@@ -11,7 +11,7 @@ it.each(["Review & submit", "Preview", "Save draft"])("official form preserves l
  const onSave=vi.fn().mockResolvedValue(undefined),onReview=vi.fn().mockResolvedValue(undefined),onPreview=vi.fn().mockResolvedValue(undefined);
  try {
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,onReview,onPreview})));
-  expect([...container.querySelectorAll("input[readonly]")]).toHaveLength(0);
+  expect([...container.querySelectorAll("input[readonly]")].map(el=>el.parentElement!.textContent)).toEqual(["Name (Last, First, Middle)","Date of Injury (MM/DD/YYYY)","Date of Birth (MM/DD/YYYY)","Claim Number","Employer","Name","Specialty","NPI Number"]);
   expect([...container.querySelectorAll("label")].some(el=>el.textContent==="Quantity")).toBe(false);
   const other=[...container.querySelectorAll("textarea")].find(el=>el.parentElement?.textContent?.startsWith("Other Information"))!;
   expect(other.value).toContain("Quantity: 6; Twice weekly");
@@ -32,5 +32,22 @@ it("practice selection prefers its unique location and excludes another practice
   const address=[...container.querySelectorAll("input")].find(el=>el.parentElement?.textContent==="Address")!;expect(address.value).toBe("Clinic address");
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());
   expect([...container.querySelectorAll('[role="option"]')].map(el=>el.textContent).join(" ")).not.toContain("Synthetic Clinic B");
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("follows the DWC Form RFA order and shows every printed field with saved values", async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const onSave=vi.fn().mockResolvedValue(undefined);
+ try{
+  await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:{...initialDraft,claimNumber:"SYN-0001",dateOfInjury:"2026-01-02",providerNpi:"1234567890"},officialForm:true,onSave,
+   formDetails:{employee:{formName:"Patient, Synthetic Q",dateOfBirth:"1980-03-04",employer:"Synthetic Employer"},physician:{specialty:"Orthopedic Surgery"}},organizationProfile:{organizationId:"org_synthetic",practiceIdentity:{},billingProviders:[],renderingProviders:[{id:"provider_synthetic",name:"Synthetic Physician",npi:"1234567890",email:"physician@example.test"}],locations:[],w9:null,onboarding:{status:null,complete:false,checklist:[]}},
+   selectors:{claim:createElement("span",{id:"claim-lookup"}),physician:createElement("span",{id:"physician-lookup"})}})));
+  expect([...container.querySelectorAll("form > fieldset > legend")].map(el=>el.textContent)).toEqual(["Request type","Employee Information","Requesting Physician Information","Claims Administrator Information","Requested Treatment"]);
+  const section=(title:string)=>[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent===title)!;
+  const fields=(title:string)=>[...section(title).querySelectorAll<HTMLInputElement|HTMLTextAreaElement>(".mbrfa-form-grid label")].map(el=>[el.firstChild!.textContent,el.querySelector<HTMLInputElement>("input,textarea")!.value]);
+  expect(fields("Employee Information")).toEqual([["Name (Last, First, Middle)","Patient, Synthetic Q"],["Date of Injury (MM/DD/YYYY)","01/02/2026"],["Date of Birth (MM/DD/YYYY)","03/04/1980"],["Claim Number","SYN-0001"],["Employer","Synthetic Employer"]]);
+  expect(fields("Requesting Physician Information")).toEqual([["Name","Synthetic Physician"],["Practice Name",""],["Contact Name",""],["Address",""],["City",""],["State",""],["Zip Code",""],["Phone",""],["Fax Number",""],["Specialty","Orthopedic Surgery"],["NPI Number","1234567890"],["E-mail Address","physician@example.test"]]);
+  expect(fields("Claims Administrator Information").map(([label])=>label)).toEqual(["Company Name","Contact Name","Address","City","State","Zip Code","Phone","Fax Number","E-mail Address"]);
+  expect(fields("Requested Treatment").map(([label])=>label)).toEqual(["Diagnosis (Required)","ICD-Code (Required)","Service/Good Requested (Required)","CPT/HCPCS Code (If known)","Other Information: (Frequency, Duration, Quantity, etc.)"]);
+  expect(section("Employee Information").querySelector("#claim-lookup")).not.toBeNull();
+  expect([...section("Requesting Physician Information").querySelectorAll(".mbrfa-pickers > .mbrfa-picker > span:first-child")].map(el=>el.textContent)).toEqual(["Requesting physician","Practice","Practice location"]);
  }finally{await act(async()=>root.unmount());container.remove();}
 });

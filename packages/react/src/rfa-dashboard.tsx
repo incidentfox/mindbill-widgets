@@ -13,6 +13,7 @@ import { RfaListView } from "./rfa-list-view";
 import { RfaOverview, rfaDashboardCss } from "./rfa-overview";
 import { RfaCreateForm, type RfaClaimSelectorProps, type RfaProviderSelectorProps } from "./rfa-create-form";
 import { RfaDraftForm, type RfaDraftInput } from "./rfa-draft-form";
+import { useRfaFormDetails } from "./rfa-official-fields";
 import { canEditRfaDraft, rfaRecordToDraft, rfaDraftReplacement } from "./rfa-draft-edit";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaLifecycleControls } from "./rfa-lifecycle-controls";
@@ -210,6 +211,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
 function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, client, signatureClient, options, permissions, environment, actorReference, onContinue, disabled, draftFormProps, canManageProviderSignatures, onCopied, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl }: RfaRelatedLinks & { layout: "classic" | "simple"; formPreviewUrl?: string; draftFormProps: Pick<import("./rfa-draft-form").RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "manageLocationsHref" | "onRefreshProfile" | "onReview" | "onPreview">; canManageProviderSignatures: boolean; onCopied: (rfa: RfaRecord) => void; id: string; selectedItem: string | null; selectedResponseDocumentId?: string; client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions; permissions: readonly string[]; environment: string; actorReference?: string; onContinue?: (rfa: RfaRecord) => void; disabled?: boolean }): ReactElement {
   const [rfa, setRfa] = useState<RfaRecord | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(false);
+  const formDetails = useRfaFormDetails(client, rfa?.claimId ?? "", rfa?.renderingProviderId ?? "", editing && !!draftFormProps.officialForm);
   const tabId = useId();
   const simple = layout === "simple";
   const [detailTab, setDetailTab] = useState<"details" | "responses" | "documents" | "history">(simple && selectedResponseDocumentId ? "responses" : "details");
@@ -295,7 +297,7 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
       }}>{tabs.map(([value, title]) => <button key={value} id={`${tabId}-${value}-tab`} type="button" role="tab" tabIndex={detailTab === value ? 0 : -1} aria-selected={detailTab === value} aria-controls={`${tabId}-${value}-panel`} onClick={() => setDetailTab(value)}>{title}</button>)}</div> : null}
       {editing ? <>
         <button type="button" disabled={locked} onClick={() => { setEditing(false); setReload(value => value + 1); }}>Discard edits and refresh</button>
-        <RfaDraftForm key={`${rfa.id}:${rfa.contentRevision}`} mode="edit" {...draftFormProps} initialDraft={rfaRecordToDraft(rfa)} disabled={!!locked} onSave={async draft => {
+        <RfaDraftForm key={`${rfa.id}:${rfa.contentRevision}`} mode="edit" {...draftFormProps} formDetails={formDetails} initialDraft={rfaRecordToDraft(rfa)} disabled={!!locked} onSave={async draft => {
           if (pending.current || disabled) throw new Error("Wait for the current action to finish.");
           pending.current = true; loadGeneration.current += 1; setBusy(true);
           try {

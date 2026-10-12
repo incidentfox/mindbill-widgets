@@ -13,10 +13,12 @@ export type RfaAuthorizationDestinationProps = {
   /** Selection only: the host owns signing, destination confirmation, and delivery. */
   onSelectionStart?: () => void;
   onChange: (destination: RfaAuthorizationDestinationOption | null) => void;
+  /** Render as a plain field group inside a host form section, without its own frame or legend. */
+  compact?: boolean;
 };
 
 /** Choose a destination without sending an RFA or treating email as fax. */
-export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart }: RfaAuthorizationDestinationProps): ReactElement {
+export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart, compact = false }: RfaAuthorizationDestinationProps): ReactElement {
   const options = loading || error ? [] : rfaAuthorizationDestinations(directory);
   const fax = savedContact?.fax ? normalizeRfaFax(savedContact.fax) : null;
   const savedLabel = savedContact?.contactName || savedContact?.name || "Saved request contact";
@@ -42,11 +44,13 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
         : nextSelection === "" ? null : options[Number(nextSelection)] ?? null;
     onChange(selected ? { ...selected, ...(recipientName ? { recipientName } : {}) } : null);
   };
-  return <fieldset className="mb-rfa-destination" disabled={disabled || loading} style={{ border: "1px solid var(--mb-border, #d7e0df)", borderRadius: 10, padding: 16, display: "grid", gap: 12, minWidth: 0, overflowWrap: "anywhere" }}>
-    <legend>Authorization destination</legend>
+  const guidance = <>
     <p style={{ margin: 0 }}>{loading ? "Loading authorization contacts…" : error ? "Directory details are unavailable. Confirm a destination with the handling adjuster." : rfaAuthorizationGuidance(directory)}</p>
     {directory?.authorizationNotice ? <p style={{ margin: 0 }}>{directory.authorizationNotice}</p> : null}
-    <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
+  </>;
+  return <fieldset className={compact ? "mb-rfa-destination mbrfa-plain" : "mb-rfa-destination"} disabled={disabled || loading} style={compact ? { display: "grid", gap: 8, minWidth: 0, overflowWrap: "anywhere" } : { border: "1px solid var(--mb-border, #d7e0df)", borderRadius: 10, padding: 16, display: "grid", gap: 12, minWidth: 0, overflowWrap: "anywhere" }}>
+    {compact ? null : <><legend>Authorization destination</legend>{guidance}</>}
+    <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{compact ? <span className="mbrfa-visually-hidden">Authorization contact</span> : directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
       <select value={selection} onChange={(event) => { const value = event.target.value; setSelection(value); setManual(""); const name = options[Number(value)]?.recipientName ?? ""; setContactName(name); emit(value, "", name); }} style={{ padding: 10, width: "100%", minWidth: 0, maxWidth: "100%", font: "inherit" }}>
         <option value="">Choose a destination…</option>
         {options.map((option, index) => <option key={`${option.method}:${option.destination}:${index}`} value={String(index)}>{option.label} · {option.method === "fax" ? "Fax" : "Email"}: {option.destination}</option>)}
@@ -58,5 +62,6 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
       {chosen.method === "email" ? <p style={{ margin: 0, overflowWrap: "anywhere" }}>Email: {chosen.destination}. Review this recipient before preparing and sending the packet.</p> : null}
       {chosen.phone ? <small>Telephone for questions: {chosen.phone}</small> : null}
     </> : null}
+    {compact ? <small className="mbrfa-guidance">{guidance}</small> : null}
   </fieldset>;
 }
