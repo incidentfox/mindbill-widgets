@@ -8,6 +8,8 @@ export type RfaDraftActionsProps = OrganizationClientOptions & {
   disabled?: boolean;
   onCopied?: (draft: RfaRecord) => void;
   onCanceled?: (rfa: RfaRecord) => void;
+  /** Call the action "Delete draft". The request record and its audit history are still retained. */
+  deleteWording?: boolean;
 };
 
 /** Reuses request content without reusing the physician's signature or sending a request. */
@@ -16,7 +18,7 @@ export function RfaDraftActions({ sessionEndpoint, getSession, apiBaseUrl, fetch
   const identity = useMemo(() => crypto.randomUUID(), [options]);
   return <DraftActionsContent key={`${identity}:${props.rfa.id}:${props.rfa.contentRevision}:${props.rfa.status}:${props.rfa.signedAt}:${props.rfa.submittedAt}`} options={options} {...props} />;
 }
-function DraftActionsContent({ rfa, options, permissions = [], disabled = false, onCopied, onCanceled }: Omit<RfaDraftActionsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement | null {
+function DraftActionsContent({ rfa, options, permissions = [], disabled = false, onCopied, onCanceled, deleteWording = false }: Omit<RfaDraftActionsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement | null {
   const client = useMemo(() => createRfaDraftActionsClient(options), [options]);
   const [confirming, setConfirming] = useState<"copy" | "cancel" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,15 +43,15 @@ function DraftActionsContent({ rfa, options, permissions = [], disabled = false,
   };
   return <section aria-label="RFA draft actions">
     {error ? <p role="alert">{error}</p> : null}
-    {completed ? <p role="status">{completed === "copy" ? "A new unsigned draft was created." : "The draft was canceled. Its audit history is retained."}</p> : confirming && (confirming === "copy" ? canCopy : canCancel) ? <div className="mbtd-note">
+    {completed ? <p role="status">{completed === "copy" ? "A new unsigned draft was created." : deleteWording ? "The draft was deleted." : "The draft was canceled. Its audit history is retained."}</p> : confirming && (confirming === "copy" ? canCopy : canCancel) ? <div className="mbtd-note">
       {confirming === "copy" ? <>
         <p>Create a new draft with this patient, injury, physician, and requested treatments? Review the new draft and attach supporting documents before signing it.</p>
         <p>Signatures, supporting documents, decisions, and delivery history remain on the original request.</p>
-      </> : <p>Cancel this unsigned draft? It will no longer be available for submission. The request and its audit history will be retained.</p>}
-      <div className="mbtd-actions"><button type="button" disabled={disabled || busy} onClick={() => { void mutate(confirming); }}>{busy ? "Saving…" : confirming === "copy" ? "Create draft copy" : "Confirm cancellation"}</button><button type="button" disabled={busy} onClick={() => { setConfirming(null); setError(""); }}>Keep current request</button></div>
+      </> : <p>{deleteWording ? "Delete this draft? It cannot be sent afterwards." : "Cancel this unsigned draft? It will no longer be available for submission. The request and its audit history will be retained."}</p>}
+      <div className="mbtd-actions"><button type="button" disabled={disabled || busy} onClick={() => { void mutate(confirming); }}>{busy ? "Saving…" : confirming === "copy" ? "Create draft copy" : deleteWording ? "Delete draft" : "Confirm cancellation"}</button><button type="button" disabled={busy} onClick={() => { setConfirming(null); setError(""); }}>{deleteWording ? "Keep draft" : "Keep current request"}</button></div>
     </div> : <div className="mbtd-actions">
       {canCopy ? <button type="button" disabled={disabled || busy} onClick={() => setConfirming("copy")}>Copy to new draft</button> : null}
-      {canCancel ? <button type="button" disabled={disabled || busy} onClick={() => setConfirming("cancel")}>Cancel draft</button> : null}
+      {canCancel ? <button type="button" disabled={disabled || busy} onClick={() => setConfirming("cancel")}>{deleteWording ? "Delete draft" : "Cancel draft"}</button> : null}
     </div>}
   </section>;
 }
