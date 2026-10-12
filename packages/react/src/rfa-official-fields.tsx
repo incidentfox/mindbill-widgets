@@ -16,8 +16,11 @@ export type RfaFormSelectors = { claim?: ReactNode; physician?: ReactNode };
 
 const formDate = (value: string | undefined) => { const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? ""); return match ? `${match[2]}/${match[3]}/${match[1]}` : value ?? ""; };
 
-export function RfaPicker({ label, children }: { label: string; children: ReactNode }): ReactElement {
-  return <div className="mbrfa-picker"><span>{label}</span>{children}</div>;
+/** Marks a field the request cannot be sent without. */
+export function RfaRequired(): ReactElement { return <span className="mbrfa-req" title="Required"> *</span>; }
+
+export function RfaPicker({ label, children, required }: { label: string; children: ReactNode; required?: boolean }): ReactElement {
+  return <div className="mbrfa-picker"><span>{label}{required ? <RfaRequired /> : null}</span>{children}</div>;
 }
 
 /** A saved value shown exactly as it prints; it changes only through its lookup. */
@@ -49,17 +52,17 @@ const contactRows = [
   ["zip", "Zip Code", 20, 2], ["phone", "Phone", 30, 2], ["fax", "Fax Number", 30, 2],
 ] as const;
 /** Contact fields in DWC Form RFA order; `before` and `beforeEmail` hold the section's saved values. */
-export function RfaOfficialContactFields({ nameLabel, value, onChange, before, beforeEmail, faxHint, editable = true }: {
+export function RfaOfficialContactFields({ nameLabel, value, onChange, before, beforeEmail, required = [], editable = true }: {
   nameLabel: "Practice Name" | "Company Name"; value: RfaContact | null | undefined; onChange: (value: RfaContact) => void;
-  before?: ReactNode; beforeEmail?: ReactNode; /** Shown under an empty Fax Number. */ faxHint?: string;
+  before?: ReactNode; beforeEmail?: ReactNode; /** Fields the request cannot be sent without. */ required?: Array<keyof RfaContact>;
   /** False shows the values as information; they change through the section's lookups. */ editable?: boolean;
 }): ReactElement {
   const dial = (key: keyof RfaContact) => key === "phone" || key === "fax";
-  const hint = (key: keyof RfaContact) => key === "fax" && faxHint && !value?.fax?.trim() ? <small className="mbrfa-field-hint">{faxHint}</small> : null;
+  const mark = (key: keyof RfaContact) => required.includes(key) ? <RfaRequired /> : null;
   const field = (key: keyof RfaContact, label: string, max: number, span: 1 | 2 | 3 | 6) => editable
-    ? <label key={key} className={`mbrfa-s${span}`}>{label}<input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={dial(key) ? formatRfaPhone(value?.[key]) : value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: dial(key) ? formatRfaPhone(event.target.value) : event.target.value })} />{hint(key)}</label>
-    : <div key={key} className={`mbrfa-s${span} mbrfa-saved`}><span>{label}</span><strong>{(dial(key) ? formatRfaPhone(value?.[key]) : value?.[key])?.trim() || "—"}</strong>{hint(key)}</div>;
-  return <div className="mbrfa-form-grid">
+    ? <label key={key} className={`mbrfa-s${span}`}><span>{label}{mark(key)}</span><input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={dial(key) ? formatRfaPhone(value?.[key]) : value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: dial(key) ? formatRfaPhone(event.target.value) : event.target.value })} /></label>
+    : <div key={key} className={`mbrfa-s${span} mbrfa-saved`}><span>{label}{mark(key)}</span><strong>{(dial(key) ? formatRfaPhone(value?.[key]) : value?.[key])?.trim() || "—"}</strong></div>;
+  return <div className="mbrfa-form-grid mbrfa-contact-grid">
     {before}{field("name", nameLabel, 200, 3)}{field("contactName", "Contact Name", 200, 3)}
     {contactRows.map(([key, label, max, span]) => field(key, label, max, span))}
     {beforeEmail}{field("email", "E-mail Address", 254, 6)}

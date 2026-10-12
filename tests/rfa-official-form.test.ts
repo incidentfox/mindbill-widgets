@@ -35,7 +35,7 @@ it("practice selection prefers its unique location and excludes another practice
   const shown=(label:string)=>[...physician.querySelectorAll(".mbrfa-saved")].find(el=>el.firstChild!.textContent===label)!.querySelector("strong")!.textContent;
   // A chosen saved practice shows as information, not as boxes to type into.
   expect(physician.querySelectorAll(".mbrfa-form-grid input")).toHaveLength(0);
-  expect([shown("Address"),shown("Contact Name"),shown("Fax Number"),shown("E-mail Address")]).toEqual(["Clinic address","Synthetic Contact","(202) 555-0177","contact@example.test"]);
+  expect([shown("Address"),shown("Contact Name"),shown("Fax Number *"),shown("E-mail Address")]).toEqual(["Clinic address","Synthetic Contact","(202) 555-0177","contact@example.test"]);
   // Saved records are edited through their own lookups, so this section has no manual-entry switch.
   expect([...physician.querySelectorAll("button")].some(el=>el.textContent==="Edit manually")).toBe(false);
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());
@@ -52,11 +52,11 @@ it("follows the DWC Form RFA order and shows every printed field with saved valu
   const section=(title:string)=>[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent===title)!;
   const fields=(title:string)=>[...section(title).querySelectorAll<HTMLElement>(".mbrfa-form-grid label, .mbrfa-form-grid .mbrfa-saved")].map(el=>[el.firstChild!.textContent,el.matches(".mbrfa-saved")?el.querySelector("strong")!.textContent!.replace(/^—$/,""):el.querySelector<HTMLInputElement>("input,textarea")!.value]);
   expect(fields("Employee Information")).toEqual([["Name (Last, First, Middle)","Patient, Synthetic Q"],["Date of Injury (MM/DD/YYYY)","01/02/2026"],["Date of Birth (MM/DD/YYYY)","03/04/1980"],["Claim Number","SYN-0001"],["Employer","Synthetic Employer"]]);
-  expect(fields("Requesting Physician Information")).toEqual([["Physician Name","Synthetic Physician"],["Practice Name",""],["Contact Name",""],["Address",""],["City",""],["State",""],["Zip Code",""],["Phone",""],["Fax Number","(202) 555-0100"],["Specialty","Orthopedic Surgery"],["NPI Number","1234567890"],["E-mail Address","physician@example.test"]]);
+  expect(fields("Requesting Physician Information")).toEqual([["Physician Name","Synthetic Physician"],["Practice Name",""],["Contact Name",""],["Address",""],["City",""],["State",""],["Zip Code",""],["Phone",""],["Fax Number *","(202) 555-0100"],["Specialty","Orthopedic Surgery"],["NPI Number","1234567890"],["E-mail Address","physician@example.test"]]);
   expect(fields("Claims Administrator Information").map(([label])=>label)).toEqual(["Company Name","Contact Name","Address","City","State","Zip Code","Phone","Fax Number","E-mail Address"]);
-  expect(fields("Requested Treatment").map(([label])=>label)).toEqual(["Diagnosis (Required)","ICD-Code (Required)","Service/Good Requested (Required)","CPT/HCPCS Code (If known)","Other Information: (Frequency, Duration, Quantity, etc.)"]);
+  expect(fields("Requested Treatment").map(([label])=>label)).toEqual(["Diagnosis *","ICD-Code *","Service/Good Requested *","CPT/HCPCS Code (If known)","Other Information: (Frequency, Duration, Quantity, etc.)"]);
   expect(section("Employee Information").querySelector("#claim-lookup")).not.toBeNull();
-  expect([...section("Requesting Physician Information").querySelectorAll(".mbrfa-pickers > .mbrfa-picker > span:first-child")].map(el=>el.textContent)).toEqual(["Requesting physician","Practice","Practice location"]);
+  expect([...section("Requesting Physician Information").querySelectorAll(".mbrfa-pickers > .mbrfa-picker > span:first-child")].map(el=>el.textContent)).toEqual(["Requesting physician *","Practice","Practice location"]);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 it("official creation is usable before a claim or physician is chosen and saving asks for them", async()=>{
@@ -78,10 +78,10 @@ it("requires a requesting physician fax to review and fills it from the organiza
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  const onSave=vi.fn().mockResolvedValue(undefined),onReview=vi.fn().mockResolvedValue(undefined);
  const draft={...initialDraft,requestingPractice:null};
- const fax=()=>[...container.querySelectorAll("input")].find(el=>el.parentElement?.firstChild?.textContent==="Fax Number")!;
+ const fax=()=>[...container.querySelectorAll("input")].find(el=>el.parentElement?.firstChild?.textContent==="Fax Number *")!;
  try{
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:draft,officialForm:true,onSave,onReview})));
-  expect(fax().value).toBe("");expect(fax().parentElement!.textContent).toContain("Required to send");
+  expect(fax().value).toBe("");
   await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Review & submit")!.click());
   expect(onReview).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')!.textContent).toContain("fax number");
   await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Save draft")!.click());

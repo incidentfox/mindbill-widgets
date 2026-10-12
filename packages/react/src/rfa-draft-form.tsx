@@ -3,7 +3,7 @@ import type { BillDiagnosisCode, OrganizationProfileData, RfaContact } from "@mi
 import { RfaPracticePicker } from "./rfa-practice-picker";
 import { RfaContactPicker, type RfaContactDirectoryProps } from "./rfa-contact-picker";
 import { RfaContactFields, RfaDiagnosisFields } from "./rfa-draft-fields";
-import { RfaEmployeeFields, RfaOfficialContactFields, RfaPicker, RfaSavedField, type RfaFormDetails, type RfaFormSelectors } from "./rfa-official-fields";
+import { RfaEmployeeFields, RfaRequired, RfaOfficialContactFields, RfaPicker, RfaSavedField, type RfaFormDetails, type RfaFormSelectors } from "./rfa-official-fields";
 import { useEffect, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
@@ -169,7 +169,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
     }) }));
   };
   const supportingDocumentFields: ReactNode = supportingDocuments ? <fieldset disabled={locked}><legend>Supporting documents</legend>{officialForm ? null : <p>Add the clinical reports supporting this request. They will be attached when you save the draft.</p>}<label>Supporting documents (PDF)<input type="file" accept="application/pdf,.pdf" multiple onChange={event => { supportingDocuments.onChange([...supportingDocuments.files, ...Array.from(event.target.files ?? [])]); event.target.value = ""; }} /></label>{supportingDocuments.files.map((file, index) => <div className="mbtd-actions" key={`${index}:${file.name}`}><span>{file.name}</span><button type="button" onClick={() => supportingDocuments.onChange(supportingDocuments.files.filter((_, position) => position !== index))}>Remove {file.name}</button></div>)}</fieldset> : null;
-  const submit = (event: FormEvent) => { event.preventDefault(); if (locked) return; const next = normalizeRfaDraft(draft); void action.save(next, validateRfaDraft(next) ?? (officialForm && intentRef.current === "review" && !next.requestingPractice?.fax?.trim() ? "Enter the Requesting Physician fax number. The claims administrator faxes the decision back to it." : null)); };
+  const submit = (event: FormEvent) => { event.preventDefault(); if (locked) return; const next = normalizeRfaDraft(draft); void action.save(next, validateRfaDraft(next) ?? (officialForm && intentRef.current === "review" && !next.requestingPractice?.fax?.trim() ? "Requesting Physician fax number is required." : null)); };
   const saveError = action.error ? <p role="alert">{action.error}{mode === "edit" ? " Your edits are still here. If this request changed elsewhere, discard edits and refresh before editing the latest version." : ""}</p> : null;
   // Sections and fields below follow the DWC Form RFA top to bottom.
   if (officialForm) return <TreatmentDraftShell {...appearance} hideHeading={embedded} title="Request for authorization" description="DWC Form RFA">
@@ -187,17 +187,17 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
       </fieldset>
       <fieldset><legend>Requesting Physician Information</legend>
         <div className="mbrfa-pickers" data-columns={selectors?.physician ? 3 : 2}>
-          {selectors?.physician ? <RfaPicker label="Requesting physician">{selectors.physician}</RfaPicker> : null}
+          {selectors?.physician ? <RfaPicker required label="Requesting physician">{selectors.physician}</RfaPicker> : null}
           <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} onEditPractice={onEditPractice} onEditLocation={onEditLocation} onChosen={() => setPracticeManual(false)} />
         </div>
-        <fieldset className="mbrfa-plain" disabled={locked}><RfaOfficialContactFields editable={practiceManual} nameLabel="Practice Name" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} faxHint="Required to send. The decision is faxed back here. Save it on the practice location to fill it automatically."
+        <fieldset className="mbrfa-plain" disabled={locked}><RfaOfficialContactFields editable={practiceManual} nameLabel="Practice Name" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} required={["fax"]}
           before={<RfaSavedField span={6} label="Physician Name" value={draft.providerName} />}
           beforeEmail={<><RfaSavedField span={3} label="Specialty" value={formDetails?.physician?.specialty ?? savedPhysician?.specialty} /><RfaSavedField span={3} label="NPI Number" value={draft.providerNpi} /></>} /></fieldset>
       </fieldset>
       <RfaContactPicker officialForm {...(searchClaimsAdministrators ? { searchClaimsAdministrators } : {})} {...(getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory } : {})} {...(draft.claimsAdminId ? { administratorId: draft.claimsAdminId } : {})} {...(draft.claimNumber ? { claimNumber: draft.claimNumber } : {})} contextKey={draft.claimId} value={draft.authorizationContact} disabled={locked} onChange={(id, authorizationContact) => { setAdministratorOverride({ id }); update({ authorizationContact }); }} />
       {draft.items.map((item, index) => <fieldset key={index} disabled={locked}><legend>Requested Treatment{draft.items.length > 1 ? ` ${index + 1}` : ""}</legend><div className="mbrfa-form-grid">
         <RfaDiagnosisFields officialForm code={item.diagnosisCode} {...(item.diagnosisDescription !== undefined ? { description: item.diagnosisDescription } : {})} {...(searchDiagnosisCodes ? { search: searchDiagnosisCodes } : {})} onChange={value => updateItem(index, value)} />
-        <label className="mbrfa-s4">Service/Good Requested (Required)<textarea required maxLength={1000} value={item.serviceDescription} onChange={(event) => updateItem(index, { serviceDescription: event.target.value })} /></label>
+        <label className="mbrfa-s4"><span>Service/Good Requested<RfaRequired /></span><textarea required maxLength={1000} value={item.serviceDescription} onChange={(event) => updateItem(index, { serviceDescription: event.target.value })} /></label>
         <label className="mbrfa-s2">CPT/HCPCS Code (If known)<input maxLength={16} value={item.procedureCode ?? ""} onChange={(event) => updateItem(index, { procedureCode: event.target.value })} /></label>
         <label className="mbrfa-s6">Other Information: (Frequency, Duration, Quantity, etc.)<textarea maxLength={2000} value={typeof item.metadata?.otherInformation === "string" ? item.metadata.otherInformation : [item.quantity !== undefined ? `Quantity: ${item.quantity}` : "", item.units !== undefined ? `Units: ${item.units}` : "", item.frequency, item.duration, item.requestedFrom ? `From: ${item.requestedFrom}` : "", item.requestedTo ? `Through: ${item.requestedTo}` : ""].filter(Boolean).join("; ")} onChange={event => updateItem(index, { metadata: { ...item.metadata, otherInformation: event.target.value } })} /></label>
       </div><div className="mbtd-actions">{index > 0 && draft.items[0]?.diagnosisCode ? <button type="button" onClick={() => updateItem(index, { diagnosisCode: draft.items[0]!.diagnosisCode, diagnosisDescription: draft.items[0]!.diagnosisDescription ?? "" })}>Copy diagnosis from first treatment</button> : null}{draft.items.length > 1 ? <button type="button" onClick={() => update({ items: draft.items.filter((_, position) => position !== index) })}>Remove requested treatment {index + 1}</button> : null}</div></fieldset>)}
