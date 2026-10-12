@@ -37,6 +37,8 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & RfaContactDirectoryPr
   selectors?: RfaFormSelectors;
   /** Open the host's in-place editor for the selected practice or location (null adds a location). The form reloads saved values when focus returns. */
   onEditPractice?: (practiceId: string) => void;
+  /** Opens the host's editor for a new practice; adds an "Add new practice" choice to the practice list. */
+  onAddPractice?: () => void;
   onEditLocation?: (locationId: string | null, practiceId: string) => void;
   /** Saved sets of requested treatments offered in the Requested Treatment section (official form). */
   treatmentTemplates?: RfaTreatmentTemplate[] | undefined;
@@ -113,7 +115,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, managePracticeHref, manageLocationsHref, onRefreshProfile, profilePending = false, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onAddPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, managePracticeHref, manageLocationsHref, onRefreshProfile, profilePending = false, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [savedDraft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   useEffect(() => {
     if (identity) setDraft(current => { const next = { ...current }; delete next.providerPhone; delete next.providerFax; return next; });
@@ -203,7 +205,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
       <fieldset><legend>Requesting Physician Information</legend>
         <div className="mbrfa-pickers" data-columns={selectors?.physician ? 3 : 2}>
           {selectors?.physician ? <RfaPicker required label="Requesting physician">{selectors.physician}</RfaPicker> : null}
-          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} onEditPractice={onEditPractice} onEditLocation={onEditLocation} onChosen={() => setPracticeManual(false)} />
+          <RfaPracticePicker profile={organizationProfile} value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} {...(managePracticeHref ? { managePracticeHref } : {})} {...(manageLocationsHref ? { manageLocationsHref } : {})} onEditPractice={onEditPractice} onAddPractice={onAddPractice} onEditLocation={onEditLocation} onChosen={() => setPracticeManual(false)} />
         </div>
         <fieldset className="mbrfa-plain" disabled={locked}><RfaOfficialContactFields editable={practiceManual} nameLabel="Practice Name" value={draft.requestingPractice} onChange={requestingPractice => update({ requestingPractice })} required={["fax"]}
           before={<RfaSavedField span={6} label="Physician Name" value={draft.providerName} />}
