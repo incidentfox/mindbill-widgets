@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaScheduling, type RfaSchedulingInput, type RfaHistoryEvent, type RfaDecisionCorrectionInput, type RfaTreatmentDecisionInput, type RfaTreatmentClosureInput } from "@mindbill/browser";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 import { rfaDetailCss } from "./rfa-detail-header";
 import { RfaHistoryEntry } from "./rfa-history-entry";
+import { RfaCard, RfaPill, rfaCalendarDate, rfaOutcome, rfaShortDate } from "./rfa-detail-cards";
 
 export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
   rfa: RfaRecord;
@@ -12,6 +13,7 @@ export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
   onUpdated?: (rfa: RfaRecord) => void;
 };
 const words = (value: string) => value.replace(/^rfa\./, "").replaceAll("_", " ");
+const capital = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 const date = (value: string | null | undefined) => value ? new Date(value).toLocaleString() : "Not recorded";
 const text = (data: FormData, key: string) => String(data.get(key) ?? "").trim();
 const required = (data: FormData, key: string, name: string) => { const value = text(data, key); if (!value) throw new Error(`Enter ${name}.`); return value; };
@@ -23,7 +25,7 @@ export function RfaTrackingPanel(props: RfaTrackingPanelProps): ReactElement {
   const identity = useMemo(() => crypto.randomUUID(), [props.options]);
   return <RfaTrackingContent key={`${identity}:${props.rfa.id}`} {...props} />;
 }
-export function RfaTrackingContent({ rfa: provided, options, permissions = [], onUpdated, view = "all", embedded = false, ...appearance }: RfaTrackingPanelProps & { view?: "all" | "treatments" | "history"; embedded?: boolean }): ReactElement {
+export function RfaTrackingContent({ rfa: provided, options, permissions = [], onUpdated, view = "all", embedded = false, cards = false, ...appearance }: RfaTrackingPanelProps & { view?: "all" | "treatments" | "history"; embedded?: boolean; /** Bill-style cards and tables instead of stacked fieldsets. */ cards?: boolean }): ReactElement {
   const [rfa, setRfa] = useState(provided);
   useEffect(() => setRfa(provided), [provided]);
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
@@ -36,6 +38,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [noteOpen, setNoteOpen] = useState(false);
   const alive = useRef(true); const pending = useRef(false); const keys = useRef(new Map<string, string>());
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -79,6 +82,64 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
   const evidence = (id: string | null | undefined, title: string) => id ? <button type="button" disabled={disabled} onClick={() => void download(id, rfa.documents.find(document => document.id === id)?.filename ?? `${title}.pdf`)}>{title}</button> : null;
   const canCorrect = permissions.includes("act") && ["received", "under_review", "information_requested", "approved", "modified", "denied", "mixed"].includes(rfa.status);
   const canClose = permissions.includes("edit") && ["submitted", "received", "under_review", "information_requested", "incomplete", "deferred"].includes(rfa.status);
+  const otherInformation = (item: RfaRecord["items"][number]) => typeof item.metadata?.otherInformation === "string" && item.metadata.otherInformation.trim() ? item.metadata.otherInformation : [item.quantity != null ? `Quantity: ${item.quantity}` : "", item.units != null ? `Units: ${item.units}` : "", item.frequency, item.duration, item.requestedFrom ? `From: ${rfaCalendarDate(item.requestedFrom)}` : "", item.requestedTo ? `Through: ${rfaCalendarDate(item.requestedTo)}` : ""].filter(Boolean).join("; ");
+  const noteForm = <form className="mbrfa-row" onSubmit={event => {
+    event.preventDefault(); const form = event.currentTarget;
+    try { const note = required(new FormData(form), "note", "a note"); void run("note", note, async key => { await client.addNote(rfa.id, note, key); return records.get(rfa.id); }).then(saved => { if (saved && alive.current) { form.reset(); setNoteOpen(false); } }); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Enter a note."); }
+  }}><label>Note<textarea name="note" required maxLength={10000} autoFocus disabled={disabled} /></label><div className="mbtd-actions"><button type="submit" className="mbtd-primary" disabled={disabled}>Save note</button><button type="button" onClick={() => setNoteOpen(false)}>Cancel</button></div></form>;
+  const cardContent = <div className="mbrfa-stack">
+    {error ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
+    {loadErrors.map(value => <p role="alert" key={value}>{value}</p>)}
+    {view !== "history" ? <RfaCard title="Requested Treatment" count={rfa.items.length} flush>
+      {rfa.items.length ? <div className="mbrfa-table-scroll"><table className="mbrfa-grid-table mbrfa-treatment-table"><thead><tr><th scope="col">#</th><th scope="col">Service/Good Requested</th><th scope="col">Diagnosis</th><th scope="col">CPT/HCPCS</th><th scope="col">Other Information</th><th scope="col">Decision</th></tr></thead><tbody>{rfa.items.map((item, index) => {
+        const appointment = scheduling.find(value => value.itemId === item.id);
+        const outcome = rfaOutcome(item);
+        const showAppointment = !!appointment && (appointment.eligible || appointment.version > 0);
+        const closable = canClose && item.outcome === "pending" && !item.decidedAt;
+        const correctable = canCorrect && !!item.currentDecisionEventId && item.outcome !== "pending";
+        return <Fragment key={item.id}>
+          <tr id={`rfa-treatment-${item.id}`} tabIndex={-1}>
+            <td>{index + 1}</td>
+            <td><strong>{item.serviceDescription}</strong></td>
+            <td><span className="mbrfa-code">{item.diagnosisCode}</span>{item.diagnosisDescription ? <small>{item.diagnosisDescription}</small> : null}</td>
+            <td><span className="mbrfa-code">{item.procedureCode || "—"}</span></td>
+            <td>{otherInformation(item) || "—"}</td>
+            <td><RfaPill tone={outcome.tone}>{outcome.label}</RfaPill>
+              {item.outcome !== "pending" ? <>
+                {item.authorizationNumber ? <small>Authorization {item.authorizationNumber}</small> : null}
+                {item.authorizedProcedureCode || item.authorizedQuantity != null || item.authorizedUnits != null ? <small>Authorized {[item.authorizedProcedureCode || item.procedureCode, item.authorizedQuantity != null ? `quantity ${item.authorizedQuantity}` : "", item.authorizedUnits != null ? `units ${item.authorizedUnits}` : ""].filter(Boolean).join(" · ")}</small> : null}
+                {item.effectiveFrom || item.effectiveTo ? <small>{rfaCalendarDate(item.effectiveFrom) || "Not specified"} – {rfaCalendarDate(item.effectiveTo) || "Not specified"}</small> : null}
+                <small>Decided {rfaShortDate(item.decidedAt)}</small>
+              </> : null}
+            </td>
+          </tr>
+          {item.decisionReason || item.reviewerName || item.decisionClosure || closable || showAppointment || correctable || item.currentResponseDocumentId || item.currentImrDocumentId ? <tr className="mbrfa-subrow"><td /><td colSpan={5}><div className="mbrfa-manage">
+            {item.decisionReason ? <p>{item.decisionReason}</p> : null}{item.reviewerName ? <p>Reviewer: {item.reviewerName}{item.reviewerPhone ? ` · ${item.reviewerPhone}` : ""}</p> : null}
+            {item.decisionClosure ? <p>{item.decisionClosure.closed ? "Closed" : "Reopened"} by {item.decisionClosure.updatedBy} · {rfaShortDate(item.decisionClosure.updatedAt)} — {item.decisionClosure.reason}</p> : null}
+            {item.currentResponseDocumentId || item.currentImrDocumentId ? <div className="mbtd-actions">{evidence(item.currentResponseDocumentId, "View decision evidence")}{evidence(item.currentImrDocumentId, "View independent medical review form")}</div> : null}
+            {showAppointment ? <AppointmentForm key={`${item.id}:${appointment.version}:${appointment.authorizationToken}`} appointment={appointment} editable={permissions.includes("edit")} disabled={disabled || loadErrors.some(value => value.startsWith("Appointments"))} onError={setError} onSave={input => run(`appointment:${item.id}`, input, async key => { await client.updateScheduling(rfa.id, item.id, input, key); return records.get(rfa.id); })} /> : null}
+            {closable ? <TreatmentClosureForm key={`${item.id}:${item.decisionClosure?.version ?? 0}`} item={item} disabled={disabled} onError={setError} onSave={input => run(`closure:${item.id}`, input, key => client.updateTreatmentClosure(rfa.id, item.id, input, key))} /> : null}
+            {correctable ? <details><summary>Correct this decision</summary><p>The original decision and its evidence remain in history. Corrections require a reason and response evidence. Requests already used for a bill or a scheduled appointment cannot be corrected.</p>
+              <CorrectionForm key={`${item.id}:${item.currentDecisionEventId}`} item={item} documents={rfa.documents} disabled={disabled || loading || loadErrors.length > 0 || scheduling.some(value => value.disposition === "scheduled")} onError={setError} onSave={input => run(`correction:${item.id}`, input, key => client.correctDecision(rfa.id, input, key))} />
+            </details> : null}
+          </div></td></tr> : null}
+        </Fragment>;
+      })}</tbody></table></div> : <p className="mbrfa-sheet-body mbrfa-empty">No treatments recorded.</p>}
+    </RfaCard> : null}
+    {view !== "treatments" ? <>
+      <RfaCard title="History" action={permissions.includes("edit") && !noteOpen ? <button type="button" disabled={disabled} onClick={() => setNoteOpen(true)}>Add note</button> : null} flush>
+        <div className="mbrfa-rows">{noteOpen ? noteForm : null}</div>
+        {loading ? <p className="mbrfa-sheet-body">Loading history…</p> : history.length ? <div className="mbrfa-table-scroll"><table className="mbrfa-history-table"><thead><tr><th scope="col">Date</th><th scope="col">Action</th><th scope="col">User</th><th scope="col">Details</th></tr></thead><tbody>{history.map(event => <RfaHistoryEntry key={event.id} event={event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />)}</tbody></table></div> : !loadErrors.some(value => value.startsWith("History")) ? <p className="mbrfa-sheet-body mbrfa-empty">No history entries have been recorded.</p> : null}
+      </RfaCard>
+      {rfa.transmissions.length ? <RfaCard title="Delivery" count={rfa.transmissions.length} flush><div className="mbrfa-table-scroll"><table className="mbrfa-grid-table"><thead><tr><th scope="col">Date</th><th scope="col">Method</th><th scope="col">Status</th><th scope="col">Recipient</th><th scope="col">Confirmed receipt</th><th scope="col"><span className="mbrfa-sr-only">Receipt</span></th></tr></thead><tbody>{rfa.transmissions.map(transmission => <tr key={transmission.id}>
+        <td>{rfaShortDate(transmission.occurredAt)}</td><td>{capital(words(transmission.channel))}<small>{capital(words(transmission.direction))}{transmission.purpose ? ` · ${words(transmission.purpose)}` : ""}</small></td>
+        <td><RfaPill tone={["delivered", "received", "sent"].includes(transmission.status) ? "ok" : transmission.status === "failed" ? "bad" : "muted"}>{capital(words(transmission.status))}</RfaPill></td>
+        <td>{transmission.destination || "—"}{transmission.providerMessageId ? <small>Reference {transmission.providerMessageId}</small> : null}</td>
+        <td>{rfaShortDate(transmission.receivedAt)}</td><td className="mbrfa-row-actions">{evidence(transmission.proofDocumentId, "Receipt")}</td>
+      </tr>)}</tbody></table></div></RfaCard> : null}
+    </> : null}
+  </div>;
   const content = <>
     <div style={{ display: "grid", gap: 16 }}>
       {error ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
@@ -119,6 +180,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
       </div>
     </div>
   </>;
+  if (cards) return <div className="mbrfa-tracking">{cardContent}</div>;
   return embedded ? <div className="mbrfa-tracking">{content}</div> : <TreatmentDraftShell {...appearance} title="Treatments and history" description="Review each treatment's authorization, appointments, delivery evidence, and notes."><style>{rfaDetailCss}</style>{content}</TreatmentDraftShell>;
 }
 function AppointmentForm({ appointment, editable, disabled, onError, onSave }: { appointment: RfaScheduling; editable: boolean; disabled: boolean; onError: (message: string) => void; onSave: (input: RfaSchedulingInput) => Promise<boolean> }): ReactElement {

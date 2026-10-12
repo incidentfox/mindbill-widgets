@@ -7,7 +7,7 @@ const object = (value: unknown): Fields => value && typeof value === "object" &&
 const string = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value : undefined;
 const words = (value: string) => value.replace(/^rfa\./, "").replaceAll("_", " ");
 const actions: Record<string, string> = { created: "RFA created", note_added: "Note added", transmission_recorded: "Transmission recorded", followup_opened: "Follow-up opened", signed: "RFA signed", submitted: "RFA submitted", treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened" };
-const date = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Not recorded";
+const date = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "Not recorded";
 const fields = {
   status: "Status", from: "Previous status", to: "New status", channel: "Delivery method", direction: "Direction",
   purpose: "Purpose", destination: "Recipient", recipientName: "Attention", providerMessageId: "Delivery reference",
@@ -86,7 +86,7 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload }: {
   add(payload.packetId, "Download retained submission PDF", "packet");
   const changed = Array.isArray(payload.changedFields) ? payload.changedFields.flatMap(value => typeof value === "string" && Object.hasOwn(changedFieldNames, value) ? [changedFieldNames[value]!] : []) : [];
   const hasDetails = entries.length || appointment.length || decisionSections.length || evidence.length || changed.length;
-  const actor = /^(system:|system$)/.test(event.actor) ? "System" : /^(native-user:|user:)/.test(event.actor) ? "Team member" : /^(developer:|integration:|api:)/.test(event.actor) ? "Integration" : event.actor;
+  const actor = /^(system:|system$)/.test(event.actor) ? "System" : /^(native-user:|user:)/.test(event.actor) || /^partner:[^:]+:browser:/.test(event.actor) ? "Team member" : /^partner:/.test(event.actor) ? "Integration" : /^(developer:|integration:|api:)/.test(event.actor) ? "Integration" : event.actor;
   const action = string(payload.action) ?? event.eventType.replace(/^rfa\./, "");
   return <tr>
     <td><time dateTime={event.occurredAt ?? undefined}>{date(event.occurredAt)}</time></td>

@@ -563,23 +563,25 @@ the administrator name, and `injuryDescription` supplies related injury context.
 
 ## Focused layout
 
-Set `layout="simple"` to start on the searchable **All RFAs** list and organize each
-request into four tabs:
+Set `layout="simple"` to start on the searchable **All RFAs** list and present each
+request like a bill detail page:
 
-- **Request:** patient and claim context, treatments, and the next action. Draft
-  signing and delivery controls open under **Review, sign and send**.
-- **Responses:** receipt dates, review deadlines, decisions, and follow-up actions.
-- **Documents:** supporting PDFs, document selection, and retained delivery packets.
-- **History:** activity, notes, and delivery evidence.
+- A **status card** with the Draft → Signed → Sent → Received → Decided milestones and,
+  once sent, the decision due date. Milestones reflect recorded evidence only.
+- A title row with status pills and the **Edit request** and **View DWC Form RFA** actions.
+- **RFA Details:** Request, Employee, Requesting Physician and Claims Administrator
+  information cards; a **Requested Treatment** table with each decision; a **Documents**
+  table; and either **Review and Sign / Review and Send** (before delivery) or
+  **Utilization Review** (after delivery).
+- **History & Activity:** the activity table with notes, delivery records, and retained packets.
+- A sticky action bar with the request status and its next action.
 
 The default is `layout="classic"`. Both layouts use the same authorization,
-signing attestations, delivery confirmation, and sandbox restrictions. Switching
-tabs preserves unsaved control values. `selectedTreatmentId` opens Request;
-`selectedResponseDocumentId` opens Responses. Viewing a PDF opens Documents.
-Hosts can enable the simple layout for selected organizations without changing
-other integrations. `initialView="create"` continues to open creation directly.
-
-The simple Request tab places treatment decisions first. Request information follows, with patient, physician, practice and claims administrator details available in a collapsed disclosure.
+signing attestations, delivery confirmation, and sandbox restrictions.
+`selectedTreatmentId` and `selectedResponseDocumentId` open RFA Details and scroll to
+the treatment or the review section. Hosts can enable the simple layout for selected
+organizations without changing other integrations. `initialView="create"` continues
+to open creation directly.
 
 ## Host patient and claim selection
 

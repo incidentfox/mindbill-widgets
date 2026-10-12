@@ -25,7 +25,7 @@ export function RfaDeliveryPanel({ rfa, client, documentIds, directory, director
   useEffect(() => { setPrepared(null); setReviewed(false); setConfirmed(false); }, [fingerprint]);
   const packet = prepared?.fingerprint === fingerprint ? prepared : null;
   return <fieldset><legend>Review packet and send</legend>
-    {!rfa.readiness.ready ? <p>Still needed: {rfa.readiness.missing.map(value => value.replaceAll("_", " ")).join(", ") || "Complete the request details"}.</p> : null}
+    {!rfa.readiness.ready ? <p>Still needed: {rfa.readiness.missing.map(value => value === "signedAt" ? "physician signature" : value.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").toLowerCase()).join(", ") || "Complete the request details"}.</p> : null}
     <label>Delivery method<select disabled={locked} value={mode} onChange={event => setMode(event.target.value as "send" | "download")}><option value="send">Send to claims administrator</option><option value="download">Download for manual submission</option></select></label>
     {mode === "send" ? <RfaAuthorizationDestination contextKey={`${rfa.id}:${rfa.claimsAdminId ?? "manual"}`} directory={directory} savedContact={rfa.authorizationContact} loading={directoryLoading} error={directoryError} disabled={locked} onChange={setDestination} /> : <p>Downloading does not mark this request as sent. Keep proof of any submission made outside this dashboard.</p>}
     <label>{destination?.method === "email" && mode === "send" ? "Email message (optional)" : "Fax cover sheet message (optional)"}<textarea disabled={locked} maxLength={1000} rows={3} value={message} onChange={event => setMessage(event.target.value)} /></label>

@@ -517,7 +517,7 @@ for permissions and the browser API contract.
 
 The RFA dashboard opens on a combined task and response overview. Task counts drill into next actions by age; hosts can opt into separate filtered task pages with `navigation.getTaskHref`, `taskPresentation="list"`, and `taskQuery` ([routing guide](docs/rfa-dashboard.md#separate-task-list-pages)); requests awaiting decisions are summarized below. In **All RFAs**, use **Show** to switch between request rows and individual treatment rows. See [RFA dashboard workflows](docs/rfa-dashboard.md#response-tasks-and-supporting-documents).
 
-`RfaDashboard` accepts `layout="simple"` for a list-first workspace with Request, Responses, Documents, and History tabs. The default `layout="classic"` preserves the existing interface. See [the RFA dashboard guide](docs/rfa-dashboard.md#focused-layout).
+`RfaDashboard` accepts `layout="simple"` for a list-first workspace whose request page mirrors a bill detail page: status milestones, information cards, treatment and document tables, and RFA Details / History & Activity tabs. The default `layout="classic"` preserves the existing interface. See [the RFA dashboard guide](docs/rfa-dashboard.md#focused-layout).
 
 Hosts can supply `RfaDashboard.renderClaimSelector` for patient-first RFA creation using their existing patient and injury forms. See [host patient selection](docs/rfa-dashboard.md#host-patient-and-claim-selection).
 
