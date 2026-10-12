@@ -34,7 +34,7 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd .mbrfa-request-details:disabled .mbrfa-check{cursor:default;opacity:.6}
 .mbtd .mbrfa-form-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:start}
 .mbtd .mbrfa-s1{grid-column:span 1}.mbtd .mbrfa-s2{grid-column:span 2}.mbtd .mbrfa-s3{grid-column:span 3}.mbtd .mbrfa-s4{grid-column:span 4}.mbtd .mbrfa-s6{grid-column:1/-1}
-.mbtd .mbrfa-form-grid input[readonly]{background:var(--mb-soft);cursor:default}
+.mbtd .mbrfa-saved{display:grid;gap:3px;min-width:0;align-content:start}.mbtd .mbrfa-saved>span{font-size:12px;color:var(--mb-muted)}.mbtd .mbrfa-saved>strong{font-size:14px;font-weight:500;line-height:20px;overflow-wrap:anywhere}
 .mbtd .mbrfa-pickers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--mb-border)}
 .mbtd .mbrfa-pickers[data-columns="1"]{grid-template-columns:minmax(0,1fr)}.mbtd .mbrfa-pickers[data-columns="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
 .mbtd .mbrfa-picker{display:grid;gap:5px;min-width:0;font-size:13px;align-content:start}.mbtd .mbrfa-picker>span:first-child{font-weight:600}
