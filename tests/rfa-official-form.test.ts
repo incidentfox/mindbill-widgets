@@ -12,7 +12,8 @@ it.each(["Review & submit", "Preview", "Save draft"])("official form preserves l
  const onSave=vi.fn().mockResolvedValue(undefined),onReview=vi.fn().mockResolvedValue(undefined),onPreview=vi.fn().mockResolvedValue(undefined);
  try {
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,onReview,onPreview})));
-  expect([...container.querySelectorAll("input[readonly]")].map(el=>el.parentElement!.textContent)).toEqual(["Name (Last, First, Middle)","Date of Injury (MM/DD/YYYY)","Date of Birth (MM/DD/YYYY)","Claim Number","Employer","Name","Specialty","NPI Number"]);
+  expect(container.querySelectorAll("input[readonly]")).toHaveLength(0);
+  expect([...container.querySelectorAll(".mbrfa-saved > span")].map(el=>el.textContent)).toEqual(["Name (Last, First, Middle)","Date of Injury (MM/DD/YYYY)","Date of Birth (MM/DD/YYYY)","Claim Number","Employer","Name","Specialty","NPI Number"]);
   expect([...container.querySelectorAll("label")].some(el=>el.textContent==="Quantity")).toBe(false);
   const other=[...container.querySelectorAll("textarea")].find(el=>el.parentElement?.textContent?.startsWith("Other Information"))!;
   expect(other.value).toContain("Quantity: 6; Twice weekly");
@@ -45,7 +46,7 @@ it("follows the DWC Form RFA order and shows every printed field with saved valu
    selectors:{claim:createElement("span",{id:"claim-lookup"}),physician:createElement("span",{id:"physician-lookup"})}})));
   expect([...container.querySelectorAll("form > fieldset > legend")].map(el=>el.textContent)).toEqual(["Request type","Employee Information","Requesting Physician Information","Claims Administrator Information","Requested Treatment"]);
   const section=(title:string)=>[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent===title)!;
-  const fields=(title:string)=>[...section(title).querySelectorAll<HTMLInputElement|HTMLTextAreaElement>(".mbrfa-form-grid label")].map(el=>[el.firstChild!.textContent,el.querySelector<HTMLInputElement>("input,textarea")!.value]);
+  const fields=(title:string)=>[...section(title).querySelectorAll<HTMLElement>(".mbrfa-form-grid label, .mbrfa-form-grid .mbrfa-saved")].map(el=>[el.firstChild!.textContent,el.matches(".mbrfa-saved")?el.querySelector("strong")!.textContent!.replace(/^—$/,""):el.querySelector<HTMLInputElement>("input,textarea")!.value]);
   expect(fields("Employee Information")).toEqual([["Name (Last, First, Middle)","Patient, Synthetic Q"],["Date of Injury (MM/DD/YYYY)","01/02/2026"],["Date of Birth (MM/DD/YYYY)","03/04/1980"],["Claim Number","SYN-0001"],["Employer","Synthetic Employer"]]);
   expect(fields("Requesting Physician Information")).toEqual([["Name","Synthetic Physician"],["Practice Name",""],["Contact Name",""],["Address",""],["City",""],["State",""],["Zip Code",""],["Phone",""],["Fax Number",""],["Specialty","Orthopedic Surgery"],["NPI Number","1234567890"],["E-mail Address","physician@example.test"]]);
   expect(fields("Claims Administrator Information").map(([label])=>label)).toEqual(["Company Name","Contact Name","Address","City","State","Zip Code","Phone","Fax Number","E-mail Address"]);

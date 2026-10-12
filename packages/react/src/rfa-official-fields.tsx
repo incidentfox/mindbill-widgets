@@ -18,7 +18,8 @@ export function RfaPicker({ label, children }: { label: string; children: ReactN
 
 /** A saved value shown exactly as it prints; it changes only through its lookup. */
 export function RfaSavedField({ label, value, span }: { label: string; value: string | undefined; span: 1 | 2 | 3 | 4 | 6 }): ReactElement {
-  return <label className={`mbrfa-s${span}`}>{label}<input readOnly tabIndex={-1} value={value ?? ""} placeholder="—" /></label>;
+  // Plain text, not a control: a boxed value reads as something to type into.
+  return <div className={`mbrfa-s${span} mbrfa-saved`}><span>{label}</span><strong>{value || "—"}</strong></div>;
 }
 
 export function RfaEmployeeFields({ name, dateOfInjury, claimNumber, details }: { name: string; dateOfInjury: string | undefined; claimNumber: string | undefined; details: RfaFormDetails["employee"] }): ReactElement {
