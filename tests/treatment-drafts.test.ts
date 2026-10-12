@@ -23,9 +23,9 @@ describe("unsigned RFA preparation", () => {
     const result = normalizeRfaDraft(draft); expect(result).not.toHaveProperty("signedAt"); expect(draft).toHaveProperty("signedAt");
     expect(result.providerFax).toBe(""); expect(result.items[0]?.units).toBe(4); expect(result.metadata).toEqual({ source: "synthetic" }); expect(validateRfaDraft(result)).toBeNull();
   });
-  it("requires material change for resubmission", () => {
+  it("accepts a resubmission with or without a written material change", () => {
     const draft = { ...rfa(), requestType: "resubmission_material_change" as const };
-    expect(validateRfaDraft(draft)).toMatch(/material change/); expect(validateRfaDraft({ ...draft, materialChange: "New clinical evidence" })).toBeNull();
+    expect(validateRfaDraft(draft)).toBeNull(); expect(validateRfaDraft({ ...draft, materialChange: "New clinical evidence" })).toBeNull();
   });
   it("rejects invalid date ranges and nonexistent dates", () => {
     const draft = rfa(); draft.items[0]!.requestedFrom = "2026-10-01"; expect(validateRfaDraft(draft)).toMatch(/dates/);
