@@ -36,6 +36,14 @@ export function RfaEmployeeFields({ name, dateOfInjury, claimNumber, details }: 
   </div>;
 }
 
+/** Formats a US number as typed or pasted: (###) ###-####. Anything else (extensions, international) is left as entered. */
+export function formatRfaPhone(value: string | undefined): string {
+  const raw = value ?? ""; if (/[^\d\s().+-]/.test(raw)) return raw;
+  let digits = raw.replace(/\D/g, ""); if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+  if (digits.length > 10) return raw;
+  if (digits.length < 4) return digits;
+  return digits.length < 7 ? `(${digits.slice(0, 3)}) ${digits.slice(3)}` : `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
 const contactRows = [
   ["address", "Address", 500, 3], ["city", "City", 100, 2], ["state", "State", 2, 1],
   ["zip", "Zip Code", 20, 2], ["phone", "Phone", 30, 2], ["fax", "Fax Number", 30, 2],
@@ -46,10 +54,11 @@ export function RfaOfficialContactFields({ nameLabel, value, onChange, before, b
   before?: ReactNode; beforeEmail?: ReactNode; /** Shown under an empty Fax Number. */ faxHint?: string;
   /** False shows the values as information; they change through the section's lookups. */ editable?: boolean;
 }): ReactElement {
+  const dial = (key: keyof RfaContact) => key === "phone" || key === "fax";
   const hint = (key: keyof RfaContact) => key === "fax" && faxHint && !value?.fax?.trim() ? <small className="mbrfa-field-hint">{faxHint}</small> : null;
   const field = (key: keyof RfaContact, label: string, max: number, span: 1 | 2 | 3 | 6) => editable
-    ? <label key={key} className={`mbrfa-s${span}`}>{label}<input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: event.target.value })} />{hint(key)}</label>
-    : <div key={key} className={`mbrfa-s${span} mbrfa-saved`}><span>{label}</span><strong>{value?.[key]?.trim() || "—"}</strong>{hint(key)}</div>;
+    ? <label key={key} className={`mbrfa-s${span}`}>{label}<input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={dial(key) ? formatRfaPhone(value?.[key]) : value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: dial(key) ? formatRfaPhone(event.target.value) : event.target.value })} />{hint(key)}</label>
+    : <div key={key} className={`mbrfa-s${span} mbrfa-saved`}><span>{label}</span><strong>{(dial(key) ? formatRfaPhone(value?.[key]) : value?.[key])?.trim() || "—"}</strong>{hint(key)}</div>;
   return <div className="mbrfa-form-grid">
     {before}{field("name", nameLabel, 200, 3)}{field("contactName", "Contact Name", 200, 3)}
     {contactRows.map(([key, label, max, span]) => field(key, label, max, span))}
@@ -58,7 +67,7 @@ export function RfaOfficialContactFields({ nameLabel, value, onChange, before, b
 }
 /** Switches a section between saved information and manual entry. */
 export function RfaManualToggle({ manual, onChange, disabled }: { manual: boolean; onChange: (manual: boolean) => void; disabled?: boolean }): ReactElement {
-  return <div className="mbrfa-section-actions"><button type="button" className="mbrfa-link" disabled={disabled} aria-pressed={manual} onClick={() => onChange(!manual)}>{manual ? "Done editing" : "Edit manually"}</button>{manual ? <span>These values are saved on this request only.</span> : null}</div>;
+  return <div className="mbrfa-section-actions"><button type="button" className={manual ? "mbtd-primary" : undefined} disabled={disabled} aria-pressed={manual} onClick={() => onChange(!manual)}>{manual ? "Save" : "Edit manually"}</button>{manual ? <span>Applies to this request only. The saved record is not changed.</span> : null}</div>;
 }
 
 /** Loads the saved employee and physician values for a request that is already drafted. */

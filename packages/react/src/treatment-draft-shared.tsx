@@ -63,6 +63,7 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd form.mbrfa-official .mbrfa-request-types input[type=radio]:not(:checked){border-color:var(--mb-muted)}
 .mbtd form.mbrfa-official .mbrfa-request-details .mbrfa-check{min-height:32px;font-size:13px}
 .mbtd form.mbrfa-official .mbrfa-section-actions{margin-top:16px;padding-top:12px;border-top:1px dashed var(--mb-border)}
+.mbtd .mbrfa-section-actions>button{min-height:36px;padding:7px 14px;font-size:13px;font-weight:600}
 .mbtd form.mbrfa-official>div:has(>button:only-child)>button{border-style:dashed;color:var(--mb-accent);font-weight:500}
 .mbtd form.mbrfa-official>.mbtd-actions:last-child{position:sticky;bottom:12px;z-index:5;justify-content:flex-end;flex-direction:row-reverse;margin-top:0;padding:10px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:color-mix(in srgb,var(--mb-surface) 92%,transparent);backdrop-filter:blur(6px);box-shadow:0 6px 20px #00000014}
 .mbtd form.mbrfa-official>.mbtd-actions:last-child>[role=status]{margin-right:auto;order:9}
