@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { RfaIdentitySelect } from "./rfa-identity-select";
+import { formatRfaPhone } from "./rfa-official-fields";
 import { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance, type BillClaimsAdministratorDirectory, type RfaAuthorizationDestinationOption } from "@mindbill/browser";
 
 export type RfaAuthorizationDestinationProps = {
@@ -16,12 +17,14 @@ export type RfaAuthorizationDestinationProps = {
   onChange: (destination: RfaAuthorizationDestinationOption | null) => void;
   /** Render as a plain field group inside a host form section, without its own frame or legend. */
   compact?: boolean;
+  /** Choose the directory's destination for the user when it publishes exactly one. */
+  autoSelectSingle?: boolean;
   /** Compact mode: offer one "enter manually" choice that hands entry to the host's own fields. */
   onManualEntry?: () => void;
 };
 
 /** Choose a destination without sending an RFA or treating email as fax. */
-export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart, compact = false, onManualEntry }: RfaAuthorizationDestinationProps): ReactElement {
+export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart, compact = false, onManualEntry, autoSelectSingle = false }: RfaAuthorizationDestinationProps): ReactElement {
   const options = loading || error ? [] : rfaAuthorizationDestinations(directory);
   const fax = savedContact?.fax ? normalizeRfaFax(savedContact.fax) : null;
   const savedLabel = savedContact?.contactName || savedContact?.name || "Saved request contact";
@@ -35,7 +38,13 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
   const needsAdjuster = directory?.authorizationStatus === "adjuster_specific_required";
   const callback = useRef(onChange);
   callback.current = onChange;
-  useEffect(() => { setSelection(""); setManual(""); setContactName(""); callback.current(null); }, [signature]);
+  const auto = useRef(autoSelectSingle); auto.current = autoSelectSingle;
+  useEffect(() => {
+    setManual("");
+    // One published destination and no adjuster to name: nothing for the user to choose between.
+    const only = auto.current && !needsAdjuster && options.length === 1 ? options[0] : undefined;
+    setSelection(only ? "0" : ""); setContactName(only?.recipientName ?? ""); callback.current(only ?? null);
+  }, [signature]);
   const chosen = selection !== "" ? options[Number(selection)] : undefined;
   const emit = (nextSelection: string, value: string, name: string) => {
     onSelectionStart?.();
@@ -56,7 +65,7 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
   return <fieldset className={compact ? "mb-rfa-destination mbrfa-plain" : "mb-rfa-destination"} disabled={disabled || loading} style={compact ? { display: "grid", gap: 8, minWidth: 0, overflowWrap: "anywhere" } : { border: "1px solid var(--mb-border, #d7e0df)", borderRadius: 10, padding: 16, display: "grid", gap: 12, minWidth: 0, overflowWrap: "anywhere" }}>
     {compact ? null : <><legend>Authorization destination</legend>{guidance}</>}
     {compact ? <RfaIdentitySelect label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"} placeholder="Choose a destination" searchPlaceholder="Search offices, fax numbers or e-mail" query={query} onSearch={setQuery} searchable disabled={disabled || loading} value={selection}
-      options={[...options.map((option, index) => ({ id: String(index), label: option.label, detail: `${option.method === "fax" ? "Fax" : "E-mail"} ${option.destination}` })), ...(onManualEntry ? [{ id: "manual-entry", label: needsAdjuster ? "Enter the handling adjuster’s contact manually" : "Enter a different contact manually" }] : [{ id: "manual", label: needsAdjuster ? "Enter the handling adjuster’s fax" : "Enter another confirmed authorization fax" }, { id: "manual-email", label: "Enter a confirmed authorization e-mail" }])].filter(option => option.id === selection || `${option.label} ${"detail" in option ? option.detail : ""}`.toLowerCase().includes(query.trim().toLowerCase()))}
+      options={[...options.map((option, index) => ({ id: String(index), ...(/[a-z]/i.test(option.label) ? { label: option.label, detail: option.method === "fax" ? `Fax ${formatRfaPhone(option.destination)}` : option.destination } : { label: option.method === "fax" ? "Authorization fax" : "Authorization e-mail", detail: option.method === "fax" ? formatRfaPhone(option.destination) : option.destination }) })), ...(onManualEntry ? [{ id: "manual-entry", label: needsAdjuster ? "Enter the handling adjuster’s contact manually" : "Enter a different contact manually" }] : [{ id: "manual", label: needsAdjuster ? "Enter the handling adjuster’s fax" : "Enter another confirmed authorization fax" }, { id: "manual-email", label: "Enter a confirmed authorization e-mail" }])].filter(option => option.id === selection || `${option.label} ${"detail" in option ? option.detail : ""}`.toLowerCase().includes(query.trim().toLowerCase()))}
       onSelect={value => { setQuery(""); if (value === "manual-entry") { onManualEntry?.(); return; } pick(value); }} /> :
     <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
       <select value={selection} onChange={(event) => pick(event.target.value)} style={{ padding: 10, width: "100%", minWidth: 0, maxWidth: "100%", font: "inherit" }}>
@@ -68,7 +77,7 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
     {selection !== "" && (needsAdjuster || selection === "manual" || selection === "manual-email") ? <label style={{ display: "grid", gap: 6 }}>{needsAdjuster ? "Handling adjuster name (required)" : "Recipient / attention (optional)"}<input value={contactName} maxLength={200} required={needsAdjuster} onChange={event => { setContactName(event.target.value); emit(selection, manual, event.target.value); }} /></label> : null}
     {selection === "manual-email" ? <label>Authorization email address<input type="email" value={manual} onChange={event => { const value = event.target.value; setManual(value); emit(selection, value, contactName); }} /></label> : selection === "manual" ? <label style={{ display: "grid", gap: 6, minWidth: 0 }}>Authorization fax number<input type="tel" value={manual} onChange={(event) => { const value = event.target.value; setManual(value); emit(selection, value, contactName); }} style={{ padding: 10, width: "100%", minWidth: 0, boxSizing: "border-box", font: "inherit" }} /></label> : selection !== "" && chosen ? <>
       {chosen.method === "email" ? <p style={{ margin: 0, overflowWrap: "anywhere" }}>Email: {chosen.destination}. Review this recipient before preparing and sending the packet.</p> : null}
-      {chosen.phone ? <small>Telephone for questions: {chosen.phone}</small> : null}
+      {chosen.phone ? <small>Telephone for questions: {formatRfaPhone(chosen.phone)}</small> : null}
     </> : null}
     {compact ? <small className="mbrfa-guidance">{guidance}</small> : null}
   </fieldset>;

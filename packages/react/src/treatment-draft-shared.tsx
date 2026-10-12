@@ -43,6 +43,8 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd .mbrfa-picker p,.mbtd .mbrfa-guidance p{margin:0;font-size:12px}.mbtd .mbrfa-guidance{display:grid;gap:4px}
 .mbtd .mbrfa-section-actions{display:flex;gap:12px;align-items:center;margin-top:14px;font-size:12px;color:var(--mb-muted)}
 .mbtd .mbrfa-field-hint{font-size:12px;color:var(--mb-muted);font-weight:400}
+.mbtd .mbrfa-req{color:var(--mb-danger,#c0392b);font-weight:700}
+.mbtd .mbrfa-contact-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.mbtd .mbrfa-contact-grid>.mbrfa-s3{grid-column:span 2}.mbtd .mbrfa-contact-grid>:is(.mbrfa-s1,.mbrfa-s2){grid-column:span 1}
 .mbtd .mbrfa-link-out{color:var(--mb-muted)!important;text-decoration:none}.mbtd .mbrfa-link-out:hover{text-decoration:underline}.mbtd .mbrfa-picker-links a{text-decoration:none}
 .mbtd button.mbrfa-link.mbrfa-link{border:0;background:none;padding:0;min-height:0;color:var(--mb-accent);font-size:12px;text-decoration:none}.mbtd button.mbrfa-link.mbrfa-link:hover,.mbtd .mbrfa-picker-links a:hover{text-decoration:underline}
 .mbtd fieldset.mbrfa-plain.mbrfa-plain{border:0;padding:0;margin:0;background:none;border-radius:0;min-width:0}

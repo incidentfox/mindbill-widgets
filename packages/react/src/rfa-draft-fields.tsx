@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useState } from "react";
 import { RfaIdentitySelect } from "./rfa-identity-select";
-import { RfaPicker } from "./rfa-official-fields";
+import { RfaPicker, RfaRequired } from "./rfa-official-fields";
 import type { BillDiagnosisCode, RfaContact } from "@mindbill/browser";
 
 export function RfaContactFields({ title, value, onChange }: { title: string; value?: RfaContact | null | undefined; onChange: (value: RfaContact) => void }) {
@@ -25,8 +25,8 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
   }, [query, search]);
   // DWC Form RFA column order: Diagnosis, then ICD-Code. The lookup fills both.
   if (officialForm) return <>{search ? <div className="mbrfa-s6"><RfaPicker label="Find diagnosis"><RfaIdentitySelect label="Find diagnosis" placeholder="Search by ICD code or description" searchPlaceholder="Search ICD code or diagnosis" query={query} onSearch={setQuery} searchable value="" options={results.map(item => ({ id: item.code, label: `${item.code} — ${item.description}` }))} onSelect={value => { const item = results.find(item => item.code === value); if (item) onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); setQuery(""); }} error={error} /></RfaPicker></div> : null}
-    <label className="mbrfa-s4">Diagnosis (Required)<input required maxLength={1000} value={description ?? ""} onChange={event => onChange({ diagnosisCode: code, diagnosisDescription: event.target.value })} /></label>
-    <label className="mbrfa-s2">ICD-Code (Required)<input required maxLength={16} value={code} onChange={event => onChange({ diagnosisCode: event.target.value, diagnosisDescription: description ?? "" })} /></label>
+    <label className="mbrfa-s4"><span>Diagnosis<RfaRequired /></span><input required maxLength={1000} value={description ?? ""} onChange={event => onChange({ diagnosisCode: code, diagnosisDescription: event.target.value })} /></label>
+    <label className="mbrfa-s2"><span>ICD-Code<RfaRequired /></span><input required maxLength={16} value={code} onChange={event => onChange({ diagnosisCode: event.target.value, diagnosisDescription: description ?? "" })} /></label>
   </>;
   return <>{search ? <label className="mbtd-wide">Find diagnosis by code or description<input value={query} aria-controls={id} onChange={event => setQuery(event.target.value)} />{error ? <small role="status">{error}</small> : null}<span id={id}>{results.map(item => <button type="button" key={item.code} onClick={() => { onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); setQuery(""); }}>{item.code} — {item.description}</button>)}</span></label> : null}
     <label>Diagnosis code<input required maxLength={16} value={code} onChange={event => onChange({ diagnosisCode: event.target.value, diagnosisDescription: "" })} /></label>

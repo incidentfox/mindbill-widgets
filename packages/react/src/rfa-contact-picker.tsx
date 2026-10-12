@@ -38,14 +38,19 @@ export function RfaContactPicker({ administratorId, claimNumber, contextKey, val
   }, [query, claimNumber, searchClaimsAdministrators]);
   if (officialForm) {
     // Shown as it prints: the saved directory entry until this request records its own contact.
-    const shown: RfaContact = value ?? { ...(directory?.name ? { name: directory.name } : {}), ...(directory?.mailingAddresses?.[0]?.address ? { address: directory.mailingAddresses[0].address } : {}), ...(directory?.telephoneNumbers?.[0] ? { phone: directory.telephoneNumbers[0] } : {}) };
+    // The directory publishes one-line addresses; the form prints street, city, state and zip separately.
+    const mailing = directory?.mailingAddresses?.[0]?.address?.trim(), parts = mailing ? /^(.+?),\s*([^,]+),\s*([A-Za-z]{2})\.?\s+(\d{5}(?:-\d{4})?)$/.exec(mailing) : null;
+    const named = (text: string | undefined) => text && /[a-z]/i.test(text) ? text : undefined;
+    const shown: RfaContact = value ?? { ...(directory?.name ? { name: directory.name } : {}), ...(parts ? { address: parts[1]!, city: parts[2]!, state: parts[3]!.toUpperCase(), zip: parts[4]! } : mailing ? { address: mailing } : {}), ...(directory?.telephoneNumbers?.[0] ? { phone: directory.telephoneNumbers[0] } : {}) };
     return <fieldset><legend>Claims Administrator Information</legend>
       <div className="mbrfa-pickers" data-columns="2">
         {searchClaimsAdministrators ? <RfaPicker label="Claims administrator"><RfaIdentitySelect label="Claims Administrator" placeholder="Choose a claims administrator" searchPlaceholder="Search claims administrators" query={query} onSearch={setQuery} searchable disabled={disabled} value={administratorId ?? ""} loading={searching} error={searchError} options={[...(administratorId && directory ? [{ id: administratorId, label: directory.name || "Saved claims administrator" }] : []), ...options.filter(item => item.id !== administratorId || !directory).map(item => ({ id: item.id, label: item.name || "Unnamed claims administrator" }))]} onSelect={id => { const option = options.find(item => item.id === id); if (option) choose(option); }} /></RfaPicker> : null}
-        <RfaPicker label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}><RfaAuthorizationDestination compact onManualEntry={() => setManual(true)} contextKey={`${contextKey}:${administratorId ?? ""}`} directory={directory} loading={loading} error={error} disabled={disabled} onChange={destination => {
+        <RfaPicker label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}><RfaAuthorizationDestination compact autoSelectSingle={!value} onManualEntry={() => setManual(true)} contextKey={`${contextKey}:${administratorId ?? ""}`} directory={directory} loading={loading} error={error} disabled={disabled} onChange={destination => {
           if (!destination) return;
-          const kept = { ...shown }; delete kept.fax; delete kept.email;
-          onChange(administratorId, { ...kept, name: directory?.name ?? shown.name ?? "", contactName: destination.recipientName ?? destination.label, ...(destination.phone ? { phone: destination.phone } : {}), ...(destination.method === "fax" ? { fax: destination.destination } : { email: destination.destination }) });
+          const kept = { ...shown }; delete kept.fax; delete kept.email; delete kept.contactName;
+          // Some directory entries are named by their own number; a number is not a contact name.
+          const contactName = named(destination.recipientName) ?? named(destination.label);
+          onChange(administratorId, { ...kept, name: directory?.name ?? shown.name ?? "", ...(contactName ? { contactName } : {}), ...(destination.phone ? { phone: destination.phone } : {}), ...(destination.method === "fax" ? { fax: destination.destination } : { email: destination.destination }) });
         }} /></RfaPicker>
       </div>
       <fieldset className="mbrfa-plain" disabled={disabled}><RfaOfficialContactFields editable={manual} nameLabel="Company Name" value={shown} onChange={contact => onChange(administratorId, contact)} /></fieldset>
