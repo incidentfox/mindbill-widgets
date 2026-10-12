@@ -124,7 +124,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
   };
   return <TreatmentDraftShell {...appearance} title="New authorization request" description={renderClaimSelector ? "Choose a patient, then select their injury / claim. Complete the treatment and attach supporting documents below." : "Choose an existing claim or add a new patient and injury here. Complete the treatment and attach supporting documents below."}>
     {addingClaim ? <RfaClaimSetup client={client} disabled={disabled} onCancel={() => setAddingClaim(false)} onCreated={result => { supportingDocuments.onChange([]); setSearchInput(""); setCreatedClaimId(result.claimId); setSelectedClaim(result.claimId); setAddingClaim(false); setQuery(value => ({ ...value, search: "", cursor: "" })); }} /> : null}
-    <div className="mbtd-grid">
+    <div className={draftFormProps?.officialForm ? "mbtd-grid mbrfa-identity-grid" : "mbtd-grid"}>
       <fieldset disabled={disabled}><legend>Patient and claim</legend>
         {renderClaimSelector ? renderClaimSelector({ selectedClaimId: effectiveClaimId ?? "", disabled: disabled || !!claimId, onSelectClaim: selectHostClaim }) : <>
         {searchableSelectors ? <RfaIdentitySelect label="Patient and claim" placeholder="Choose a patient claim" searchPlaceholder="Search patients or claim numbers" query={searchInput} searchable={!claimId} disabled={disabled} loading={loading || query.search !== searchInput.trim()} error={error} value={claim?.claimId ?? ""}
@@ -160,7 +160,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     </div>
     {loading ? <p role="status">Loading saved claims and providers…</p> : null}
     {error ? <p role="alert">{error}</p> : null}
-    {claim && provider ? <p className="mbtd-note">Create a request for <strong>{claim.employeeName}</strong>, claim <strong>{claim.claimNumber || "number not recorded"}</strong>, with <strong>{provider.name}</strong>.</p> : null}
+    {claim && provider && !draftFormProps?.officialForm ? <p className="mbtd-note">Create a request for <strong>{claim.employeeName}</strong>, claim <strong>{claim.claimNumber || "number not recorded"}</strong>, with <strong>{provider.name}</strong>.</p> : null}
     {error ? <button type="button" disabled={locked} onClick={() => setReload(value => value + 1)}>Try again</button> : null}
     <RfaDraftForm embedded key={renderClaimSelector ? `${selectedClaim}:${claim?.claimId ?? ""}` : selectedClaim} {...appearance} {...draftFormProps} disabled={disabled || loading || addingClaim || !claim || !provider || !!error}
       initialDraft={{ claimId: "", patientId: "", renderingProviderId: "", employeeName: "", providerName: "", requestType: "new", reviewType: "prospective", items: [{ diagnosisCode: claim?.diagnosisCodes?.[0] ?? "", serviceDescription: "" }] }}
