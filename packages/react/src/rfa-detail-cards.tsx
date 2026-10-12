@@ -32,12 +32,13 @@ export function rfaLifecycleTone(rfa: RfaRecord): "ok" | "warn" | "bad" | "muted
 export function RfaStatusCard({ rfa }: { rfa: RfaRecord }): ReactElement {
   const status = getRfaLifecycleStatus(rfa);
   const decided = DECIDED.includes(rfa.status) || (rfa.items.length > 0 && rfa.items.every(item => item.outcome !== "pending" || item.decisionClosure?.closed));
-  const stages = ["Draft", "Signed", "Sent", "Received", "Decided"];
-  const current = rfa.submittedAt && decided ? 4 : rfa.receivedAt ? 3 : rfa.submittedAt ? 2 : rfa.signedAt ? 1 : 0;
+  // Signing is part of sending, so it is not a step of its own.
+  const stages = ["Draft", "Sent", "Received", "Decided"];
+  const current = rfa.submittedAt && decided ? 3 : rfa.receivedAt ? 2 : rfa.submittedAt ? 1 : 0;
   const stopped = status === "canceled" || status === "failed";
-  const detail = status === "canceled" ? "This request was canceled" : status === "failed" ? "Delivery needs attention" : rfa.submittedAt ? `Sent ${rfaShortDate(rfa.submittedAt)}` : rfa.signedAt ? "Signed, not yet sent" : "Not yet signed";
+  const detail = status === "canceled" ? "This request was canceled" : status === "failed" ? "Delivery needs attention" : rfa.submittedAt ? `Sent ${rfaShortDate(rfa.submittedAt)}` : "Not sent yet";
   return <section className="mbrfa-status" aria-label="Request status" data-stopped={stopped || undefined}>
-    <div className="mbrfa-status-heading"><div><h3>{RFA_LIFECYCLE_LABELS[status]}</h3><p>{detail}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
+    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : RFA_LIFECYCLE_LABELS[status]}</h3><p>{detail}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
     <ol aria-label="Authorization progress">{stages.map((stage, index) => <li key={stage} data-state={index < current ? "done" : index === current ? "current" : "todo"} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span><strong>{stage}</strong></li>)}</ol>
   </section>;
 }

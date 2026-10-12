@@ -7,7 +7,7 @@ import { RfaCreateForm } from "../packages/react/src/rfa-create-form";
 import type { RfaDraftInput } from "../packages/react/src/rfa-draft-form";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const initialDraft: RfaDraftInput = { claimId:"claim_synthetic", patientId:"patient_synthetic", renderingProviderId:"provider_synthetic", employeeName:"Synthetic Patient", providerName:"Synthetic Physician", requestingPractice:{fax:"(202) 555-0100"}, items:[{diagnosisCode:"M54.2",diagnosisDescription:"Synthetic neck pain",serviceDescription:"Synthetic therapy",quantity:6,frequency:"Twice weekly", metadata:{preserved:"synthetic"}}] };
-it.each(["Review & submit", "Preview", "Save draft"])("official form preserves legacy data and routes %s once", async (label) => {
+it.each(["Send", "Preview", "Save draft"])("official form preserves legacy data and routes %s once", async (label) => {
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  const onSave=vi.fn().mockResolvedValue(undefined),onReview=vi.fn().mockResolvedValue(undefined),onPreview=vi.fn().mockResolvedValue(undefined);
  try {
@@ -19,7 +19,7 @@ it.each(["Review & submit", "Preview", "Save draft"])("official form preserves l
   expect(other.value).toContain("Quantity: 6; Twice weekly");
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")!.set!.call(other,"Six visits over three weeks");other.dispatchEvent(new Event("input",{bubbles:true}));});
   await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent===label)!.click());
-  const expected=label==="Preview"?onPreview:label==="Review & submit"?onReview:onSave;
+  const expected=label==="Preview"?onPreview:label==="Send"?onReview:onSave;
   expect(expected).toHaveBeenCalledOnce();expect(onSave.mock.calls.length+onReview.mock.calls.length+onPreview.mock.calls.length).toBe(1);
   expect(expected.mock.calls[0]![0].items[0]).toMatchObject({quantity:6,frequency:"Twice weekly",metadata:{preserved:"synthetic",otherInformation:"Six visits over three weeks"}});
  }finally{await act(async()=>root.unmount());container.remove();}
@@ -82,14 +82,14 @@ it("requires a requesting physician fax to review and fills it from the organiza
  try{
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:draft,officialForm:true,onSave,onReview})));
   expect(fax().value).toBe("");
-  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Review & submit")!.click());
+  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Send")!.click());
   expect(onReview).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')!.textContent).toContain("fax number");
   await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Save draft")!.click());
   expect(onSave).toHaveBeenCalledOnce();
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:draft,officialForm:true,onSave,onReview,formDetails:{returnFax:"+12025550100",returnEmail:"synthetic-org@example.test"}})));
   expect(fax().value).toBe("(202) 555-0100");
   expect([...container.querySelectorAll("input")].find(el=>el.parentElement?.firstChild?.textContent==="E-mail Address")!.value).toBe("synthetic-org@example.test");
-  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Review & submit")!.click());
+  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Send")!.click());
   expect(onReview).toHaveBeenCalledOnce();expect(onReview.mock.calls[0]![0].requestingPractice.fax).toBe("+12025550100");
  }finally{await act(async()=>root.unmount());container.remove();}
 });
