@@ -47,6 +47,8 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & RfaContactDirectoryPr
   managePracticeHref?: string;
   manageLocationsHref?: string;
   onRefreshProfile?: () => Promise<void>;
+  /** The organization profile is still loading: show the practice as information, not as empty boxes to type into. */
+  profilePending?: boolean;
   /** Save unsigned content and continue to the host's reviewed signing workflow. */
   onReview?: (draft: RfaDraftInput) => Promise<void>;
   /** Save unsigned content before opening the host's actual PDF packet preview. */
@@ -111,7 +113,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, managePracticeHref, manageLocationsHref, onRefreshProfile, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, managePracticeHref, manageLocationsHref, onRefreshProfile, profilePending = false, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [savedDraft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   useEffect(() => {
     if (identity) setDraft(current => { const next = { ...current }; delete next.providerPhone; delete next.providerFax; return next; });
@@ -149,7 +151,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   const savedPractices = organizationProfile?.billingProviders ?? [];
   // A filled-in fax or e-mail default is not a typed practice; only its own name or address is.
   const typedPractice = Boolean(savedDraft.requestingPractice?.name?.trim() || savedDraft.requestingPractice?.address?.trim());
-  const practiceManual = practiceManualChoice ?? (organizationProfile ? savedPractices.length === 0 || (typedPractice && !savedPractices.some(provider => provider.name === savedDraft.requestingPractice?.name)) : true);
+  const practiceManual = practiceManualChoice ?? (organizationProfile ? savedPractices.length === 0 || (typedPractice && !savedPractices.some(provider => provider.name === savedDraft.requestingPractice?.name)) : !profilePending);
   const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
   const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
   const previousClaim = useRef(identityKey);
