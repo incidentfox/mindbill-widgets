@@ -50,7 +50,7 @@ export function TreatmentDraftShell({ title, description, children, hideHeading 
 .mbtd form.mbrfa-official{gap:18px;counter-reset:mbrfa-section}
 .mbtd form.mbrfa-official>fieldset{padding:0 20px 20px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:0 1px 2px #0000000a}
 .mbtd form.mbrfa-official>fieldset>legend{float:left;display:flex;align-items:center;gap:10px;width:calc(100% + 40px);margin:0 -20px;padding:13px 20px;border-bottom:1px solid var(--mb-border);font-size:14px;font-weight:600;letter-spacing:-.005em}
-.mbtd form.mbrfa-official>fieldset>legend+*{clear:both}.mbtd form.mbrfa-official>fieldset>legend+:not(.mbrfa-pickers){margin-top:18px}
+.mbtd form.mbrfa-official>fieldset>legend+*{clear:both}.mbtd form.mbrfa-official>fieldset>legend+:not(.mbrfa-pickers){padding-top:18px}
 .mbtd form.mbrfa-official>fieldset>legend::before{counter-increment:mbrfa-section;content:counter(mbrfa-section);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:color-mix(in srgb,var(--mb-accent) 12%,var(--mb-surface));color:var(--mb-accent);font-size:12px;font-weight:600}
 .mbtd form.mbrfa-official .mbrfa-pickers{margin:0 -20px 18px;padding:16px 20px;border-bottom:1px solid var(--mb-border);background:var(--mb-soft)}
 .mbtd form.mbrfa-official .mbrfa-picker>span:first-child{font-size:12px;font-weight:600;letter-spacing:.01em}
