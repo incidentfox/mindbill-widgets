@@ -21,8 +21,6 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
   search?: (query: string) => Promise<BillDiagnosisCode[]>;
 }) {
   const id = useId(); const [query, setQuery] = useState(""); const [results, setResults] = useState<BillDiagnosisCode[]>([]); const [error, setError] = useState("");
-  // Stays open once the user starts typing a diagnosis, so the field does not vanish under the cursor.
-  const [manualDiagnosis, setManualDiagnosis] = useState(false);
   const [searching, setSearching] = useState(false);
   useEffect(() => {
     let active = true; const text = query.trim(); setError("");
