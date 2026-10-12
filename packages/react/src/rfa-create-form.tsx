@@ -5,6 +5,7 @@ import { RfaIdentitySelect } from "./rfa-identity-select";
 import { RfaClaimSetup } from "./rfa-claim-setup";
 import { RfaDraftForm, type RfaDraftInput, type RfaDraftFormProps } from "./rfa-draft-form";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
+import { useRfaFormDetails, type RfaFormDetails } from "./rfa-official-fields";
 
 export type RfaClaimSelectorProps = {
   selectedClaimId: string;
@@ -122,10 +123,8 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     claimNumber: claim?.claimNumber ?? "", dateOfInjury: claim?.dateOfInjury,
     claimsAdminId: claim?.claimsAdminId, providerNpi: provider?.npi,
   };
-  return <TreatmentDraftShell {...appearance} title="New authorization request" description={renderClaimSelector ? "Choose a patient, then select their injury / claim. Complete the treatment and attach supporting documents below." : "Choose an existing claim or add a new patient and injury here. Complete the treatment and attach supporting documents below."}>
-    {addingClaim ? <RfaClaimSetup client={client} disabled={disabled} onCancel={() => setAddingClaim(false)} onCreated={result => { supportingDocuments.onChange([]); setSearchInput(""); setCreatedClaimId(result.claimId); setSelectedClaim(result.claimId); setAddingClaim(false); setQuery(value => ({ ...value, search: "", cursor: "" })); }} /> : null}
-    <div className={draftFormProps?.officialForm ? "mbtd-grid mbrfa-identity-grid" : "mbtd-grid"}>
-      <fieldset disabled={disabled}><legend>Patient and claim</legend>
+  const official = !!draftFormProps?.officialForm;
+  const claimFields = <>
         {renderClaimSelector ? renderClaimSelector({ selectedClaimId: effectiveClaimId ?? "", disabled: disabled || !!claimId, onSelectClaim: selectHostClaim }) : <>
         {searchableSelectors ? <RfaIdentitySelect label="Patient and claim" placeholder="Choose a patient claim" searchPlaceholder="Search patients or claim numbers" query={searchInput} searchable={!claimId} disabled={disabled} loading={loading || query.search !== searchInput.trim()} error={error} value={claim?.claimId ?? ""}
           options={(context?.claims ?? []).map(value => ({ id: value.claimId, label: value.employeeName, detail: `${value.claimNumber || "Claim number not recorded"}${value.dateOfInjury ? ` · Injury ${value.dateOfInjury}` : ""}` }))}
@@ -141,8 +140,8 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
         {!claimId && canCreateClaim && client.provisionClaim && client.searchClaimsAdministrators ? <button type="button" disabled={locked || addingClaim} onClick={() => setAddingClaim(true)}>New patient and injury</button> : null}
         <div className="mbtd-actions">{query.cursor ? <button type="button" disabled={locked} onClick={() => { setSelectedClaim(""); supportingDocuments.onChange([]); setQuery(value => ({ ...value, cursor: "" })); }}>First claims page</button> : null}{context?.nextCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedClaim(""); supportingDocuments.onChange([]); setQuery(value => ({ ...value, cursor: context.nextCursor! })); }}>Next claims page</button> : null}</div>
         </>}
-      </fieldset>
-      <fieldset disabled={disabled}><legend>Requesting physician</legend>
+  </>;
+  const providerFields = <>
         {renderProviderSelector ? renderProviderSelector({ options: (context?.renderingProviders ?? []).map(value => ({ id: value.id, label: value.name, ...(value.npi ? { npi: value.npi } : {}) })), selectedProviderId: effectiveProviderId ?? "", search: providerSearchInput, onSearchProvider: value => { if (!disabled && !renderingProviderId) setProviderSearchInput(value); }, hasNext: !!context?.renderingProvidersNextCursor, hasPrevious: !!query.providerCursor, onNext: () => { if (!disabled && !renderingProviderId && context?.renderingProvidersNextCursor) setQuery(value => ({ ...value, providerCursor: context.renderingProvidersNextCursor! })); }, onFirst: () => { if (!disabled && !renderingProviderId) setQuery(value => ({ ...value, providerCursor: "" })); }, loading, error, disabled: disabled || !!renderingProviderId, onSelectProvider: selectHostProvider }) : <>
         {searchableSelectors ? <RfaIdentitySelect label="Requesting physician" placeholder="Choose a rendering provider" searchPlaceholder="Search physicians by name or NPI" query={providerSearchInput} searchable={!renderingProviderId} disabled={disabled} loading={loading || query.providerSearch !== providerSearchInput.trim()} error={error} value={provider?.id ?? ""}
           options={(context?.renderingProviders ?? []).map(value => ({ id: value.id, label: value.name, detail: value.npi ? `NPI ${value.npi}` : "" }))}
@@ -156,14 +155,27 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
         {!loading && !error && context?.renderingProviders.length === 0 ? <p>{query.providerSearch ? "No physicians match this search. Try another name or NPI." : "No saved rendering providers are available. Add a rendering provider in Settings, then reopen this form."}</p> : null}
         <div className="mbtd-actions">{query.providerCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: "" })); }}>First physicians page</button> : null}{context?.renderingProvidersNextCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: context.renderingProvidersNextCursor! })); }}>Next physicians page</button> : null}</div>
         </>}
-      </fieldset>
-    </div>
+  </>;
+  // A search page omits the selected claim's date of birth and employer; load them for the chosen claim.
+  const selectedDetails = useRfaFormDetails(client, claim?.claimId ?? "", provider?.id ?? "", official && !!claim && !effectiveClaimId);
+  const formDetails: RfaFormDetails = {
+    ...(claim ? { employee: selectedDetails?.employee ?? { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : {}),
+    ...(provider ? { physician: { specialty: provider.specialty } } : {}),
+  };
+  return <TreatmentDraftShell {...appearance} title="New authorization request" description={official ? "DWC Form RFA" : renderClaimSelector ? "Choose a patient, then select their injury / claim. Complete the treatment and attach supporting documents below." : "Choose an existing claim or add a new patient and injury here. Complete the treatment and attach supporting documents below."}>
+    {addingClaim ? <RfaClaimSetup client={client} disabled={disabled} onCancel={() => setAddingClaim(false)} onCreated={result => { supportingDocuments.onChange([]); setSearchInput(""); setCreatedClaimId(result.claimId); setSelectedClaim(result.claimId); setAddingClaim(false); setQuery(value => ({ ...value, search: "", cursor: "" })); }} /> : null}
+    {official ? null : <div className="mbtd-grid">
+      <fieldset disabled={disabled}><legend>Patient and claim</legend>{claimFields}</fieldset>
+      <fieldset disabled={disabled}><legend>Requesting physician</legend>{providerFields}</fieldset>
+    </div>}
     {loading ? <p role="status">Loading saved claims and providers…</p> : null}
     {error ? <p role="alert">{error}</p> : null}
-    {claim && provider && !draftFormProps?.officialForm ? <p className="mbtd-note">Create a request for <strong>{claim.employeeName}</strong>, claim <strong>{claim.claimNumber || "number not recorded"}</strong>, with <strong>{provider.name}</strong>.</p> : null}
+    {claim && provider && !official ? <p className="mbtd-note">Create a request for <strong>{claim.employeeName}</strong>, claim <strong>{claim.claimNumber || "number not recorded"}</strong>, with <strong>{provider.name}</strong>.</p> : null}
     {error ? <button type="button" disabled={locked} onClick={() => setReload(value => value + 1)}>Try again</button> : null}
-    <RfaDraftForm embedded key={renderClaimSelector ? `${selectedClaim}:${claim?.claimId ?? ""}` : selectedClaim} {...appearance} {...draftFormProps} disabled={disabled || loading || addingClaim || !claim || !provider || !!error}
+    {/* The official form keeps its lookups mounted inside the form, so it resets per claim through `identity` instead of remounting. */}
+    <RfaDraftForm embedded key={official ? "official" : renderClaimSelector ? `${selectedClaim}:${claim?.claimId ?? ""}` : selectedClaim} {...appearance} {...draftFormProps} disabled={disabled || loading || addingClaim || !claim || !provider || !!error}
       initialDraft={{ claimId: "", patientId: "", renderingProviderId: "", employeeName: "", providerName: "", requestType: "new", reviewType: "prospective", items: [{ diagnosisCode: claim?.diagnosisCodes?.[0] ?? "", serviceDescription: "" }] }}
+      {...(official ? { formDetails, selectors: { claim: <fieldset className="mbrfa-plain" disabled={disabled}>{claimFields}</fieldset>, physician: <fieldset className="mbrfa-plain" disabled={disabled}>{providerFields}</fieldset> } } : {})}
       identity={identity} supportingDocuments={supportingDocuments} savedDiagnosisCodes={claim?.diagnosisCodes ?? []} onSave={onSave} />
   </TreatmentDraftShell>;
 }

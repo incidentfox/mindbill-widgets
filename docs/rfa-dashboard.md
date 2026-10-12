@@ -374,8 +374,10 @@ should use `writtenConfirmation` with a new or material-change request type.
 `getCreationContext(query?)` uses `GET /partner/v2/browser/rfas/creation-context`
 and requires `rfas:create`. It returns `{claims, renderingProviders, nextCursor,
 renderingProvidersNextCursor}`. Claims include `claimId`, `patientId`, `employeeName`,
-and optional `claimNumber`, `dateOfInjury`, `claimsAdminId`, and `diagnosisCodes`. Active rendering
-providers include `id`, `name`, and optional `npi`; signature material is never returned.
+and optional `employeeFormName` ("Last, First Middle"), `claimNumber`, `dateOfInjury`, `claimsAdminId`,
+and `diagnosisCodes`. `dateOfBirth` and `employer` are returned only for the claim named by `claimId`,
+never on a search page. Active rendering providers include `id`, `name`, and optional `npi` and
+`specialty`; signature material is never returned.
 Use `search` (patient name or claim number) with `cursor` for claims, and
 `providerSearch` (name or NPI) with `providerCursor` for physicians. `limit` defaults
 to 50 and is capped at 100. Reset the corresponding cursor when changing a search.
@@ -607,7 +609,7 @@ After a host provider dialog saves a record, call `onSelectProvider` with its sa
 
 ## Official form creation
 
-Hosts can opt into `officialForm` to show the DWC-RFA request checkboxes, unified diagnosis lookup, and a single **Other Information (Frequency, Duration, Quantity, etc.)** field. Existing integrations retain their current form by default. Other Information is saved as `items[].metadata.otherInformation` (up to 2,000 characters); an empty string explicitly clears this field. Legacy structured service data is preserved.
+Hosts can opt into `officialForm` to complete the request in DWC Form RFA order: request type, **Employee Information**, **Requesting Physician Information**, **Claims Administrator Information**, then **Requested Treatment**. Each section shows every field printed on the form under its official label. Saved lookups (patient claim, requesting physician, practice, practice location, claims administrator, authorization contact) sit at the top of their section; values that come only from a saved record (employee name, dates, claim number, employer, physician name, specialty, NPI) are shown read-only, and the remaining fields stay editable. Each treatment has a diagnosis lookup and a single **Other Information: (Frequency, Duration, Quantity, etc.)** field. Existing integrations retain their current form by default. Other Information is saved as `items[].metadata.otherInformation` (up to 2,000 characters); an empty string explicitly clears this field. Legacy structured service data is preserved.
 
 Saved practice and location lookups fill editable physician contact fields. Locations can specify `billingProviderId`; only the chosen practice's locations are offered, with a unique or primary location selected automatically. `managePracticeHref` and `manageLocationsHref` open host settings in a new tab. A refresh action reloads the profile without discarding the request.
 
