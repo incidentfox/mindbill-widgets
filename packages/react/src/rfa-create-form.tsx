@@ -106,6 +106,19 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     void load();
     return () => { active = false; };
   }, [client, query, effectiveClaimId, effectiveProviderId, renderingProviderId, reload]);
+  // Saved records are edited in another tab; show the saved values again when the user returns.
+  const refreshProfile = draftFormProps?.officialForm ? draftFormProps.onRefreshProfile : undefined;
+  const refreshOnReturn = !!draftFormProps?.officialForm;
+  useEffect(() => {
+    if (!refreshOnReturn) return;
+    let last = Date.now();
+    const refresh = () => {
+      if (document.visibilityState === "hidden" || Date.now() - last < 2000) return;
+      last = Date.now(); setReload(value => value + 1); void refreshProfile?.().catch(() => undefined);
+    };
+    window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [refreshOnReturn, refreshProfile]);
   const claim = context?.claims.find(value => value.claimId === selectedClaim);
   const provider = context?.renderingProviders.find(value => value.id === selectedProvider);
   const locked = disabled || loading;
@@ -168,7 +181,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
       <fieldset disabled={disabled}><legend>Patient and claim</legend>{claimFields}</fieldset>
       <fieldset disabled={disabled}><legend>Requesting physician</legend>{providerFields}</fieldset>
     </div>}
-    {loading ? <p role="status">Loading saved claims and providers…</p> : null}
+    {loading && !(official && context) ? <p role="status">Loading saved claims and providers…</p> : null}
     {error ? <p role="alert">{error}</p> : null}
     {claim && provider && !official ? <p className="mbtd-note">Create a request for <strong>{claim.employeeName}</strong>, claim <strong>{claim.claimNumber || "number not recorded"}</strong>, with <strong>{provider.name}</strong>.</p> : null}
     {error ? <button type="button" disabled={locked} onClick={() => setReload(value => value + 1)}>Try again</button> : null}
