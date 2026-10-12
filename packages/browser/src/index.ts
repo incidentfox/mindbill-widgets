@@ -2441,7 +2441,8 @@ export type RfaUploadDocumentInput = { file: File; documentType: "clinical_repor
 /** `employeeFormName`, `dateOfBirth` and `employer` mirror the DWC Form RFA employee block. Date of birth and employer are returned only when the query names this `claimId`. */
 export type RfaCreationClaim = { claimId: string; patientId: string; employeeName: string; employeeFormName?: string; dateOfBirth?: string; employer?: string; claimNumber?: string; dateOfInjury?: string; claimsAdminId?: string; diagnosisCodes?: string[] };
 export type RfaCreationProvider = { id: string; name: string; npi?: string; specialty?: string };
-export type RfaCreationContext = { claims: RfaCreationClaim[]; renderingProviders: RfaCreationProvider[]; nextCursor: string | null; renderingProvidersNextCursor: string | null };
+/** `returnFax` and `returnEmail` are the organization's MindBill-provided fax line and monitored e-mail address for utilization review responses, when set up. */
+export type RfaCreationContext = { claims: RfaCreationClaim[]; renderingProviders: RfaCreationProvider[]; nextCursor: string | null; renderingProvidersNextCursor: string | null; returnFax?: string; returnEmail?: string };
 export type RfaCreationContextQuery = { search?: string; cursor?: string; providerSearch?: string; providerCursor?: string; limit?: number; claimId?: string; renderingProviderId?: string };
 export type RfaProvisionClaimInput = {
   patient: Omit<BrowserBillCreateInput["patient"], "id" | "externalId"> & { externalId: string };

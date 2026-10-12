@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type ReactElement } from "react";
+import { RfaIdentitySelect } from "./rfa-identity-select";
 import { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance, type BillClaimsAdministratorDirectory, type RfaAuthorizationDestinationOption } from "@mindbill/browser";
 
 export type RfaAuthorizationDestinationProps = {
@@ -27,6 +28,7 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
   const signature = JSON.stringify([contextKey, directory?.authorizationStatus, options, loading, error]);
   const [selection, setSelection] = useState("");
   const [manual, setManual] = useState("");
+  const [query, setQuery] = useState("");
   const [contactName, setContactName] = useState("");
   const needsAdjuster = directory?.authorizationStatus === "adjuster_specific_required";
   const callback = useRef(onChange);
@@ -44,19 +46,23 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
         : nextSelection === "" ? null : options[Number(nextSelection)] ?? null;
     onChange(selected ? { ...selected, ...(recipientName ? { recipientName } : {}) } : null);
   };
+  const pick = (value: string) => { setSelection(value); setManual(""); const name = options[Number(value)]?.recipientName ?? ""; setContactName(name); emit(value, "", name); };
   const guidance = <>
     <p style={{ margin: 0 }}>{loading ? "Loading authorization contacts…" : error ? "Directory details are unavailable. Confirm a destination with the handling adjuster." : rfaAuthorizationGuidance(directory)}</p>
     {directory?.authorizationNotice ? <p style={{ margin: 0 }}>{directory.authorizationNotice}</p> : null}
   </>;
   return <fieldset className={compact ? "mb-rfa-destination mbrfa-plain" : "mb-rfa-destination"} disabled={disabled || loading} style={compact ? { display: "grid", gap: 8, minWidth: 0, overflowWrap: "anywhere" } : { border: "1px solid var(--mb-border, #d7e0df)", borderRadius: 10, padding: 16, display: "grid", gap: 12, minWidth: 0, overflowWrap: "anywhere" }}>
     {compact ? null : <><legend>Authorization destination</legend>{guidance}</>}
-    <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{compact ? <span className="mbrfa-visually-hidden">Authorization contact</span> : directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
-      <select value={selection} onChange={(event) => { const value = event.target.value; setSelection(value); setManual(""); const name = options[Number(value)]?.recipientName ?? ""; setContactName(name); emit(value, "", name); }} style={{ padding: 10, width: "100%", minWidth: 0, maxWidth: "100%", font: "inherit" }}>
+    {compact ? <RfaIdentitySelect label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"} placeholder="Choose a destination" searchPlaceholder="Search offices, fax numbers or e-mail" query={query} onSearch={setQuery} searchable disabled={disabled || loading} value={selection}
+      options={[...options.map((option, index) => ({ id: String(index), label: option.label, detail: `${option.method === "fax" ? "Fax" : "E-mail"} ${option.destination}` })), { id: "manual", label: needsAdjuster ? "Enter the handling adjuster’s fax" : "Enter another confirmed authorization fax" }, { id: "manual-email", label: "Enter a confirmed authorization e-mail" }].filter(option => option.id === selection || `${option.label} ${"detail" in option ? option.detail : ""}`.toLowerCase().includes(query.trim().toLowerCase()))}
+      onSelect={value => { setQuery(""); pick(value); }} /> :
+    <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
+      <select value={selection} onChange={(event) => pick(event.target.value)} style={{ padding: 10, width: "100%", minWidth: 0, maxWidth: "100%", font: "inherit" }}>
         <option value="">Choose a destination…</option>
         {options.map((option, index) => <option key={`${option.method}:${option.destination}:${index}`} value={String(index)}>{option.label} · {option.method === "fax" ? "Fax" : "Email"}: {option.destination}</option>)}
         <option value="manual">{needsAdjuster ? "Enter the handling adjuster’s fax" : "Enter another confirmed authorization fax"}</option><option value="manual-email">Enter a confirmed authorization email</option>
       </select>
-    </label>
+    </label>}
     {selection !== "" && (needsAdjuster || selection === "manual" || selection === "manual-email") ? <label style={{ display: "grid", gap: 6 }}>{needsAdjuster ? "Handling adjuster name (required)" : "Recipient / attention (optional)"}<input value={contactName} maxLength={200} required={needsAdjuster} onChange={event => { setContactName(event.target.value); emit(selection, manual, event.target.value); }} /></label> : null}
     {selection === "manual-email" ? <label>Authorization email address<input type="email" value={manual} onChange={event => { const value = event.target.value; setManual(value); emit(selection, value, contactName); }} /></label> : selection === "manual" ? <label style={{ display: "grid", gap: 6, minWidth: 0 }}>Authorization fax number<input type="tel" value={manual} onChange={(event) => { const value = event.target.value; setManual(value); emit(selection, value, contactName); }} style={{ padding: 10, width: "100%", minWidth: 0, boxSizing: "border-box", font: "inherit" }} /></label> : selection !== "" && chosen ? <>
       {chosen.method === "email" ? <p style={{ margin: 0, overflowWrap: "anywhere" }}>Email: {chosen.destination}. Review this recipient before preparing and sending the packet.</p> : null}

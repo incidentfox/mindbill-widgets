@@ -35,7 +35,7 @@ type Props = TreatmentDraftAppearance & {
   searchableSelectors?: boolean;
   renderClaimSelector?: (props: RfaClaimSelectorProps) => ReactNode;
   renderProviderSelector?: (props: RfaProviderSelectorProps) => ReactNode;
-  draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "manageLocationsHref" | "onRefreshProfile" | "onReview" | "onPreview">;
+  draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "onEditPractice" | "onEditLocation" | "manageLocationsHref" | "onRefreshProfile" | "onReview" | "onPreview">;
   claimId?: string;
   renderingProviderId?: string;
   previewAvailable?: boolean;
@@ -173,6 +173,8 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
   const formDetails: RfaFormDetails = {
     ...(claim ? { employee: selectedDetails?.employee ?? { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : {}),
     ...(provider ? { physician: { specialty: provider.specialty } } : {}),
+    ...(context?.returnFax ? { returnFax: context.returnFax } : {}),
+    ...(context?.returnEmail ? { returnEmail: context.returnEmail } : {}),
   };
   return <TreatmentDraftShell {...appearance} title="New authorization request" description={official ? "DWC Form RFA" : renderClaimSelector ? "Choose a patient, then select their injury / claim. Complete the treatment and attach supporting documents below." : "Choose an existing claim or add a new patient and injury here. Complete the treatment and attach supporting documents below."}>
     {addingClaim ? <RfaClaimSetup client={client} disabled={disabled} onCancel={() => setAddingClaim(false)} onCreated={result => { supportingDocuments.onChange([]); setSearchInput(""); setCreatedClaimId(result.claimId); setSelectedClaim(result.claimId); setAddingClaim(false); setQuery(value => ({ ...value, search: "", cursor: "" })); }} /> : null}
