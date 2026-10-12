@@ -110,12 +110,14 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const references = useMemo(() => createBillReferenceClient(options), [options]);
   const [profile, setProfile] = useState<OrganizationProfileData | undefined>();
+  // Until the saved practices have loaded (or failed to), the form must not offer manual entry for them.
+  const [profileSettled, setProfileSettled] = useState(false);
   useEffect(() => {
     if (!savedProfileChanges) return;
     const merge = <T extends { id: string }>(current: T[], saved: T[] | undefined) => saved?.length ? [...current.map(item => saved.find(next => next.id === item.id) ?? item), ...saved.filter(next => !current.some(item => item.id === next.id))] : current;
     setProfile(current => current ? { ...current, billingProviders: merge(current.billingProviders, savedProfileChanges.billingProviders), locations: merge(current.locations, savedProfileChanges.locations) } : current);
   }, [savedProfileChanges]);
-  const draftFormProps = { officialForm, ...(officialForm && (treatmentTemplates || onSaveTreatmentTemplate) ? { treatmentTemplates: treatmentTemplates ?? [], onSaveTreatmentTemplate, onManageTreatmentTemplates } : {}), ...(onEditPractice ? { onEditPractice } : {}), ...(onEditLocation ? { onEditLocation } : {}), ...(managePracticeHref ? { managePracticeHref } : {}), ...(manageLocationsHref ? { manageLocationsHref } : {}), onRefreshProfile: async () => { const next = await createOrganizationClient(options).getBillingProfile(); if (active.current) setProfile(next); }, ...(client.searchClaimsAdministrators ? { searchClaimsAdministrators: client.searchClaimsAdministrators } : {}), ...(client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: client.getClaimsAdministratorDirectory } : {}), searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
+  const draftFormProps = { officialForm, profilePending: !profile && !profileSettled, ...(officialForm && (treatmentTemplates || onSaveTreatmentTemplate) ? { treatmentTemplates: treatmentTemplates ?? [], onSaveTreatmentTemplate, onManageTreatmentTemplates } : {}), ...(onEditPractice ? { onEditPractice } : {}), ...(onEditLocation ? { onEditLocation } : {}), ...(managePracticeHref ? { managePracticeHref } : {}), ...(manageLocationsHref ? { manageLocationsHref } : {}), onRefreshProfile: async () => { const next = await createOrganizationClient(options).getBillingProfile(); if (active.current) setProfile(next); }, ...(client.searchClaimsAdministrators ? { searchClaimsAdministrators: client.searchClaimsAdministrators } : {}), ...(client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: client.getClaimsAdministratorDirectory } : {}), searchDiagnosisCodes: references.searchDiagnosisCodes, ...(profile ? { organizationProfile: profile } : {}) };
   const [result, setResult] = useState<RfaListResult | null>(null);
   const [status, setStatus] = useState(initialStatus);
   const lifecycleAvailable = result?.summary.byLifecycleStatus !== undefined;
@@ -146,7 +148,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     let active = true;
     createOrganizationClient(options).getBillingProfile().then(value => {
       if (active && Array.isArray(value?.billingProviders) && Array.isArray(value?.locations)) setProfile(value);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => { if (active) setProfileSettled(true); });
     return () => { active = false; };
   }, [options, creating, selected]);
   const [loading, setLoading] = useState(true); const createKeys = useRef(new Map<string, string>());
