@@ -6,6 +6,10 @@ import type { RfaClient, RfaContact } from "@mindbill/browser";
 export type RfaFormDetails = {
   employee?: { formName?: string | undefined; dateOfBirth?: string | undefined; employer?: string | undefined };
   physician?: { specialty?: string | undefined };
+  /** The organization's own fax line for responses; fills a blank Fax Number. */
+  returnFax?: string | undefined;
+  /** The organization's monitored e-mail address; fills a blank E-mail Address. */
+  returnEmail?: string | undefined;
 };
 /** Host-rendered lookups placed inside the matching official form section. */
 export type RfaFormSelectors = { claim?: ReactNode; physician?: ReactNode };
@@ -37,11 +41,11 @@ const contactRows = [
   ["zip", "Zip Code", 20, 2], ["phone", "Phone", 30, 2], ["fax", "Fax Number", 30, 2],
 ] as const;
 /** Contact fields in DWC Form RFA order; `before` and `beforeEmail` hold the section's saved values. */
-export function RfaOfficialContactFields({ nameLabel, value, onChange, before, beforeEmail }: {
+export function RfaOfficialContactFields({ nameLabel, value, onChange, before, beforeEmail, faxHint }: {
   nameLabel: "Practice Name" | "Company Name"; value: RfaContact | null | undefined; onChange: (value: RfaContact) => void;
-  before?: ReactNode; beforeEmail?: ReactNode;
+  before?: ReactNode; beforeEmail?: ReactNode; /** Shown under an empty Fax Number. */ faxHint?: string;
 }): ReactElement {
-  const field = (key: keyof RfaContact, label: string, max: number, span: number) => <label key={key} className={`mbrfa-s${span}`}>{label}<input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: event.target.value })} /></label>;
+  const field = (key: keyof RfaContact, label: string, max: number, span: number) => <label key={key} className={`mbrfa-s${span}`}>{label}<input type={key === "email" ? "email" : key === "phone" || key === "fax" ? "tel" : "text"} maxLength={max} value={value?.[key] ?? ""} onChange={event => onChange({ ...value, [key]: event.target.value })} />{key === "fax" && faxHint && !value?.fax?.trim() ? <small className="mbrfa-field-hint">{faxHint}</small> : null}</label>;
   return <div className="mbrfa-form-grid">
     {before}{field("name", nameLabel, 200, 3)}{field("contactName", "Contact Name", 200, 3)}
     {contactRows.map(([key, label, max, span]) => field(key, label, max, span))}
@@ -59,7 +63,7 @@ export function useRfaFormDetails(client: RfaClient, claimId: string, renderingP
     void client.getCreationContext({ claimId, renderingProviderId, limit: 1 }).then(context => {
       if (!active) return;
       const claim = context.claims.find(value => value.claimId === claimId), provider = context.renderingProviders.find(value => value.id === renderingProviderId);
-      setDetails({ ...(claim ? { employee: { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : {}), ...(provider ? { physician: { specialty: provider.specialty } } : {}) });
+      setDetails({ ...(context.returnFax ? { returnFax: context.returnFax } : {}), ...(context.returnEmail ? { returnEmail: context.returnEmail } : {}), ...(claim ? { employee: { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : {}), ...(provider ? { physician: { specialty: provider.specialty } } : {}) });
     }).catch(() => undefined);
     return () => { active = false; };
   }, [client, claimId, renderingProviderId, enabled]);

@@ -1,6 +1,6 @@
 {
   "name": "@mindbill/browser",
-  "version": "0.50.7",
+  "version": "0.50.8",
   "description": "Framework-neutral browser client for the MindBill bill lifecycle",
   "type": "module",
   "main": "./dist/index.js",

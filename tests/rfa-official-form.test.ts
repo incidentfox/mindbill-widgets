@@ -6,7 +6,7 @@ import { RfaDraftForm } from "../packages/react/src/rfa-draft-form";
 import { RfaCreateForm } from "../packages/react/src/rfa-create-form";
 import type { RfaDraftInput } from "../packages/react/src/rfa-draft-form";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-const initialDraft: RfaDraftInput = { claimId:"claim_synthetic", patientId:"patient_synthetic", renderingProviderId:"provider_synthetic", employeeName:"Synthetic Patient", providerName:"Synthetic Physician", items:[{diagnosisCode:"M54.2",diagnosisDescription:"Synthetic neck pain",serviceDescription:"Synthetic therapy",quantity:6,frequency:"Twice weekly", metadata:{preserved:"synthetic"}}] };
+const initialDraft: RfaDraftInput = { claimId:"claim_synthetic", patientId:"patient_synthetic", renderingProviderId:"provider_synthetic", employeeName:"Synthetic Patient", providerName:"Synthetic Physician", requestingPractice:{fax:"(202) 555-0100"}, items:[{diagnosisCode:"M54.2",diagnosisDescription:"Synthetic neck pain",serviceDescription:"Synthetic therapy",quantity:6,frequency:"Twice weekly", metadata:{preserved:"synthetic"}}] };
 it.each(["Review & submit", "Preview", "Save draft"])("official form preserves legacy data and routes %s once", async (label) => {
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  const onSave=vi.fn().mockResolvedValue(undefined),onReview=vi.fn().mockResolvedValue(undefined),onPreview=vi.fn().mockResolvedValue(undefined);
@@ -48,7 +48,7 @@ it("follows the DWC Form RFA order and shows every printed field with saved valu
   const section=(title:string)=>[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent===title)!;
   const fields=(title:string)=>[...section(title).querySelectorAll<HTMLElement>(".mbrfa-form-grid label, .mbrfa-form-grid .mbrfa-saved")].map(el=>[el.firstChild!.textContent,el.matches(".mbrfa-saved")?el.querySelector("strong")!.textContent!.replace(/^—$/,""):el.querySelector<HTMLInputElement>("input,textarea")!.value]);
   expect(fields("Employee Information")).toEqual([["Name (Last, First, Middle)","Patient, Synthetic Q"],["Date of Injury (MM/DD/YYYY)","01/02/2026"],["Date of Birth (MM/DD/YYYY)","03/04/1980"],["Claim Number","SYN-0001"],["Employer","Synthetic Employer"]]);
-  expect(fields("Requesting Physician Information")).toEqual([["Physician Name","Synthetic Physician"],["Practice Name",""],["Contact Name",""],["Address",""],["City",""],["State",""],["Zip Code",""],["Phone",""],["Fax Number",""],["Specialty","Orthopedic Surgery"],["NPI Number","1234567890"],["E-mail Address","physician@example.test"]]);
+  expect(fields("Requesting Physician Information")).toEqual([["Physician Name","Synthetic Physician"],["Practice Name",""],["Contact Name",""],["Address",""],["City",""],["State",""],["Zip Code",""],["Phone",""],["Fax Number","(202) 555-0100"],["Specialty","Orthopedic Surgery"],["NPI Number","1234567890"],["E-mail Address","physician@example.test"]]);
   expect(fields("Claims Administrator Information").map(([label])=>label)).toEqual(["Company Name","Contact Name","Address","City","State","Zip Code","Phone","Fax Number","E-mail Address"]);
   expect(fields("Requested Treatment").map(([label])=>label)).toEqual(["Diagnosis (Required)","ICD-Code (Required)","Service/Good Requested (Required)","CPT/HCPCS Code (If known)","Other Information: (Frequency, Duration, Quantity, etc.)"]);
   expect(section("Employee Information").querySelector("#claim-lookup")).not.toBeNull();
@@ -68,5 +68,24 @@ it("official creation is usable before a claim or physician is chosen and saving
   for (const field of container.querySelectorAll<HTMLInputElement|HTMLTextAreaElement>("[required]")) field.required=false;
   await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Save draft")!.click());
   expect(onSave).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')!.textContent).toContain("Choose a patient claim and requesting physician");
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("requires a requesting physician fax to review and fills it from the organization's line", async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const onSave=vi.fn().mockResolvedValue(undefined),onReview=vi.fn().mockResolvedValue(undefined);
+ const draft={...initialDraft,requestingPractice:null};
+ const fax=()=>[...container.querySelectorAll("input")].find(el=>el.parentElement?.firstChild?.textContent==="Fax Number")!;
+ try{
+  await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:draft,officialForm:true,onSave,onReview})));
+  expect(fax().value).toBe("");expect(fax().parentElement!.textContent).toContain("Required to send");
+  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Review & submit")!.click());
+  expect(onReview).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')!.textContent).toContain("fax number");
+  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Save draft")!.click());
+  expect(onSave).toHaveBeenCalledOnce();
+  await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:draft,officialForm:true,onSave,onReview,formDetails:{returnFax:"+12025550100",returnEmail:"synthetic-org@example.test"}})));
+  expect(fax().value).toBe("+12025550100");
+  expect([...container.querySelectorAll("input")].find(el=>el.parentElement?.firstChild?.textContent==="E-mail Address")!.value).toBe("synthetic-org@example.test");
+  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Review & submit")!.click());
+  expect(onReview).toHaveBeenCalledOnce();expect(onReview.mock.calls[0]![0].requestingPractice.fax).toBe("+12025550100");
  }finally{await act(async()=>root.unmount());container.remove();}
 });
