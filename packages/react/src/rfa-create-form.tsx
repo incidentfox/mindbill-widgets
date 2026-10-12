@@ -192,7 +192,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     {/* The official form starts with fields above its lookups, so it never locks while a claim or physician is unchosen; saving validates them instead. */}
     {/* The official form keeps its lookups mounted inside the form, so it resets per claim through `identity` instead of remounting. */}
     <RfaDraftForm embedded key={official ? "official" : renderClaimSelector ? `${selectedClaim}:${claim?.claimId ?? ""}` : selectedClaim} {...appearance} {...draftFormProps} disabled={official ? disabled || addingClaim : disabled || loading || addingClaim || !claim || !provider || !!error}
-      initialDraft={{ claimId: "", patientId: "", renderingProviderId: "", employeeName: "", providerName: "", requestType: "new", reviewType: "prospective", items: [{ diagnosisCode: claim?.diagnosisCodes?.[0] ?? "", serviceDescription: "" }] }}
+      initialDraft={{ claimId: "", patientId: "", renderingProviderId: "", employeeName: "", providerName: "", requestType: "new", reviewType: "prospective", items: [{ diagnosisCode: (draftFormProps?.officialForm ? claim?.diagnosisCodes?.slice(0, 12).join(", ") : claim?.diagnosisCodes?.[0]) ?? "", serviceDescription: "" }] }}
       {...(official ? { formDetails, selectors: { claim: <fieldset className="mbrfa-plain" disabled={disabled}>{renderClaimSelector ? claimFields : <RfaPicker label="Patient and claim">{claimFields}</RfaPicker>}</fieldset>, physician: <fieldset className="mbrfa-plain" disabled={disabled}>{providerFields}</fieldset> } } : {})}
       identity={identity} supportingDocuments={supportingDocuments} savedDiagnosisCodes={claim?.diagnosisCodes ?? []} onSave={onSave} />
   </TreatmentDraftShell>;
