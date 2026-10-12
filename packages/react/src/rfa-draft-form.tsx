@@ -107,7 +107,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
     if ((item.diagnosisDescription?.length ?? 0) > 1000) return "Diagnosis descriptions must be at most 1,000 characters.";
     const prefix = `Service ${index + 1}: `;
     if (item.metadata?.otherInformation !== undefined && (typeof item.metadata.otherInformation !== "string" || item.metadata.otherInformation.length > 2000)) return prefix + "Other Information must be text up to 2,000 characters.";
-    if (!item.diagnosisCode.trim() || item.diagnosisCode.length > 16 || !item.serviceDescription.trim() || item.serviceDescription.length > 1000) return prefix + "a diagnosis code and service description are required.";
+    if (!item.diagnosisCode.trim() || item.diagnosisCode.length > 200 || !item.serviceDescription.trim() || item.serviceDescription.length > 1000) return prefix + "a diagnosis code and service description are required.";
     for (const [value, max] of [[item.externalId, 255], [item.procedureCode, 16], [item.frequency, 200], [item.duration, 200]] as const) if (value !== undefined && (!value.trim() || value.length > max)) return prefix + `optional text must contain 1 to ${max} characters.`;
     if (item.units !== undefined && (!Number.isInteger(item.units) || item.units < 1 || item.units > 100000)) return prefix + "units must be a whole number between 1 and 100,000.";
     if (item.quantity !== undefined && (!Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > 100000)) return prefix + "quantity must be positive and at most 100,000.";
@@ -157,7 +157,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
   const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
   const previousClaim = useRef(identityKey);
-  useEffect(() => { if (previousClaim.current !== identityKey) { setAdministratorOverride(null); setDraft(current => ({ ...current, authorizationContact: null, ...(officialForm ? { items: [{ diagnosisCode: savedDiagnosisCodes[0] ?? "", serviceDescription: "" }] } : {}) })); previousClaim.current = identityKey; } }, [identityKey]);
+  useEffect(() => { if (previousClaim.current !== identityKey) { setAdministratorOverride(null); setDraft(current => ({ ...current, authorizationContact: null, ...(officialForm ? { items: [{ diagnosisCode: savedDiagnosisCodes.slice(0, 12).join(", "), serviceDescription: "" }] } : {}) })); previousClaim.current = identityKey; } }, [identityKey]);
   const draft = { ...savedDraft };
   if (identity) {
     for (const key of ["claimId", "patientId", "renderingProviderId", "employeeName", "providerName", "claimNumber", "dateOfInjury", "claimsAdminId", "providerNpi"] as const) {

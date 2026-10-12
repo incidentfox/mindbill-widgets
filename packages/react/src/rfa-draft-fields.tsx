@@ -37,32 +37,57 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
     }).catch(() => { if (active) { setError("Diagnosis search is unavailable."); setSearching(false); } }); }, 120);
     return () => { active = false; clearTimeout(timer); };
   }, [query, search]);
-  // A code chosen without its description (prefilled from the injury, or picked from the injury's saved
-  // codes) gets the description looked up once, so nobody has to retype a diagnosis the directory knows.
-  const resolved = useRef(new Set<string>()); const [resolving, setResolving] = useState(false);
+  // A treatment can be supported by several diagnoses. They are stored on the one treatment row the way they
+  // print on the form: codes joined with ", " and their descriptions, in the same order, joined with "; ".
+  const codes = code.split(",").map(part => part.trim()).filter(Boolean);
+  const parts = (description ?? "").split(";").map(part => part.trim());
+  const descriptions = codes.map((_, index) => parts.length === codes.length ? parts[index]! : codes.length === 1 ? (description ?? "").trim() : "");
+  const emit = (nextCodes: string[], nextDescriptions: string[]) => onChange({
+    diagnosisCode: nextCodes.join(", "),
+    diagnosisDescription: nextDescriptions.some(Boolean) ? nextDescriptions.map(text => text.replace(/;/g, ",").trim()).join("; ") : "",
+  });
+  // A code that arrives without its description (prefilled from the injury, or picked from the injury's saved
+  // codes) gets the description looked up once, so nobody retypes a diagnosis the directory knows.
+  const resolved = useRef(new Set<string>()); const [resolving, setResolving] = useState("");
+  const pending = officialForm && search ? codes.find((item, index) => !descriptions[index] && !resolved.current.has(item)) ?? "" : "";
+  const latest = useRef({ codes, descriptions, emit }); latest.current = { codes, descriptions, emit };
   useEffect(() => {
-    if (!officialForm || !search || !code || description || manualDiagnosis || resolved.current.has(code)) return;
-    resolved.current.add(code); let active = true; setResolving(true);
-    void search(code).then(items => { const match = items.find(item => item.code.replace(".", "").toUpperCase() === code.replace(".", "").toUpperCase()); if (active && match) onChange({ diagnosisCode: match.code, diagnosisDescription: match.description }); })
-      .catch(() => undefined).finally(() => { if (active) setResolving(false); });
+    if (!pending || !search) return;
+    resolved.current.add(pending); let active = true; setResolving(pending);
+    const same = (left: string, right: string) => left.replace(".", "").toUpperCase() === right.replace(".", "").toUpperCase();
+    void search(pending).then(items => {
+      const match = items.find(item => same(item.code, pending)); if (!active || !match) return;
+      const now = latest.current, at = now.codes.indexOf(pending); if (at < 0) return;
+      now.emit(now.codes.map((item, index) => index === at ? match.code : item), now.descriptions.map((text, index) => index === at ? match.description : text));
+    }).catch(() => undefined).finally(() => { if (active) setResolving(""); });
     return () => { active = false; };
-  }, [code, description, search, officialForm, manualDiagnosis]);
+  }, [pending, search]);
   // One ICD-10 lookup fills both printed columns (Diagnosis and ICD-Code). A code the lookup
   // does not know can still be entered, and then its diagnosis is typed beside it.
   if (officialForm && search) {
     const typed = query.trim().toUpperCase(), known = results.some(item => item.code.toUpperCase() === typed);
+    const chosen = (value: string) => codes.includes(value);
     const options = [
-      ...(code && !typed && !results.some(item => item.code === code) ? [{ id: code, label: code, ...(description ? { detail: description } : {}) }] : []),
-      ...(!typed ? savedCodes.filter(saved => saved && saved !== code).map(saved => ({ id: `saved:${saved}`, label: saved, detail: "Saved on this injury" })) : []),
-      ...results.map(item => ({ id: item.code, label: item.code, detail: item.description })),
-      ...(/^[A-Z]\d[0-9A-Z](\.?[0-9A-Z]{1,4})?$/.test(typed) && !known && typed !== code ? [{ id: `entered:${typed}`, label: `Use ${typed}`, detail: "Enter the diagnosis yourself" }] : []),
+      ...(!typed ? savedCodes.filter(saved => saved && !chosen(saved)).map(saved => ({ id: `saved:${saved}`, label: saved, detail: "Saved on this injury" })) : []),
+      ...results.filter(item => !chosen(item.code)).map(item => ({ id: item.code, label: item.code, detail: item.description })),
+      ...(/^[A-Z]\d[0-9A-Z](\.?[0-9A-Z]{1,4})?$/.test(typed) && !known && !chosen(typed) ? [{ id: `entered:${typed}`, label: `Use ${typed}`, detail: "Enter the diagnosis yourself" }] : []),
     ];
-    const listed = results.find(item => item.code === code);
-    return <>
-      <div className="mbrfa-s3"><RfaPicker required label="ICD-10 Code"><RfaIdentitySelect label="ICD-10 Code" placeholder="Enter code" searchPlaceholder="Search by code or diagnosis" query={query} onSearch={setQuery} searchable value={code} current={code ? { id: code, label: code, ...(description ? { detail: description } : {}) } : undefined} options={options} error={error} loading={searching && !results.length}
-        onSelect={value => { const item = results.find(item => item.code === value); if (item) onChange({ diagnosisCode: item.code, diagnosisDescription: item.description }); else if (value.startsWith("entered:")) onChange({ diagnosisCode: value.slice(8), diagnosisDescription: "" }); else if (value.startsWith("saved:")) onChange({ diagnosisCode: value.slice(6), diagnosisDescription: "" }); setQuery(""); }} /></RfaPicker></div>
-      {code && !listed && !resolving && (manualDiagnosis || !description) ? <label className="mbrfa-s3"><span>Diagnosis<RfaRequired /></span><input required autoFocus={manualDiagnosis} maxLength={1000} placeholder="Diagnosis for this code" value={description ?? ""} onFocus={() => setManualDiagnosis(true)} onChange={event => onChange({ diagnosisCode: code, diagnosisDescription: event.target.value })} /></label> : null}
-    </>;
+    const add = (value: string) => {
+      const item = results.find(item => item.code === value);
+      if (item) emit([...codes, item.code], [...descriptions, item.description]);
+      else if (value.startsWith("entered:")) { resolved.current.add(value.slice(8)); emit([...codes, value.slice(8)], [...descriptions, ""]); }
+      else if (value.startsWith("saved:")) emit([...codes, value.slice(6)], [...descriptions, ""]);
+      setQuery("");
+    };
+    return <div className="mbrfa-s6"><RfaPicker required label="ICD-10 Code">
+      {codes.length ? <ul className="mbrfa-dx-list" aria-label="Selected ICD-10 codes">{codes.map((item, index) => <li key={item}>
+        <strong>{item}</strong>
+        {descriptions[index] || resolving === item || !resolved.current.has(item) ? <span>{descriptions[index] || "Looking up…"}</span>
+          : <input required aria-label={`Diagnosis for ${item}`} maxLength={400} placeholder="Type the diagnosis for this code" defaultValue="" onBlur={event => { if (event.target.value.trim()) emit(codes, descriptions.map((text, position) => position === index ? event.target.value : text)); }} />}
+        <button type="button" aria-label={`Remove ${item}`} onClick={() => emit(codes.filter((_, position) => position !== index), descriptions.filter((_, position) => position !== index))}>×</button>
+      </li>)}</ul> : null}
+      {codes.length < 12 ? <RfaIdentitySelect label="ICD-10 Code" placeholder={codes.length ? "Add another ICD-10 code" : "Enter code"} searchPlaceholder="Search by code or diagnosis" query={query} onSearch={setQuery} searchable loading={searching && !options.length} error={error} value="" options={options} onSelect={add} /> : null}
+    </RfaPicker></div>;
   }
   if (officialForm) return <>
     <label className="mbrfa-s2"><span>ICD-10 Code<RfaRequired /></span><input required maxLength={16} placeholder="Enter code" value={code} onChange={event => onChange({ diagnosisCode: event.target.value, diagnosisDescription: description ?? "" })} /></label>
