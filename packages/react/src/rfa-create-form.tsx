@@ -11,6 +11,8 @@ export type RfaClaimSelectorProps = {
   selectedClaimId: string;
   onSelectClaim: (claimId: string) => void;
   disabled: boolean;
+  /** Show the chosen patient's printed name and date of birth before a claim is selected (official form). */
+  onPreviewEmployee: (employee: { formName?: string; dateOfBirth?: string } | null) => void;
 };
 
 export type RfaProviderSelectorProps = {
@@ -136,8 +138,9 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
     claimsAdminId: claim?.claimsAdminId, providerNpi: provider?.npi,
   };
   const official = !!draftFormProps?.officialForm;
+  const [employeePreview, setEmployeePreview] = useState<{ formName?: string; dateOfBirth?: string } | null>(null);
   const claimFields = <>
-        {renderClaimSelector ? renderClaimSelector({ selectedClaimId: effectiveClaimId ?? "", disabled: disabled || !!claimId, onSelectClaim: selectHostClaim }) : <>
+        {renderClaimSelector ? renderClaimSelector({ selectedClaimId: effectiveClaimId ?? "", disabled: disabled || !!claimId, onSelectClaim: selectHostClaim, onPreviewEmployee: setEmployeePreview }) : <>
         {searchableSelectors ? <RfaIdentitySelect label="Patient and claim" placeholder="Choose a patient claim" searchPlaceholder="Search patients or claim numbers" query={searchInput} searchable={!claimId} disabled={disabled} loading={loading || query.search !== searchInput.trim()} error={error} value={claim?.claimId ?? ""}
           options={(context?.claims ?? []).map(value => ({ id: value.claimId, label: value.employeeName, detail: `${value.claimNumber || "Claim number not recorded"}${value.dateOfInjury ? ` · Injury ${value.dateOfInjury}` : ""}` }))}
           onSearch={value => { setSearchInput(value); supportingDocuments.onChange([]); setSelectedClaim(""); setCreatedClaimId(undefined); }}
@@ -171,7 +174,7 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
   // A search page omits the selected claim's date of birth and employer; load them for the chosen claim.
   const selectedDetails = useRfaFormDetails(client, claim?.claimId ?? "", provider?.id ?? "", official && !!claim && !effectiveClaimId);
   const formDetails: RfaFormDetails = {
-    ...(claim ? { employee: selectedDetails?.employee ?? { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : {}),
+    ...(claim ? { employee: selectedDetails?.employee ?? { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : employeePreview ? { employee: employeePreview } : {}),
     ...(provider ? { physician: { specialty: provider.specialty } } : {}),
     ...(context?.returnFax ? { returnFax: context.returnFax } : {}),
     ...(context?.returnEmail ? { returnEmail: context.returnEmail } : {}),
