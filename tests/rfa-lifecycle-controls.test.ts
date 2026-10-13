@@ -27,6 +27,30 @@ it("defaults to read-only without mutation or upload controls", async () => {
     expect(view.fetcher.mock.calls.every(call => !call[1]?.method)).toBe(true);
   } finally { await view.close(); }
 });
+it("prefills decisions read from the response and saves them only after a person confirms", async () => {
+  const readResponse = vi.fn(async () => ({ status: "read" as const, decidedAt: "2026-09-16T17:00:00.000Z",
+    items: [{ itemId: "item_one", outcome: "approved" as const, confident: true, authorizationNumber: "READ-AUTH-1", authorizedUnits: 6, effectiveFrom: "2026-09-16", effectiveTo: "2026-11-15" }] }));
+  const view = await setup({ permissions: ["act"], readResponse });
+  try {
+    await act(async () => { set(view.container, "responseDocumentId", "ur_one"); });
+    await act(async () => {});
+    expect(readResponse).toHaveBeenCalledWith("rfa_synthetic", "ur_one");
+    expect(view.container.textContent).toContain("These decisions were read from the response");
+    expect(view.container.querySelector<HTMLInputElement>('[name="item_one:authorizationNumber"]')!.value).toBe("READ-AUTH-1");
+    // A treatment the response does not mention is flagged and left pending.
+    const flagged = [...view.container.querySelectorAll('fieldset[data-flag="true"]')];
+    expect(flagged.length).toBeGreaterThan(0); expect(flagged[0]!.textContent).toContain("No decision for this treatment was found");
+    const form = view.container.querySelector<HTMLInputElement>('[name="decidedAt"]')!.closest("form")!;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    expect(view.container.textContent).toContain("Confirm that you checked these decisions");
+    expect(view.fetcher.mock.calls.some(call => String(call[0]).endsWith("/decisions"))).toBe(false);
+    const check = [...view.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(node => node.parentElement?.textContent?.includes("I checked each decision"))!;
+    await act(async () => { check.click(); });
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    const mutation = view.fetcher.mock.calls.find(call => String(call[0]).endsWith("/decisions"));
+    expect(JSON.parse(String(mutation?.[1]?.body)).decisions).toEqual([{ itemId: "item_one", outcome: "approved", authorizationNumber: "READ-AUTH-1", effectiveFrom: "2026-09-16", effectiveTo: "2026-11-15", authorizedUnits: 6 }]);
+  } finally { await view.close(); }
+});
 it("records a partial treatment decision and keeps unselected treatments pending", async () => {
   const onUpdated = vi.fn(); const view = await setup({ permissions: ["act"], onUpdated });
   try {
