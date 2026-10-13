@@ -28,7 +28,7 @@ export function rfaDecisionSummary(rfa: Pick<RfaRecord, "items">): { label: stri
   if (decided.every(item => item.outcome === "modified")) return { label: "Modified", tone: "warn" };
   return { label: "Partially approved", tone: "warn" };
 }
-const FAX_FAILURES: Record<string, string> = { busy: "The line was busy", no_answer: "No answer", not_a_fax_machine: "The number did not answer as a fax machine", invalid_number: "The number is not in service", rejected: "The call was rejected", carrier_error: "The fax carrier could not complete the call", email_rejected: "The e-mail address was refused" };
+const FAX_FAILURES: Record<string, string> = { busy: "The line was busy", no_answer: "No answer", not_a_fax_machine: "The number did not answer as a fax machine", invalid_number: "The number is not in service", rejected: "The call was rejected", carrier_error: "The fax carrier could not complete the call", email_rejected: "The e-mail address was refused", email_bounced_bad_address: "The e-mail bounced: that address does not exist", email_bounced_mailbox_full: "The e-mail bounced: the recipient's mailbox is full", email_bounced: "The e-mail bounced and was not delivered" };
 /** Why a send failed, in plain words, when the carrier gave a reason. */
 export function rfaFailureReason(transmission: RfaRecord["transmissions"][number]): string {
   const reason = (transmission as { metadata?: { failureReason?: unknown } }).metadata?.failureReason;
