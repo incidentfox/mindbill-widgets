@@ -154,6 +154,23 @@ it("offers an opt-in focused layout while retaining deliberate sandbox delivery 
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 
+it("names what is being sent and offers the host's signature setup when the physician has none",async()=>{
+ const unsigned={...record,signedAt:null,items:[{id:"item_opaque",serviceDescription:"Knee rehabilitation",diagnosisCode:"M25.5",procedureCode:"97110",quantity:6,outcome:"pending"}]};
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:unsigned}));
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text)!;
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:unsigned.id,permissions:["send","sign"],renderSendSignatureSetup:({providerName})=>({missing:true,setup:createElement("button",{type:"button"},`Add signature for ${providerName}`)})})));
+  await act(async()=>button("Send").click());
+  const listed=container.querySelector<HTMLElement>('[role="dialog"] .mbrfa-send-contents')!;
+  expect(listed.textContent).toContain("Knee rehabilitation · CPT/HCPCS 97110 · Qty 6 · Dx M25.5");expect(listed.textContent).toContain("Synthetic report.pdf");
+  expect(container.querySelector('[role="dialog"]')!.textContent).not.toMatch(/\d+ (requested treatment|supporting document)/);
+  expect(container.querySelector('[role="dialog"] .mbrfa-send-signature')?.textContent).toContain("Synthetic physician has no saved signature yet");
+  expect(button("Add signature for Synthetic physician")).toBeDefined();expect(button("Send fax").disabled).toBe(true);
+  expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+
 it("opens response and treatment deep links on the details tab",async()=>{
  const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:record}));
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
