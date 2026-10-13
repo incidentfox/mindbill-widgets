@@ -40,7 +40,8 @@ export function RfaPracticePicker({ profile, value, onChange, managePracticeHref
     const provider = practices.find(item => item.id === id); if (!provider) return;
     setPractice(id); setPracticeQuery(""); onChosen?.();
     const matching = (profile?.locations ?? []).filter(item => item.active !== false && (item.billingProviderId === id || (!item.billingProviderId && practices.length === 1)));
-    const primary = matching.filter(item => item.isPrimary); const chosen = matching.length === 1 ? matching[0] : primary.length === 1 ? primary[0] : undefined;
+    // Only a practice's single location is chosen for the user; with several, the address printed on the request must be picked explicitly.
+    const chosen = matching.length === 1 ? matching[0] : undefined;
     setLocation(chosen?.id ?? "");
     onChange({ ...value, name: provider.name, address: provider.billingStreet ?? "", city: provider.billingCity ?? "", state: provider.billingState ?? "", zip: provider.billingZip ?? "", ...contactFields(provider), ...(chosen ? located(chosen, provider) : {}) });
   };
