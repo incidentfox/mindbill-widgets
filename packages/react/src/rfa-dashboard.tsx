@@ -17,7 +17,7 @@ import { RfaDraftForm, type RfaDraftInput } from "./rfa-draft-form";
 import { formatRfaPhone, useRfaFormDetails } from "./rfa-official-fields";
 import { RfaSendDialog } from "./rfa-send-dialog";
 import { RfaDuplicateDialog } from "./rfa-duplicate-dialog";
-import { RfaCard, RfaFacts, RfaPill, RfaStatusCard, rfaAddress, rfaCalendarDate, rfaCardsCss, rfaLifecycleTone, rfaRequestTypeLabel, rfaShortDate } from "./rfa-detail-cards";
+import { RfaCard, RfaFacts, RfaPill, RfaStatusCard, rfaAddress, rfaCalendarDate, rfaCardsCss, rfaDecisionSummary, rfaLifecycleTone, rfaRequestTypeLabel, rfaShortDate } from "./rfa-detail-cards";
 import { canEditRfaDraft, rfaRecordToDraft, rfaDraftReplacement } from "./rfa-draft-edit";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaLifecycleControls } from "./rfa-lifecycle-controls";
@@ -330,6 +330,9 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const unsent = rfa && !rfa.submittedAt && ["draft", "ready", "incomplete", "deferred"].includes(rfa.status);
   // The carrier accepted the request and then failed to deliver it: it reads as sent, but nothing arrived.
   const resendable = !!rfa && rfaCanResend(rfa);
+  // Once anything is decided, the status says what was decided rather than only that the request is closed.
+  const decision = rfa && !unsent && !["failed", "canceled"].includes(getRfaLifecycleStatus(rfa)) ? rfaDecisionSummary(rfa) : null;
+  const statusPill = rfa ? <RfaPill tone={decision ? decision.tone : rfaLifecycleTone(rfa)}>{unsent ? "Draft" : decision ? decision.label : RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</RfaPill> : null;
   const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
   const openDocument = (documentId: string, title: string) => run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) { setOpenedDocument({ blob, title }); if (simple) reveal("documents"); } });
   return <div className={`mbrfa-detail mbrfa-stack${simple ? " mbrfa-simple" : ""}`} style={{ marginTop: 16 }}>
@@ -337,7 +340,7 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
     {error ? <p role="alert">{error}</p> : null}{busy ? <p role="status">Working…</p> : null}
     {!rfa ? (!error ? <p role="status">Loading request…</p> : null) : <>
       {simple ? <RfaStatusCard rfa={rfa} /> : <RfaDetailHeader rfa={rfa} {...(getPatientHref ? { getPatientHref } : {})} {...(getClaimHref ? { getClaimHref } : {})} {...(getProviderHref ? { getProviderHref } : {})} />}
-      <div className="mbrfa-detail-toolbar"><div>{simple ? <><h2>{rfa.displayReference || "Request for Authorization"}</h2><RfaPill tone={rfaLifecycleTone(rfa)}>{unsent ? "Draft" : RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</RfaPill><RfaPill>{rfa.expedited ? "Expedited" : sentence(rfa.reviewType)}</RfaPill>{rfa.claimNumber ? <RfaPill tone="mono">Claim {rfa.claimNumber}</RfaPill> : null}</> : <><h2>{rfaTitle(rfa)}</h2>{rfa.displayReference ? <span className="mbrfa-reference">{rfa.displayReference}</span> : null}<span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><span className="mbrfa-badge">{rfa.expedited ? "Expedited" : label(rfa.reviewType)}</span></>}</div><div className="mbtd-actions">
+      <div className="mbrfa-detail-toolbar"><div>{simple ? <><h2>{rfa.displayReference || "Request for Authorization"}</h2>{statusPill}<RfaPill>{rfa.expedited ? "Expedited" : sentence(rfa.reviewType)}</RfaPill>{rfa.claimNumber ? <RfaPill tone="mono">Claim {rfa.claimNumber}</RfaPill> : null}</> : <><h2>{rfaTitle(rfa)}</h2>{rfa.displayReference ? <span className="mbrfa-reference">{rfa.displayReference}</span> : null}<span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span><span className="mbrfa-badge">{rfa.expedited ? "Expedited" : label(rfa.reviewType)}</span></>}</div><div className="mbtd-actions">
         {simple && permissions.includes("edit") && canEditRfaDraft(rfa) && !editing ? <button type="button" disabled={locked} onClick={() => { setDetailTab("details"); setEditing(true); }}>Edit request</button> : null}
         {formPreviewUrl ? <a className="mbrfa-form-link" href={formPreviewUrl} target="_blank" rel="noopener noreferrer">View DWC Form RFA</a> : rfa.documents.some(document => document.documentType === "rfa_form" && document.contentRevision === rfa.contentRevision) ? <button type="button" disabled={locked} onClick={() => { const document = [...rfa.documents].reverse().find(document => document.documentType === "rfa_form" && document.contentRevision === rfa.contentRevision); if (document) void openDocument(document.id, "DWC Form RFA"); }}>View DWC Form RFA</button> : null}
 
@@ -435,7 +438,7 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
       {detailTab === "history" && permissions.includes("send") && (!simple || rfa.transmissions.some(transmission => transmission.channel === "fax")) ? simple ? <div className="mbtd-actions" style={{ marginTop: 16 }}><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery status</button></div> : <details className="mbrfa-delivery-tools"><summary>Delivery tools</summary><button type="button" disabled={locked} onClick={() => void run(async () => { adopt(await client.refreshFaxes(id, key())); })}>Check fax delivery with provider</button></details> : null}
       </div>
       </>}
-      {!editing || !simple ? <div className="mbrfa-bottom-actions">{simple ? <RfaPill tone={rfaLifecycleTone(rfa)}>{unsent ? "Draft" : RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</RfaPill> : <span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span>}<div className="mbtd-actions">
+      {!editing || !simple ? <div className="mbrfa-bottom-actions">{simple ? statusPill : <span className="mbrfa-badge">{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</span>}<div className="mbtd-actions">
         {!simple && permissions.includes("edit") && canEditRfaDraft(rfa) && !editing ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => { setDetailTab("details"); setEditing(true); }}>Edit request draft</button> : null}
         {onContinue ? <button type="button" disabled={locked} onClick={() => onContinue(rfa)}>Open in your application</button> : null}
         {simple ? <details className="mbrfa-more"><summary>More</summary><div><RfaDraftActions deleteWording {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} /></div></details>

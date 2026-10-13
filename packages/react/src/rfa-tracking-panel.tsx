@@ -5,7 +5,7 @@ import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-
 import { rfaDetailCss } from "./rfa-detail-header";
 import { RfaHistoryEntry } from "./rfa-history-entry";
 import { rfaDecisionDueText } from "./rfa-decision-due";
-import { RfaCard, RfaPill, rfaCalendarDate, rfaOutcome, rfaShortDate } from "./rfa-detail-cards";
+import { RfaCard, RfaPill, rfaCalendarDate, rfaFailureReason, rfaOutcome, rfaShortDate } from "./rfa-detail-cards";
 
 export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
   rfa: RfaRecord;
@@ -124,7 +124,9 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
     {view !== "history" ? <RfaCard title="Requested Treatment" count={rfa.items.length} flush>
       {rfa.items.length ? <div className="mbrfa-table-scroll"><table className="mbrfa-grid-table mbrfa-treatment-table"><thead><tr><th scope="col">#</th><th scope="col">Service/Good Requested</th><th scope="col">Diagnosis</th><th scope="col">CPT/HCPCS</th><th scope="col">Other Information</th><th scope="col">Decision</th></tr></thead><tbody>{rfa.items.map((item, index) => {
         const appointment = scheduling.find(value => value.itemId === item.id);
-        const outcome = rfaOutcome(item);
+        // A treatment the response did not decide is still being waited on: mark it so it is not overlooked.
+        const awaiting = item.outcome === "pending" && !item.decisionClosure?.closed && rfa.items.some(other => other.outcome !== "pending");
+        const outcome = awaiting ? { label: "Awaiting decision", tone: "warn" as const } : rfaOutcome(item);
         const showAppointment = !!appointment && (appointment.eligible || appointment.version > 0);
         const closable = canClose && item.outcome === "pending" && !item.decidedAt;
         const correctable = canCorrect && !!item.currentDecisionEventId && item.outcome !== "pending";
@@ -167,7 +169,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
       {rfa.transmissions.length ? <RfaCard title="Delivery" count={rfa.transmissions.length} flush><div className="mbrfa-table-scroll"><table className="mbrfa-grid-table"><thead><tr><th scope="col">Date</th><th scope="col">Method</th><th scope="col">Status</th><th scope="col">Recipient</th><th scope="col">Confirmed receipt</th><th scope="col"><span className="mbrfa-sr-only">Receipt</span></th></tr></thead><tbody>{rfa.transmissions.map(transmission => <tr key={transmission.id}>
         <td>{rfaShortDate(transmission.occurredAt)}</td><td>{capital(words(transmission.channel))}<small>{capital(words(transmission.direction))}{transmission.purpose ? ` · ${words(transmission.purpose)}` : ""}</small></td>
         <td><RfaPill tone={["delivered", "received", "sent"].includes(transmission.status) ? "ok" : transmission.status === "failed" ? "bad" : "muted"}>{capital(words(transmission.status))}</RfaPill></td>
-        <td>{transmission.destination || "—"}{transmission.providerMessageId ? <small>Reference {transmission.providerMessageId}</small> : null}</td>
+        <td>{transmission.destination || "—"}{transmission.providerMessageId ? <small>Reference {transmission.providerMessageId}</small> : null}{rfaFailureReason(transmission) ? <small>{rfaFailureReason(transmission)}</small> : null}</td>
         <td>{rfaShortDate(transmission.receivedAt)}</td><td className="mbrfa-row-actions">{evidence(transmission.proofDocumentId, "Receipt")}</td>
       </tr>)}</tbody></table></div></RfaCard> : null}
     </> : null}

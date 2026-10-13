@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaDashboard, rfaCanResend } from "../packages/react/src/rfa-dashboard";
 import { rfaDuplicatePacket } from "../packages/react/src/rfa-duplicate-dialog";
+import { rfaDecisionSummary, rfaFailureReason } from "../packages/react/src/rfa-detail-cards";
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
 function taskResponse(input: RequestInfo | URL): Response | undefined {
  const url = String(input);
@@ -198,6 +199,22 @@ it("offers Send again, not a duplicate, when every attempt failed and nothing wa
  expect(rfaCanResend({...sent,transmissions:[]})).toBe(false);
  expect(rfaCanResend({...sent,receivedAt:"2026-09-02T00:00:00Z",transmissions:[t("failed")]})).toBe(false);
  expect(rfaCanResend({status:"received",receivedAt:null,transmissions:[t("failed")]})).toBe(false);
+});
+
+it("says what was decided, and flags a request the response only partly decided",()=>{
+ const item=(outcome:string,closed=false)=>({outcome,decisionClosure:closed?{closed:true}:null}) as never;
+ expect(rfaDecisionSummary({items:[item("pending")]})).toBeNull();
+ expect(rfaDecisionSummary({items:[item("approved"),item("approved")]})).toEqual({label:"Approved",tone:"ok"});
+ expect(rfaDecisionSummary({items:[item("denied")]})).toEqual({label:"Denied",tone:"bad"});
+ expect(rfaDecisionSummary({items:[item("modified")]})).toEqual({label:"Modified",tone:"warn"});
+ expect(rfaDecisionSummary({items:[item("approved"),item("denied")]})).toEqual({label:"Partially approved",tone:"warn"});
+ expect(rfaDecisionSummary({items:[item("approved"),item("pending")]})).toEqual({label:"Partially decided",tone:"warn"});
+ // A treatment closed without a decision is not being waited on.
+ expect(rfaDecisionSummary({items:[item("approved"),item("pending",true)]})).toEqual({label:"Approved",tone:"ok"});
+ const sent={id:"t",direction:"outbound",channel:"fax",destination:null,occurredAt:null,receivedAt:null,proofDocumentId:null,providerMessageId:null};
+ expect(rfaFailureReason({...sent,status:"failed",metadata:{failureReason:"busy"}} as never)).toBe("The line was busy");
+ expect(rfaFailureReason({...sent,status:"failed",metadata:{failureReason:"anything else"}} as never)).toBe("");
+ expect(rfaFailureReason({...sent,status:"sent",metadata:{failureReason:"busy"}} as never)).toBe("");
 });
 
 it("opens response and treatment deep links on the details tab",async()=>{
