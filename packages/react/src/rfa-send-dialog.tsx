@@ -11,41 +11,49 @@ export const rfaSendDialogCss = `.mbrfa-send-backdrop{position:fixed;z-index:100
 .mbrfa-send-body{display:grid;gap:14px;padding:18px 20px;overflow:auto}.mbrfa-send-body p{margin:0}.mbrfa-send-body label{display:grid;gap:5px;font-size:13px}
 .mbrfa-send-methods{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}.mbrfa-send-methods>span{font-size:13px;font-weight:600}.mbrfa-send .mb-rfa-destination{margin:0;padding:0;border:0}.mbrfa-send-to{display:grid;gap:5px;min-width:0}.mbrfa-send-to>span{font-size:13px;font-weight:600}.mbrfa-send-to[data-method=email] .mbrfa-guidance{display:none}.mbrfa-send .mb-rfa-destination label{display:grid;gap:5px}.mbrfa-send-methods label{display:flex;align-items:center;gap:8px;min-height:36px;cursor:pointer}.mbrfa-send-methods input{width:16px;height:16px;min-height:16px;margin:0;padding:0;accent-color:var(--mb-accent)}
 .mbrfa-send-summary{display:grid;gap:4px;padding:12px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 4%,var(--mb-surface));font-size:13px}.mbrfa-send-summary span{color:var(--mb-muted)}
+.mbrfa-send-contents{display:grid;gap:10px}.mbrfa-send-contents h4{margin:0 0 4px;font-size:13px;font-weight:600}.mbrfa-send-contents ul{display:grid;gap:4px;margin:0;padding:0;list-style:none;font-size:13px}.mbrfa-send-contents li{min-width:0;overflow-wrap:anywhere}.mbrfa-send-contents li span,.mbrfa-send-contents p{color:var(--mb-muted);font-size:13px}
+.mbrfa-send-signature{display:grid;gap:8px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--mb-danger,#b42318) 35%,var(--mb-border));border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger,#b42318) 5%,var(--mb-surface));font-size:13px}
 .mbrfa-send-confirm{display:flex!important;align-items:flex-start;gap:10px;padding-top:4px;cursor:pointer}.mbrfa-send-confirm input{width:16px;height:16px;min-height:16px;margin:3px 0 0;padding:0;flex:none;accent-color:var(--mb-accent)}
 .mbrfa-send>footer{display:flex;flex-direction:row-reverse;gap:10px;padding:14px 20px;border-top:1px solid var(--mb-border)}.mbrfa-send>footer>a{margin-right:auto;align-self:center;font-size:13px}
 .mbrfa-send [role=alert]{color:var(--mb-danger,#b42318);font-size:13px}
 @media(max-width:640px){.mbrfa-send-backdrop{place-items:end stretch;padding:0}.mbrfa-send{width:100%;max-height:92vh;border-radius:var(--mb-radius) var(--mb-radius) 0 0}.mbrfa-send>footer{flex-direction:column}.mbrfa-send>footer>a{margin:0;align-self:center}}`;
 
 type Method = "fax" | "email";
+const treatmentDetail = (item: RfaRecord["items"][number]): string => [item.procedureCode ? `CPT/HCPCS ${item.procedureCode}` : "", item.quantity ? `Qty ${item.quantity}` : "", item.frequency ?? "", item.duration ?? "", `Dx ${item.diagnosisCode}`].filter(Boolean).join(" · ");
 
 /** One step to send a request: choose where it goes, confirm once, send. Applying the requesting
  * physician's saved signature and assembling the packet happen as part of sending. */
-export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, onUpdated, onSent, onClose }: {
+export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, signatureMissing, onUpdated, onSent, onClose }: {
   rfa: RfaRecord; client: RfaClient; documentIds: string[]; diagnosisDescriptions: Record<string, string>;
   directory: BillClaimsAdministratorDirectory | null; directoryLoading: boolean; directoryError: string | null;
   environment: string; canSend: boolean; canSign: boolean; actorReference?: string | undefined; previewUrl?: string | undefined;
   /** Shown when the physician has no saved signature yet. */ signatureSetup?: ReactNode;
+  /** The host knows the requesting physician has no saved signature: say so up front and hold the send until one is added. */ signatureMissing?: boolean | undefined;
   onUpdated: (rfa: RfaRecord) => void; onSent: (rfa: RfaRecord) => void; onClose: () => void;
 }): ReactElement {
   // Start on how the request is already addressed: its saved fax, else its saved e-mail.
   const [method, setMethod] = useState<Method>(() => !rfa.authorizationContact?.fax?.trim() && rfa.authorizationContact?.email?.trim() ? "email" : "fax");
   const [destination, setDestination] = useState<RfaAuthorizationDestinationOption | null>(null);
   const [message, setMessage] = useState(""); const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(""); const [error, setError] = useState("");
+  const [busy, setBusy] = useState(""); const [error, setError] = useState(""); const [signatureRefused, setSignatureRefused] = useState(false);
   const keys = useRef(new Map<string, string>()); const alive = useRef(true); const latest = useRef(rfa); latest.current = rfa;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) onClose(); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [busy, onClose]);
+  useEffect(() => { // A host dialog opened from here (signature setup) handles its own Escape first.
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy && !event.defaultPrevented) onClose(); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [busy, onClose]);
   const stable = (name: string, body: unknown) => { const print = JSON.stringify([rfa.id, name, body]); let value = keys.current.get(print); if (!value) { value = `rfa-${name}-${crypto.randomUUID()}`; keys.current.set(print, value); } return value; };
   const supporting = rfa.documents.filter(document => ["clinical_report", "supporting_record"].includes(document.documentType) && documentIds.includes(document.id));
   const missingDiagnosis = rfa.items.find(item => !(diagnosisDescriptions[item.id] ?? item.diagnosisDescription ?? "").trim());
   const live = environment === "live";
+  // Known from the host, or learned when the server refused to sign. A host that reports the signature as saved clears it.
+  const needsSignature = !rfa.signedAt && (signatureMissing ?? signatureRefused);
+  useEffect(() => { if (signatureMissing === false) setSignatureRefused(false); }, [signatureMissing]);
   const blocked = !supporting.length ? "Add the report that supports this request (PR-2, Doctor's First Report or narrative) before sending."
     : missingDiagnosis ? `Add the diagnosis for ${missingDiagnosis.diagnosisCode} (Edit request) before sending.`
     : !rfa.signedAt && !canSign ? "Sending applies the physician's saved signature, and your account is not set up to do that."
     : !live ? "This is a sandbox: nothing is faxed or e-mailed."
     : !canSend ? "Sending requires permission from your organization." : "";
   const go = async () => {
-    if (busy || blocked || !confirmed || !destination) return;
+    if (busy || blocked || needsSignature || !confirmed || !destination) return;
     setError("");
     try {
       // 1. The physician's saved signature goes on the exact form being sent.
@@ -68,7 +76,9 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
       onSent(await client.submit(current.id, body, stable("submit", body)));
     } catch (caught) {
       const reason = caught instanceof Error ? caught.message : "";
-      if (alive.current) setError(/saved.signature/i.test(reason) ? `${rfa.providerName} has no saved signature yet. Add it on the physician’s page, then send again. Nothing was sent.` : reason || "The request could not be sent. Nothing was sent; try again.");
+      if (!alive.current) return;
+      if (/saved.signature/i.test(reason)) setSignatureRefused(true);
+      else setError(reason || "The request could not be sent. Nothing was sent; try again.");
     } finally { if (alive.current) setBusy(""); }
   };
   // Say where it goes once, the way a person reads it. A "name" that is only the number again is left out.
@@ -79,7 +89,11 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
     <section className="mbrfa-send" role="dialog" aria-modal="true" aria-label="Send request for authorization">
       <header><h3>Send request for authorization</h3><button type="button" aria-label="Close" disabled={!!busy} onClick={onClose}>×</button></header>
       <div className="mbrfa-send-body">
-        <div className="mbrfa-send-summary"><strong>{rfa.employeeName}{rfa.claimNumber ? ` · Claim ${rfa.claimNumber}` : ""}</strong><span>{rfa.providerName} · {rfa.items.length} requested treatment{rfa.items.length === 1 ? "" : "s"} · {supporting.length} supporting document{supporting.length === 1 ? "" : "s"}</span></div>
+        <div className="mbrfa-send-summary"><strong>{rfa.employeeName}{rfa.claimNumber ? ` · Claim ${rfa.claimNumber}` : ""}</strong><span>{rfa.providerName}</span></div>
+        <div className="mbrfa-send-contents">
+          <div><h4>Requested treatment{rfa.items.length === 1 ? "" : "s"}</h4><ul>{rfa.items.map(item => { const detail = treatmentDetail(item); return <li key={item.id}>{item.serviceDescription}{detail ? <span> · {detail}</span> : null}</li>; })}</ul></div>
+          <div><h4>Supporting documents</h4>{supporting.length ? <ul>{supporting.map(document => <li key={document.id}>{document.filename}</li>)}</ul> : <p>None attached yet.</p>}</div>
+        </div>
         <div className="mbrfa-send-methods" role="radiogroup" aria-label="Send by">
           <span>Send by</span>
           <label><input type="radio" name="rfa-send-method" checked={method === "fax"} disabled={!!busy} onChange={() => { setMethod("fax"); setConfirmed(false); }} />Fax</label>
@@ -87,13 +101,13 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
         </div>
 <div className="mbrfa-send-to" data-method={method}><span>Send to</span><RfaAuthorizationDestination compact preselectSaved autoSelectSingle method={method} contextKey={`${rfa.id}:${rfa.claimsAdminId ?? "manual"}:${method}`} directory={directory} savedContact={rfa.authorizationContact} loading={directoryLoading} error={directoryError} disabled={!!busy} onChange={value => { setDestination(value); setConfirmed(false); }} /></div>
         <label>{method === "email" ? "E-mail message" : "Cover sheet message"} (optional)<textarea disabled={!!busy} maxLength={1000} rows={2} value={message} onChange={event => setMessage(event.target.value)} /></label>
-        {signatureSetup}
+        {needsSignature ? <div className="mbrfa-send-signature"><p role="alert">{rfa.providerName} has no saved signature yet. Sending puts the physician’s signature on the form, so add it first.{signatureSetup ? "" : " Add it on the physician’s page, then send again."}{signatureRefused ? " Nothing was sent." : ""}</p>{signatureSetup}</div> : signatureSetup}
         {blocked ? <p role="alert">{blocked}</p> : <label className="mbrfa-send-confirm"><input type="checkbox" checked={confirmed} disabled={!!busy || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>
           {rfa.signedAt ? "I reviewed this request" : <>I reviewed this request and am authorized by <strong>{rfa.providerName}</strong> to send it with their saved signature</>}{where ? <>, and verified it goes to <strong>{where}</strong></> : null}.</span></label>}
         {error ? <p role="alert">{error}</p> : null}
       </div>
       <footer>
-        <button type="button" className="mbtd-primary" disabled={!!busy || !!blocked || !confirmed || !destination} onClick={() => void go()}>{busy || (method === "email" ? "Send e-mail" : "Send fax")}</button>
+        <button type="button" className="mbtd-primary" disabled={!!busy || !!blocked || needsSignature || !confirmed || !destination} onClick={() => void go()}>{busy || (method === "email" ? "Send e-mail" : "Send fax")}</button>
         <button type="button" disabled={!!busy} onClick={onClose}>Cancel</button>
         {previewUrl ? <a href={previewUrl} target="_blank" rel="noopener noreferrer">Preview packet</a> : null}
       </footer>
