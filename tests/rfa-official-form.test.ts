@@ -131,3 +131,27 @@ it("fills requested treatments from a template and saves the current ones withou
   expect(onSave.mock.calls[0]![0].items).toEqual([expect.objectContaining({diagnosisCode:"M54.2",diagnosisDescription:"Synthetic neck pain",serviceDescription:"Synthetic MRI of the shoulder",procedureCode:"73221"})]);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+it("looks up the description of every prefilled ICD-10 code, in any arrival order", async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const onSave=vi.fn().mockResolvedValue(undefined);
+ const known:Record<string,string>={"M25.512":"Pain in left shoulder","M54.50":"Low back pain, unspecified","M25.511":"Pain in right shoulder","M25.561":"Pain in right knee"};
+ // Later codes answer first; the last code is unknown to the directory.
+ const searchDiagnosisCodes=vi.fn((query:string)=>new Promise<{code:string;description:string}[]>(resolve=>setTimeout(()=>resolve(known[query]?[{code:query,description:known[query]!}]:[]),query==="M25.512"?40:query==="Z99.99"?30:5)));
+ try{
+  await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:{...initialDraft,items:[{diagnosisCode:"M25.512, M54.50, M25.511, M25.561, Z99.99",serviceDescription:""}]},officialForm:true,onSave,searchDiagnosisCodes})));
+  const rows=()=>[...container.querySelectorAll(".mbrfa-dx-list li")].map(el=>[el.querySelector("strong")!.textContent,el.querySelector("span")?.textContent??(el.querySelector("input")?"input":"")]);
+  expect(rows().map(row=>row[1])).toEqual(Array(5).fill("Looking up…"));
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,80));});
+  expect(rows()).toEqual([["M25.512","Pain in left shoulder"],["M54.50","Low back pain, unspecified"],["M25.511","Pain in right shoulder"],["M25.561","Pain in right knee"],["Z99.99","input"]]);
+  expect(searchDiagnosisCodes).toHaveBeenCalledTimes(5);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("previews an unfinished form without saving or requiring any field", async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const onSave=vi.fn().mockResolvedValue(undefined),onPreview=vi.fn().mockResolvedValue(undefined),onPreviewDraft=vi.fn().mockResolvedValue(undefined);
+ try{
+  await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:{claimId:"",patientId:"",renderingProviderId:"",employeeName:"",providerName:"",items:[{diagnosisCode:"",serviceDescription:"Synthetic therapy"}]},officialForm:true,onSave,onReview:onSave,onPreview,onPreviewDraft})));
+  await act(async()=>[...container.querySelectorAll("button")].find(el=>el.textContent==="Preview")!.click());
+  expect(onPreviewDraft).toHaveBeenCalledOnce();expect(onPreviewDraft.mock.calls[0]![0].items[0].serviceDescription).toBe("Synthetic therapy");
+  expect(onSave).not.toHaveBeenCalled();expect(onPreview).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')).toBeNull();
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
