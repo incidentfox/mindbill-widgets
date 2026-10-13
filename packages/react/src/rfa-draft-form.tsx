@@ -130,6 +130,11 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   useEffect(() => {
     if (officialForm && returnFax) setDraft(current => current.requestingPractice?.fax?.trim() ? current : { ...current, requestingPractice: { ...current.requestingPractice, fax: returnFax } });
   }, [officialForm, returnFax, savedDraft.requestingPractice?.fax]);
+  // The adjuster saved on the injury is who the request is addressed to, unless someone typed another name.
+  const adjusterName = formDetails?.adjusterName;
+  useEffect(() => {
+    if (officialForm && adjusterName) setDraft(current => !current.authorizationContact || current.authorizationContact.contactName?.trim() ? current : { ...current, authorizationContact: { ...current.authorizationContact, contactName: adjusterName } });
+  }, [officialForm, adjusterName, savedDraft.authorizationContact?.name, savedDraft.authorizationContact?.contactName]);
   // With no saved practice or physician e-mail, use the organization's monitored address.
   const returnEmail = formDetails?.returnEmail;
   useEffect(() => {
@@ -159,7 +164,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
   const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
   const previousClaim = useRef(identityKey);
-  useEffect(() => { if (previousClaim.current !== identityKey) { setAdministratorOverride(null); setDraft(current => ({ ...current, authorizationContact: null, ...(officialForm ? { items: [{ diagnosisCode: savedDiagnosisCodes.slice(0, 12).join(", "), serviceDescription: "" }] } : {}) })); previousClaim.current = identityKey; } }, [identityKey]);
+  useEffect(() => { if (previousClaim.current !== identityKey) { setAdministratorOverride(null); setDraft(current => ({ ...current, authorizationContact: null, ...(officialForm ? { items: [{ diagnosisCode: "", serviceDescription: "" }] } : {}) })); previousClaim.current = identityKey; } }, [identityKey]);
   const draft = { ...savedDraft };
   if (identity) {
     for (const key of ["claimId", "patientId", "renderingProviderId", "employeeName", "providerName", "claimNumber", "dateOfInjury", "claimsAdminId", "providerNpi"] as const) {

@@ -6,6 +6,8 @@ import type { RfaClient, RfaContact } from "@mindbill/browser";
 export type RfaFormDetails = {
   employee?: { formName?: string | undefined; dateOfBirth?: string | undefined; employer?: string | undefined };
   physician?: { specialty?: string | undefined };
+  /** The claim's adjuster, when one is saved on the injury; fills a blank claims administrator Contact Name. */
+  adjusterName?: string | undefined;
   /** The organization's own fax line for responses; fills a blank Fax Number. */
   returnFax?: string | undefined;
   /** The organization's monitored e-mail address; fills a blank E-mail Address. */
@@ -83,7 +85,8 @@ export function useRfaFormDetails(client: RfaClient, claimId: string, renderingP
     void client.getCreationContext({ claimId, renderingProviderId, limit: 1 }).then(context => {
       if (!active) return;
       const claim = context.claims.find(value => value.claimId === claimId), provider = context.renderingProviders.find(value => value.id === renderingProviderId);
-      setDetails({ ...(context.returnFax ? { returnFax: context.returnFax } : {}), ...(context.returnEmail ? { returnEmail: context.returnEmail } : {}), ...(claim ? { employee: { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : {}), ...(provider ? { physician: { specialty: provider.specialty } } : {}) });
+      const adjusterName = (claim as { adjusterName?: string } | undefined)?.adjusterName;
+      setDetails({ ...(adjusterName ? { adjusterName } : {}), ...(context.returnFax ? { returnFax: context.returnFax } : {}), ...(context.returnEmail ? { returnEmail: context.returnEmail } : {}), ...(claim ? { employee: { formName: claim.employeeFormName, dateOfBirth: claim.dateOfBirth, employer: claim.employer } } : {}), ...(provider ? { physician: { specialty: provider.specialty } } : {}) });
     }).catch(() => undefined);
     return () => { active = false; };
   }, [client, claimId, renderingProviderId, enabled]);

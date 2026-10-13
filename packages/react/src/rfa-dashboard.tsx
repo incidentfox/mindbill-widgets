@@ -332,7 +332,7 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const resendable = !!rfa && rfaCanResend(rfa);
   // Once anything is decided, the status says what was decided rather than only that the request is closed.
   const decision = rfa && !unsent && !["failed", "canceled"].includes(getRfaLifecycleStatus(rfa)) ? rfaDecisionSummary(rfa) : null;
-  const statusPill = rfa ? <RfaPill tone={decision ? decision.tone : rfaLifecycleTone(rfa)}>{unsent ? "Draft" : decision ? decision.label : RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</RfaPill> : null;
+  const statusPill = rfa ? <RfaPill tone={decision ? decision.tone : rfaLifecycleTone(rfa)}>{unsent && getRfaLifecycleStatus(rfa) !== "failed" ? "Draft" : decision ? decision.label : RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</RfaPill> : null;
   const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
   const openDocument = (documentId: string, title: string) => run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) { setOpenedDocument({ blob, title }); if (simple) reveal("documents"); } });
   return <div className={`mbrfa-detail mbrfa-stack${simple ? " mbrfa-simple" : ""}`} style={{ marginTop: 16 }}>

@@ -94,6 +94,8 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
           : <input required aria-label={`Diagnosis for ${item}`} maxLength={400} placeholder="Type the diagnosis for this code" defaultValue="" onBlur={event => { if (event.target.value.trim()) emit(codes, descriptions.map((text, position) => position === index ? event.target.value : text)); }} />}
         <button type="button" aria-label={`Remove ${item}`} onClick={() => emit(codes.filter((_, position) => position !== index), descriptions.filter((_, position) => position !== index))}>×</button>
       </li>)}</ul> : null}
+      {codes.length < 12 && savedCodes.some(saved => saved && !chosen(saved)) ? <div className="mbrfa-dx-suggest" role="group" aria-label="Diagnoses saved on this injury"><span>On this injury:</span>{savedCodes.filter(saved => saved && !chosen(saved)).map(saved =>
+        <button type="button" key={saved} aria-label={`Add ${saved}`} onClick={() => add(`saved:${saved}`)}>+ {saved}</button>)}</div> : null}
       {codes.length < 12 ? <RfaIdentitySelect label="ICD-10 Code" placeholder={codes.length ? "Add another ICD-10 code" : "Enter code"} searchPlaceholder="Search by code or diagnosis" query={query} onSearch={setQuery} searchable loading={searching && !options.length} error={error} value="" options={options} onSelect={add} /> : null}
     </RfaPicker></div>;
   }
