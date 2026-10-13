@@ -16,6 +16,7 @@ import { RfaCreateForm, type RfaClaimSelectorProps, type RfaProviderSelectorProp
 import { RfaDraftForm, type RfaDraftInput } from "./rfa-draft-form";
 import { formatRfaPhone, useRfaFormDetails } from "./rfa-official-fields";
 import { RfaSendDialog } from "./rfa-send-dialog";
+import { RfaDuplicateDialog } from "./rfa-duplicate-dialog";
 import { RfaCard, RfaFacts, RfaPill, RfaStatusCard, rfaAddress, rfaCalendarDate, rfaCardsCss, rfaLifecycleTone, rfaRequestTypeLabel, rfaShortDate } from "./rfa-detail-cards";
 import { canEditRfaDraft, rfaRecordToDraft, rfaDraftReplacement } from "./rfa-draft-edit";
 import { rfaDecisionDueText } from "./rfa-decision-due";
@@ -244,6 +245,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
 function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, client, signatureClient, options, permissions, environment, actorReference, onContinue, disabled, draftFormProps, canManageProviderSignatures, renderSendSignatureSetup, onCopied, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, initialAction }: RfaRelatedLinks & { layout: "classic" | "simple"; formPreviewUrl?: string; initialAction?: "send" | undefined; draftFormProps: Pick<import("./rfa-draft-form").RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "onEditPractice" | "onAddPractice" | "onEditLocation" | "manageLocationsHref" | "onRefreshProfile" | "onReview" | "onPreview">; canManageProviderSignatures: boolean; renderSendSignatureSetup?: RfaDashboardProps["renderSendSignatureSetup"]; onCopied: (rfa: RfaRecord) => void; id: string; selectedItem: string | null; selectedResponseDocumentId?: string; client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions; permissions: readonly string[]; environment: string; actorReference?: string; onContinue?: (rfa: RfaRecord) => void; disabled?: boolean }): ReactElement {
   const [rfa, setRfa] = useState<RfaRecord | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [sending, setSending] = useState(() => {
     if (initialAction === "send") return true;
     try { const key = `mbrfa-send:${id}`; if (sessionStorage.getItem(key)) { sessionStorage.removeItem(key); return true; } } catch { /* storage unavailable */ }
@@ -429,8 +431,11 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
         {onContinue ? <button type="button" disabled={locked} onClick={() => onContinue(rfa)}>Open in your application</button> : null}
         {simple ? <details className="mbrfa-more"><summary>More</summary><div><RfaDraftActions deleteWording {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} /></div></details>
           : <RfaDraftActions {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} />}
+        {simple && !unsent && !!rfa.submittedAt && rfa.status !== "canceled" && permissions.includes("act") ? <button type="button" disabled={locked} onClick={() => setDuplicating(true)}>Send duplicate</button> : null}
         {simple && unsent ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => setSending(true)}>Send</button> : simple && reviewable && detailTab === "details" ? <button type="button" disabled={locked} onClick={() => reveal("review")}>Record response</button> : null}
       </div></div> : null}
+      {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} options={options} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
+        onSent={() => { void run(async () => adopt(await client.get(id))); }} onClose={() => setDuplicating(false)} /> : null}
       {simple && sending && unsent ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
         signatureMissing={hostSignature?.missing}
         signatureSetup={hostSignature ? hostSignature.setup : canManageProviderSignatures && canSign ? settingSignature ? <RfaProviderSignatureSetup client={signatureClient} renderingProviderId={rfa.renderingProviderId} providerName={rfa.providerName} disabled={!!locked} onSaved={() => setSettingSignature(false)} onCancel={() => setSettingSignature(false)} /> : <p><button type="button" className="mbrfa-text-link" onClick={() => setSettingSignature(true)}>Set up or replace the physician's saved signature</button></p> : null}
