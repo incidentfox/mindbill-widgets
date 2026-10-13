@@ -23,11 +23,12 @@ const treatmentDetail = (item: RfaRecord["items"][number]): string => [item.proc
 
 /** One step to send a request: choose where it goes, confirm once, send. Applying the requesting
  * physician's saved signature and assembling the packet happen as part of sending. */
-export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, signatureMissing, onUpdated, onSent, onClose }: {
+export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, signatureMissing, resend, onUpdated, onSent, onClose }: {
   rfa: RfaRecord; client: RfaClient; documentIds: string[]; diagnosisDescriptions: Record<string, string>;
   directory: BillClaimsAdministratorDirectory | null; directoryLoading: boolean; directoryError: string | null;
   environment: string; canSend: boolean; canSign: boolean; actorReference?: string | undefined; previewUrl?: string | undefined;
   /** Shown when the physician has no saved signature yet. */ signatureSetup?: ReactNode;
+  /** An earlier attempt failed after the carrier accepted it; this sends the request again. */ resend?: boolean | undefined;
   /** The host knows the requesting physician has no saved signature: say so up front and hold the send until one is added. */ signatureMissing?: boolean | undefined;
   onUpdated: (rfa: RfaRecord) => void; onSent: (rfa: RfaRecord) => void; onClose: () => void;
 }): ReactElement {
@@ -94,6 +95,7 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
           <div><h4>Requested treatment{rfa.items.length === 1 ? "" : "s"}</h4><ul>{rfa.items.map(item => { const detail = treatmentDetail(item); return <li key={item.id}>{item.serviceDescription}{detail ? <span> · {detail}</span> : null}</li>; })}</ul></div>
           <div><h4>Supporting documents</h4>{supporting.length ? <ul>{supporting.map(document => <li key={document.id}>{document.filename}</li>)}</ul> : <p>None attached yet.</p>}</div>
         </div>
+        {resend ? <p className="mbrfa-send-signature" role="status">The last attempt did not go through. Check the destination with the claims administrator, or choose another way to send, then send again.</p> : null}
         <div className="mbrfa-send-methods" role="radiogroup" aria-label="Send by">
           <span>Send by</span>
           <label><input type="radio" name="rfa-send-method" checked={method === "fax"} disabled={!!busy} onChange={() => { setMethod("fax"); setConfirmed(false); }} />Fax</label>

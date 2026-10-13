@@ -110,6 +110,11 @@ const sentence = (value: string) => { const text = label(value); return text.cha
 const documentTypeLabel = (type: string) => ({ rfa_form: "DWC Form RFA", clinical_report: "Clinical report", supporting_record: "Supporting record", ur_response: "Utilization review response", imr_form: "Independent medical review form", fax_cover: "Fax cover sheet" } as Record<string, string>)[type] ?? sentence(type);
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
 const key = () => `rfa-widget-${globalThis.crypto.randomUUID()}`;
+/** True when every attempt to send the request failed and no receipt was ever recorded. */
+export function rfaCanResend(rfa: Pick<RfaRecord, "status" | "receivedAt" | "transmissions">): boolean {
+  const attempts = rfa.transmissions.filter(sent => sent.direction === "outbound" && (sent.purpose ?? "submission") === "submission");
+  return rfa.status === "submitted" && !rfa.receivedAt && attempts.length > 0 && attempts.every(sent => sent.status === "failed");
+}
 export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: fetchOverride, patientId, claimId, renderingProviderId, signatureSession, ...props }: RfaDashboardProps): ReactElement {
   const options = useMemo<OrganizationClientOptions>(() => ({ ...(sessionEndpoint ? { sessionEndpoint } : {}), ...(getSession ? { getSession } : {}), ...(apiBaseUrl ? { apiBaseUrl } : {}), ...(fetchOverride ? { fetch: fetchOverride } : {}) }), [sessionEndpoint, getSession, apiBaseUrl, fetchOverride]);
   const client = useMemo(() => createRfaClient(options), [options]);
@@ -323,6 +328,8 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const locked = busy || disabled;
   const canSign = permissions.includes("sign") && !!actorReference?.trim();
   const unsent = rfa && !rfa.submittedAt && ["draft", "ready", "incomplete", "deferred"].includes(rfa.status);
+  // The carrier accepted the request and then failed to deliver it: it reads as sent, but nothing arrived.
+  const resendable = !!rfa && rfaCanResend(rfa);
   const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
   const openDocument = (documentId: string, title: string) => run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) { setOpenedDocument({ blob, title }); if (simple) reveal("documents"); } });
   return <div className={`mbrfa-detail mbrfa-stack${simple ? " mbrfa-simple" : ""}`} style={{ marginTop: 16 }}>
@@ -433,12 +440,12 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
         {onContinue ? <button type="button" disabled={locked} onClick={() => onContinue(rfa)}>Open in your application</button> : null}
         {simple ? <details className="mbrfa-more"><summary>More</summary><div><RfaDraftActions deleteWording {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} /></div></details>
           : <RfaDraftActions {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} />}
-        {simple && !unsent && !!rfa.submittedAt && rfa.status !== "canceled" && permissions.includes("act") ? <button type="button" disabled={locked} onClick={() => setDuplicating(true)}>Send duplicate</button> : null}
-        {simple && unsent ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => setSending(true)}>Send</button> : simple && reviewable && detailTab === "details" ? <button type="button" disabled={locked} onClick={() => reveal("review")}>Record response</button> : null}
+        {simple && !unsent && !resendable && !!rfa.submittedAt && rfa.status !== "canceled" && permissions.includes("act") ? <button type="button" disabled={locked} onClick={() => setDuplicating(true)}>Send duplicate</button> : null}
+        {simple && (unsent || resendable) ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => setSending(true)}>{resendable ? "Send again" : "Send"}</button> : simple && reviewable && detailTab === "details" ? <button type="button" disabled={locked} onClick={() => reveal("review")}>Record response</button> : null}
       </div></div> : null}
       {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} options={options} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
         onSent={() => { void run(async () => adopt(await client.get(id))); }} onClose={() => setDuplicating(false)} /> : null}
-      {simple && sending && unsent ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
+      {simple && sending && (unsent || resendable) ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog resend={resendable} rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
         signatureMissing={hostSignature?.missing}
         signatureSetup={hostSignature ? hostSignature.setup : canManageProviderSignatures && canSign ? settingSignature ? <RfaProviderSignatureSetup client={signatureClient} renderingProviderId={rfa.renderingProviderId} providerName={rfa.providerName} disabled={!!locked} onSaved={() => setSettingSignature(false)} onCancel={() => setSettingSignature(false)} /> : <p><button type="button" className="mbrfa-text-link" onClick={() => setSettingSignature(true)}>Set up or replace the physician's saved signature</button></p> : null}
         onUpdated={adopt} onSent={value => { adopt(value); setSending(false); }} onClose={() => setSending(false)} />; })() : null}

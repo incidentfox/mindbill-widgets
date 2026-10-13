@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { RfaDashboard } from "../packages/react/src/rfa-dashboard";
+import { RfaDashboard, rfaCanResend } from "../packages/react/src/rfa-dashboard";
 import { rfaDuplicatePacket } from "../packages/react/src/rfa-duplicate-dialog";
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
 function taskResponse(input: RequestInfo | URL): Response | undefined {
@@ -187,6 +187,17 @@ it("offers a duplicate send only after a request was sent, re-sending the packet
    expect(has("Send duplicate")).toBe(expected);
   }
  }finally{await act(async()=>root.unmount());container.remove();}
+});
+
+it("offers Send again, not a duplicate, when every attempt failed and nothing was received",()=>{
+ const t=(status:string,purpose="submission")=>({id:`t_${status}_${purpose}`,purpose,direction:"outbound",channel:"fax",status,destination:"+18005550100",occurredAt:null,receivedAt:null,proofDocumentId:null,providerMessageId:null});
+ const sent={status:"submitted",receivedAt:null};
+ expect(rfaCanResend({...sent,transmissions:[t("failed"),t("failed")]})).toBe(true);
+ expect(rfaCanResend({...sent,transmissions:[t("failed"),t("sent","forward")]})).toBe(true);
+ expect(rfaCanResend({...sent,transmissions:[t("failed"),t("sent")]})).toBe(false);
+ expect(rfaCanResend({...sent,transmissions:[]})).toBe(false);
+ expect(rfaCanResend({...sent,receivedAt:"2026-09-02T00:00:00Z",transmissions:[t("failed")]})).toBe(false);
+ expect(rfaCanResend({status:"received",receivedAt:null,transmissions:[t("failed")]})).toBe(false);
 });
 
 it("opens response and treatment deep links on the details tab",async()=>{
