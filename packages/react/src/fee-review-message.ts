@@ -18,6 +18,13 @@ const messages: Record<string, string> = {
   conflicting_telehealth_modifiers: "Review the telehealth modifiers; the selected modes conflict.",
   telehealth_modifier_93_not_adopted_for_date: "Audio-only modifier 93 is not adopted for this service date. Review the dated telehealth rules.",
   telehealth_modifier_required: "Select the telehealth modifier that matches the service and its date.",
+  timed_testing_add_on_requires_primary_service: "Add the first-hour or first-30-minute testing code for the same date; this code is billed only with it.",
+  timed_testing_units_exceed_adopted_mue: "The units are above the daily limit for this code. Lower the units, or submit with documentation for review.",
+  timed_testing_unit_limit_unverified: "The daily unit limit for this code could not be confirmed for this service date.",
+  timed_testing_indicators_or_modifiers_require_review: "Remove the modifiers from this testing code to get an automatic fee, or submit it for review.",
+  modifier_requires_ground_rule_review: "This modifier changes how the fee is calculated and needs review.",
+  physician_service_context_required_or_adjustment_not_supported: "This service is billed with other same-day services and needs fee review.",
+  separate_schedule_or_payment_formula_required: "This code is paid under a separate schedule and needs fee review.",
 };
 
 export function feeReviewMessage(reason: string | undefined): string {

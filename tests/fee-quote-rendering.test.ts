@@ -42,7 +42,7 @@ it.each([...BILL_FEE_QUOTE_BASES, "unknown_fee_family"])("renders the API result
     await act(async () => { await vi.advanceTimersByTimeAsync(300); });
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/partner/v2/fee-quotes"))).toBe(true);
     if (basis === "unknown_fee_family") {
-      expect(container.querySelector(".mbsf-money")?.textContent).toBe("Needs review");
+      expect(container.querySelector(".mbsf-money")?.textContent).toBe("Fee unavailable");
       expect(container.textContent).toContain("Fee lookup is unavailable. Retry the fee check.");
       expect(container.textContent).not.toContain("$282.46");
     } else {
