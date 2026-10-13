@@ -55,6 +55,8 @@ export type RfaDraftFormProps = TreatmentDraftAppearance & RfaContactDirectoryPr
   onReview?: (draft: RfaDraftInput) => Promise<void>;
   /** Save unsigned content before opening the host's actual PDF packet preview. */
   onPreview?: (draft: RfaDraftInput) => Promise<void>;
+  /** Shows the form as filled in so far, without saving it or requiring any field. Replaces `onPreview`. */
+  onPreviewDraft?: (draft: RfaDraftInput) => Promise<void>;
   /** Suppress the repeated title when composing a single creation page. */
   embedded?: boolean;
   /** Live identity selection on the same creation page; clinical fields remain local. */
@@ -115,7 +117,7 @@ export function validateRfaDraft(draft: RfaDraftInput): string | null {
   }
   return null;
 }
-export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onAddPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, managePracticeHref, manageLocationsHref, onRefreshProfile, profilePending = false, onReview, onPreview, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
+export function RfaDraftForm({ initialDraft, identity, officialForm = false, formDetails, selectors, onEditPractice, onAddPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, managePracticeHref, manageLocationsHref, onRefreshProfile, profilePending = false, onReview, onPreview, onPreviewDraft, searchClaimsAdministrators, getClaimsAdministratorDirectory, embedded = false, onSave, onBack, mode = "create", searchDiagnosisCodes, organizationProfile, savedDiagnosisCodes = [], supportingDocuments, disabled = false, ...appearance }: RfaDraftFormProps): ReactElement {
   const [savedDraft, setDraft] = useState(() => normalizeRfaDraft(initialDraft));
   useEffect(() => {
     if (identity) setDraft(current => { const next = { ...current }; delete next.providerPhone; delete next.providerFax; return next; });
@@ -171,6 +173,12 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   const intentRef = useRef(intent);
   const chooseIntent = (value: typeof intent) => { intentRef.current = value; setIntent(value); };
   const action = useDraftSave(async (value: RfaDraftInput) => { await (intentRef.current === "preview" && onPreview ? onPreview : intentRef.current === "review" && onReview ? onReview : onSave)(value); }), locked = disabled || action.busy;
+  const [previewing, setPreviewing] = useState(false); const [previewError, setPreviewError] = useState("");
+  const previewDraft = async () => {
+    if (!onPreviewDraft || previewing) return;
+    setPreviewing(true); setPreviewError("");
+    try { await onPreviewDraft(normalizeRfaDraft(draft)); } catch { setPreviewError("The preview could not be opened. Try again."); } finally { setPreviewing(false); }
+  };
   const billingProviders = Array.isArray(organizationProfile?.billingProviders) ? organizationProfile.billingProviders : [];
   const locations = Array.isArray(organizationProfile?.locations) ? organizationProfile.locations : [];
   const update = (patch: Partial<RfaDraftInput>) => { action.clear(); setDraft((current) => ({ ...current, ...patch })); };
@@ -227,7 +235,7 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
         </div>
       </fieldset>
       {supportingDocumentFields}
-      {saveError}<div className="mbtd-actions">{onReview ? <button type="submit" className="mbtd-primary" disabled={locked} onClick={() => chooseIntent("review")}>{action.busy && intent === "review" ? "Saving…" : officialForm ? "Send" : "Review & submit"}</button> : null}{onPreview ? <button type="submit" disabled={locked} onClick={() => chooseIntent("preview")}>{action.busy && intent === "preview" ? "Preparing preview…" : "Preview"}</button> : null}<button type="submit" className={onReview ? undefined : "mbtd-primary"} disabled={locked} onClick={() => chooseIntent("save")}>{action.busy && intent === "save" ? "Saving…" : mode === "edit" ? "Save draft changes" : "Save draft"}</button><p role="status">{action.message}</p></div>
+      {saveError}<div className="mbtd-actions">{onReview ? <button type="submit" className="mbtd-primary" disabled={locked} onClick={() => chooseIntent("review")}>{action.busy && intent === "review" ? "Saving…" : officialForm ? "Send" : "Review & submit"}</button> : null}{onPreviewDraft ? <button type="button" disabled={locked || previewing} onClick={() => void previewDraft()}>{previewing ? "Preparing preview…" : "Preview"}</button> : onPreview ? <button type="submit" disabled={locked} onClick={() => chooseIntent("preview")}>{action.busy && intent === "preview" ? "Preparing preview…" : "Preview"}</button> : null}<button type="submit" className={onReview ? undefined : "mbtd-primary"} disabled={locked} onClick={() => chooseIntent("save")}>{action.busy && intent === "save" ? "Saving…" : mode === "edit" ? "Save draft changes" : "Save draft"}</button><p role="status">{action.message}</p>{previewError ? <p role="alert">{previewError}</p> : null}</div>
     </form>
   </TreatmentDraftShell>;
   return <TreatmentDraftShell {...appearance} hideHeading={embedded} title="Request for authorization" description="Prepare services and supporting rationale for utilization review.">

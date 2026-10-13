@@ -46,20 +46,30 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
   });
   // A code that arrives without its description (prefilled from the injury, or picked from the injury's saved
   // codes) gets the description looked up once, so nobody retypes a diagnosis the directory knows.
-  const resolved = useRef(new Set<string>()); const [resolving, setResolving] = useState("");
-  const pending = officialForm && search ? codes.find((item, index) => !descriptions[index] && !resolved.current.has(item)) ?? "" : "";
+  // Every missing description is looked up at once. Each lookup runs to completion on its own: an earlier
+  // version cancelled a lookup as soon as the next one started, so none of the answers were ever used.
+  const resolved = useRef(new Set<string>()); const started = useRef(new Set<string>()); const [, lookedUp] = useState(0);
+  // A code that was removed is looked up afresh if it comes back.
+  for (const known of [...started.current]) if (!codes.includes(known)) { started.current.delete(known); resolved.current.delete(known); }
+  const missing = officialForm && search ? codes.filter((item, index) => !descriptions[index] && !started.current.has(item)) : [];
   const latest = useRef({ codes, descriptions, emit }); latest.current = { codes, descriptions, emit };
+  const mounted = useRef(true); useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const missingKey = missing.join("|");
   useEffect(() => {
-    if (!pending || !search) return;
-    resolved.current.add(pending); let active = true; setResolving(pending);
+    if (!missing.length || !search) return;
     const same = (left: string, right: string) => left.replace(".", "").toUpperCase() === right.replace(".", "").toUpperCase();
-    void search(pending).then(items => {
-      const match = items.find(item => same(item.code, pending)); if (!active || !match) return;
-      const now = latest.current, at = now.codes.indexOf(pending); if (at < 0) return;
-      now.emit(now.codes.map((item, index) => index === at ? match.code : item), now.descriptions.map((text, index) => index === at ? match.description : text));
-    }).catch(() => undefined).finally(() => { if (active) setResolving(""); });
-    return () => { active = false; };
-  }, [pending, search]);
+    for (const wanted of missing) {
+      started.current.add(wanted);
+      void search(wanted).then(items => {
+        const match = items.find(item => same(item.code, wanted)); if (!mounted.current || !match) return;
+        const now = latest.current, at = now.codes.indexOf(wanted); if (at < 0 || now.descriptions[at]) return;
+        // Answers can arrive together: keep the descriptions already applied by an earlier answer in this tick.
+        const descriptions = now.descriptions.map((text, index) => index === at ? match.description : text);
+        latest.current = { ...now, descriptions };
+        now.emit(now.codes, descriptions);
+      }).catch(() => undefined).finally(() => { resolved.current.add(wanted); if (mounted.current) lookedUp(count => count + 1); });
+    }
+  }, [missingKey, search]);
   // One ICD-10 lookup fills both printed columns (Diagnosis and ICD-Code). A code the lookup
   // does not know can still be entered, and then its diagnosis is typed beside it.
   if (officialForm && search) {
@@ -73,14 +83,14 @@ export function RfaDiagnosisFields({ code, description, onChange, search, offici
     const add = (value: string) => {
       const item = results.find(item => item.code === value);
       if (item) emit([...codes, item.code], [...descriptions, item.description]);
-      else if (value.startsWith("entered:")) { resolved.current.add(value.slice(8)); emit([...codes, value.slice(8)], [...descriptions, ""]); }
+      else if (value.startsWith("entered:")) { started.current.add(value.slice(8)); resolved.current.add(value.slice(8)); emit([...codes, value.slice(8)], [...descriptions, ""]); }
       else if (value.startsWith("saved:")) emit([...codes, value.slice(6)], [...descriptions, ""]);
       setQuery("");
     };
     return <div className="mbrfa-s6"><RfaPicker required label="ICD-10 Code">
       {codes.length ? <ul className="mbrfa-dx-list" aria-label="Selected ICD-10 codes">{codes.map((item, index) => <li key={item}>
         <strong>{item}</strong>
-        {descriptions[index] || resolving === item || !resolved.current.has(item) ? <span>{descriptions[index] || "Looking up…"}</span>
+        {descriptions[index] || !resolved.current.has(item) ? <span>{descriptions[index] || "Looking up…"}</span>
           : <input required aria-label={`Diagnosis for ${item}`} maxLength={400} placeholder="Type the diagnosis for this code" defaultValue="" onBlur={event => { if (event.target.value.trim()) emit(codes, descriptions.map((text, position) => position === index ? event.target.value : text)); }} />}
         <button type="button" aria-label={`Remove ${item}`} onClick={() => emit(codes.filter((_, position) => position !== index), descriptions.filter((_, position) => position !== index))}>×</button>
       </li>)}</ul> : null}

@@ -37,7 +37,7 @@ type Props = TreatmentDraftAppearance & {
   searchableSelectors?: boolean;
   renderClaimSelector?: (props: RfaClaimSelectorProps) => ReactNode;
   renderProviderSelector?: (props: RfaProviderSelectorProps) => ReactNode;
-  draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "onEditPractice" | "onAddPractice" | "onEditLocation" | "treatmentTemplates" | "onSaveTreatmentTemplate" | "onManageTreatmentTemplates" | "manageLocationsHref" | "onRefreshProfile" | "profilePending" | "onReview" | "onPreview">;
+  draftFormProps?: Pick<RfaDraftFormProps, "searchDiagnosisCodes" | "organizationProfile" | "searchClaimsAdministrators" | "getClaimsAdministratorDirectory" | "officialForm" | "managePracticeHref" | "onEditPractice" | "onAddPractice" | "onEditLocation" | "treatmentTemplates" | "onSaveTreatmentTemplate" | "onManageTreatmentTemplates" | "manageLocationsHref" | "onRefreshProfile" | "profilePending" | "onReview" | "onPreview" | "onPreviewDraft">;
   claimId?: string;
   renderingProviderId?: string;
   previewAvailable?: boolean;
