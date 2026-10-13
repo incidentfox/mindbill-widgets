@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaDashboard } from "../packages/react/src/rfa-dashboard";
+import { rfaDuplicatePacket } from "../packages/react/src/rfa-duplicate-dialog";
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
 function taskResponse(input: RequestInfo | URL): Response | undefined {
  const url = String(input);
@@ -168,6 +169,23 @@ it("names what is being sent and offers the host's signature setup when the phys
   expect(container.querySelector('[role="dialog"] .mbrfa-send-signature')?.textContent).toContain("Synthetic physician has no saved signature yet");
   expect(button("Add signature for Synthetic physician")).toBeDefined();expect(button("Send fax").disabled).toBe(true);
   expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+
+it("offers a duplicate send only after a request was sent, re-sending the packet that actually went out",async()=>{
+ const packets=[{id:"p_download",source:"download" as const,sha256:"a",sizeBytes:1,contentRevision:1,createdAt:"2026-09-03T00:00:00Z"},{id:"p_failed",source:"submission" as const,sha256:"b",sizeBytes:1,contentRevision:1,createdAt:"2026-09-04T00:00:00Z"},{id:"p_sent",source:"submission" as const,sha256:"c",sizeBytes:1,contentRevision:1,createdAt:"2026-09-02T00:00:00Z"}];
+ const sent=(packetId:string,status:string)=>({id:`t_${packetId}`,packetId,purpose:"submission" as const,channel:"fax",status,destination:"+18005550100",occurredAt:"2026-09-02T00:00:00Z",receivedAt:null});
+ expect(rfaDuplicatePacket({packets,transmissions:[sent("p_failed","failed"),sent("p_sent","delivered")]})?.id).toBe("p_sent");
+ expect(rfaDuplicatePacket({packets:packets.slice(0,2),transmissions:[sent("p_failed","failed")]})?.id).toBe("p_download");
+ expect(rfaDuplicatePacket({packets:[packets[1]!],transmissions:[sent("p_failed","failed")]})).toBeNull();
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const has=(text:string)=>[...container.querySelectorAll("button")].some(x=>x.textContent===text);
+ try{
+  for(const [current,expected] of [[{...record,status:"received",submittedAt:"2026-09-02T00:00:00Z"},true],[record,false]] as const){
+   const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:current}));
+   await act(async()=>root.render(createElement(RfaDashboard,{key:String(expected),getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:current.id,permissions:["send","act"]})));
+   expect(has("Send duplicate")).toBe(expected);
+  }
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 
