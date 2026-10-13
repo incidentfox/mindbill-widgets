@@ -14,6 +14,9 @@ export type RfaLifecycleControlsProps = OrganizationClientOptions & TreatmentDra
   onUpdated?: (rfa: RfaRecord) => void;
   /** Render as rows inside a host card, without the panel heading or summary notes. */
   rows?: boolean;
+  /** Host-provided reading of a response document (for example OCR plus a model). When given, choosing a response
+   * prefills its treatment decisions for a person to check. Failures leave the form empty; nothing is saved automatically. */
+  readResponse?: (rfaId: string, documentId: string) => Promise<RfaResponseReading>;
 };
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
 const timestamp = (form: FormData, name: string) => {
@@ -24,12 +27,22 @@ const timestamp = (form: FormData, name: string) => {
 const label = (value: string) => value.replaceAll("_", " ");
 const displayDate = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
 
+/** What was read from a utilization review response, for a person to check. Nothing here is saved until they confirm. */
+export type RfaResponseReading = {
+  status: "read" | "unreadable";
+  decidedAt?: string;
+  items: Array<{ itemId: string; outcome: "approved" | "modified" | "denied" | "not_addressed"; confident: boolean;
+    authorizationNumber?: string; authorizedProcedureCode?: string; authorizedQuantity?: number; authorizedUnits?: number;
+    effectiveFrom?: string; effectiveTo?: string; decisionReason?: string; reviewerName?: string; reviewerPhone?: string }>;
+};
+const localDateTime = (value?: string): string => { const date = value ? new Date(value) : null; if (!date || !Number.isFinite(date.getTime())) return ""; return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
+
 export function RfaLifecycleControls({ sessionEndpoint, getSession, apiBaseUrl, fetch: fetchOverride, ...props }: RfaLifecycleControlsProps): ReactElement {
   const options = useMemo<OrganizationClientOptions>(() => ({ ...(sessionEndpoint ? { sessionEndpoint } : {}), ...(getSession ? { getSession } : {}), ...(apiBaseUrl ? { apiBaseUrl } : {}), ...(fetchOverride ? { fetch: fetchOverride } : {}) }), [sessionEndpoint, getSession, apiBaseUrl, fetchOverride]);
   const identity = useMemo(() => crypto.randomUUID(), [options]);
   return <LifecycleContent key={`${identity}:${props.rfa.id}`} {...props} options={options} />;
 }
-function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdated, selectedResponseDocumentId, rows = false, ...appearance }: Omit<RfaLifecycleControlsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
+function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdated, selectedResponseDocumentId, rows = false, readResponse, ...appearance }: Omit<RfaLifecycleControlsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
   const [rfa, setRfa] = useState(providedRfa);
   useEffect(() => { setRfa(providedRfa); }, [providedRfa]);
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
@@ -39,6 +52,9 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
   const [responseDocument, setResponseDocument] = useState(selectedResponseDocumentId ?? "");
   const [responsePdf, setResponsePdf] = useState<Blob | null>(null);
   const [previewError, setPreviewError] = useState(""); const [previewReload, setPreviewReload] = useState(0);
+  // Decisions read from the chosen response. They prefill the form; a person still checks and saves them.
+  const [reading, setReading] = useState<{ documentId: string; value: RfaResponseReading } | null>(null);
+  const [readingBusy, setReadingBusy] = useState(false); const [readingChecked, setReadingChecked] = useState(false);
   useEffect(() => {
     let active = true; setResponsePdf(null); setPreviewError("");
     if (responseDocument && rfa.documents.some(document => document.id === responseDocument && document.documentType === "ur_response")) {
@@ -47,6 +63,20 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
     return () => { active = false; };
   }, [records, rfa.id, responseDocument, rfa.documents, previewReload]);
   const [outcomes, setOutcomes] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true; setReading(null); setReadingChecked(false);
+    if (!readResponse || !responseDocument || !rfa.documents.some(document => document.id === responseDocument && document.documentType === "ur_response")) return;
+    setReadingBusy(true);
+    readResponse(rfa.id, responseDocument).then(value => {
+      if (!active) return;
+      setReading({ documentId: responseDocument, value });
+      if (value.status === "read") setOutcomes(Object.fromEntries(value.items.filter(item => item.outcome !== "not_addressed").map(item => [item.itemId, item.outcome])));
+    }).catch(() => { if (active) setReading({ documentId: responseDocument, value: { status: "unreadable", items: [] } }); }).finally(() => { if (active) setReadingBusy(false); });
+    return () => { active = false; };
+    // Read once per chosen document; the request's other fields changing must not overwrite what the person typed.
+  }, [readResponse, rfa.id, responseDocument]);
+  const read = reading?.documentId === responseDocument && reading.value.status === "read" ? reading.value : null;
+  const readItem = (itemId: string) => read?.items.find(item => item.itemId === itemId);
   const alive = useRef(true); const pending = useRef(false); const keys = useRef(new Map<string, string>());
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -114,10 +144,14 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
           return decision;
         });
         if (!decisions.length) throw new Error("Choose at least one treatment decision. Other treatments remain pending.");
+        if (read && !readingChecked) throw new Error("Confirm that you checked these decisions against the response.");
         if (decisions.some(item => item.outcome !== "approved") && !text(data, "imrDocumentId")) throw new Error("An independent medical review form is required for modified or denied treatment.");
         return { decidedAt: timestamp(data, "decidedAt"), responseDocumentId: text(data, "responseDocumentId"), ...(text(data, "imrDocumentId") ? { imrDocumentId: text(data, "imrDocumentId") } : {}), decisions };
-      }, (input, key) => client.recordDecisions(rfa.id, input, key))}><fieldset disabled={disabled}><legend>Treatment decisions</legend><p>Record only treatments addressed by this response. Unselected treatments remain pending.</p><div className="mbtd-grid"><label>Decision time<input type="datetime-local" name="decidedAt" required /></label><label>Utilization review response<select name="responseDocumentId" required value={responseDocument} onChange={event => setResponseDocument(event.target.value)}><option value="">Choose a document</option>{docs(["ur_response"]).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>{documentSelect("imrDocumentId", "Independent medical review form", ["imr_form"], false)}</div>
-        {pendingItems.map(item => <fieldset key={item.id}><legend>{item.procedureCode || "Treatment"}: {item.serviceDescription}</legend><label>Decision for {item.procedureCode || item.serviceDescription}<select value={outcomes[item.id] ?? ""} onChange={event => setOutcomes(value => ({ ...value, [item.id]: event.target.value }))}><option value="">Leave pending</option><option value="approved">Approved</option><option value="modified">Modified</option><option value="denied">Denied</option></select></label>{outcomes[item.id] ? <div className="mbtd-grid">{outcomes[item.id] !== "denied" ? <><label>Authorization number<input name={`${item.id}:authorizationNumber`} required /></label><label>Authorized procedure code<input name={`${item.id}:authorizedProcedureCode`} /></label><label>Authorized quantity<input name={`${item.id}:authorizedQuantity`} type="number" min="0.001" max="100000" step="any" /></label><label>Authorized units<input name={`${item.id}:authorizedUnits`} type="number" min="1" max="100000" /></label><label>Effective from<input name={`${item.id}:effectiveFrom`} type="date" /></label><label>Effective through<input name={`${item.id}:effectiveTo`} type="date" /></label></> : null}{outcomes[item.id] !== "approved" ? <><label>Decision reason<textarea name={`${item.id}:decisionReason`} required /></label><label>Reviewer name<input name={`${item.id}:reviewerName`} required /></label><label>Reviewer phone<input name={`${item.id}:reviewerPhone`} required /></label></> : null}</div> : null}</fieldset>)}<button type="submit">Save treatment decisions</button></fieldset></form></details> : null}
+      }, (input, key) => client.recordDecisions(rfa.id, input, key))}><fieldset disabled={disabled}><legend>Treatment decisions</legend><p>Record only treatments addressed by this response. Unselected treatments remain pending.</p>
+        {readingBusy ? <p role="status">Reading the response…</p> : read ? <p className="mbrfa-reading" role="status">These decisions were read from the response. Check each one against the document before saving{read.items.some(item => !item.confident || item.outcome === "not_addressed") ? "; the ones marked in orange need a closer look" : ""}.</p>
+          : reading?.documentId === responseDocument ? <p className="mbrfa-reading" data-flag="true" role="status">This response could not be read automatically. Enter the decisions from the document.</p> : null}
+        <div className="mbtd-grid"><label>Decision time<input key={`decidedAt:${read ? reading!.documentId : ""}`} type="datetime-local" name="decidedAt" required defaultValue={localDateTime(read?.decidedAt)} /></label><label>Utilization review response<select name="responseDocumentId" required value={responseDocument} onChange={event => setResponseDocument(event.target.value)}><option value="">Choose a document</option>{docs(["ur_response"]).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>{documentSelect("imrDocumentId", "Independent medical review form", ["imr_form"], false)}</div>
+        {pendingItems.map(item => { const found = readItem(item.id); const flag = read ? !found || found.outcome === "not_addressed" ? "No decision for this treatment was found in the response. It stays pending unless you choose one." : !found.confident ? "This one was hard to read. Check it carefully." : "" : ""; const k = `${item.id}:${read ? reading!.documentId : ""}`; return <fieldset key={k} {...(flag ? { "data-flag": "true" } : {})}><legend>{item.procedureCode || "Treatment"}: {item.serviceDescription}</legend>{flag ? <p className="mbrfa-reading" data-flag="true">{flag}</p> : null}<label>Decision for {item.procedureCode || item.serviceDescription}<select value={outcomes[item.id] ?? ""} onChange={event => setOutcomes(value => ({ ...value, [item.id]: event.target.value }))}><option value="">Leave pending</option><option value="approved">Approved</option><option value="modified">Modified</option><option value="denied">Denied</option></select></label>{outcomes[item.id] ? <div className="mbtd-grid">{outcomes[item.id] !== "denied" ? <><label>Authorization number<input name={`${item.id}:authorizationNumber`} defaultValue={found?.authorizationNumber ?? ""} required /></label><label>Authorized procedure code<input name={`${item.id}:authorizedProcedureCode`} defaultValue={found?.authorizedProcedureCode ?? ""} /></label><label>Authorized quantity<input name={`${item.id}:authorizedQuantity`} defaultValue={found?.authorizedQuantity ?? ""} type="number" min="0.001" max="100000" step="any" /></label><label>Authorized units<input name={`${item.id}:authorizedUnits`} defaultValue={found?.authorizedUnits ?? ""} type="number" min="1" max="100000" /></label><label>Effective from<input name={`${item.id}:effectiveFrom`} defaultValue={found?.effectiveFrom ?? ""} type="date" /></label><label>Effective through<input name={`${item.id}:effectiveTo`} defaultValue={found?.effectiveTo ?? ""} type="date" /></label></> : null}{outcomes[item.id] !== "approved" ? <><label>Decision reason<textarea name={`${item.id}:decisionReason`} required defaultValue={found?.decisionReason ?? ""} /></label><label>Reviewer name<input name={`${item.id}:reviewerName`} defaultValue={found?.reviewerName ?? ""} required /></label><label>Reviewer phone<input name={`${item.id}:reviewerPhone`} defaultValue={found?.reviewerPhone ?? ""} required /></label></> : null}</div> : null}</fieldset>; })}{read ? <label className="mbrfa-check"><input type="checkbox" checked={readingChecked} onChange={event => setReadingChecked(event.target.checked)} />I checked each decision above against the response document.</label> : null}<button type="submit">Save treatment decisions</button></fieldset></form></details> : null}
       <details><summary>Information requests ({rfa.informationRequests.filter(request => !request.respondedAt).length} outstanding)</summary><div style={{ display: "grid", gap: 12 }}>
         {rfa.informationRequests.map(request => <fieldset key={request.id}><legend>Requested {displayDate(request.requestedAt)}</legend><p>{request.requestText}</p>{request.dueAt ? <p>Due {displayDate(request.dueAt)}</p> : null}{request.respondedAt ? <p>Response recorded {displayDate(request.respondedAt)}</p> : act ? <form onSubmit={event => submit(event, `response:${request.id}`, data => ({ respondedAt: timestamp(data, "respondedAt"), responseDocumentIds: data.getAll("responseDocumentIds").map(String) }), (input, key) => client.recordInformationResponse(rfa.id, request.id, input, key))}><fieldset disabled={disabled}><legend>Record an already-delivered response</legend><p>This records evidence only. It does not send these documents to the administrator.</p><label>Response sent at<input type="datetime-local" name="respondedAt" required /></label><label>Response documents<select name="responseDocumentIds" multiple required>{docs().map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label><label><input type="checkbox" required /> I confirm these documents were already delivered to the administrator.</label><button type="submit">Record delivered response</button></fieldset></form> : null}</fieldset>)}
         {act && decisionAllowed ? <form onSubmit={event => submit(event, "information-request", data => ({ requestedAt: timestamp(data, "requestedAt"), requestText: text(data, "requestText"), ...(text(data, "dueAt") ? { dueAt: timestamp(data, "dueAt") } : {}) }), (input, key) => client.recordInformationRequest(rfa.id, input, key))}><fieldset disabled={disabled}><legend>Record a request for information</legend><div className="mbtd-grid"><label>Requested at<input type="datetime-local" name="requestedAt" required /></label><label>Response due (optional)<input type="datetime-local" name="dueAt" /></label><label className="mbtd-wide">Requested information<textarea name="requestText" required /></label></div><button type="submit">Save information request</button></fieldset></form> : null}
