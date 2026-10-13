@@ -41,22 +41,30 @@ const taskViewDescriptions: Record<string, string> = {
   Scheduled: "Open tasks with a future follow-up date. This does not mean a treatment appointment is scheduled.",
   Completed: "Tasks that have been resolved. Completing a task does not necessarily close its RFA.",
 };
-const names: Record<string, string> = { send_rfa: "Send RFA", no_response: "Decision overdue", transmission_failed: "Submission failed", information_requested: "Respond to information request", clock_review: "Deadline needs review", schedule_treatment: "Schedule treatment", post_ur_decision: "Post UR", document_required: "Add supporting documents" };
+const names: Record<string, string> = { send_rfa: "Send RFA", no_response: "Decision overdue", transmission_failed: "Submission failed", information_requested: "Respond to information request", clock_review: "Deadline needs review", schedule_treatment: "Schedule treatment", post_ur_decision: "Post UR", post_ur_approved: "Approved — confirm and bill", post_ur_denied: "Denied or modified — review", document_required: "Add supporting documents" };
 const descriptions: Record<string, string> = {
   transmission_failed: "Delivery failed. Correct the issue before sending again.",
   no_response: "The decision deadline passed without a recorded decision.",
   clock_review: "The deadline cannot yet be calculated confidently. Review receipt and timing details.",
-  post_ur_decision: "Record the treatment decisions in a received utilization review response.",
+  post_ur_decision: "A response arrived and its decisions are not recorded yet. Check what was read from it and save.",
+  post_ur_approved: "Every treatment in this response was approved. Confirm the review, then bill the authorized care.",
+  post_ur_denied: "This response denied or modified treatment. Confirm the review and decide on an appeal or independent medical review.",
   information_requested: "Provide the additional information requested by the reviewer.",
   schedule_treatment: "Arrange treatment after approval.",
 };
+/** A response-review task is listed by what its response decided, once those decisions are recorded. */
+export function rfaTaskByResponseOutcome(task: RfaFollowUp): RfaFollowUp {
+  const outcome = (task as RfaFollowUp & { responseOutcome?: string | null }).responseOutcome;
+  if (task.kind !== "post_ur_decision" || !outcome) return task;
+  return { ...task, kind: outcome === "approved" ? "post_ur_approved" : "post_ur_denied" };
+}
 export const rfaTaskLabel = (kind: string): string => names[kind] ?? kind.replaceAll("_", " ");
 const taskAgeColumns: { key: RfaTaskAge; label: string }[] = [{ key: "0-5", label: "0–5 days" }, { key: "6-14", label: "6–14 days" }, { key: "15-30", label: "15–30 days" }, { key: "31+", label: "31+ days" }];
 const taskGroups = [
   { title: "Incomplete RFAs", kinds: ["document_required", "send_rfa"] },
   { title: "Delivery issues", kinds: ["transmission_failed"] },
   { title: "Decision deadlines", kinds: ["no_response", "clock_review"] },
-  { title: "Responses to process", kinds: ["post_ur_decision", "information_requested"] },
+  { title: "Responses to process", kinds: ["post_ur_decision", "post_ur_approved", "post_ur_denied", "information_requested"] },
   { title: "Treatment scheduling", kinds: ["schedule_treatment"] },
 ];
 /** Calendar dates in the viewer's timezone, rather than elapsed 24-hour periods. */
@@ -98,7 +106,7 @@ function TaskBoardContent({ options, patientId, claimId, renderingProviderId, pe
         const found: RfaFollowUp[] = []; const seen = new Set<string>(); let cursor: string | undefined;
         do {
           const result = await client.listFollowUps({ ...(patientId ? { patientId } : {}), ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), includeResolved: true, limit: 200, ...(cursor ? { cursor } : {}) });
-          found.push(...result.data); cursor = result.nextCursor ?? undefined;
+          found.push(...result.data.map(rfaTaskByResponseOutcome)); cursor = result.nextCursor ?? undefined;
           if (cursor && seen.has(cursor)) throw new Error("Task pagination could not be completed. Retrying automatically.");
           if (cursor) seen.add(cursor);
         } while (cursor && active);

@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { RfaTaskBoard, rfaTaskState, rfaTaskAgeBucket } from "../packages/react/src/rfa-task-board";
+import { RfaTaskBoard, rfaTaskState, rfaTaskAgeBucket, rfaTaskByResponseOutcome, rfaTaskLabel } from "../packages/react/src/rfa-task-board";
 vi.mock("../packages/react/src/rfa-delivery-panel", () => ({ RfaPdfReview: ({ title }: { title: string }) => createElement("div", {}, title) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const getSession = async () => ({ token: "synthetic_token" });
@@ -206,4 +206,13 @@ it("keeps task actions available without showing mismatched scoped request ident
     expect(h.container.textContent).toContain("Request rfa_synthetic · Claim claim_synthetic");
     expect(h.button("Open request")).toBeDefined();
   } finally { await h.close(); }
+});
+
+it("lists a response-review task by what the response decided once decisions are recorded", () => {
+  const task = { id: "t", rfaId: "r", claimId: "c", responseDocumentId: "d", responseFilename: null, kind: "post_ur_decision", status: "open", dueAt: "2026-09-01T00:00:00Z", assigneeReference: null, snoozedUntil: null, lastOutcome: null, lastNote: null, createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z", resolvedAt: null };
+  expect(rfaTaskByResponseOutcome(task).kind).toBe("post_ur_decision");
+  expect(rfaTaskByResponseOutcome({ ...task, responseOutcome: "approved" } as typeof task).kind).toBe("post_ur_approved");
+  expect(rfaTaskByResponseOutcome({ ...task, responseOutcome: "denied_or_modified" } as typeof task).kind).toBe("post_ur_denied");
+  expect(rfaTaskByResponseOutcome({ ...task, kind: "no_response", responseOutcome: "approved" } as typeof task).kind).toBe("no_response");
+  expect(rfaTaskLabel("post_ur_approved")).toBe("Approved — confirm and bill");
 });
