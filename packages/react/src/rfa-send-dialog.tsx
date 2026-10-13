@@ -81,7 +81,9 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
       const reason = caught instanceof Error ? caught.message : "";
       if (!alive.current) return;
       if (/saved.signature/i.test(reason)) setSignatureRefused(true);
-      else setError(reason || "The request could not be sent. Nothing was sent; try again.");
+      else setError(/email_rejected/i.test(reason) ? "The mail service refused that e-mail address. Check it, or send another way. Nothing was sent."
+        : /return_fax/i.test(reason) ? "Faxing needs your organization’s return fax line, which is not set up yet. Send by e-mail, or ask MindBill to set up the fax line."
+        : reason || "The request could not be sent. Nothing was sent; try again.");
     } finally { if (alive.current) setBusy(""); }
   };
   // Say where it goes once, the way a person reads it. A "name" that is only the number again is left out.
