@@ -44,13 +44,15 @@ it("practice selection prefers its unique location and excludes another practice
 });
 it("fills the contact saved on the practice, and a location's own contact replaces it field by field", async()=>{
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const onSave=vi.fn().mockResolvedValue(undefined);
- const profile={organizationId:"org_synthetic",practiceIdentity:{},billingProviders:[{id:"practice_a",name:"Synthetic Practice A",npi:"1234567890",phone:"(202) 555-0101",contact:{name:"Practice Contact",fax:"(202) 555-0111",email:"practice@example.test"}}],locations:[{id:"location_a",billingProviderId:"practice_a",name:"Synthetic Clinic A",street:"Clinic address",city:"Test City",state:"CA",zip:"90001"},{id:"location_b",billingProviderId:"practice_a",name:"Synthetic Clinic B",street:"Other address",city:"Test City",state:"CA",zip:"90002",contact:{fax:"(202) 555-0122"}}],w9:null,onboarding:{status:null,complete:false,checklist:[]}};
+ const profile={organizationId:"org_synthetic",practiceIdentity:{},billingProviders:[{id:"practice_a",name:"Synthetic Practice A",npi:"1234567890",phone:"(202) 555-0101",contact:{name:"Practice Contact",fax:"(202) 555-0111",email:"practice@example.test"}}],locations:[{id:"location_a",billingProviderId:"practice_a",isPrimary:true,name:"Synthetic Clinic A",street:"Clinic address",city:"Test City",state:"CA",zip:"90001"},{id:"location_b",billingProviderId:"practice_a",name:"Synthetic Clinic B",street:"Other address",city:"Test City",state:"CA",zip:"90002",contact:{fax:"(202) 555-0122"}}],w9:null,onboarding:{status:null,complete:false,checklist:[]}};
  try{
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,organizationProfile:profile})));
   const physician=[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent==="Requesting Physician Information")!;
   const shown=(label:string)=>[...physician.querySelectorAll(".mbrfa-saved")].find(el=>el.firstChild!.textContent===label)!.querySelector("strong")!.textContent;
   const choose=async(text:string)=>{await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());await act(async()=>[...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')].find(el=>el.textContent!.includes(text))!.click());};
-  // The only practice is chosen automatically, and its contact shows before any location is picked.
+  // The only practice is chosen automatically. With two locations (one of them primary) none is chosen for the user.
+  expect(container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.textContent).toContain("Choose a location");
+  // The practice's contact shows before any location is picked.
   expect([shown("Contact Name"),shown("Phone"),shown("Fax Number *"),shown("E-mail Address")]).toEqual(["Practice Contact","(202) 555-0101","(202) 555-0111","practice@example.test"]);
   await choose("Synthetic Clinic B");
   expect([shown("Address"),shown("Contact Name"),shown("Fax Number *"),shown("E-mail Address")]).toEqual(["Other address","Practice Contact","(202) 555-0122","practice@example.test"]);
