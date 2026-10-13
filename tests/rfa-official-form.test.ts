@@ -134,13 +134,18 @@ it("fills requested treatments from a template and saves the current ones withou
 it("looks up the description of every prefilled ICD-10 code, in any arrival order", async()=>{
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const onSave=vi.fn().mockResolvedValue(undefined);
  const known:Record<string,string>={"M25.512":"Pain in left shoulder","M54.50":"Low back pain, unspecified","M25.511":"Pain in right shoulder","M25.561":"Pain in right knee"};
- // Later codes answer first; the last code is unknown to the directory.
- const searchDiagnosisCodes=vi.fn((query:string)=>new Promise<{code:string;description:string}[]>(resolve=>setTimeout(()=>resolve(known[query]?[{code:query,description:known[query]!}]:[]),query==="M25.512"?40:query==="Z99.99"?30:5)));
+ // The test releases each answer itself, so the order never depends on timing.
+ const waiting=new Map<string,()=>void>();
+ const searchDiagnosisCodes=vi.fn((query:string)=>new Promise<{code:string;description:string}[]>(resolve=>{waiting.set(query,()=>resolve(known[query]?[{code:query,description:known[query]!}]:[]));}));
+ const answer=async(...codes:string[])=>{await act(async()=>{for(const code of codes)waiting.get(code)!();await Promise.resolve();});};
  try{
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft:{...initialDraft,items:[{diagnosisCode:"M25.512, M54.50, M25.511, M25.561, Z99.99",serviceDescription:""}]},officialForm:true,onSave,searchDiagnosisCodes})));
   const rows=()=>[...container.querySelectorAll(".mbrfa-dx-list li")].map(el=>[el.querySelector("strong")!.textContent,el.querySelector("span")?.textContent??(el.querySelector("input")?"input":"")]);
   expect(rows().map(row=>row[1])).toEqual(Array(5).fill("Looking up…"));
-  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,80));});
+  // Later codes answer first, two of them together; the last code is unknown to the directory.
+  await answer("M25.561");
+  expect(rows().map(row=>row[1])).toEqual(["Looking up…","Looking up…","Looking up…","Pain in right knee","Looking up…"]);
+  await answer("M25.511","M54.50");await answer("Z99.99");await answer("M25.512");
   expect(rows()).toEqual([["M25.512","Pain in left shoulder"],["M54.50","Low back pain, unspecified"],["M25.511","Pain in right shoulder"],["M25.561","Pain in right knee"],["Z99.99","input"]]);
   expect(searchDiagnosisCodes).toHaveBeenCalledTimes(5);
  }finally{await act(async()=>root.unmount());container.remove();}
