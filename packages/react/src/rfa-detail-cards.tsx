@@ -16,6 +16,24 @@ export function rfaOutcome(item: RfaRecord["items"][number]): { label: string; t
   if (item.outcome === "denied") return { label: "Denied", tone: "bad" };
   return { label: sentence(item.outcome || "pending"), tone: "muted" };
 }
+/** What the reviewer decided, across the whole request, in a word. Null until at least one treatment is decided.
+ * "Partially decided" means the response left treatments without a decision; those are still being waited on. */
+export function rfaDecisionSummary(rfa: Pick<RfaRecord, "items">): { label: string; tone: "ok" | "warn" | "bad" } | null {
+  const items = rfa.items.filter(item => !item.decisionClosure?.closed);
+  const decided = items.filter(item => item.outcome !== "pending");
+  if (!decided.length) return null;
+  if (decided.length < items.length) return { label: "Partially decided", tone: "warn" };
+  if (decided.every(item => item.outcome === "approved")) return { label: "Approved", tone: "ok" };
+  if (decided.every(item => item.outcome === "denied")) return { label: "Denied", tone: "bad" };
+  if (decided.every(item => item.outcome === "modified")) return { label: "Modified", tone: "warn" };
+  return { label: "Partially approved", tone: "warn" };
+}
+const FAX_FAILURES: Record<string, string> = { busy: "The line was busy", no_answer: "No answer", not_a_fax_machine: "The number did not answer as a fax machine", invalid_number: "The number is not in service", rejected: "The call was rejected", carrier_error: "The fax carrier could not complete the call" };
+/** Why a send failed, in plain words, when the carrier gave a reason. */
+export function rfaFailureReason(transmission: RfaRecord["transmissions"][number]): string {
+  const reason = (transmission as { metadata?: { failureReason?: unknown } }).metadata?.failureReason;
+  return transmission.status === "failed" && typeof reason === "string" ? FAX_FAILURES[reason] ?? "" : "";
+}
 export function RfaPill({ tone = "muted", children }: { tone?: "ok" | "warn" | "bad" | "muted" | "accent" | "mono"; children: ReactNode }): ReactElement {
   return <span className="mbrfa-pill" data-tone={tone}>{children}</span>;
 }
@@ -36,9 +54,10 @@ export function RfaStatusCard({ rfa }: { rfa: RfaRecord }): ReactElement {
   const stages = ["Draft", "Sent", "Received", "Decided"];
   const current = rfa.submittedAt && decided ? 3 : rfa.receivedAt ? 2 : rfa.submittedAt ? 1 : 0;
   const stopped = status === "canceled" || status === "failed";
-  const detail = status === "canceled" ? "This request was canceled" : status === "failed" ? "Delivery needs attention" : rfa.submittedAt ? `Sent ${rfaShortDate(rfa.submittedAt)}` : "Not sent yet";
+  const failure = status === "failed" ? rfa.transmissions.map(rfaFailureReason).filter(Boolean).at(-1) : "";
+  const detail = status === "canceled" ? "This request was canceled" : status === "failed" ? `Delivery needs attention${failure ? `: ${failure.charAt(0).toLowerCase()}${failure.slice(1)}` : ""}` : rfa.submittedAt ? `Sent ${rfaShortDate(rfa.submittedAt)}` : "Not sent yet";
   return <section className="mbrfa-status" aria-label="Request status" data-stopped={stopped || undefined}>
-    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : RFA_LIFECYCLE_LABELS[status]}</h3><p>{detail}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
+    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : !stopped && rfaDecisionSummary(rfa) ? rfaDecisionSummary(rfa)!.label : RFA_LIFECYCLE_LABELS[status]}</h3><p>{detail}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
     <ol aria-label="Authorization progress">{stages.map((stage, index) => <li key={stage} data-state={index < current ? "done" : index === current ? "current" : "todo"} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span><strong>{stage}</strong></li>)}</ol>
   </section>;
 }

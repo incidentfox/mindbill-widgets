@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "
 import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOption, RfaClient, RfaRecord } from "@mindbill/browser";
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { formatRfaPhone } from "./rfa-official-fields";
+import { rfaFailureReason } from "./rfa-detail-cards";
 
 export const rfaSendDialogCss = `.mbrfa-send-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:16px;background:rgba(17,28,38,.44)}
 .mbrfa-send{display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:min(560px,100%);max-height:min(88vh,760px);border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);color:var(--mb-text);box-shadow:0 18px 48px #0003}
@@ -45,6 +46,7 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
   const supporting = rfa.documents.filter(document => ["clinical_report", "supporting_record"].includes(document.documentType) && documentIds.includes(document.id));
   const missingDiagnosis = rfa.items.find(item => !(diagnosisDescriptions[item.id] ?? item.diagnosisDescription ?? "").trim());
   const live = environment === "live";
+  const lastFailure = rfa.transmissions.map(rfaFailureReason).filter(Boolean).at(-1) ?? "";
   // Known from the host, or learned when the server refused to sign. A host that reports the signature as saved clears it.
   const needsSignature = !rfa.signedAt && (signatureMissing ?? signatureRefused);
   useEffect(() => { if (signatureMissing === false) setSignatureRefused(false); }, [signatureMissing]);
@@ -95,7 +97,7 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
           <div><h4>Requested treatment{rfa.items.length === 1 ? "" : "s"}</h4><ul>{rfa.items.map(item => { const detail = treatmentDetail(item); return <li key={item.id}>{item.serviceDescription}{detail ? <span> · {detail}</span> : null}</li>; })}</ul></div>
           <div><h4>Supporting documents</h4>{supporting.length ? <ul>{supporting.map(document => <li key={document.id}>{document.filename}</li>)}</ul> : <p>None attached yet.</p>}</div>
         </div>
-        {resend ? <p className="mbrfa-send-signature" role="status">The last attempt did not go through. Check the destination with the claims administrator, or choose another way to send, then send again.</p> : null}
+        {resend ? <p className="mbrfa-send-signature" role="status">The last attempt did not go through{lastFailure ? `: ${lastFailure.charAt(0).toLowerCase()}${lastFailure.slice(1)}` : ""}. Check the destination with the claims administrator, or choose another way to send, then send again.</p> : null}
         <div className="mbrfa-send-methods" role="radiogroup" aria-label="Send by">
           <span>Send by</span>
           <label><input type="radio" name="rfa-send-method" checked={method === "fax"} disabled={!!busy} onChange={() => { setMethod("fax"); setConfirmed(false); }} />Fax</label>
