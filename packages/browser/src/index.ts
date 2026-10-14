@@ -2430,7 +2430,8 @@ export type RfaRecord = {
     currentDecisionEventId?: string | null; currentResponseDocumentId?: string | null; currentImrDocumentId?: string | null;
     authorizedProcedureCode?: string | null; authorizedQuantity?: number | null; authorizedUnits?: number | null;
     effectiveFrom?: string | null; effectiveTo?: string | null; decidedAt?: string | null; reviewerName?: string | null; reviewerPhone?: string | null }>;
-  documents: Array<{ id: string; documentType: string; filename: string; contentUrl: string; contentRevision: number | null; createdAt: string | null }>;
+  /** `source`: where the file came from (upload, mindbill, fax, bill, injury, library). `internal`: a working file such as a signing preview, not part of the request. */
+  documents: Array<{ id: string; documentType: string; filename: string; contentUrl: string; contentRevision: number | null; createdAt: string | null; source?: string; internal?: boolean }>;
   transmissions: Array<{ id: string; purpose?: string; direction: string; channel: string; status: string; destination: string | null;
     occurredAt: string | null; receivedAt: string | null; proofDocumentId: string | null; providerMessageId: string | null }>;
   informationRequests: Array<{ id: string; requestText: string; requestedAt: string | null; dueAt: string | null; respondedAt: string | null }>;
