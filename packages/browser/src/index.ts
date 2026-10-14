@@ -1,4 +1,4 @@
-import { parseCaClaimFeeQuote, type CaClaimFeeQuoteInput, type CaClaimFeeQuoteResult } from "./claim-fees";
+import { parseCaClaimFeeQuote, type CaClaimFeeQuoteInput, type CaClaimFeeQuoteResult, type CaFeeCalculation } from "./claim-fees";
 /** Paper claim family; clearinghouse transport is selected by the server. */
 export type ClaimForm = "cms1500" | "ub04" | "ada" | "ncpdp";
 /** JSON fields validated by the server's form-specific contract. */
@@ -1334,6 +1334,9 @@ export type BillFeeQuote =
     statutoryMaximumCents?: number;
     basis: BillFeeQuoteBasis;
     anesthesia?: { actualMinutes: number; baseUnits: number; timeUnitsTenths: number; conversionFactorCents: number; locality: string; medicalDirection?: { concurrentCases: number; baseReductionPercent: number; physicianPaymentPercent: 50 } };
+    /** Relative-value calculation behind an RBRVS amount, for display. */
+    calculation?: CaFeeCalculation;
+    feeBreakdown?: { method: string; inputs: Array<{ label: string; value: string }>; steps: Array<{ label: string; value: string }> };
     provenance: BillFeeSource[];
     notes: string[];
   }

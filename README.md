@@ -167,16 +167,19 @@ multiselect applies up to four diagnoses to every line. Clear “Apply the same 
 codes to all service lines” to choose diagnoses independently in each row; the bill
 supports twelve unique codes. Switching modes preserves diagnosis links by code.
 Pass `treatmentBilling` to include treatment procedures in the existing procedure picker
-and obtain dated standard fee estimates through the browser session. The form displays
-the assumptions and requires applicable provider and therapy-minute inputs. Select
-“Requires adjustment” for a nonstandard case; unavailable rates and incomplete service
-details also require review before submission. Pass `editableTreatmentCharges` to opt in
+and obtain dated standard fee estimates through the browser session. Each priced line
+shows how the fee was calculated (RVUs, geographic factors, conversion factor). The
+provider type comes from the rendering taxonomy and is asked for only when it cannot be
+inferred; therapy minutes are required where applicable. Unavailable rates and incomplete
+service details require review before submission. Line dates follow the bill's date of
+service unless the biller chooses a different date for a line. Pass `editableTreatmentCharges` to opt in
 to a separate billed-charge field on treatment lines when it differs from the fee
 estimate. Imported charges are preserved when units or modifiers change and cleared
 when the procedure changes. The default treatment form behavior remains unchanged.
 Treatment modifier choices include `25`, `GP/GO/GN` and `CQ/CO`; `93/95` labels
 follow the line’s treatment or medical-legal context and service date. The evaluator
-selector appears for medical-legal lines. See [modifier meanings](./docs/evaluation-modifiers.md)
+selector appears for medical-legal lines; pass `evaluationTypes` to offer only some
+evaluator types, for example `["psych_qme", "psych_ame"]` for a psychiatric practice. See [modifier meanings](./docs/evaluation-modifiers.md)
 and [procedure search and fee quotes](./docs/procedure-fees.md).
 
 Select **Preview CMS-1500** to review the current bill inside the editor, including

@@ -47,7 +47,8 @@ it.each([...BILL_FEE_QUOTE_BASES, "unknown_fee_family"])("renders the API result
       expect(container.textContent).not.toContain("$282.46");
     } else {
       expect(container.querySelector(".mbsf-money")?.textContent).toBe("$282.46");
-      expect(container.textContent).toContain("Fee estimate for this service date and the details above.");
+      expect(container.textContent).not.toContain("Fee basis");
+      expect(container.textContent).not.toContain("Injectable drug details");
       expect(container.querySelector('[aria-label="Billed charge for line 1"]')).toBeNull();
       expect(container.textContent).not.toContain("Fee lookup is unavailable");
       expect(container.textContent).not.toContain("$564.92");
@@ -125,7 +126,7 @@ it("keeps imported treatment charges out of the default fee display", async () =
     expect(container.querySelector('[aria-label="Billed charge for line 1"]')).toBeNull();
     expect(container.querySelector(".mbsf-money")?.textContent).toBe("$282.46");
     expect(container.querySelector(".mbsf-money")?.getAttribute("data-label")).toBe("Allowed");
-    expect(container.textContent).toContain("Fee estimate for this service date and the details above.");
+    expect(container.textContent).not.toContain("Fee basis");
   } finally {
     await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
   }
@@ -183,6 +184,55 @@ it("retains evaluator controls and medical-legal modifier meanings for an ML lin
     await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Modifiers 1"]')!.focus());
     expect(container.querySelector('[role="listbox"]')?.textContent).toContain("Interpreter required");
     expect(container.querySelector('[role="listbox"]')?.textContent).not.toContain("Audio-only telehealth");
+  } finally {
+    await act(async () => root.unmount()); container.remove();
+  }
+});
+
+it("shows the relative-value calculation behind a priced line instead of fee-basis controls", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const fetcher = vi.fn<typeof fetch>(async (url) => String(url).endsWith("/partner/v2/fee-quotes")
+    ? Response.json({ data: { status: "priced", amountCents: 22378, scheduleMaximumCents: 22378, basis: "ca_physician_rbrvs",
+      provenance: [{ id: "ca-rbrvs-formula", url: "https://www.dir.ca.gov/t8/9789_12_2.html" }], notes: [],
+      calculation: { method: "rbrvs", locality: "01112:05", serviceZip: "95814", setting: "nonfacility", units: 1, conversionFactor: "51.6091", providerPercent: 100,
+        components: [{ name: "Work", rvu: "2.56", gpci: "1.095", payableUnits: 1 }, { name: "Practice expense", rvu: "1.06", gpci: "1.410", payableUnits: 1 }, { name: "Malpractice", rvu: "0.09", gpci: "0.425", payableUnits: 1 }],
+        rounding: "nearest_cent_after_adjustments" } } })
+    : Response.json({ data: [] }));
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: { ...bill, serviceLines: [{ code: "96130", units: 1, serviceDate: "2026-08-24", diagnosisPointers: [1] }] },
+      getSession: async () => ({ token: "synthetic_session" }), fetch: fetcher, treatmentBilling: true, deliveryRoutePicker: "off",
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(container.querySelector(".mbsf-money")?.textContent).toBe("$223.78");
+    const calculation = container.querySelector(".mbsf-calc");
+    expect(calculation?.textContent).toContain("How this fee is calculated");
+    expect(calculation?.textContent).toContain("Practice expense1.061.4101.4946");
+    expect(calculation?.textContent).toContain("4.33605 × conversion factor $51.6091 = $223.78");
+    expect(calculation?.textContent).toContain("Physician");
+    // The rendering taxonomy already identifies a physician, so the line does not ask again.
+    expect(container.querySelector('[aria-label="Provider type for line 1"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Service date for line 1"]')).toBeNull();
+    expect(container.textContent).toContain("Use a different service date for this line");
+  } finally {
+    await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
+  }
+});
+
+it("offers only the evaluator types a practice supplies", async () => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(BillSubmissionForm, {
+      initialBill: { ...bill, billingMode: "med_legal", renderingProvider: { ...bill.renderingProvider, specialty: "Psychiatry" }, serviceLines: [{ code: "ML201", units: 1, serviceDate: "2026-08-24", diagnosisPointers: [1] }] },
+      getSession: async () => ({ token: "synthetic_session" }), fetch: vi.fn<typeof fetch>(async () => Response.json({ data: [] })),
+      treatmentBilling: true, deliveryRoutePicker: "off", evaluationTypes: ["psych_qme", "psych_ame"],
+    })));
+    const segments = [...container.querySelectorAll('[aria-label="Evaluation type"] button')].map((button) => button.textContent);
+    expect(segments).toEqual(["Psych QME", "Psych AME"]);
+    expect(container.querySelector('[aria-label="Evaluation type"] [aria-pressed="true"]')?.textContent).toBe("Psych QME");
   } finally {
     await act(async () => root.unmount()); container.remove();
   }
