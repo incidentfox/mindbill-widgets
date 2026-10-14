@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "
 import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOption, RfaClient, RfaRecord } from "@mindbill/browser";
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { formatRfaPhone } from "./rfa-official-fields";
+import { rfaSendFix } from "./rfa-send-fix";
 import { rfaFailureReason } from "./rfa-detail-cards";
 
 export const rfaSendDialogCss = `.mbrfa-send-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:16px;background:rgba(17,28,38,.44)}
@@ -24,13 +25,15 @@ const treatmentDetail = (item: RfaRecord["items"][number]): string => [item.proc
 
 /** One step to send a request: choose where it goes, confirm once, send. Applying the requesting
  * physician's saved signature and assembling the packet happen as part of sending. */
-export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, signatureMissing, resend, onUpdated, onSent, onClose }: {
+export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, signatureMissing, resend, onUpdated, onSent, onClose, onFix }: {
   rfa: RfaRecord; client: RfaClient; documentIds: string[]; diagnosisDescriptions: Record<string, string>;
   directory: BillClaimsAdministratorDirectory | null; directoryLoading: boolean; directoryError: string | null;
   environment: string; canSend: boolean; canSign: boolean; actorReference?: string | undefined; previewUrl?: string | undefined;
   /** Shown when the physician has no saved signature yet. */ signatureSetup?: ReactNode;
   /** An earlier attempt failed after the carrier accepted it; this sends the request again. */ resend?: boolean | undefined;
   /** The host knows the requesting physician has no saved signature: say so up front and hold the send until one is added. */ signatureMissing?: boolean | undefined;
+  /** Return to the draft editor to fix missing content or attach reports. */
+  onFix?: (() => void) | undefined;
   onUpdated: (rfa: RfaRecord) => void; onSent: (rfa: RfaRecord) => void; onClose: () => void;
 }): ReactElement {
   // Start on how the request is already addressed: its saved fax, else its saved e-mail.
@@ -44,16 +47,15 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
     const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy && !event.defaultPrevented) onClose(); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [busy, onClose]);
   const stable = (name: string, body: unknown) => { const print = JSON.stringify([rfa.id, name, body]); let value = keys.current.get(print); if (!value) { value = `rfa-${name}-${crypto.randomUUID()}`; keys.current.set(print, value); } return value; };
   const supporting = rfa.documents.filter(document => ["clinical_report", "supporting_record"].includes(document.documentType) && documentIds.includes(document.id));
-  const missingDiagnosis = rfa.items.find(item => !(diagnosisDescriptions[item.id] ?? item.diagnosisDescription ?? "").trim());
+  const fix = rfaSendFix(rfa, documentIds, diagnosisDescriptions);
   const live = environment === "live";
   const lastFailure = rfa.transmissions.map(rfaFailureReason).filter(Boolean).at(-1) ?? "";
   // Known from the host, or learned when the server refused to sign. A host that reports the signature as saved clears it.
   const needsSignature = !rfa.signedAt && (signatureMissing ?? signatureRefused);
   useEffect(() => { if (signatureMissing === false) setSignatureRefused(false); }, [signatureMissing]);
-  const blocked = !supporting.length ? "Add the report that supports this request (PR-2, Doctor's First Report or narrative) before sending."
-    : missingDiagnosis ? `Add the diagnosis for ${missingDiagnosis.diagnosisCode} (Edit request) before sending.`
+  const blocked = !live ? "This is a sandbox: nothing is faxed or e-mailed."
+    : fix ? fix.message
     : !rfa.signedAt && !canSign ? "Sending applies the physician's saved signature, and your account is not set up to do that."
-    : !live ? "This is a sandbox: nothing is faxed or e-mailed."
     : !canSend ? "Sending requires permission from your organization." : "";
   const go = async () => {
     if (busy || blocked || needsSignature || !confirmed || !destination) return;
@@ -108,7 +110,7 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
 <div className="mbrfa-send-to" data-method={method}><span>Send to</span><RfaAuthorizationDestination compact preselectSaved autoSelectSingle method={method} contextKey={`${rfa.id}:${rfa.claimsAdminId ?? "manual"}:${method}`} directory={directory} savedContact={rfa.authorizationContact} loading={directoryLoading} error={directoryError} disabled={!!busy} onChange={value => { setDestination(value); setConfirmed(false); }} /></div>
         <label>{method === "email" ? "E-mail message" : "Cover sheet message"} (optional)<textarea disabled={!!busy} maxLength={1000} rows={2} value={message} onChange={event => setMessage(event.target.value)} /></label>
         {needsSignature ? <div className="mbrfa-send-signature"><p role="alert">{rfa.providerName} has no saved signature yet. Sending puts the physician’s signature on the form, so add it first.{signatureSetup ? "" : " Add it on the physician’s page, then send again."}{signatureRefused ? " Nothing was sent." : ""}</p>{signatureSetup}</div> : signatureSetup}
-        {blocked ? <p role="alert">{blocked}</p> : <label className="mbrfa-send-confirm"><input type="checkbox" checked={confirmed} disabled={!!busy || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>
+        {blocked ? <div><p role="alert">{blocked}</p>{fix && onFix ? <button type="button" disabled={!!busy} onClick={onFix}>{fix.label}</button> : null}</div> : <label className="mbrfa-send-confirm"><input type="checkbox" checked={confirmed} disabled={!!busy || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>
           {rfa.signedAt ? "I reviewed this request" : <>I reviewed this request and am authorized by <strong>{rfa.providerName}</strong> to send it with their saved signature</>}{where ? <>, and verified it goes to <strong>{where}</strong></> : null}.</span></label>}
         {error ? <p role="alert">{error}</p> : null}
       </div>

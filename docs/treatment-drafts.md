@@ -101,3 +101,5 @@ before saving. Do not pass an already signed request to this preparation form.
 Signing, attachment review, delivery, receipt tracking, and utilization-review
 decisions are separate host workflows. Choosing “Confirm oral authorization”
 records the requested document type; it is not evidence that authorization exists.
+
+`RfaDraftForm` accepts optional `onCancel` to show a Cancel button in its action bar. `supportingDocuments.existingDocuments` accepts host-rendered links or controls for already attached reports, alongside `files` and `onChange` for queued uploads. The host remains responsible for persistence.
