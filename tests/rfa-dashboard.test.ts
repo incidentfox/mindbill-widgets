@@ -297,7 +297,7 @@ it("turns host claim contacts into Forward destinations, one per fax and e-mail"
 
 it("removes an uploaded document from an unsent request, and offers no Remove once sent",async()=>{
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
- const removeButtons=()=>[...container.querySelectorAll("button")].filter(x=>x.textContent==="Remove");
+ const removeButtons=()=>[...container.querySelectorAll("button")].filter(x=>x.getAttribute("title")==="Delete");
  const confirm=vi.spyOn(window,"confirm").mockReturnValue(true);
  try{
   const after={...record,documents:record.documents.filter(d=>d.id!=="clinical_synthetic")};
@@ -313,4 +313,17 @@ it("removes an uploaded document from an unsent request, and offers no Remove on
   await act(async()=>root.render(createElement(RfaDashboard,{key:"sent",getSession:async()=>({token:"synthetic_token"}),fetch:vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:sent})),layout:"simple",selectedRfaId:sent.id,permissions:["edit","send","act"]})));
   expect(removeButtons()).toHaveLength(0);
  }finally{confirm.mockRestore();await act(async()=>root.unmount());container.remove();}
+});
+
+it("lists documents daisyBill-style: Type, Source, File name, View, Delete; hides the signing preview",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ try{
+  const withSource={...record,documents:[{...record.documents[0]!,source:"mindbill"},{...record.documents[1]!,source:"upload"},{id:"preview_synthetic",documentType:"other",filename:"DWC-RFA-signing-preview.pdf",contentUrl:"",contentRevision:1,createdAt:null,source:"mindbill",internal:true}]};
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:withSource})),layout:"simple",selectedRfaId:record.id,permissions:["edit","send"]})));
+  const table=container.querySelector(".mbrfa-documents-table")!;
+  expect([...table.querySelectorAll("th")].map(th=>th.textContent)).toEqual(["Send","Type","Source","File name","View","Delete"]);
+  expect(table.textContent).toContain("MindBill");expect(table.textContent).toContain("Upload");
+  expect(table.textContent).not.toContain("signing-preview");
+  expect(table.querySelectorAll('button[title="Delete"]')).toHaveLength(1);
+ }finally{await act(async()=>root.unmount());container.remove();}
 });

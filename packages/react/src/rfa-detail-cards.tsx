@@ -132,6 +132,7 @@ export const rfaCardsCss = `
 .mbrfa-grid-table td small{display:block;margin-top:2px;font-size:12px;color:var(--mb-muted)}
 .mbrfa-grid-table .mbrfa-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600}
 .mbrfa-grid-table .mbrfa-row-actions{text-align:right;white-space:nowrap}
+.mbrfa-grid-table .mbrfa-icon-col{width:1%;text-align:center;white-space:nowrap}.mbrfa-grid-table .mbrfa-icon-button{display:inline-flex;align-items:center;justify-content:center;min-height:30px;width:30px;padding:0;border:1px solid transparent;border-radius:var(--mb-control-radius);background:transparent;color:var(--mb-muted,#5f6b66);cursor:pointer}.mbrfa-grid-table .mbrfa-icon-button:hover:not(:disabled){border-color:var(--mb-border);background:var(--mb-surface-muted,rgba(0,0,0,.04));color:var(--mb-text,inherit)}.mbrfa-grid-table .mbrfa-icon-danger:hover:not(:disabled){color:var(--mb-danger,#b42318)}
 .mbrfa-grid-table .mbrfa-row-actions button{min-height:30px;padding:4px 10px;font-size:12px}
 .mbrfa-grid-table tr.mbrfa-subrow td{border-top:0;padding-top:0}
 .mbrfa-manage{display:grid;gap:8px;padding:10px 12px;border-radius:var(--mb-control-radius);background:var(--mb-soft)}
