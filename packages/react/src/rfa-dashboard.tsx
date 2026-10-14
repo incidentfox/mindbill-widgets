@@ -15,6 +15,7 @@ import { RfaOverview, rfaDashboardCss } from "./rfa-overview";
 import { RfaCreateForm, type RfaClaimSelectorProps, type RfaProviderSelectorProps } from "./rfa-create-form";
 import { RfaDraftForm, type RfaDraftInput } from "./rfa-draft-form";
 import { formatRfaPhone, useRfaFormDetails } from "./rfa-official-fields";
+import { rfaSendFix } from "./rfa-send-fix";
 import { RfaSendDialog } from "./rfa-send-dialog";
 import { RfaDuplicateDialog } from "./rfa-duplicate-dialog";
 import { RfaCard, RfaFacts, RfaPill, RfaStatusCard, rfaAddress, rfaCalendarDate, rfaCardsCss, rfaDecisionSummary, rfaLifecycleTone, rfaRequestTypeLabel, rfaShortDate } from "./rfa-detail-cards";
@@ -270,6 +271,7 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const alive = useRef(true); const pending = useRef(false); const loadGeneration = useRef(0); const keys = useRef(new Map<string, string>());
   const [descriptions, setDescriptions] = useState<Record<string, string>>({}); const [preview, setPreview] = useState<RfaSigningPreview | null>(null); const [previewPdf, setPreviewPdf] = useState<Blob | null>(null); const [attested, setAttested] = useState(false);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [editFiles, setEditFiles] = useState<File[]>([]);
   const [settingSignature, setSettingSignature] = useState(false);
   const [directory, setDirectory] = useState<BillClaimsAdministratorDirectory | null>(null); const [directoryLoading, setDirectoryLoading] = useState(false); const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [directoryOpen, setDirectoryOpen] = useState(false);
@@ -334,6 +336,8 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const decision = rfa && !unsent && !["failed", "canceled"].includes(getRfaLifecycleStatus(rfa)) ? rfaDecisionSummary(rfa) : null;
   const statusPill = rfa ? <RfaPill tone={decision ? decision.tone : rfaLifecycleTone(rfa)}>{unsent && getRfaLifecycleStatus(rfa) !== "failed" ? "Draft" : decision ? decision.label : RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</RfaPill> : null;
   const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
+  const sendFix = rfa ? rfaSendFix(rfa, documentIds, descriptions) : null;
+  const editRequest = () => { setSending(false); setDetailTab("details"); setEditFiles([]); setEditing(true); };
   const openDocument = (documentId: string, title: string) => run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) { setOpenedDocument({ blob, title }); if (simple) reveal("documents"); } });
   return <div className={`mbrfa-detail mbrfa-stack${simple ? " mbrfa-simple" : ""}`} style={{ marginTop: 16 }}>
     <style>{rfaDetailCss + rfaPolishCss + rfaSimpleCss + (simple ? rfaCardsCss : "")}</style>
@@ -352,14 +356,25 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
         setDetailTab(next); document.getElementById(`${tabId}-${next}-tab`)?.focus();
       }}>{tabs.map(([value, title]) => <button key={value} id={`${tabId}-${value}-tab`} type="button" role="tab" tabIndex={detailTab === value ? 0 : -1} aria-selected={detailTab === value} aria-controls={`${tabId}-${value}-panel`} onClick={() => setDetailTab(value)}>{title}</button>)}</div> : null}
       {editing ? <>
-        <button type="button" disabled={locked} onClick={() => { setEditing(false); setReload(value => value + 1); }}>Discard edits and refresh</button>
-        <RfaDraftForm key={`${rfa.id}:${rfa.contentRevision}`} mode="edit" {...draftFormProps} formDetails={formDetails} initialDraft={rfaRecordToDraft(rfa)} disabled={!!locked} onSave={async draft => {
+        <RfaDraftForm key={`${rfa.id}:${rfa.contentRevision}`} mode="edit" {...draftFormProps} formDetails={formDetails} onCancel={() => { setEditFiles([]); setEditing(false); setReload(value => value + 1); }} supportingDocuments={{ files: editFiles, onChange: setEditFiles, existingDocuments: <>{rfa.documents.filter(document => ["clinical_report", "supporting_record"].includes(document.documentType)).map(document => <div className="mbtd-actions" key={document.id}><span>{document.filename}</span><button type="button" disabled={locked} onClick={() => void openDocument(document.id, document.filename)}>View PDF</button></div>)}{openedDocument ? <PdfReview blob={openedDocument.blob} title={openedDocument.title} /> : null}</> }} initialDraft={rfaRecordToDraft(rfa)} disabled={!!locked} onSave={async draft => {
           if (pending.current || disabled) throw new Error("Wait for the current action to finish.");
+          if (editFiles.some(file => !file.name.toLowerCase().endsWith(".pdf") || !file.size || file.size > 25 * 1024 * 1024)) throw new Error("Choose nonempty PDF documents up to 25 MB each.");
           pending.current = true; loadGeneration.current += 1; setBusy(true);
           try {
             const body = rfaDraftReplacement(draft, rfa.contentRevision);
-            const saved = await client.updateDraft(id, body, operationKey("edit-draft", body));
-            if (alive.current) { adopt(saved); setEditing(false); }
+            let saved = await client.updateDraft(id, body, operationKey("edit-draft", body));
+            let attached = 0;
+            try {
+              for (const file of editFiles) {
+                if (!alive.current) return;
+                saved = await client.uploadDocument(id, { file, documentType: "clinical_report", contentRevision: saved.contentRevision }, operationKey("edit-upload", [saved.contentRevision, attached, file.name]));
+                attached += 1;
+              }
+            } catch {
+              if (alive.current) { adopt(saved); setEditFiles(editFiles.slice(attached)); setError(`Draft changes saved. ${attached} of ${editFiles.length} supporting documents attached. The remaining files are still selected; save again to retry.`); }
+              return;
+            }
+            if (alive.current) { adopt(saved); setEditFiles([]); setEditing(false); }
           } finally { pending.current = false; if (alive.current) setBusy(false); }
         }} />
       </> : <>
@@ -444,11 +459,11 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
         {simple ? <details className="mbrfa-more"><summary>More</summary><div><RfaDraftActions deleteWording {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} /></div></details>
           : <RfaDraftActions {...options} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "create" | "edit" => permission === "create" || permission === "edit")} onCopied={onCopied} onCanceled={adopt} />}
         {simple && !unsent && !resendable && !!rfa.submittedAt && rfa.status !== "canceled" && permissions.includes("act") ? <button type="button" disabled={locked} onClick={() => setDuplicating(true)}>Send duplicate</button> : null}
-        {simple && (unsent || resendable) ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => setSending(true)}>{resendable ? "Send again" : "Send"}</button> : simple && reviewable && detailTab === "details" ? <button type="button" disabled={locked} onClick={() => reveal("review")}>Record response</button> : null}
+        {simple && (unsent || resendable) ? <button type="button" className="mbtd-primary" disabled={locked} onClick={() => { if (!resendable && sendFix && permissions.includes("edit") && canEditRfaDraft(rfa)) editRequest(); else setSending(true); }}>{!resendable && sendFix && permissions.includes("edit") && canEditRfaDraft(rfa) ? sendFix.label : resendable ? "Send again" : "Send"}</button> : simple && reviewable && detailTab === "details" ? <button type="button" disabled={locked} onClick={() => reveal("review")}>Record response</button> : null}
       </div></div> : null}
       {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} options={options} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
         onSent={() => { void run(async () => adopt(await client.get(id))); }} onClose={() => setDuplicating(false)} /> : null}
-      {simple && sending && (unsent || resendable) ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog resend={resendable} rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
+      {simple && sending && (unsent || resendable) ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog {...(permissions.includes("edit") && canEditRfaDraft(rfa) ? { onFix: editRequest } : {})} resend={resendable} rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
         signatureMissing={hostSignature?.missing}
         signatureSetup={hostSignature ? hostSignature.setup : canManageProviderSignatures && canSign ? settingSignature ? <RfaProviderSignatureSetup client={signatureClient} renderingProviderId={rfa.renderingProviderId} providerName={rfa.providerName} disabled={!!locked} onSaved={() => setSettingSignature(false)} onCancel={() => setSettingSignature(false)} /> : <p><button type="button" className="mbrfa-text-link" onClick={() => setSettingSignature(true)}>Set up or replace the physician's saved signature</button></p> : null}
         onUpdated={adopt} onSent={value => { adopt(value); setSending(false); }} onClose={() => setSending(false)} />; })() : null}
