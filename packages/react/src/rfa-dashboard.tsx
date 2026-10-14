@@ -262,6 +262,8 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
   const formDetails = useRfaFormDetails(client, rfa?.claimId ?? "", rfa?.renderingProviderId ?? "", editing && !!draftFormProps.officialForm);
   const tabId = useId();
   const simple = layout === "simple";
+  const practiceContact = rfa?.requestingPractice ?? rfa?.formContactDefaults?.requestingPractice;
+  const authorizationContact = rfa?.authorizationContact ?? rfa?.formContactDefaults?.authorizationContact;
   const [detailTab, setDetailTab] = useState<"details" | "history">("details");
   const tabs = simple ? [["details", "RFA Details"], ["history", "History & Activity"]] as const : [["details", "RFA details"], ["history", "History & activity"]] as const;
   const reveal = (suffix: string) => { setDetailTab("details"); setTimeout(() => document.getElementById(`${tabId}-${suffix}`)?.scrollIntoView?.({ block: "start", behavior: "smooth" }), 0); };
@@ -401,20 +403,20 @@ function RfaDetail({ layout, id, selectedItem, selectedResponseDocumentId, clien
           ["Name", <RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink>],
           ["NPI Number", rfa.providerNpi],
           ["Specialty", rfa.providerSpecialty],
-          ["Practice Name", rfa.requestingPractice?.name],
-          ["Contact Name", rfa.requestingPractice?.contactName],
-          ["Address", rfaAddress(rfa.requestingPractice)],
-          ["Phone", formatRfaPhone((rfa.requestingPractice ? rfa.requestingPractice.phone : rfa.providerPhone) ?? "")],
-          ["Fax Number", formatRfaPhone(rfa.requestingPractice?.fax?.trim() || rfa.providerFax || "")],
-          ["E-mail Address", rfa.requestingPractice?.email],
+          ["Practice Name", practiceContact?.name],
+          ["Contact Name", practiceContact?.contactName],
+          ["Address", rfaAddress(practiceContact)],
+          ["Phone", formatRfaPhone((practiceContact ? practiceContact.phone : rfa.providerPhone) ?? "")],
+          ["Fax Number", formatRfaPhone(practiceContact?.fax?.trim() || rfa.providerFax || "")],
+          ["E-mail Address", practiceContact?.email],
         ]} /></RfaCard>
         <RfaCard title="Claims Administrator Information"><RfaFacts showEmpty entries={[
-          ["Company Name", <RfaLink onSelect={rfa.claimsAdminId ? () => setDirectoryOpen(true) : undefined}>{(rfa.authorizationContact ? rfa.authorizationContact.name : rfa.claimsAdminName) || "—"}</RfaLink>],
-          ["Contact Name", rfa.authorizationContact?.contactName],
-          ["Address", rfaAddress(rfa.authorizationContact)],
-          ["Phone", formatRfaPhone(rfa.authorizationContact?.phone ?? "")],
-          ["Fax Number", formatRfaPhone(rfa.authorizationContact?.fax ?? "")],
-          ["E-mail Address", rfa.authorizationContact?.email],
+          ["Company Name", <RfaLink onSelect={rfa.claimsAdminId ? () => setDirectoryOpen(true) : undefined}>{(authorizationContact ? authorizationContact.name : rfa.claimsAdminName) || "—"}</RfaLink>],
+          ["Contact Name", authorizationContact?.contactName],
+          ["Address", rfaAddress(authorizationContact)],
+          ["Phone", formatRfaPhone(authorizationContact?.phone ?? "")],
+          ["Fax Number", formatRfaPhone(authorizationContact?.fax ?? "")],
+          ["E-mail Address", authorizationContact?.email],
         ]} /></RfaCard>
       </div>
       <ClaimsAdministratorDirectoryDialog open={directoryOpen} directory={directory} loading={directoryLoading} error={directoryError} onClose={() => setDirectoryOpen(false)} />

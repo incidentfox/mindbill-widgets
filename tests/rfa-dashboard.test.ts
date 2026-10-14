@@ -247,7 +247,7 @@ it("composes an opt-in routed task list without the dashboard summary or inbox",
 });
 
 for (const filled of [true, false]) it(`shows all DWC information rows for read-only users (${filled ? "filled" : "blank"})`, async()=>{
- const current={...record,employeeDateOfBirth:filled?"1980-01-02":null,employer:filled?"Sample employer":null,providerSpecialty:filled?"Physical Medicine":null,providerPhone:"5555550199",claimsAdminName:"Directory name",requestingPractice:filled?{name:"Sample practice",contactName:"Sample contact",address:"100 Example St",city:"Sample City",state:"CA",zip:"90001",phone:"5555550100",fax:"5555550101",email:"practice@example.com"}:{phone:""},authorizationContact:filled?{name:"Saved administrator",contactName:"Claims contact",address:"200 Example St",city:"Sample City",state:"CA",zip:"90002",phone:"5555550102",fax:"5555550103",email:"claims@example.com"}:{name:""}};
+ const current={...record,employeeDateOfBirth:filled?"1980-01-02":null,employer:filled?"Sample employer":null,providerSpecialty:filled?"Physical Medicine":null,providerPhone:"5555550199",claimsAdminName:"Directory name",formContactDefaults:{requestingPractice:{name:"Directory practice",phone:"5555550198",email:"directory@example.com"},authorizationContact:{name:"Directory administrator",address:"Directory address",email:"directory-admin@example.com"}},requestingPractice:filled?{name:"Sample practice",contactName:"Sample contact",address:"100 Example St",city:"Sample City",state:"CA",zip:"90001",phone:"5555550100",fax:"5555550101",email:"practice@example.com"}:{phone:""},authorizationContact:filled?{name:"Saved administrator",contactName:"Claims contact",address:"200 Example St",city:"Sample City",state:"CA",zip:"90002",phone:"5555550102",fax:"5555550103",email:"claims@example.com"}:{name:""}};
  const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input)??Response.json({data:current}));
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
  try {
@@ -269,5 +269,18 @@ for (const filled of [true, false]) it(`shows all DWC information rows for read-
    expect(facts("Claims Administrator Information")).toMatchObject({"Company Name":"—","Address":"—","E-mail Address":"—"});
   }
   expect(fetcher.mock.calls.every(([input,init])=>(init?.method??"GET")==="GET"&&!String(input).includes("creation-context"))).toBe(true);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+
+it("uses the same directory defaults as the form for legacy requests without saved contacts", async()=>{
+ const current={...record,requestingPractice:null,authorizationContact:null,formContactDefaults:{requestingPractice:{name:"Directory practice",address:"100 Example St",phone:"5555550100",email:"practice@example.com"},authorizationContact:{name:"Directory administrator",address:"200 Example St",phone:"5555550102",email:"claims@example.com"}}};
+ const fetcher=vi.fn<typeof fetch>(async input=>taskResponse(input)??Response.json({data:current}));
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:current.id,permissions:[]})));
+  const facts=(title:string)=>Object.fromEntries([...([...container.querySelectorAll(".mbrfa-sheet")].find(node=>node.querySelector("header h3")?.textContent===title)!).querySelectorAll("dt")].map(dt=>[dt.textContent,dt.nextElementSibling?.textContent]));
+  expect(facts("Requesting Physician Information")).toMatchObject({"Practice Name":"Directory practice","Address":"100 Example St","E-mail Address":"practice@example.com"});
+  expect(facts("Claims Administrator Information")).toMatchObject({"Company Name":"Directory administrator","Address":"200 Example St","E-mail Address":"claims@example.com"});
+  expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
