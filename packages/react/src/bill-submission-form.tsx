@@ -298,6 +298,12 @@ export function billSubmissionCalculationContext(code: string, placeOfService: s
 }
 
 const isMedicalLegalCode = (code: string) => /^ML/i.test(code.trim());
+/**
+ * A bill with a medical-legal procedure is a medical-legal bill. The diagnostic
+ * tests performed for that evaluation are billed on it at treatment fee schedule
+ * rates (8 CCR §9794(a)(1)).
+ */
+const billingModeForLines = (lines: readonly { code: string }[]) => lines.some((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const;
 
 /** Context and service changes produce a different quote request; amounts are never reused across requests. */
 export function billSubmissionFeeRequest(bill: BillSubmissionInput, line: BillSubmissionInput["serviceLines"][number], context: BillSubmissionFeeContext = line.feeContext ?? {}): BillFeeQuoteInput {
@@ -386,6 +392,8 @@ export type BillSubmissionFormProps = {
   procedureOptions?: BillSubmissionProcedureOption[];
   /** Extend the existing procedure picker with treatment codes and authoritative fee quotes. */
   treatmentBilling?: boolean;
+  /** Lines added when a procedure is chosen, keyed by that procedure's code. A code already on the bill is not added again. */
+  companionLines?: Readonly<Record<string, readonly { code: string; units?: number }[]>>;
   /** Opt in to editable treatment billed charges; fee quotes remain separate estimates. */
   editableTreatmentCharges?: boolean;
   onSearchProcedureCodes?: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
@@ -539,6 +547,23 @@ function blankLine(): BillSubmissionInput["serviceLines"][number] {
 }
 function lineHasContent(line: BillSubmissionInput["serviceLines"][number]): boolean {
   return Boolean(line.code.trim() || line.modifiers?.length || line.charge != null || line.drug || line.formData);
+}
+/** Append a procedure's companion lines after the entered lines; a code already on the bill is left as entered. */
+export function withAddedBillSubmissionLines(
+  lines: BillSubmissionInput["serviceLines"],
+  added: readonly { code: string; units?: number }[] | undefined,
+): BillSubmissionInput["serviceLines"] {
+  if (!added?.length) return lines;
+  const entered = [...lines];
+  while (entered.length && !lineHasContent(entered.at(-1)!)) entered.pop();
+  const present = new Set(entered.map((line) => line.code.trim().toUpperCase()));
+  for (const line of added) {
+    const code = line.code.trim().toUpperCase();
+    if (!code || present.has(code)) continue;
+    present.add(code);
+    entered.push({ code, modifiers: [], units: line.units ?? 1 });
+  }
+  return entered;
 }
 export function ensureTrailingBillSubmissionLine(
   lines: BillSubmissionInput["serviceLines"],
@@ -697,7 +722,7 @@ export function setBillSubmissionLineDiagnoses(bill: BillSubmissionInput, index:
 
 function cloneInitialBill(bill: BillSubmissionInput, treatmentBilling = false): BillSubmissionInput {
   const cloned = cloneBill(bill);
-  if (treatmentBilling && cloned.serviceLines.some((line) => line.code.trim() && !isMedicalLegalCode(line.code))) cloned.billingMode = "professional";
+  if (treatmentBilling && cloned.serviceLines.some((line) => line.code.trim())) cloned.billingMode = billingModeForLines(cloned.serviceLines);
   if (cloned.billingMode !== "professional") cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
   return billSubmissionUsesSharedDiagnoses(cloned) ? setBillSubmissionSharedDiagnoses(cloned, cloned.diagnoses ?? []) : cloned;
 }
@@ -798,14 +823,14 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   if (bill.renderingProvider?.taxonomy && !/^[A-Za-z0-9]{10}$/.test(bill.renderingProvider.taxonomy.trim())) errors["renderingProvider.taxonomy"] = "Enter a valid 10-character taxonomy code.";
   if (bill.serviceLocation?.placeOfServiceCode && !/^\d{2}$/.test(bill.serviceLocation.placeOfServiceCode.trim())) errors["serviceLocation.placeOfServiceCode"] = "Enter a valid 2-digit place of service code.";
   const lines = submittedLines(bill.serviceLines);
-  if (lines.some((line) => isMedicalLegalCode(line.code)) && lines.some((line) => line.code && !isMedicalLegalCode(line.code))) errors.serviceLines = "Submit medical-legal and treatment services on separate bills.";
   if (!lines.length) errors.serviceLines = "Add at least one service line";
   lines.forEach((line, index) => {
     required(`serviceLines.${index}.code`, line.code, "Select a procedure code.");
     const pointers = line.diagnosisPointers ?? [];
     if (pointers.length > 4 || new Set(pointers).size !== pointers.length || pointers.some((pointer) => !Number.isInteger(pointer) || pointer < 1 || pointer > (bill.diagnoses?.length ?? 0)) || (bill.billingMode === "professional" && !pointers.length)) errors[`serviceLines.${index}.diagnosisPointers`] = "Select up to four diagnoses for this service line.";
     if (!Number.isInteger(line.units) || (line.units ?? 0) < 1) errors[`serviceLines.${index}.units`] = "Enter at least 1 unit";
-    if (bill.billingMode === "professional" && (!Number.isFinite(line.charge) || (line.charge ?? 0) <= 0)) errors[`serviceLines.${index}.charge`] = "Enter the billed charge";
+    // Tests billed with a medical-legal evaluation need a price, like any treatment line.
+    if ((bill.billingMode === "professional" || (!isMedicalLegalCode(line.code) && lines.some((other) => isMedicalLegalCode(other.code)))) && (!Number.isFinite(line.charge) || (line.charge ?? 0) <= 0)) errors[`serviceLines.${index}.charge`] = "Enter the billed charge";
   });
   return { valid: Object.keys(errors).length === 0, fieldErrors: errors };
 }
@@ -999,7 +1024,7 @@ export function BillSubmissionForm({
   profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, treatmentBilling = false, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, treatmentBilling = false, companionLines, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -1154,7 +1179,9 @@ export function BillSubmissionForm({
     if (Object.hasOwn(patch, "modifiers")) setFeeDetails((current) => ({ ...current, [index]: { ...detailsForLine(index), interpretationLocation: "", professionalComponentBasis: "" } }));
     if (Object.hasOwn(patch, "code")) setFeeDetails((current) => ({ ...current, [index]: {} }));
     setBill((current) => {
-      const serviceLines = ensureTrailingBillSubmissionLine(current.serviceLines.map((line, lineIndex) => {
+      const added = patch.code != null && patch.code !== current.serviceLines[index]?.code
+        ? Object.entries(companionLines ?? {}).find(([code]) => code.trim().toUpperCase() === patch.code!.trim().toUpperCase())?.[1] : undefined;
+      const serviceLines = ensureTrailingBillSubmissionLine(withAddedBillSubmissionLines(current.serviceLines.map((line, lineIndex) => {
         if (lineIndex !== index) return line;
         const next = { ...line, ...patch };
         if (patch.code != null && patch.code !== line.code) { delete next.rfaItemId; delete next.feeContext; delete next.drug; }
@@ -1171,9 +1198,9 @@ export function BillSubmissionForm({
         if (charge != null) return { ...next, charge };
         if (Object.hasOwn(patch, "code")) delete next.charge;
         return next;
-      }));
+      }), added));
       const populated = serviceLines.filter((line) => line.code.trim());
-      return { ...(sharedDiagnoses ? setBillSubmissionSharedDiagnoses(replaceBillSubmissionServiceLines(current, serviceLines), current.diagnoses ?? []) : replaceBillSubmissionServiceLines(current, serviceLines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
+      return { ...(sharedDiagnoses ? setBillSubmissionSharedDiagnoses(replaceBillSubmissionServiceLines(current, serviceLines), current.diagnoses ?? []) : replaceBillSubmissionServiceLines(current, serviceLines)), ...(treatmentBilling && populated.length ? { billingMode: billingModeForLines(populated) } : {}) };
     });
   };
   const setLineCharge = (index: number, charge: number | undefined) => setBill((current) => ({
@@ -1395,7 +1422,7 @@ export function BillSubmissionForm({
     } else if (charge != null) next.charge = charge;
     return next;
   }).filter(lineHasContent);
-  const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: pricedLines.every((line) => isMedicalLegalCode(line.code)) ? "med_legal" as const : "professional" as const } : {}) };
+  const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: billingModeForLines(pricedLines) } : {}) };
   const previewBillKey = JSON.stringify(clean);
   const previewCurrent = cmsPreview?.billKey === previewBillKey;
   const liveErrors = JSON.stringify(validateBillSubmission(clean).fieldErrors);

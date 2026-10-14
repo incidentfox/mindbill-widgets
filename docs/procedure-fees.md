@@ -34,7 +34,9 @@ verify a new one. “Requires adjustment” clears the automatic estimate and re
 review before submission, while still allowing an actual billed charge. Quotes for
 unsupported services, dates, or jurisdictions remain marked for review. Current context
 controls cover office visits and therapeutic exercise; other services may need review.
-Medical-legal and treatment services require separate bills.
+Diagnostic tests performed for a medical-legal evaluation are billed on the same
+bill as the evaluation (8 CCR §9794(a)(1)) and are priced from the treatment fee
+schedule; a bill with any medical-legal line is submitted as a medical-legal bill.
 
 Hosts with custom reference integrations may supply `onSearchProcedureCodes` and
 `onQuoteFee`; these callbacks use the exported browser input and result types. The
