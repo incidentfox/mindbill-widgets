@@ -139,7 +139,7 @@ it("offers an opt-in focused layout while retaining deliberate sandbox delivery 
   expect(button("Request for authorization")).toBeDefined();
   await act(async()=>button("Request for authorization").click());
   expect([...container.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)).toEqual(["RFA Details","History & Activity"]);
-  expect([...container.querySelectorAll('[aria-label="Authorization progress"] li')].map(step=>[step.textContent!.replace(/^[\d✓]+/,""),step.getAttribute("data-state")])).toEqual([["Draft","current"],["Sent","todo"],["Received","todo"],["Decided","todo"]]);
+  expect([...container.querySelectorAll('[aria-label="Authorization progress"] li')].map(step=>[step.textContent!.replace(/^[\d✓]+/,""),step.getAttribute("data-state")])).toEqual([["Draft","current"],["Sent","todo"],["Received","todo"],["Closed","todo"]]);
   expect(panel("RFA Details").hidden).toBe(false);
   expect([...panel("RFA Details").querySelectorAll(".mbrfa-sheet > header h3")].map(title=>title.firstChild!.textContent)).toEqual(["Request Information","Employee Information","Requesting Physician Information","Claims Administrator Information","Requested Treatment","Documents"]);
   expect(container.querySelector("details")?.querySelector("summary")?.textContent).not.toBe("Patient, physician & claim details");

@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaRecord } from "@mindbill/browser";
+import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaLifecycleStatus, type RfaRecord } from "@mindbill/browser";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 
 const DECIDED = ["approved", "modified", "denied", "mixed", "closed"];
@@ -9,12 +9,16 @@ export const rfaCalendarDate = (value: string | null | undefined): string => { c
 const sentence = (value: string) => { const text = value.replaceAll("_", " "); return text.charAt(0).toUpperCase() + text.slice(1); };
 
 /** Decision wording and tone for one requested treatment. */
+/** The few request statuses people see: Draft, Sent, Failed, Received, Closed (or Canceled). Decisions belong to
+ * each treatment, not to the request. The lifecycle's "incomplete" means not yet sent, so it reads Draft here
+ * (an RFA the administrator returns as incomplete is a different thing). */
+export const rfaStatusLabel = (status: RfaLifecycleStatus): string => status === "incomplete" ? "Draft" : RFA_LIFECYCLE_LABELS[status];
 export function rfaOutcome(item: RfaRecord["items"][number]): { label: string; tone: "ok" | "warn" | "bad" | "muted" } {
-  if (item.decisionClosure?.closed) return { label: "No decision required", tone: "muted" };
+  if (item.decisionClosure?.closed) return { label: "Not required", tone: "muted" };
   if (item.outcome === "approved") return { label: "Approved", tone: "ok" };
   if (item.outcome === "modified") return { label: "Modified", tone: "warn" };
   if (item.outcome === "denied") return { label: "Denied", tone: "bad" };
-  return { label: sentence(item.outcome || "pending"), tone: "muted" };
+  return { label: !item.outcome || item.outcome === "pending" ? "No response" : sentence(item.outcome), tone: "muted" };
 }
 /** What the reviewer decided, across the whole request, in a word. Null until at least one treatment is decided.
  * "Partially decided" means the response left treatments without a decision; those are still being waited on. */
@@ -51,13 +55,17 @@ export function RfaStatusCard({ rfa }: { rfa: RfaRecord }): ReactElement {
   const status = getRfaLifecycleStatus(rfa);
   const decided = DECIDED.includes(rfa.status) || (rfa.items.length > 0 && rfa.items.every(item => item.outcome !== "pending" || item.decisionClosure?.closed));
   // Signing is part of sending, so it is not a step of its own.
-  const stages = ["Draft", "Sent", "Received", "Decided"];
+  const stages = ["Draft", "Sent", "Received", "Closed"];
   const current = rfa.submittedAt && decided ? 3 : rfa.receivedAt ? 2 : rfa.submittedAt ? 1 : 0;
   const stopped = status === "canceled" || status === "failed";
   const failure = status === "failed" ? rfa.transmissions.map(rfaFailureReason).filter(Boolean).at(-1) : "";
   const detail = status === "canceled" ? "This request was canceled" : status === "failed" ? `Delivery needs attention${failure ? `: ${failure.charAt(0).toLowerCase()}${failure.slice(1)}` : ""}` : rfa.submittedAt ? `Sent ${rfaShortDate(rfa.submittedAt)}` : "Not sent yet";
+  // How far the review has got, in treatments; the request itself only has the few statuses above.
+  const open = rfa.items.filter(item => !item.decisionClosure?.closed);
+  const answered = open.filter(item => item.outcome !== "pending").length;
+  const progress = rfa.submittedAt && !stopped && open.length && answered ? ` · ${answered} of ${open.length} treatment${open.length === 1 ? "" : "s"} decided` : "";
   return <section className="mbrfa-status" aria-label="Request status" data-stopped={stopped || undefined}>
-    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : !stopped && rfaDecisionSummary(rfa) ? rfaDecisionSummary(rfa)!.label : RFA_LIFECYCLE_LABELS[status]}</h3><p>{detail}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
+    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : rfaStatusLabel(status)}</h3><p>{detail}{progress}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
     <ol aria-label="Authorization progress">{stages.map((stage, index) => <li key={stage} data-state={index < current ? "done" : index === current ? "current" : "todo"} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span><strong>{stage}</strong></li>)}</ol>
   </section>;
 }

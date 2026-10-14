@@ -1,6 +1,7 @@
 "use client";
 import { type ReactElement } from "react";
-import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaListQuery, type RfaRecord } from "@mindbill/browser";
+import { getRfaLifecycleStatus, type RfaListQuery, type RfaRecord } from "@mindbill/browser";
+import { rfaStatusLabel } from "./rfa-detail-cards";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaLink, rfaTitle, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
 type Sort = NonNullable<RfaListQuery["sortBy"]>;
@@ -27,7 +28,7 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
           <td><RfaLink href={getRfaHref?.(rfa.id)} onSelect={() => onSelect(rfa.id)}>{rfaTitle(rfa)}</RfaLink>{rfa.displayReference ? <small>{rfa.displayReference}</small> : null}</td>
           <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td><td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>
           <td>{rfa.claimsAdminName || rfa.authorizationContact?.name || "Not recorded"}</td>
-          <td>{date(rfa.submittedAt)}</td><td>{rfaDecisionDueText(rfa)}</td><td>{RFA_LIFECYCLE_LABELS[getRfaLifecycleStatus(rfa)]}</td><td>{date(rfa.createdAt)}</td>
+          <td>{date(rfa.submittedAt)}</td><td>{rfaDecisionDueText(rfa)}</td><td>{rfaStatusLabel(getRfaLifecycleStatus(rfa))}</td><td>{date(rfa.createdAt)}</td>
         </tr>] : rfa.items.map((item) => <tr key={`${rfa.id}:${item.id}`}>
           <td><RfaLink href={getRfaHref?.(rfa.id, { treatmentId: item.id })} onSelect={() => onSelect(rfa.id, item.id)}>{item.serviceDescription}</RfaLink>{rfa.displayReference ? <small>{rfa.displayReference}</small> : null}</td>
           <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td><td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>

@@ -1,4 +1,5 @@
-import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaRecord } from "@mindbill/browser";
+import { getRfaLifecycleStatus, type RfaRecord } from "@mindbill/browser";
+import { rfaStatusLabel } from "./rfa-detail-cards";
 import { RfaLink, type RfaRelatedLinks } from "./rfa-display";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 
@@ -9,7 +10,7 @@ export function RfaDetailHeader({ rfa, getPatientHref, getClaimHref, getProvider
   const current = status === "closed" ? 3 : status === "received" || rfa.receivedAt ? 2 : status === "sent" || rfa.submittedAt ? 1 : 0;
   return <>
     <div className="mbrfa-context"><div><strong><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink></strong><span><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "Not recorded"}</RfaLink></span></div><div><strong><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></strong><span>Requesting physician</span></div><div><strong>{rfa.expedited ? "Expedited review" : `${rfa.reviewType.charAt(0).toUpperCase()}${rfa.reviewType.slice(1)} review`}</strong><span className="mbrfa-update-note">Updates automatically</span></div></div>
-    {!compact ? <section className="mbrfa-progress" aria-label="Request status"><div className="mbrfa-progress-heading"><div><h3>{RFA_LIFECYCLE_LABELS[status]}</h3><p>{status === "failed" ? "Delivery needs attention. Review the delivery evidence before retrying." : status === "canceled" ? "This request was canceled." : rfa.submittedAt ? `Submitted ${new Date(rfa.submittedAt).toLocaleDateString()}` : "Not yet submitted"}</p></div><div className="mbrfa-deadline"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div></div>
+    {!compact ? <section className="mbrfa-progress" aria-label="Request status"><div className="mbrfa-progress-heading"><div><h3>{rfaStatusLabel(status)}</h3><p>{status === "failed" ? "Delivery needs attention. Review the delivery evidence before retrying." : status === "canceled" ? "This request was canceled." : rfa.submittedAt ? `Submitted ${new Date(rfa.submittedAt).toLocaleDateString()}` : "Not yet submitted"}</p></div><div className="mbrfa-deadline"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div></div>
       <ol aria-label="Authorization progress">{stages.map((stage, index) => <li key={stage} className={index <= current ? "is-complete" : ""} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span><strong>{stage}</strong></li>)}</ol>
     </section> : null}
   </>;

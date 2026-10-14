@@ -129,7 +129,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
         const appointment = scheduling.find(value => value.itemId === item.id);
         // A treatment the response did not decide is still being waited on: mark it so it is not overlooked.
         const awaiting = item.outcome === "pending" && !item.decisionClosure?.closed && rfa.items.some(other => other.outcome !== "pending");
-        const outcome = awaiting ? { label: "Awaiting decision", tone: "warn" as const } : rfaOutcome(item);
+        const outcome = awaiting ? { label: "No response", tone: "warn" as const } : rfaOutcome(item);
         const showAppointment = !!appointment && (appointment.eligible || appointment.version > 0);
         const closable = canClose && item.outcome === "pending" && !item.decidedAt;
         const correctable = canCorrect && !!item.currentDecisionEventId && item.outcome !== "pending";
