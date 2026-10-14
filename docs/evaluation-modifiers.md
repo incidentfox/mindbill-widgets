@@ -13,6 +13,8 @@ Switching evaluation type replaces modifiers 94, 95, and 96 while preserving oth
 
 These defaults follow [California 8 CCR section 9795](https://www.dir.ca.gov/t8/9795.html). Modifier 96 applies when psychiatric or psychological evaluation is the primary focus. The user should select the mode appropriate to the actual evaluation.
 
+Interpreter modifier 93 applies only to ML201 and ML202. The form does not offer it for other codes, removes it when a line changes to another code, prices ML203 without it (a psychiatric supplemental report with 95 and 96 is $1,300), and asks the biller to remove it from an imported ML203 line before submission.
+
 ## Treatment modifiers
 
 In treatment mode, a bill containing only treatment lines shows **Service lines**

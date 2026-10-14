@@ -479,6 +479,15 @@ describe("atomic bill submission form contract", () => {
     expect(calculateBillSubmissionAllowedAmount({ code: "ML201", modifiers: ["95", "96"], units: 1 })).toBe(4030);
   });
 
+  it("applies the interpreter modifier only to ML201 and ML202 (8 CCR §9795(d))", () => {
+    expect(calculateBillSubmissionAllowedAmount({ code: "ML201", modifiers: ["93", "95", "96"], units: 1 })).toBe(4231.5);
+    expect(calculateBillSubmissionAllowedAmount({ code: "ML203", modifiers: ["95", "96"], units: 1 })).toBe(1300);
+    expect(calculateBillSubmissionAllowedAmount({ code: "ML203", modifiers: ["93", "95", "96"], units: 1 })).toBe(1300);
+    expect(calculateBillSubmissionAllowedAmount({ code: "ML203", modifiers: ["93"], units: 1 })).toBe(650);
+    const ml203 = { ...validBill, billingMode: "med_legal" as const, serviceLines: [{ ...validBill.serviceLines[0]!, code: "ML203", modifiers: ["95", "96", "93"] }] };
+    expect(validateBillSubmission(ml203).fieldErrors["serviceLines.0.code"]).toBe("Modifier -93 does not apply to ML203 (8 CCR §9795(d)). Remove it.");
+  });
+
   it("does not apply psychiatric multipliers to missed appointments or record review", () => {
     const lines = ["ML200", "MLPRR"].map((code) => ({ code, modifiers: ["94", "96"], units: 1 }));
     expect(applyBillSubmissionEvaluationModifiers(lines, "psych_qme").map((line) => line.modifiers))
@@ -508,10 +517,10 @@ describe("atomic bill submission form contract", () => {
     );
     expect(BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.find((item) => item.label === "Psych")?.code).toBe("Z04.6");
     expect(calculateBillSubmissionAllowedAmount({
-      code: "ML203",
+      code: "ML202",
       modifiers: ["93", "95"],
       units: 1,
-    })).toBe(715);
+    })).toBe(1447.88);
     expect(calculateBillSubmissionAllowedAmount({
       code: "ML201",
       modifiers: ["96"],

@@ -9,6 +9,7 @@ import { type ClaimForm, type BillFormData, type BillLineFormData, type BilledDr
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
 import { acceptedNoResponseLabel } from "./bill-status-label";
+import { medicalLegalModifierApplies } from "./billing-catalog";
 import type { CSSProperties, FormEvent, KeyboardEvent, ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -382,15 +383,6 @@ const MODIFIERS = [
 ] as const;
 type CodingPreset = "qme" | "ame" | "psych_qme";
 const MANAGED_EVALUATOR_MODIFIERS = new Set(["94", "95", "96"]);
-const MODIFIER_CODES: Record<string, readonly string[]> = {
-  "92": ["ML201", "ML202", "ML203"],
-  "93": ["ML201", "ML202"],
-  "94": ["ML201", "ML202", "ML203"],
-  "95": ["ML200", "ML201", "ML202", "ML203", "MLPRR"],
-  "96": ["ML201", "ML202", "ML203"],
-  "97": ["ML201", "ML202", "ML203"],
-  "98": ["ML201", "ML202", "ML203"],
-};
 
 function toDraft(data: BillReviewData): BillReviewDraft {
   const snapshot = data.bill.billingSnapshot;
@@ -614,7 +606,7 @@ function presetModifiersForCode(preset: CodingPreset, code: string): string[] {
 }
 
 function modifierAppliesToCode(modifier: string, code: string): boolean {
-  return !code || (MODIFIER_CODES[modifier]?.includes(code) ?? true);
+  return !code || medicalLegalModifierApplies(modifier, code);
 }
 
 function applyPreset(lines: BillReviewLineItem[], preset: CodingPreset): BillReviewLineItem[] {
