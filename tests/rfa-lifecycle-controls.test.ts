@@ -167,7 +167,7 @@ it("excludes administratively closed treatments from Post UR and reloads tasks a
  }finally{await view.close();}
 });
 it("opens decisions for a requested treatment and attaches the UR decision PDF in place", async () => {
-  const uploaded: RfaRecord = { ...record, documents: [...record.documents, { id: "ur_new", documentType: "ur_response", filename: "UR decision.pdf", sha256: "0", sizeBytes: 10, contentRevision: record.contentRevision, createdAt: "2026-09-17T10:00:00.000Z" } as RfaRecord["documents"][number]] };
+  const uploaded: RfaRecord = { ...record, documents: [...record.documents, { id: "ur_new", documentType: "ur_response", filename: "UR decision.pdf", contentUrl: "", contentRevision: record.contentRevision, createdAt: "2026-09-17T10:00:00.000Z" }] };
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   const fetcher = vi.fn<typeof fetch>(async (url, init) => String(url).includes("rfa-follow-ups") ? Response.json({ data: [], nextCursor: null })
     : init?.method === "POST" && String(url).endsWith("/documents") ? Response.json({ data: uploaded }, { status: 201 }) : Response.json({ data: record }));
