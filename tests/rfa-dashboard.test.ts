@@ -180,7 +180,6 @@ it("offers Forward only after a request was sent, forwarding the packet that act
  expect(rfaDuplicatePacket({packets:packets.slice(0,2),transmissions:[sent("p_failed","failed")]})?.id).toBe("p_download");
  expect(rfaDuplicatePacket({packets:[packets[1]!],transmissions:[sent("p_failed","failed")]})).toBeNull();
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
- const has=(text:string)=>[...container.querySelectorAll("button")].some(x=>x.textContent===text);
  try{
   for(const [current,expected] of [[{...record,status:"received",submittedAt:"2026-09-02T00:00:00Z"},true],[record,false]] as const){
    const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:current}));
