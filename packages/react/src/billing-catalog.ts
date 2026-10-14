@@ -163,6 +163,25 @@ const MED_LEGAL_MODIFIER_MULTIPLIERS: Record<string, number> = {
   "98": 1.5,
 };
 
+/** 8 CCR §9795(d): the procedure codes each medical-legal modifier may modify. */
+export const MED_LEGAL_MODIFIER_CODES: Readonly<Record<string, readonly string[]>> = {
+  "92": ["ML201", "ML202", "ML203"],
+  // Interpreter: "This modifier shall only be applicable to ML-201 and ML-202."
+  "93": ["ML201", "ML202"],
+  "94": ["ML201", "ML202", "ML203"],
+  // Identification only; ML200 and MLPRR carry it by established billing practice.
+  "95": ["ML200", "ML201", "ML202", "ML203", "MLPRR"],
+  "96": ["ML201", "ML202", "ML203"],
+  "97": ["ML201", "ML202", "ML203"],
+  "98": ["ML201", "ML202", "ML203"],
+};
+
+/** Modifiers outside the table (CPT modifiers) are not restricted here. */
+export function medicalLegalModifierApplies(modifier: string, code: string): boolean {
+  const codes = MED_LEGAL_MODIFIER_CODES[modifier.replace(/^-/, "").toUpperCase()];
+  return !codes || codes.includes(code.trim().toUpperCase());
+}
+
 function medicalLegalMultiplier(modifiers: string[]): number {
   const priced = modifiers.filter((item) => MED_LEGAL_MODIFIER_MULTIPLIERS[item] !== 1);
   if (priced.length === 0) return 1;
@@ -179,7 +198,8 @@ export function calculateBillSubmissionAllowedAmount(
   if (procedure?.allowedAmount == null) return undefined;
   const code = procedure.code.toUpperCase();
   const units = Math.max(1, line.units ?? 1);
-  const normalized = [...new Set((line.modifiers ?? []).map((item) => item.replace(/^-/, "").toUpperCase()))].sort();
+  const normalized = [...new Set((line.modifiers ?? []).map((item) => item.replace(/^-/, "").toUpperCase()))]
+    .filter((item) => medicalLegalModifierApplies(item, code)).sort();
   const multiplier = ["ML200", "ML201", "ML202", "ML203"].includes(code)
     ? medicalLegalMultiplier(normalized)
     : 1;
