@@ -24,14 +24,15 @@ catalog. Untouched mode round trips restore independent selections; edits made i
 shared mode become the current selection when switching back.
 The bill supports twelve unique diagnoses and four unique diagnosis pointers per line.
 Treatment procedures use the existing procedure picker. The form quotes California
-fees for the service date and location. Standard visit estimates display their
-assumptions; the biller supplies the applicable provider type and therapy minutes
-in the line's fee details. With the opt-in `editableTreatmentCharges` prop, enter the
+fees for the service date and location. A priced line shows its calculation: the
+work, practice-expense and malpractice RVUs, their geographic factors, and the
+conversion factor. The provider type comes from the rendering provider's taxonomy;
+the line asks for it only when the taxonomy does not identify one. Therapy lines
+also need treatment minutes. With the opt-in `editableTreatmentCharges` prop, enter the
 actual billed charge separately from the fee schedule estimate. Imported billed
 charges remain editable and survive changes to
 units or modifiers; changing the procedure clears the old charge so the biller can
-verify a new one. “Requires adjustment” clears the automatic estimate and requires
-review before submission, while still allowing an actual billed charge. Quotes for
+verify a new one. Quotes for
 unsupported services, dates, or jurisdictions remain marked for review. Current context
 controls cover office visits and therapeutic exercise; other services may need review.
 Diagnostic tests performed for a medical-legal evaluation are billed on the same
