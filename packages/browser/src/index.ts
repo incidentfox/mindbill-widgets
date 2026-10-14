@@ -2406,7 +2406,11 @@ export type RfaRecord = {
   displayReference?: string;
   claimsAdminName?: string;
   injuryDescription?: string;
+  /** Read-only current contacts used by the form when no saved contact exists. */
+  formContactDefaults?: { requestingPractice?: RfaContact; authorizationContact?: RfaContact };
   contentRevision: number; id: string; claimId: string; patientId: string; renderingProviderId: string; claimsAdminId: string | null;
+  /** Employee and physician fields printed on the DWC Form RFA. */
+  employeeDateOfBirth?: string | null; employer?: string | null; providerSpecialty?: string | null;
   employeeName: string; providerName: string; claimNumber: string | null; status: string;
   /** Delivery/review lifecycle, separate from the clinical status and item outcomes. */
   lifecycleStatus?: import("./rfa-status").RfaLifecycleStatus;
