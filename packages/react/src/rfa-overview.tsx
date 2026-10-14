@@ -1,6 +1,7 @@
 "use client";
 import { type ReactElement } from "react";
-import { RFA_LIFECYCLE_LABELS, type RfaListQuery, type RfaListResult } from "@mindbill/browser";
+import { type RfaListQuery, type RfaListResult } from "@mindbill/browser";
+import { rfaStatusLabel } from "./rfa-detail-cards";
 type Bucket = NonNullable<RfaListQuery["agingBucket"]>;
 const buckets: { id: Bucket; label: string }[] = [{ id: "0_5", label: "0–5 days" }, { id: "6_14", label: "6–14 days" }, { id: "15_30", label: "15–30 days" }, { id: "31_plus", label: "31+ days" }];
 const groups = [{ title: "Needs attention", tone: "attention", states: ["incomplete", "failed"] }, { title: "Awaiting decision", tone: "waiting", states: ["sent", "received"] }, { title: "Finished", tone: "finished", states: ["closed", "canceled"] }] as const;
@@ -13,9 +14,9 @@ export function RfaOverview({ summary, onSelect, combined = false }: { combined?
     {groups.filter(group => !combined || group.tone === "waiting").map(group => <section className={`mbrfa-status-group mbrfa-${group.tone}`} key={group.title} aria-label={group.title}>
       <div className="mbrfa-aging-grid mbrfa-group-heading"><h4><i aria-hidden="true" />{group.title}</h4>{buckets.map(bucket => <span className="mbrfa-age-heading" key={bucket.id}>{bucket.label}</span>)}<span className="mbrfa-total-heading">Total</span></div>
       {group.states.map(status => <div className="mbrfa-aging-grid mbrfa-aging-row" key={status}>
-        <strong>{RFA_LIFECYCLE_LABELS[status]}</strong>
-        {buckets.map(bucket => <span className="mbrfa-age-cell" key={bucket.id}><span className="mbrfa-mobile-age">{bucket.label}</span>{group.tone === "waiting" && aging ? countButton(aging.byLifecycleStatus[status]?.[bucket.id] ?? 0, `${RFA_LIFECYCLE_LABELS[status]} · ${bucket.label} since submission`, status, bucket.id) : <span className="mbrfa-zero" aria-label="Not applicable">—</span>}</span>)}
-        <span className="mbrfa-row-total">{countButton(summary.byLifecycleStatus?.[status] ?? 0, RFA_LIFECYCLE_LABELS[status], status)}</span>
+        <strong>{rfaStatusLabel(status)}</strong>
+        {buckets.map(bucket => <span className="mbrfa-age-cell" key={bucket.id}><span className="mbrfa-mobile-age">{bucket.label}</span>{group.tone === "waiting" && aging ? countButton(aging.byLifecycleStatus[status]?.[bucket.id] ?? 0, `${rfaStatusLabel(status)} · ${bucket.label} since submission`, status, bucket.id) : <span className="mbrfa-zero" aria-label="Not applicable">—</span>}</span>)}
+        <span className="mbrfa-row-total">{countButton(summary.byLifecycleStatus?.[status] ?? 0, rfaStatusLabel(status), status)}</span>
       </div>)}
     </section>)}
     <p className="mbrfa-overview-footnote">Aging counts calendar days since submission, separately from the decision deadline. Only requests awaiting a treatment decision are aged.{!aging ? " Aging is unavailable from this server." : ""}</p>

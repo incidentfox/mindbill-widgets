@@ -44,6 +44,10 @@ function DefinitionList({ entries }: { entries: Array<[string, string]> }): Reac
 }
 
 /** Only display known clinical/workflow fields. Audit payloads may also contain private transport and concurrency metadata. */
+// System reasons arrive as codes (for example "source_condition_cleared"); people read words.
+const systemReasons: Record<string, string> = { source_condition_cleared: "Closed automatically: no longer needed", superseded: "Replaced by a newer task", rfa_canceled: "Closed because the request was canceled" };
+const readable = (key: string, value: string): string => key === "reason" && /^[a-z]+(_[a-z]+)+$/.test(value)
+  ? systemReasons[value] ?? value.replaceAll("_", " ").replace(/^./, letter => letter.toUpperCase()) : value;
 export function RfaHistoryEntry({ event, rfa, disabled, onDownload, timeline = false }: {
   event: RfaHistoryEvent; rfa: RfaRecord; disabled: boolean;
   onDownload: (kind: "document" | "packet", id: string, filename: string) => void;
@@ -85,18 +89,19 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload, timeline = f
   documents(payload);
   add(transmission?.proofDocumentId, "Download transmission receipt");
   if (Object.keys(replacement).length) { documents(object(payload.before), "Original: "); documents(replacement, "Corrected: "); }
-  add(payload.packetId, "Download retained submission PDF", "packet");
+  // The exact packet that went out (cover sheet, signed DWC Form RFA, attachments): on the event, else on its transmission.
+  add(payload.packetId ?? (transmission as { packetId?: string | null } | undefined)?.packetId, "Download retained submission PDF", "packet");
   const changed = Array.isArray(payload.changedFields) ? payload.changedFields.flatMap(value => typeof value === "string" && Object.hasOwn(changedFieldNames, value) ? [changedFieldNames[value]!] : []) : [];
   const hasDetails = entries.length || appointment.length || decisionSections.length || evidence.length || changed.length;
   const actor = /^(system:|system$)/.test(event.actor) ? "System" : /^(native-user:|user:)/.test(event.actor) || /^partner:[^:]+:browser:/.test(event.actor) ? "Team member" : /^partner:/.test(event.actor) ? "Integration" : /^(developer:|integration:|api:)/.test(event.actor) ? "Integration" : event.actor;
   const action = string(payload.action) ?? event.eventType.replace(/^rfa\./, "");
   if (timeline) {
     const kind = /submitted|transmission|forward/.test(action) ? "sent" : /decision|decided|approved|denied|modified/.test(action) || decisionSections.length ? "decision" : /note/.test(action) ? "note" : "event";
-    const short: Record<string, string> = { "Download retained submission PDF": "View sent packet", "Download transmission receipt": "Fax receipt", "Download decision evidence": "View decision", "Download document": "View document" };
+    const short: Record<string, string> = { "Download retained submission PDF": "View sent packet (PDF)", "Download transmission receipt": "Fax receipt", "Download decision evidence": "View decision", "Download document": "View document" };
     const details = entries.length || appointment.length || changed.length || decisionSections.some(group => group.value !== payload || group.decisions.some(value => rows(value).length));
     return <li data-kind={kind}>
       <div className="mbrfa-tl-head"><strong>{actions[action] ?? words(action).replace(/^./, letter => letter.toUpperCase())}</strong><span><time dateTime={event.occurredAt ?? undefined}>{date(event.occurredAt)}</time> · {actor}</span></div>
-      {["text", "reason", "requestText", "note"].map(key => string(payload[key]) ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{String(payload[key])}</p> : null)}
+      {["text", "reason", "requestText", "note"].map(key => string(payload[key]) ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{readable(key, String(payload[key]))}</p> : null)}
       {transmission?.destination || string(payload.destination) ? <p className="mbrfa-tl-meta">{string(payload.channel) || transmission?.channel ? `${words(String(payload.channel ?? transmission?.channel)).replace(/^./, letter => letter.toUpperCase())} to ` : "To "}{String(payload.destination ?? transmission?.destination)}{string(payload.recipientName) ? ` · ${String(payload.recipientName)}` : ""}</p> : null}
       {decisionSections.length ? <ul className="mbrfa-tl-decisions" aria-label="Decisions by treatment">{decisionSections[decisionSections.length - 1]!.decisions.map((value, index) => {
         const position = rfa.items.findIndex(item => item.id === value.itemId), item = rfa.items[position];
@@ -122,7 +127,7 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload, timeline = f
     <td className="mbrfa-history-action">{actions[action] ?? words(action)}</td>
     <td><span className="mbrfa-sr-only">Recorded by </span>{actor}</td>
     <td>
-    {["text", "reason", "requestText", "note"].map(key => string(payload[key]) ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{String(payload[key])}</p> : null)}
+    {["text", "reason", "requestText", "note"].map(key => string(payload[key]) ? <p key={key} style={{ whiteSpace: "pre-wrap" }}>{readable(key, String(payload[key]))}</p> : null)}
     {ids.size ? <ul aria-label="Related treatments">{[...ids].map(id => <li key={id}>{treatment(id)}</li>)}</ul> : null}
     {hasDetails ? <details><summary>Event details</summary>
       {entries.length ? <DefinitionList entries={entries} /> : null}

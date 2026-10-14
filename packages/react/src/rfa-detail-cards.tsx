@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaRecord } from "@mindbill/browser";
+import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaLifecycleStatus, type RfaRecord } from "@mindbill/browser";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 
 const DECIDED = ["approved", "modified", "denied", "mixed", "closed"];
@@ -9,12 +9,16 @@ export const rfaCalendarDate = (value: string | null | undefined): string => { c
 const sentence = (value: string) => { const text = value.replaceAll("_", " "); return text.charAt(0).toUpperCase() + text.slice(1); };
 
 /** Decision wording and tone for one requested treatment. */
+/** The few request statuses people see: Draft, Sent, Failed, Received, Closed (or Canceled). Decisions belong to
+ * each treatment, not to the request. The lifecycle's "incomplete" means not yet sent, so it reads Draft here
+ * (an RFA the administrator returns as incomplete is a different thing). */
+export const rfaStatusLabel = (status: RfaLifecycleStatus): string => status === "incomplete" ? "Draft" : RFA_LIFECYCLE_LABELS[status];
 export function rfaOutcome(item: RfaRecord["items"][number]): { label: string; tone: "ok" | "warn" | "bad" | "muted" } {
-  if (item.decisionClosure?.closed) return { label: "No decision required", tone: "muted" };
+  if (item.decisionClosure?.closed) return { label: "Not required", tone: "muted" };
   if (item.outcome === "approved") return { label: "Approved", tone: "ok" };
   if (item.outcome === "modified") return { label: "Modified", tone: "warn" };
   if (item.outcome === "denied") return { label: "Denied", tone: "bad" };
-  return { label: sentence(item.outcome || "pending"), tone: "muted" };
+  return { label: !item.outcome || item.outcome === "pending" ? "No response" : sentence(item.outcome), tone: "muted" };
 }
 /** What the reviewer decided, across the whole request, in a word. Null until at least one treatment is decided.
  * "Partially decided" means the response left treatments without a decision; those are still being waited on. */
@@ -51,13 +55,17 @@ export function RfaStatusCard({ rfa }: { rfa: RfaRecord }): ReactElement {
   const status = getRfaLifecycleStatus(rfa);
   const decided = DECIDED.includes(rfa.status) || (rfa.items.length > 0 && rfa.items.every(item => item.outcome !== "pending" || item.decisionClosure?.closed));
   // Signing is part of sending, so it is not a step of its own.
-  const stages = ["Draft", "Sent", "Received", "Decided"];
+  const stages = ["Draft", "Sent", "Received", "Closed"];
   const current = rfa.submittedAt && decided ? 3 : rfa.receivedAt ? 2 : rfa.submittedAt ? 1 : 0;
   const stopped = status === "canceled" || status === "failed";
   const failure = status === "failed" ? rfa.transmissions.map(rfaFailureReason).filter(Boolean).at(-1) : "";
   const detail = status === "canceled" ? "This request was canceled" : status === "failed" ? `Delivery needs attention${failure ? `: ${failure.charAt(0).toLowerCase()}${failure.slice(1)}` : ""}` : rfa.submittedAt ? `Sent ${rfaShortDate(rfa.submittedAt)}` : "Not sent yet";
+  // How far the review has got, in treatments; the request itself only has the few statuses above.
+  const open = rfa.items.filter(item => !item.decisionClosure?.closed);
+  const answered = open.filter(item => item.outcome !== "pending").length;
+  const progress = rfa.submittedAt && !stopped && open.length && answered ? ` · ${answered} of ${open.length} treatment${open.length === 1 ? "" : "s"} decided` : "";
   return <section className="mbrfa-status" aria-label="Request status" data-stopped={stopped || undefined}>
-    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : !stopped && rfaDecisionSummary(rfa) ? rfaDecisionSummary(rfa)!.label : RFA_LIFECYCLE_LABELS[status]}</h3><p>{detail}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
+    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : rfaStatusLabel(status)}</h3><p>{detail}{progress}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
     <ol aria-label="Authorization progress">{stages.map((stage, index) => <li key={stage} data-state={index < current ? "done" : index === current ? "current" : "todo"} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span><strong>{stage}</strong></li>)}</ol>
   </section>;
 }
@@ -141,6 +149,7 @@ export const rfaCardsCss = `
 .mbrfa-rows{display:grid}
 .mbrfa-rows>*{padding:11px 14px;border-top:1px solid var(--mb-border);margin:0!important}
 .mbrfa-rows>:first-child{border-top:0}
+.mbrfa-rows>.mbrfa-modal{padding:16px;border-top:0}
 .mbrfa-rows>details>summary{font-size:13px}
 .mbrfa-rows>details[open]>summary{margin-bottom:12px}
 .mbrfa-rows>details>summary{color:var(--mb-text)}
@@ -154,4 +163,24 @@ export const rfaCardsCss = `
 .mbrfa-file-button input{position:absolute;inset:0;opacity:0;cursor:pointer;min-height:0!important;padding:0!important}
 .mbrfa-file-button:focus-within{outline:2px solid var(--mb-accent);outline-offset:2px}
 @media(max-width:760px){.mbrfa-cards-2{grid-template-columns:minmax(0,1fr)}.mbrfa-facts>div{grid-template-columns:104px minmax(0,1fr)}.mbrfa-status li>strong{font-size:11px}.mbrfa-simple .mbrfa-bottom-actions{position:static}.mbrfa-status-heading{flex-direction:column;gap:8px}.mbrfa-status-due{text-align:left}}
+/* Requested treatment: one card per treatment (service header, then decision and appointment side by side). */
+.mbrfa-tx-list{display:grid;gap:14px;padding:14px 16px 16px}
+.mbrfa-tx{border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden;scroll-margin-top:5rem;outline:none}
+.mbrfa-tx:focus{box-shadow:0 0 0 2px color-mix(in srgb,var(--mb-accent) 45%,transparent)}
+.mbrfa-tx-head{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;background:color-mix(in srgb,var(--mb-accent) 6%,var(--mb-surface));border-bottom:1px solid var(--mb-border)}
+.mbrfa-tx-num{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:999px;background:var(--mb-accent);color:var(--mb-accent-contrast,#fff);font-size:12px;font-weight:600}
+.mbrfa-tx-head dl{flex:1;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.7fr) minmax(0,1.2fr) minmax(0,1.6fr);gap:6px 16px;margin:0;min-width:0}
+.mbrfa-tx dt{font-size:11px;font-weight:500;color:var(--mb-muted);text-transform:none}.mbrfa-tx dd{margin:2px 0 0;font-size:13px;overflow-wrap:anywhere}.mbrfa-tx dd small{display:block;color:var(--mb-muted);font-size:12px}
+.mbrfa-tx-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:12px 14px}
+.mbrfa-tx-panel{display:grid;align-content:start;gap:10px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface)}
+.mbrfa-tx-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.mbrfa-tx-panel-head h4{margin:0;font-size:12px;font-weight:600;color:var(--mb-muted);text-transform:uppercase;letter-spacing:.03em}
+.mbrfa-tx-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px 14px;margin:0}
+.mbrfa-tx-note{margin:0;font-size:13px;color:var(--mb-muted)}.mbrfa-tx-actions{gap:8px}.mbrfa-tx-actions button{font-size:13px}
+@media(max-width:760px){.mbrfa-tx-head dl{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.mbrfa-tx-panels{grid-template-columns:minmax(0,1fr)}}
+/* Utilization review: responses and follow-ups as short lists; every form opens in a dialog. */
+.mbrfa-ur-section{display:grid;gap:6px}.mbrfa-ur-section h4{margin:0;font-size:12px;font-weight:600;color:var(--mb-muted);text-transform:uppercase;letter-spacing:.03em}
+.mbrfa-ur-list{display:grid;margin:0;padding:0;list-style:none;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}
+.mbrfa-ur-list li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding:10px 12px;font-size:13px}.mbrfa-ur-list li+li{border-top:1px solid var(--mb-border)}
+.mbrfa-ur-list li>span:first-child{display:grid;gap:2px;min-width:0}.mbrfa-ur-list li small{color:var(--mb-muted);font-size:12px}
+.mbrfa-ur-actions{padding-top:4px}
 `;
