@@ -141,6 +141,7 @@ export const rfaCardsCss = `
 .mbrfa-rows{display:grid}
 .mbrfa-rows>*{padding:11px 14px;border-top:1px solid var(--mb-border);margin:0!important}
 .mbrfa-rows>:first-child{border-top:0}
+.mbrfa-rows>.mbrfa-modal{padding:16px;border-top:0}
 .mbrfa-rows>details>summary{font-size:13px}
 .mbrfa-rows>details[open]>summary{margin-bottom:12px}
 .mbrfa-rows>details>summary{color:var(--mb-text)}
@@ -154,4 +155,24 @@ export const rfaCardsCss = `
 .mbrfa-file-button input{position:absolute;inset:0;opacity:0;cursor:pointer;min-height:0!important;padding:0!important}
 .mbrfa-file-button:focus-within{outline:2px solid var(--mb-accent);outline-offset:2px}
 @media(max-width:760px){.mbrfa-cards-2{grid-template-columns:minmax(0,1fr)}.mbrfa-facts>div{grid-template-columns:104px minmax(0,1fr)}.mbrfa-status li>strong{font-size:11px}.mbrfa-simple .mbrfa-bottom-actions{position:static}.mbrfa-status-heading{flex-direction:column;gap:8px}.mbrfa-status-due{text-align:left}}
+/* Requested treatment: one card per treatment (service header, then decision and appointment side by side). */
+.mbrfa-tx-list{display:grid;gap:14px;padding:14px 16px 16px}
+.mbrfa-tx{border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden;scroll-margin-top:5rem;outline:none}
+.mbrfa-tx:focus{box-shadow:0 0 0 2px color-mix(in srgb,var(--mb-accent) 45%,transparent)}
+.mbrfa-tx-head{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;background:color-mix(in srgb,var(--mb-accent) 6%,var(--mb-surface));border-bottom:1px solid var(--mb-border)}
+.mbrfa-tx-num{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:999px;background:var(--mb-accent);color:var(--mb-accent-contrast,#fff);font-size:12px;font-weight:600}
+.mbrfa-tx-head dl{flex:1;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.7fr) minmax(0,1.2fr) minmax(0,1.6fr);gap:6px 16px;margin:0;min-width:0}
+.mbrfa-tx dt{font-size:11px;font-weight:500;color:var(--mb-muted);text-transform:none}.mbrfa-tx dd{margin:2px 0 0;font-size:13px;overflow-wrap:anywhere}.mbrfa-tx dd small{display:block;color:var(--mb-muted);font-size:12px}
+.mbrfa-tx-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:12px 14px}
+.mbrfa-tx-panel{display:grid;align-content:start;gap:10px;padding:10px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface)}
+.mbrfa-tx-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.mbrfa-tx-panel-head h4{margin:0;font-size:12px;font-weight:600;color:var(--mb-muted);text-transform:uppercase;letter-spacing:.03em}
+.mbrfa-tx-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px 14px;margin:0}
+.mbrfa-tx-note{margin:0;font-size:13px;color:var(--mb-muted)}.mbrfa-tx-actions{gap:8px}.mbrfa-tx-actions button{font-size:13px}
+@media(max-width:760px){.mbrfa-tx-head dl{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.mbrfa-tx-panels{grid-template-columns:minmax(0,1fr)}}
+/* Utilization review: responses and follow-ups as short lists; every form opens in a dialog. */
+.mbrfa-ur-section{display:grid;gap:6px}.mbrfa-ur-section h4{margin:0;font-size:12px;font-weight:600;color:var(--mb-muted);text-transform:uppercase;letter-spacing:.03em}
+.mbrfa-ur-list{display:grid;margin:0;padding:0;list-style:none;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}
+.mbrfa-ur-list li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding:10px 12px;font-size:13px}.mbrfa-ur-list li+li{border-top:1px solid var(--mb-border)}
+.mbrfa-ur-list li>span:first-child{display:grid;gap:2px;min-width:0}.mbrfa-ur-list li small{color:var(--mb-muted);font-size:12px}
+.mbrfa-ur-actions{padding-top:4px}
 `;

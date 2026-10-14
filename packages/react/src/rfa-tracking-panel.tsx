@@ -1,10 +1,11 @@
 "use client";
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import { createRfaClient, createRfaLifecycleClient, type OrganizationClientOptions, type RfaRecord, type RfaScheduling, type RfaSchedulingInput, type RfaHistoryEvent, type RfaDecisionCorrectionInput, type RfaTreatmentDecisionInput, type RfaTreatmentClosureInput } from "@mindbill/browser";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 import { rfaDetailCss } from "./rfa-detail-header";
 import { RfaHistoryEntry } from "./rfa-history-entry";
 import { rfaDecisionDueText } from "./rfa-decision-due";
+import { RfaModal } from "./rfa-modal";
 import { RfaCard, RfaPill, rfaCalendarDate, rfaFailureReason, rfaOutcome, rfaShortDate } from "./rfa-detail-cards";
 
 export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
@@ -69,6 +70,8 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  // Card layout: the treatment form being filled in, shown in a dialog ("appointment:<itemId>" and so on).
+  const [panel, setPanel] = useState("");
   const alive = useRef(true); const pending = useRef(false); const keys = useRef(new Map<string, string>());
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -98,7 +101,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
     try {
       const updated = await action(key);
       keys.current.delete(fingerprint);
-      if (alive.current) { if (updated) { setRfa(updated); onUpdated?.(updated); } setReload(value => value + 1); setMessage("Record saved."); }
+      if (alive.current) { if (updated) { setRfa(updated); onUpdated?.(updated); } setReload(value => value + 1); setMessage("Record saved."); setPanel(""); }
       return true;
     } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "The record could not be saved. Refresh before retrying."); return false; }
     finally { pending.current = false; if (alive.current) setBusy(false); }
@@ -122,7 +125,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
     {error ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
     {loadErrors.map(value => <p role="alert" key={value}>{value}</p>)}
     {view !== "history" ? <RfaCard title="Requested Treatment" count={rfa.items.length} flush>
-      {rfa.items.length ? <div className="mbrfa-table-scroll"><table className="mbrfa-grid-table mbrfa-treatment-table"><thead><tr><th scope="col">#</th><th scope="col">Service/Good Requested</th><th scope="col">Diagnosis</th><th scope="col">CPT/HCPCS</th><th scope="col">Other Information</th><th scope="col">Decision</th></tr></thead><tbody>{rfa.items.map((item, index) => {
+      {rfa.items.length ? <div className="mbrfa-tx-list">{rfa.items.map((item, index) => {
         const appointment = scheduling.find(value => value.itemId === item.id);
         // A treatment the response did not decide is still being waited on: mark it so it is not overlooked.
         const awaiting = item.outcome === "pending" && !item.decisionClosure?.closed && rfa.items.some(other => other.outcome !== "pending");
@@ -130,34 +133,57 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
         const showAppointment = !!appointment && (appointment.eligible || appointment.version > 0);
         const closable = canClose && item.outcome === "pending" && !item.decidedAt;
         const correctable = canCorrect && !!item.currentDecisionEventId && item.outcome !== "pending";
-        return <Fragment key={item.id}>
-          <tr id={`rfa-treatment-${item.id}`} tabIndex={-1}>
-            <td>{index + 1}</td>
-            <td><strong>{item.serviceDescription}</strong></td>
-            <td><span className="mbrfa-code">{item.diagnosisCode}</span>{item.diagnosisDescription ? <small>{item.diagnosisDescription}</small> : null}</td>
-            <td><span className="mbrfa-code">{item.procedureCode || "—"}</span></td>
-            <td>{otherInformation(item) || "—"}</td>
-            <td><RfaPill tone={outcome.tone}>{outcome.label}</RfaPill>
-              {item.outcome !== "pending" ? <>
-                {item.authorizationNumber ? <small>Authorization {item.authorizationNumber}</small> : null}
-                {item.authorizedProcedureCode || item.authorizedQuantity != null || item.authorizedUnits != null ? <small>Authorized {[item.authorizedProcedureCode || item.procedureCode, item.authorizedQuantity != null ? `quantity ${item.authorizedQuantity}` : "", item.authorizedUnits != null ? `units ${item.authorizedUnits}` : ""].filter(Boolean).join(" · ")}</small> : null}
-                {item.effectiveFrom || item.effectiveTo ? <small>{rfaCalendarDate(item.effectiveFrom) || "Not specified"} – {rfaCalendarDate(item.effectiveTo) || "Not specified"}</small> : null}
-                <small>Decided {rfaShortDate(item.decidedAt)}</small>
-              </> : null}
-            </td>
-          </tr>
-          {item.decisionReason || item.reviewerName || item.decisionClosure || closable || showAppointment || correctable || item.currentResponseDocumentId || item.currentImrDocumentId ? <tr className="mbrfa-subrow"><td /><td colSpan={5}><div className="mbrfa-manage">
-            {item.decisionReason ? <p>{item.decisionReason}</p> : null}{item.reviewerName ? <p>Reviewer: {item.reviewerName}{item.reviewerPhone ? ` · ${item.reviewerPhone}` : ""}</p> : null}
-            {item.decisionClosure ? <p>{item.decisionClosure.closed ? "Closed" : "Reopened"} by {item.decisionClosure.updatedBy} · {rfaShortDate(item.decisionClosure.updatedAt)} — {item.decisionClosure.reason}</p> : null}
-            {item.currentResponseDocumentId || item.currentImrDocumentId ? <div className="mbtd-actions">{evidence(item.currentResponseDocumentId, "View decision evidence")}{evidence(item.currentImrDocumentId, "View independent medical review form")}</div> : null}
-            {showAppointment ? <AppointmentForm key={`${item.id}:${appointment.version}:${appointment.authorizationToken}`} appointment={appointment} editable={permissions.includes("edit")} disabled={disabled || loadErrors.some(value => value.startsWith("Appointments"))} onError={setError} onSave={input => run(`appointment:${item.id}`, input, async key => { await client.updateScheduling(rfa.id, item.id, input, key); return records.get(rfa.id); })} /> : null}
-            {closable ? <TreatmentClosureForm key={`${item.id}:${item.decisionClosure?.version ?? 0}`} item={item} disabled={disabled} onError={setError} onSave={input => run(`closure:${item.id}`, input, key => client.updateTreatmentClosure(rfa.id, item.id, input, key))} /> : null}
-            {correctable ? <details><summary>Correct this decision</summary><p>The original decision and its evidence remain in history. Corrections require a reason and response evidence. Requests already used for a bill or a scheduled appointment cannot be corrected.</p>
-              <CorrectionForm key={`${item.id}:${item.currentDecisionEventId}`} item={item} documents={rfa.documents} disabled={disabled || loading || loadErrors.length > 0 || scheduling.some(value => value.disposition === "scheduled")} onError={setError} onSave={input => run(`correction:${item.id}`, input, key => client.correctDecision(rfa.id, input, key))} />
-            </details> : null}
-          </div></td></tr> : null}
-        </Fragment>;
-      })}</tbody></table></div> : <p className="mbrfa-sheet-body mbrfa-empty">No treatments recorded.</p>}
+        const decided = item.outcome !== "pending";
+        const authorized = decided && (item.authorizedProcedureCode || item.authorizedQuantity != null || item.authorizedUnits != null)
+          ? [item.authorizedProcedureCode || item.procedureCode, item.authorizedQuantity != null ? `Qty ${item.authorizedQuantity}` : "", item.authorizedUnits != null ? `Units ${item.authorizedUnits}` : ""].filter(Boolean).join(" · ") : "";
+        const field = (title: string, value: ReactNode) => value === null || value === undefined || value === "" ? null : <div><dt>{title}</dt><dd>{value}</dd></div>;
+        const dialog = (id: string, title: string, content: ReactNode) => panel === `${id}:${item.id}` ? <RfaModal title={title} busy={busy} onClose={() => { setPanel(""); setError(""); }}>{error ? <p role="alert">{error}</p> : null}{content}</RfaModal> : null;
+        const open = (id: string) => { setError(""); setMessage(""); setPanel(`${id}:${item.id}`); };
+        return <section key={item.id} className="mbrfa-tx" id={`rfa-treatment-${item.id}`} tabIndex={-1} aria-label={`Treatment ${index + 1}: ${item.serviceDescription}`}>
+          <header className="mbrfa-tx-head">
+            <span className="mbrfa-tx-num" aria-hidden="true">{index + 1}</span>
+            <dl>
+              <div><dt>Service/Good Requested</dt><dd><strong>{item.serviceDescription}</strong></dd></div>
+              <div><dt>CPT/HCPCS</dt><dd><span className="mbrfa-code">{item.procedureCode || "—"}</span></dd></div>
+              <div><dt>Diagnosis (ICD-10)</dt><dd><span className="mbrfa-code">{item.diagnosisCode}</span>{item.diagnosisDescription ? <small>{item.diagnosisDescription}</small> : null}</dd></div>
+              <div><dt>Other Information</dt><dd>{otherInformation(item) || "—"}</dd></div>
+            </dl>
+          </header>
+          <div className="mbrfa-tx-panels">
+            <div className="mbrfa-tx-panel">
+              <div className="mbrfa-tx-panel-head"><h4>Utilization Review Decision</h4><RfaPill tone={outcome.tone}>{outcome.label}</RfaPill></div>
+              <dl className="mbrfa-tx-fields">
+                {field("RFA Sent", rfaCalendarDate(rfa.submittedAt) || "Not sent")}
+                {field("UR Decision Due", decided ? null : rfaCalendarDate(rfa.decisionDueAt) || "—")}
+                {field("UR Decision Date", decided ? rfaCalendarDate(item.decidedAt) : null)}
+                {field("Authorization #", decided ? item.authorizationNumber : null)}
+                {field("Authorized", authorized)}
+                {field("Valid", decided && (item.effectiveFrom || item.effectiveTo) ? `${rfaCalendarDate(item.effectiveFrom) || "—"} – ${rfaCalendarDate(item.effectiveTo) || "—"}` : null)}
+                {field("Reviewer", item.reviewerName ? `${item.reviewerName}${item.reviewerPhone ? ` · ${item.reviewerPhone}` : ""}` : null)}
+                {field("Reason", item.decisionReason)}
+                {field(item.decisionClosure?.closed ? "Closed" : item.decisionClosure ? "Reopened" : "", item.decisionClosure ? `${rfaShortDate(item.decisionClosure.updatedAt)} — ${item.decisionClosure.reason}` : null)}
+              </dl>
+              {item.currentResponseDocumentId || item.currentImrDocumentId || correctable || closable ? <div className="mbtd-actions mbrfa-tx-actions">
+                {evidence(item.currentResponseDocumentId, "View decision")}{evidence(item.currentImrDocumentId, "View IMR form")}
+                {correctable ? <button type="button" disabled={disabled} onClick={() => open("correct")}>Correct decision</button> : null}
+                {closable ? <button type="button" disabled={disabled} onClick={() => open("close")}>{item.decisionClosure?.closed ? "Reopen" : "No longer needed"}</button> : null}
+              </div> : null}
+            </div>
+            <div className="mbrfa-tx-panel">
+              <div className="mbrfa-tx-panel-head"><h4>Appointment</h4>{appointment && appointment.disposition !== "pending" ? <RfaPill tone={appointment.disposition === "scheduled" ? "ok" : "muted"}>{capital(words(appointment.disposition))}</RfaPill> : null}</div>
+              {loading ? <p className="mbrfa-tx-note">Loading…</p> : appointment && appointment.disposition === "scheduled" ? <dl className="mbrfa-tx-fields">
+                {field("Date", date(appointment.appointmentAt))}{field("Provider", appointment.providerName)}{field("Location", appointment.location)}
+              </dl> : appointment?.reason ? <p className="mbrfa-tx-note">{appointment.reason}</p> : <p className="mbrfa-tx-note">{showAppointment ? "Not scheduled yet." : "Available after treatment is authorized."}</p>}
+              {appointment && appointment.version > 0 && !appointment.current ? <p className="mbrfa-tx-note" role="status">Authorization has changed. Review the current decision before updating this appointment.</p> : null}
+              {showAppointment && permissions.includes("edit") ? <div className="mbtd-actions mbrfa-tx-actions"><button type="button" disabled={disabled || loadErrors.some(value => value.startsWith("Appointments"))} onClick={() => open("appointment")}>{appointment.disposition === "scheduled" ? "Update appointment" : "Schedule"}</button></div> : null}
+            </div>
+          </div>
+          {showAppointment ? dialog("appointment", `Appointment · ${item.serviceDescription}`, <AppointmentForm bare key={`${item.id}:${appointment.version}:${appointment.authorizationToken}`} appointment={appointment} editable={permissions.includes("edit")} disabled={disabled} onError={setError} onSave={input => run(`appointment:${item.id}`, input, async key => { await client.updateScheduling(rfa.id, item.id, input, key); return records.get(rfa.id); })} />) : null}
+          {closable ? dialog("close", item.decisionClosure?.closed ? "Reopen treatment follow-up" : "Decision no longer required", <TreatmentClosureForm bare key={`${item.id}:${item.decisionClosure?.version ?? 0}`} item={item} disabled={disabled} onError={setError} onSave={input => run(`closure:${item.id}`, input, key => client.updateTreatmentClosure(rfa.id, item.id, input, key))} />) : null}
+          {correctable ? dialog("correct", `Correct decision · ${item.serviceDescription}`, <><p>The original decision and its evidence remain in history. Corrections require a reason and response evidence. Requests already used for a bill or a scheduled appointment cannot be corrected.</p>
+            <CorrectionForm key={`${item.id}:${item.currentDecisionEventId}`} item={item} documents={rfa.documents} disabled={disabled || loading || loadErrors.length > 0 || scheduling.some(value => value.disposition === "scheduled")} onError={setError} onSave={input => run(`correction:${item.id}`, input, key => client.correctDecision(rfa.id, input, key))} /></>) : null}
+        </section>;
+      })}</div> : <p className="mbrfa-sheet-body mbrfa-empty">No treatments recorded.</p>}
     </RfaCard> : null}
     {view !== "treatments" ? <>
       <RfaCard title="History" action={permissions.includes("edit") && !noteOpen ? <button type="button" disabled={disabled} onClick={() => setNoteOpen(true)}>Add note</button> : null} flush>
@@ -217,11 +243,9 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
   if (cards) return <div className="mbrfa-tracking">{cardContent}</div>;
   return embedded ? <div className="mbrfa-tracking">{content}</div> : <TreatmentDraftShell {...appearance} title="Treatments and history" description="Review each treatment's authorization, appointments, delivery evidence, and notes."><style>{rfaDetailCss}</style>{content}</TreatmentDraftShell>;
 }
-function AppointmentForm({ appointment, editable, disabled, onError, onSave }: { appointment: RfaScheduling; editable: boolean; disabled: boolean; onError: (message: string) => void; onSave: (input: RfaSchedulingInput) => Promise<boolean> }): ReactElement {
+function AppointmentForm({ appointment, editable, disabled, onError, onSave, bare = false }: { bare?: boolean; appointment: RfaScheduling; editable: boolean; disabled: boolean; onError: (message: string) => void; onSave: (input: RfaSchedulingInput) => Promise<boolean> }): ReactElement {
   const [disposition, setDisposition] = useState(appointment.disposition === "canceled" && appointment.version > 0 ? "canceled" : appointment.eligible && appointment.disposition === "no_appointment" ? "no_appointment" : appointment.eligible ? "scheduled" : "canceled");
-  return <section><h4>Appointment</h4><p>{words(appointment.disposition)}{appointment.appointmentAt ? ` · ${date(appointment.appointmentAt)}` : ""}</p>{appointment.providerName ? <p>{appointment.providerName} · {appointment.location}</p> : null}{appointment.reason ? <p>{appointment.reason}</p> : null}
-    {appointment.version > 0 && !appointment.current ? <p role="status">Authorization has changed. Review the current decision before updating this appointment.</p> : null}
-    {editable && (appointment.eligible || appointment.version > 0) ? <details><summary>Update appointment</summary><form onSubmit={event => {
+  const form = <form onSubmit={event => {
       event.preventDefault(); if (disabled) return;
       try {
         const data = new FormData(event.currentTarget); const base = { expectedVersion: appointment.version, authorizationToken: appointment.authorizationToken };
@@ -230,7 +254,11 @@ function AppointmentForm({ appointment, editable, disabled, onError, onSave }: {
       } catch (reason) { onError(reason instanceof Error ? reason.message : "Review the appointment details."); }
     }}><fieldset disabled={disabled}><legend>Appointment details</legend><label>Disposition<select value={disposition} onChange={event => setDisposition(event.target.value)}>{appointment.eligible ? <><option value="scheduled">Scheduled</option><option value="no_appointment">No appointment needed</option></> : null}{appointment.version > 0 ? <option value="canceled">Canceled</option> : null}</select></label>
       {disposition === "scheduled" ? <div className="mbtd-grid"><label>Date and time (your local time)<input name="appointmentAt" type="datetime-local" required defaultValue={localTime(appointment.appointmentAt)} /></label><label>Provider name<input name="providerName" required maxLength={200} defaultValue={appointment.providerName ?? ""} /></label><label>Location<input name="location" required maxLength={500} defaultValue={appointment.location ?? ""} /></label></div> : <label>Reason<textarea name="reason" required maxLength={2000} defaultValue={appointment.reason ?? ""} /></label>}
-      <button type="submit">Save appointment</button></fieldset></form></details> : !appointment.eligible && appointment.disposition === "pending" ? <p>Appointments become available after treatment is authorized.</p> : null}
+      <button type="submit">Save appointment</button></fieldset></form>;
+  if (bare) return form;
+  return <section><h4>Appointment</h4><p>{words(appointment.disposition)}{appointment.appointmentAt ? ` · ${date(appointment.appointmentAt)}` : ""}</p>{appointment.providerName ? <p>{appointment.providerName} · {appointment.location}</p> : null}{appointment.reason ? <p>{appointment.reason}</p> : null}
+    {appointment.version > 0 && !appointment.current ? <p role="status">Authorization has changed. Review the current decision before updating this appointment.</p> : null}
+    {editable && (appointment.eligible || appointment.version > 0) ? <details><summary>Update appointment</summary>{form}</details> : !appointment.eligible && appointment.disposition === "pending" ? <p>Appointments become available after treatment is authorized.</p> : null}
   </section>;
 }
 function CorrectionForm({ item, documents, disabled, onError, onSave }: { item: RfaRecord["items"][number]; documents: RfaRecord["documents"]; disabled: boolean; onError: (message: string) => void; onSave: (input: RfaDecisionCorrectionInput) => Promise<boolean> }): ReactElement {
@@ -260,13 +288,14 @@ function CorrectionForm({ item, documents, disabled, onError, onSave }: { item: 
     </div><button type="submit">Save decision correction</button></fieldset></form>;
 }
 
-function TreatmentClosureForm({ item, disabled, onError, onSave }: {
+function TreatmentClosureForm({ item, disabled, onError, onSave, bare = false }: {
+  bare?: boolean;
   item: RfaRecord["items"][number]; disabled: boolean;
   onError: (message: string) => void; onSave: (input: RfaTreatmentClosureInput) => Promise<boolean>;
 }): ReactElement {
   const closed = Boolean(item.decisionClosure?.closed);
   const title = closed ? "Reopen treatment follow-up" : "Decision no longer required";
-  return <details><summary>{title}</summary>
+  const content = <>
     <p>{closed ? "Resume waiting for a decision on this treatment. Its original review deadline still applies." : "Close follow-up for this treatment without recording an approval or denial. Other treatments remain active. This does not withdraw the request with the claims administrator."}</p>
     <form onSubmit={event => {
       event.preventDefault(); if (disabled) return;
@@ -278,5 +307,6 @@ function TreatmentClosureForm({ item, disabled, onError, onSave }: {
       <label>{closed ? "Reason for reopening" : "Reason a decision is no longer required"}<textarea name="closureReason" required maxLength={2000} /></label>
       <div className="mbtd-actions"><button type="submit">{closed ? "Reopen treatment" : "Close treatment"}</button></div>
     </fieldset></form>
-  </details>;
+  </>;
+  return bare ? content : <details><summary>{title}</summary>{content}</details>;
 }
