@@ -979,7 +979,7 @@ export function ConnectedBillLifecycle({
       initialBill={correctionInitialBill}
               profileOptions={data.options ? organizationProfileOptions(data.options) : {}}
               {...(billingSettings ? { billingSettings } : {})}
-              treatmentBilling={data.bill.billingMode === "professional"}
+              treatmentBilling={data.bill.billingMode === "professional" || data.bill.lineItems.some((line) => !/^ML/i.test(line.code.trim()))}
       attachments={correctionAttachments}
       onSubmit={submitCorrection}
       onListMedicalProviderNetworks={lifecycle.listMedicalProviderNetworks}
@@ -1007,7 +1007,7 @@ export function ConnectedBillLifecycle({
       initialBill={correctionInitialBill}
               profileOptions={data.options ? organizationProfileOptions(data.options) : {}}
               {...(billingSettings ? { billingSettings } : {})}
-              treatmentBilling={data.bill.billingMode === "professional"}
+              treatmentBilling={data.bill.billingMode === "professional" || data.bill.lineItems.some((line) => !/^ML/i.test(line.code.trim()))}
       attachments={correctionAttachments}
       onSubmit={submitNewBillFromForm}
       onListMedicalProviderNetworks={lifecycle.listMedicalProviderNetworks}
@@ -1049,7 +1049,7 @@ export function ConnectedBillLifecycle({
       initialBill={correctionInitialBill}
               profileOptions={data.options ? organizationProfileOptions(data.options) : {}}
               {...(billingSettings ? { billingSettings } : {})}
-              treatmentBilling={data.bill.billingMode === "professional"}
+              treatmentBilling={data.bill.billingMode === "professional" || data.bill.lineItems.some((line) => !/^ML/i.test(line.code.trim()))}
       attachments={correctionAttachments}
       onSubmit={submitDuplicateFromForm}
       onListMedicalProviderNetworks={lifecycle.listMedicalProviderNetworks}

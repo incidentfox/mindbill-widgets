@@ -17,8 +17,9 @@ These defaults follow [California 8 CCR section 9795](https://www.dir.ca.gov/t8/
 
 In treatment mode, a bill containing only treatment lines shows **Service lines**
 without the evaluator selector. Adding a medical-legal line restores that selector;
-its defaults still apply only to medical-legal codes. Medical-legal and treatment
-services must be submitted on separate bills.
+its defaults still apply only to medical-legal codes. A bill with a medical-legal
+line is a medical-legal bill; diagnostic tests performed for that evaluation go on
+the same bill and are priced from the treatment fee schedule.
 
 Modifier descriptions follow the line's code and service date. Medical-legal `93`
 and `95` retain their interpreter and QME meanings. For California treatment from
