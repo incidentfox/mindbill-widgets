@@ -56,8 +56,9 @@ export function RfaTrackingPanel(props: RfaTrackingPanelProps): ReactElement {
   const identity = useMemo(() => crypto.randomUUID(), [props.options]);
   return <RfaTrackingContent key={`${identity}:${props.rfa.id}`} {...props} />;
 }
-export function RfaTrackingContent({ rfa: provided, options, permissions = [], onUpdated, view = "all", embedded = false, cards = false, onRefreshDelivery, ...appearance }: RfaTrackingPanelProps & { view?: "all" | "treatments" | "history"; embedded?: boolean; /** Bill-style cards and tables instead of stacked fieldsets. */ cards?: boolean;
-  /** Card layout: ask the fax provider again about a fax still shown as sending. */ onRefreshDelivery?: () => void }): ReactElement {
+export function RfaTrackingContent({ rfa: provided, options, permissions = [], onUpdated, view = "all", embedded = false, cards = false, onRefreshDelivery, onRecordDecision, ...appearance }: RfaTrackingPanelProps & { view?: "all" | "treatments" | "history"; embedded?: boolean; /** Bill-style cards and tables instead of stacked fieldsets. */ cards?: boolean;
+  /** Card layout: ask the fax provider again about a fax still shown as sending. */ onRefreshDelivery?: () => void;
+  /** Card layout: record the decision for one treatment (opens the host's decision dialog). */ onRecordDecision?: (itemId: string) => void }): ReactElement {
   const [rfa, setRfa] = useState(provided);
   useEffect(() => setRfa(provided), [provided]);
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
@@ -142,6 +143,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
         const closable = canClose && item.outcome === "pending" && !item.decidedAt;
         const correctable = canCorrect && !!item.currentDecisionEventId && item.outcome !== "pending";
         const decided = item.outcome !== "pending";
+        const recordable = !!onRecordDecision && permissions.includes("act") && !decided && !item.decisionClosure?.closed && ["received", "under_review", "information_requested"].includes(rfa.status);
         const authorized = decided && (item.authorizedProcedureCode || item.authorizedQuantity != null || item.authorizedUnits != null)
           ? [item.authorizedProcedureCode || item.procedureCode, item.authorizedQuantity != null ? `Qty ${item.authorizedQuantity}` : "", item.authorizedUnits != null ? `Units ${item.authorizedUnits}` : ""].filter(Boolean).join(" · ") : "";
         const field = (title: string, value: ReactNode) => value === null || value === undefined || value === "" ? null : <div><dt>{title}</dt><dd>{value}</dd></div>;
@@ -171,7 +173,8 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
                 {field("Reason", item.decisionReason)}
                 {field(item.decisionClosure?.closed ? "Closed" : item.decisionClosure ? "Reopened" : "", item.decisionClosure ? `${rfaShortDate(item.decisionClosure.updatedAt)} — ${item.decisionClosure.reason}` : null)}
               </dl>
-              {item.currentResponseDocumentId || item.currentImrDocumentId || correctable || closable ? <div className="mbtd-actions mbrfa-tx-actions">
+              {item.currentResponseDocumentId || item.currentImrDocumentId || correctable || closable || recordable ? <div className="mbtd-actions mbrfa-tx-actions">
+                {recordable ? <button type="button" className="mbtd-primary" disabled={disabled} onClick={() => onRecordDecision!(item.id)}>Record decision</button> : null}
                 {evidence(item.currentResponseDocumentId, "View decision")}{evidence(item.currentImrDocumentId, "View IMR form")}
                 {correctable ? <button type="button" disabled={disabled} onClick={() => open("correct")}>Correct decision</button> : null}
                 {closable ? <button type="button" disabled={disabled} onClick={() => open("close")}>{item.decisionClosure?.closed ? "Reopen" : "No longer needed"}</button> : null}

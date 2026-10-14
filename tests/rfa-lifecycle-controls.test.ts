@@ -166,3 +166,26 @@ it("excludes administratively closed treatments from Post UR and reloads tasks a
   expect(view.fetcher.mock.calls.length).toBeGreaterThan(before);
  }finally{await view.close();}
 });
+it("opens decisions for a requested treatment and attaches the UR decision PDF in place", async () => {
+  const uploaded: RfaRecord = { ...record, documents: [...record.documents, { id: "ur_new", documentType: "ur_response", filename: "UR decision.pdf", sha256: "0", sizeBytes: 10, contentRevision: record.contentRevision, createdAt: "2026-09-17T10:00:00.000Z" } as RfaRecord["documents"][number]] };
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  const fetcher = vi.fn<typeof fetch>(async (url, init) => String(url).includes("rfa-follow-ups") ? Response.json({ data: [], nextCursor: null })
+    : init?.method === "POST" && String(url).endsWith("/documents") ? Response.json({ data: uploaded }, { status: 201 }) : Response.json({ data: record }));
+  const props = { rfa: record, getSession, fetch: fetcher, rows: true, permissions: ["act", "edit"] as const };
+  try {
+    await act(async () => root.render(createElement(RfaLifecycleControls, props)));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    const itemId = record.items.at(-1)!.id;
+    await act(async () => root.render(createElement(RfaLifecycleControls, { ...props, decisionRequest: { itemId, nonce: 1 } })));
+    const dialog = container.querySelector('[role="dialog"]')!;
+    expect(dialog.getAttribute("aria-label")).toContain("Record treatment decisions");
+    expect(dialog.querySelector("fieldset fieldset legend")!.textContent).toContain(record.items.at(-1)!.serviceDescription);
+    const input = [...dialog.querySelectorAll<HTMLInputElement>('input[type="file"]')].find(node => /UR decision/i.test(node.parentElement?.textContent ?? ""))!;
+    const file = new File(["%PDF-1.4"], "UR decision.pdf", { type: "application/pdf" });
+    Object.defineProperty(input, "files", { value: [file] });
+    await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => {});
+    expect(fetcher.mock.calls.some(call => call[1]?.method === "POST" && String(call[0]).endsWith("/documents"))).toBe(true);
+    expect(container.querySelector<HTMLSelectElement>('[name="responseDocumentId"]')!.value).toBe("ur_new");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});

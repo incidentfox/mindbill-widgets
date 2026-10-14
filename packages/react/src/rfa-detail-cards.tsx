@@ -183,4 +183,5 @@ export const rfaCardsCss = `
 .mbrfa-ur-list li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding:10px 12px;font-size:13px}.mbrfa-ur-list li+li{border-top:1px solid var(--mb-border)}
 .mbrfa-ur-list li>span:first-child{display:grid;gap:2px;min-width:0}.mbrfa-ur-list li small{color:var(--mb-muted);font-size:12px}
 .mbrfa-ur-actions{padding-top:4px}
+.mbrfa-decision-upload{display:grid;gap:6px;padding:10px 12px;border:1px dashed var(--mb-border);border-radius:var(--mb-control-radius);font-size:13px}
 `;

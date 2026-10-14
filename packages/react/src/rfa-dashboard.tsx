@@ -257,6 +257,8 @@ function RfaDetail({ layout, forwardContacts, id, selectedItem, selectedResponse
   const [rfa, setRfa] = useState<RfaRecord | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  // A treatment card asked to record its decision; the Utilization Review section opens the dialog.
+  const [decisionRequest, setDecisionRequest] = useState<{ itemId: string; nonce: number } | null>(null);
   const [sending, setSending] = useState(() => {
     if (initialAction === "send") return true;
     try { const key = `mbrfa-send:${id}`; if (sessionStorage.getItem(key)) { sessionStorage.removeItem(key); return true; } } catch { /* storage unavailable */ }
@@ -440,7 +442,7 @@ function RfaDetail({ layout, forwardContacts, id, selectedItem, selectedResponse
         ]} /></RfaCard>
       </div>
       <ClaimsAdministratorDirectoryDialog open={directoryOpen} directory={directory} loading={directoryLoading} error={directoryError} onClose={() => setDirectoryOpen(false)} />
-      <RfaTrackingContent embedded cards view="treatments" rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
+      <RfaTrackingContent embedded cards view="treatments" onRecordDecision={itemId => setDecisionRequest({ itemId, nonce: Date.now() })} rfa={rfa} options={options} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
       <RfaCard id={`${tabId}-documents`} title="Documents" count={listedDocuments.length} flush action={permissions.includes("edit") && unsent ? <label className="mbrfa-file-button">+ Add documents<input type="file" multiple accept="application/pdf,.pdf" aria-label="Add supporting documents (PDF, up to 25 MB each)" disabled={locked} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void uploadFiles(files); }} /></label> : null}>
         {listedDocuments.length ? <div className="mbrfa-table-scroll" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void uploadFiles(Array.from(event.dataTransfer.files)); }}><table className="mbrfa-grid-table mbrfa-documents-table"><thead><tr>{unsent ? <th scope="col">Send</th> : null}<th scope="col">Type</th>{showSource ? <th scope="col">Source</th> : null}<th scope="col">File name</th><th scope="col" className="mbrfa-icon-col">View</th>{anyRemovable ? <th scope="col" className="mbrfa-icon-col">Delete</th> : null}</tr></thead><tbody>{listedDocuments.map(document => <tr key={document.id}>
           {unsent ? <td><input type="checkbox" aria-label={`Include ${document.filename} in the packet`} disabled={locked || (document.documentType === "rfa_form" && document.contentRevision !== rfa.contentRevision)} checked={documentIds.includes(document.id)} onChange={event => { setDocumentIds(value => event.target.checked ? [...value.filter(item => document.documentType !== "rfa_form" || !rfa.documents.some(candidate => candidate.id === item && candidate.documentType === "rfa_form")), document.id] : value.filter(item => item !== document.id)); }} /></td> : null}
@@ -453,7 +455,7 @@ function RfaDetail({ layout, forwardContacts, id, selectedItem, selectedResponse
       </RfaCard>
       {unsent ? null : reviewable ? <RfaCard id={`${tabId}-review`} title="Utilization Review" flush>
         {rfa.informationRequests.some(item => !item.respondedAt) ? <div className="mbrfa-rows">{rfa.informationRequests.filter(item => !item.respondedAt).map(item => <p key={item.id}><RfaPill tone="warn">Information requested</RfaPill> {item.requestText} · Due {date(item.dueAt)}</p>)}</div> : null}
-        <RfaLifecycleControls rows {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} {...(readRfaResponse ? { readResponse: readRfaResponse } : {})} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
+        <RfaLifecycleControls rows {...(decisionRequest ? { decisionRequest } : {})} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} {...(readRfaResponse ? { readResponse: readRfaResponse } : {})} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
       </RfaCard> : null}
       </div>
       </> : <>
