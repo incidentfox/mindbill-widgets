@@ -65,6 +65,14 @@ try {
   await page.getByRole("dialog", { name: /Appointment/ }).waitFor();
   await page.screenshot({ path: resolve(output, `appointment-dialog-${width}.png`) });
   await page.keyboard.press("Escape"); assert.equal(await page.getByRole("dialog").count(), 0);
+  // A pending treatment records its own decision; the dialog lists it first and lets the decision PDF be attached in place.
+  assert.equal(await approved.getByRole("button", { name: "Record decision" }).count(), 0);
+  await page.locator(".mbrfa-tx").nth(1).getByRole("button", { name: "Record decision" }).click();
+  const fromCard = page.getByRole("dialog", { name: /Record treatment decisions/ });
+  await fromCard.waitFor();
+  assert.match(await fromCard.locator("fieldset fieldset legend").first().innerText(), /Therapeutic exercise/);
+  assert.equal(await fromCard.getByLabel(/attach a different UR decision/i).count(), 1);
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Record decisions/ }).first().click();
   const decisions = page.getByRole("dialog", { name: /Record treatment decisions/ });
   await decisions.waitFor(); assert.equal(await decisions.locator("form").count(), 1);
