@@ -19,7 +19,7 @@ const row={id:'rfa_synthetic',contentRevision:1,claimId:'claim_synthetic',patien
  items:[{id:'item_approved',serviceDescription:'Chiropractic manipulative treatment, spinal, 3–4 regions',diagnosisCode:'M54.2',diagnosisDescription:'Cervicalgia',procedureCode:'98941',quantity:6,units:6,frequency:'1 visit per week',duration:'6 weeks',requestedFrom:'2026-10-03',requestedTo:'2026-11-27',outcome:'approved',decidedAt:'2026-10-07T13:14:00Z',authorizationNumber:'SAMPLE-UR-001',authorizedProcedureCode:'98941',authorizedQuantity:6,authorizedUnits:6,effectiveFrom:'2026-10-07',effectiveTo:'2026-12-06',currentResponseDocumentId:'doc_ur',currentDecisionEventId:'event_1'},
   {id:'item_pending',serviceDescription:'Therapeutic exercise',diagnosisCode:'M54.2',diagnosisDescription:'Cervicalgia',procedureCode:'97110',quantity:8,frequency:'2 visits per week',duration:'4 weeks',outcome:'pending'}],
  documents:[doc('doc_report','clinical_report','PR-2 progress report.pdf'),doc('doc_form','rfa_form','DWC-RFA-signed.pdf'),doc('doc_ur','ur_response','UR determination - Sample administrator.pdf')],
- transmissions:[],informationRequests:[],events:[],requestingPractice:{},authorizationContact:{}};
+ transmissions:[{id:'tx_sub',direction:'outbound',channel:'fax',status:'delivered',purpose:'submission',destination:'+15555550163',occurredAt:'2026-10-02T00:40:00Z',receivedAt:'2026-10-03T00:00:00Z',proofDocumentId:null,providerMessageId:'FAX-SAMPLE-1',packetId:'pkt_1'},{id:'tx_fwd',direction:'outbound',channel:'fax',status:'sending',purpose:'forward',destination:'+15555550199',occurredAt:'2026-10-08T00:40:00Z',receivedAt:null,proofDocumentId:null,providerMessageId:null,packetId:'pkt_1'}],informationRequests:[],events:[],requestingPractice:{},authorizationContact:{}};
 const scheduling=[{itemId:'item_approved',serviceDescription:row.items[0].serviceDescription,outcome:'approved',eligible:true,authorizationToken:'token',version:0,disposition:'pending',current:true,appointmentAt:null,providerName:null,location:null,reason:null,updatedAt:null},{itemId:'item_pending',serviceDescription:'Therapeutic exercise',outcome:'pending',eligible:false,authorizationToken:'token2',version:0,disposition:'pending',current:true,appointmentAt:null,providerName:null,location:null,reason:null,updatedAt:null}];
 const task={id:'task_1',rfaId:row.id,claimId:row.claimId,responseDocumentId:'doc_ur',responseFilename:'UR determination - Sample administrator.pdf',kind:'post_ur_decision',status:'open',dueAt:'2026-10-08T09:30:00Z',assigneeReference:null,snoozedUntil:null,lastOutcome:null,lastNote:null,createdAt:'2026-10-07T13:20:00Z',updatedAt:'2026-10-07T13:20:00Z',resolvedAt:null};
 window.__writes=[];
@@ -28,9 +28,11 @@ const fetcher=async(input,init)=>{const path=new URL(String(input)).pathname;if(
  if(path.endsWith('/scheduling'))return Response.json({data:scheduling});
  if(path.endsWith('/rfa-follow-ups'))return Response.json({data:[task],nextCursor:null});
  if(path.includes('/documents/'))return new Response(new Blob(['%PDF-1.4\\n%%EOF'],{type:'application/pdf'}));
- if(path.endsWith('/events')||path.endsWith('/rfa-inbound-faxes'))return Response.json({data:[]});
+ if(path.endsWith('/events'))return Response.json({data:[{id:'ev_1',sequence:1,eventType:'transmission_recorded',actor:'integration',payload:{transmissionId:'tx_sub',channel:'fax',destination:'+15555550163'},occurredAt:'2026-10-02T00:40:00Z'},{id:'ev_2',sequence:2,eventType:'followup_resolved',actor:'system:rfa-follow-ups',payload:{reason:'source_condition_cleared'},occurredAt:'2026-10-08T00:00:00Z'}]});
+ if(path.includes('/packets/'))return new Response(new Blob(['%PDF-1.4\\n%%EOF'],{type:'application/pdf'}));
+ if(path.endsWith('/rfa-inbound-faxes'))return Response.json({data:[]});
  return Response.json({data:row});};
-createRoot(document.getElementById('app')).render(React.createElement(RfaDashboard,{appearance:{preset:'mindbill'},getSession:async()=>({token:'synthetic_session'}),fetch:fetcher,permissions:['act','edit'],layout:'simple',selectedRfaId:row.id,officialForm:true}));
+createRoot(document.getElementById('app')).render(React.createElement(RfaDashboard,{appearance:{preset:'mindbill'},getSession:async()=>({token:'synthetic_session'}),fetch:fetcher,permissions:['act','edit','send'],layout:'simple',selectedRfaId:row.id,officialForm:true}));
 `,resolveDir:process.cwd(),loader:'jsx'},bundle:true,write:false,minify:true,format:'iife',platform:'browser',define:{'process.env.NODE_ENV':'"production"'},alias:{react:resolve(host.resolve('react/package.json'),'..'),'react-dom':resolve(host.resolve('react-dom/package.json'),'..')}
 });
 const server = createServer((req, res) => {
@@ -71,6 +73,16 @@ try {
   await page.getByRole("button", { name: "Update" }).first().click();
   await page.getByRole("dialog", { name: /follow-up/ }).waitFor();
   await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "History & Activity" }).click();
+  const delivery = page.getByRole("region", { name: "Delivery" });
+  await delivery.waitFor();
+  assert.equal(await delivery.getByRole("button", { name: "View PDF" }).count(), 2);
+  assert.equal(await delivery.getByRole("button", { name: "Refresh status" }).count(), 1, "only the fax still sending offers a status refresh");
+  assert.equal(await delivery.getByRole("button", { name: "Forward" }).count(), 0, "Forward lives in the title row and action bar");
+  assert.equal(await page.getByText("Saved Packets", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("Check fax delivery status").count(), 0);
+  assert.equal(await page.getByText("source_condition_cleared").count(), 0);
+  await page.screenshot({ path: resolve(output, `history-${width}.png`), fullPage: true });
   assert.deepEqual(errors, []); assert.deepEqual(await page.evaluate(() => window.__writes), []);
   await page.close();
  }

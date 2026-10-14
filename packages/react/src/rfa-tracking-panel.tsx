@@ -47,7 +47,7 @@ function timelineEntries(history: RfaHistoryEvent[], rfa: RfaRecord): TimelineEn
     const at = events.findIndex(entry => entry.event && (entry.event.occurredAt ?? "") > rfa.decisionDueAt!);
     events.splice(at < 0 ? events.length : at, 0, due);
   } else events.push({ key: "receipt", state: "pending", title: "Waiting for confirmed receipt", when: "", detail: "The decision due date is set when receipt is confirmed." });
-  if (open) events.push({ key: "awaiting", state: "pending", title: decided ? `Awaiting decision on ${rfa.items.length - decided} of ${rfa.items.length} treatments` : "Awaiting UR decision", when: "" });
+  if (open) events.push({ key: "awaiting", state: "pending", title: decided ? `No response on ${rfa.items.length - decided} of ${rfa.items.length} treatments` : "Awaiting UR decision", when: "" });
   return events;
 }
 
@@ -56,7 +56,8 @@ export function RfaTrackingPanel(props: RfaTrackingPanelProps): ReactElement {
   const identity = useMemo(() => crypto.randomUUID(), [props.options]);
   return <RfaTrackingContent key={`${identity}:${props.rfa.id}`} {...props} />;
 }
-export function RfaTrackingContent({ rfa: provided, options, permissions = [], onUpdated, view = "all", embedded = false, cards = false, ...appearance }: RfaTrackingPanelProps & { view?: "all" | "treatments" | "history"; embedded?: boolean; /** Bill-style cards and tables instead of stacked fieldsets. */ cards?: boolean }): ReactElement {
+export function RfaTrackingContent({ rfa: provided, options, permissions = [], onUpdated, view = "all", embedded = false, cards = false, onRefreshDelivery, ...appearance }: RfaTrackingPanelProps & { view?: "all" | "treatments" | "history"; embedded?: boolean; /** Bill-style cards and tables instead of stacked fieldsets. */ cards?: boolean;
+  /** Card layout: ask the fax provider again about a fax still shown as sending. */ onRefreshDelivery?: () => void }): ReactElement {
   const [rfa, setRfa] = useState(provided);
   useEffect(() => setRfa(provided), [provided]);
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
@@ -111,6 +112,13 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
       const blob = await (kind === "packet" ? records.getPacket(rfa.id, id) : records.getDocument(rfa.id, id)); if (!alive.current) return;
       const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "The evidence could not be opened."); }
+  };
+  // The complete packet a transmission sent, opened in a new tab like any other PDF.
+  const packetOf = (transmission: RfaRecord["transmissions"][number]) => (transmission as { packetId?: string | null }).packetId ?? null;
+  const viewPacket = async (packetId: string) => {
+    const tab = window.open("", "_blank");
+    try { const url = URL.createObjectURL(await records.getPacket(rfa.id, packetId)); if (tab) tab.location.href = url; else window.location.assign(url); setTimeout(() => URL.revokeObjectURL(url), 60_000); }
+    catch (reason) { tab?.close(); if (alive.current) setError(reason instanceof Error ? reason.message : "The sent packet could not be opened."); }
   };
   const evidence = (id: string | null | undefined, title: string) => id ? <button type="button" disabled={disabled} onClick={() => void download(id, rfa.documents.find(document => document.id === id)?.filename ?? `${title}.pdf`)}>{title}</button> : null;
   const canCorrect = permissions.includes("act") && ["received", "under_review", "information_requested", "approved", "modified", "denied", "mixed"].includes(rfa.status);
@@ -192,12 +200,18 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
           ? <RfaHistoryEntry timeline key={entry.event.id} event={entry.event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />
           : <li key={entry.key} data-kind={entry.state}><div className="mbrfa-tl-head"><strong>{entry.title}</strong><span>{entry.when}</span></div>{entry.detail ? <p className="mbrfa-tl-meta">{entry.detail}</p> : null}</li>)}</ol></div> : !loadErrors.some(value => value.startsWith("History")) ? <p className="mbrfa-sheet-body mbrfa-empty">No history entries have been recorded.</p> : null}
       </RfaCard>
-      {rfa.transmissions.length ? <RfaCard title="Delivery" count={rfa.transmissions.length} flush><div className="mbrfa-table-scroll"><table className="mbrfa-grid-table"><thead><tr><th scope="col">Date</th><th scope="col">Method</th><th scope="col">Status</th><th scope="col">Recipient</th><th scope="col">Confirmed receipt</th><th scope="col"><span className="mbrfa-sr-only">Receipt</span></th></tr></thead><tbody>{rfa.transmissions.map(transmission => <tr key={transmission.id}>
-        <td>{rfaShortDate(transmission.occurredAt)}</td><td>{capital(words(transmission.channel))}<small>{capital(words(transmission.direction))}{transmission.purpose ? ` · ${words(transmission.purpose)}` : ""}</small></td>
-        <td><RfaPill tone={["delivered", "received", "sent"].includes(transmission.status) ? "ok" : transmission.status === "failed" ? "bad" : "muted"}>{capital(words(transmission.status))}</RfaPill></td>
-        <td>{transmission.destination || "—"}{transmission.providerMessageId ? <small>Reference {transmission.providerMessageId}</small> : null}{rfaFailureReason(transmission) ? <small>{rfaFailureReason(transmission)}</small> : null}</td>
-        <td>{rfaShortDate(transmission.receivedAt)}</td><td className="mbrfa-row-actions">{evidence(transmission.proofDocumentId, "Receipt")}</td>
-      </tr>)}</tbody></table></div></RfaCard> : null}
+      {rfa.transmissions.length ? <RfaCard title="Delivery" count={rfa.transmissions.length} flush><div className="mbrfa-table-scroll"><table className="mbrfa-grid-table"><thead><tr><th scope="col">Date</th><th scope="col">Sent by</th><th scope="col">To</th><th scope="col">Status</th><th scope="col">Receipt confirmed</th><th scope="col"><span className="mbrfa-sr-only">Packet</span></th></tr></thead><tbody>{rfa.transmissions.map(transmission => {
+        const sending = !["delivered", "received", "sent", "failed", "canceled"].includes(transmission.status);
+        const packetId = packetOf(transmission);
+        return <tr key={transmission.id}>
+          <td>{rfaShortDate(transmission.occurredAt)}</td>
+          <td>{capital(words(transmission.channel))}<small>{transmission.direction === "inbound" ? "Received" : transmission.purpose === "forward" ? "Forwarded" : "Submission"}</small></td>
+          <td>{transmission.destination || "—"}{transmission.providerMessageId ? <small>Ref {transmission.providerMessageId}</small> : null}{rfaFailureReason(transmission) ? <small>{rfaFailureReason(transmission)}</small> : null}</td>
+          <td><RfaPill tone={["delivered", "received", "sent"].includes(transmission.status) ? "ok" : transmission.status === "failed" ? "bad" : "muted"}>{capital(words(transmission.status))}</RfaPill>{sending && onRefreshDelivery && transmission.channel === "fax" ? <button type="button" className="mbrfa-text-link" style={{ display: "block", marginTop: 4 }} disabled={disabled} title="Ask the fax provider for the latest status. MindBill also checks automatically." onClick={onRefreshDelivery}>Refresh status</button> : null}</td>
+          <td>{rfaShortDate(transmission.receivedAt)}{transmission.proofDocumentId ? <small>{evidence(transmission.proofDocumentId, "Receipt")}</small> : null}</td>
+          <td className="mbrfa-row-actions">{packetId ? <button type="button" disabled={disabled} title="The complete packet that was sent" onClick={() => void viewPacket(packetId)}>View PDF</button> : null}</td>
+        </tr>;
+      })}</tbody></table></div></RfaCard> : null}
     </> : null}
   </div>;
   const content = <>
