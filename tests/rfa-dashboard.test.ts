@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaDashboard, rfaCanResend } from "../packages/react/src/rfa-dashboard";
-import { rfaDuplicatePacket } from "../packages/react/src/rfa-duplicate-dialog";
+import { rfaDuplicatePacket, rfaForwardContactOptions } from "../packages/react/src/rfa-duplicate-dialog";
 import { rfaDecisionSummary, rfaFailureReason } from "../packages/react/src/rfa-detail-cards";
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
 function taskResponse(input: RequestInfo | URL): Response | undefined {
@@ -173,19 +173,18 @@ it("names what is being sent and offers the host's signature setup when the phys
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 
-it("offers a duplicate send only after a request was sent, re-sending the packet that actually went out",async()=>{
+it("offers Forward only after a request was sent, forwarding the packet that actually went out",async()=>{
  const packets=[{id:"p_download",source:"download" as const,sha256:"a",sizeBytes:1,contentRevision:1,createdAt:"2026-09-03T00:00:00Z"},{id:"p_failed",source:"submission" as const,sha256:"b",sizeBytes:1,contentRevision:1,createdAt:"2026-09-04T00:00:00Z"},{id:"p_sent",source:"submission" as const,sha256:"c",sizeBytes:1,contentRevision:1,createdAt:"2026-09-02T00:00:00Z"}];
  const sent=(packetId:string,status:string)=>({id:`t_${packetId}`,packetId,purpose:"submission" as const,channel:"fax",status,destination:"+18005550100",occurredAt:"2026-09-02T00:00:00Z",receivedAt:null});
  expect(rfaDuplicatePacket({packets,transmissions:[sent("p_failed","failed"),sent("p_sent","delivered")]})?.id).toBe("p_sent");
  expect(rfaDuplicatePacket({packets:packets.slice(0,2),transmissions:[sent("p_failed","failed")]})?.id).toBe("p_download");
  expect(rfaDuplicatePacket({packets:[packets[1]!],transmissions:[sent("p_failed","failed")]})).toBeNull();
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
- const has=(text:string)=>[...container.querySelectorAll("button")].some(x=>x.textContent===text);
  try{
   for(const [current,expected] of [[{...record,status:"received",submittedAt:"2026-09-02T00:00:00Z"},true],[record,false]] as const){
    const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:current}));
    await act(async()=>root.render(createElement(RfaDashboard,{key:String(expected),getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:current.id,permissions:["send","act"]})));
-   expect(has("Send duplicate")).toBe(expected);
+   expect([...container.querySelectorAll("button")].filter(x=>x.textContent==="Forward").length).toBe(expected ? 2 : 0);
   }
  }finally{await act(async()=>root.unmount());container.remove();}
 });
@@ -283,4 +282,35 @@ it("uses the same directory defaults as the form for legacy requests without sav
   expect(facts("Claims Administrator Information")).toMatchObject({"Company Name":"Directory administrator","Address":"200 Example St","E-mail Address":"claims@example.com"});
   expect(fetcher.mock.calls.every(([,init])=>(init?.method??"GET")==="GET")).toBe(true);
  }finally{await act(async()=>root.unmount());container.remove();}
+});
+
+it("turns host claim contacts into Forward destinations, one per fax and e-mail",()=>{
+ expect(rfaForwardContactOptions([
+  {name:"Synthetic Adjuster",role:"Adjuster",fax:"(800) 555-0100",email:"adjuster@example.invalid"},
+  {name:"No route",role:"Attorney"},
+  {name:"Bad email",role:"Other",email:"not-an-email"},
+ ])).toEqual([
+  {method:"fax",destination:"+18005550100",label:"Adjuster · Synthetic Adjuster",recipientName:"Synthetic Adjuster"},
+  {method:"email",destination:"adjuster@example.invalid",label:"Adjuster · Synthetic Adjuster",recipientName:"Synthetic Adjuster"},
+ ]);
+});
+
+it("removes an uploaded document from an unsent request, and offers no Remove once sent",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const removeButtons=()=>[...container.querySelectorAll("button")].filter(x=>x.textContent==="Remove");
+ const confirm=vi.spyOn(window,"confirm").mockReturnValue(true);
+ try{
+  const after={...record,documents:record.documents.filter(d=>d.id!=="clinical_synthetic")};
+  const fetcher=vi.fn<typeof fetch>(async(input,init)=>taskResponse(input) ?? Response.json({data:init?.method==="DELETE"?after:record}));
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:record.id,permissions:["edit","send"]})));
+  expect(removeButtons()).toHaveLength(1);
+  await act(async()=>removeButtons()[0]!.click());
+  const call=fetcher.mock.calls.find(([,init])=>init?.method==="DELETE")!;
+  expect(String(call[0])).toContain("/rfa_synthetic/documents/clinical_synthetic");
+  expect(new Headers(call[1]!.headers).get("idempotency-key")).toBeTruthy();
+  expect(container.textContent).not.toContain("Synthetic report.pdf");
+  const sent={...record,status:"received",submittedAt:"2026-09-02T00:00:00Z"};
+  await act(async()=>root.render(createElement(RfaDashboard,{key:"sent",getSession:async()=>({token:"synthetic_token"}),fetch:vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:sent})),layout:"simple",selectedRfaId:sent.id,permissions:["edit","send","act"]})));
+  expect(removeButtons()).toHaveLength(0);
+ }finally{confirm.mockRestore();await act(async()=>root.unmount());container.remove();}
 });
