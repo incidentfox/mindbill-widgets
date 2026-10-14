@@ -2407,6 +2407,8 @@ export type RfaRecord = {
   claimsAdminName?: string;
   injuryDescription?: string;
   contentRevision: number; id: string; claimId: string; patientId: string; renderingProviderId: string; claimsAdminId: string | null;
+  /** Employee and physician fields printed on the DWC Form RFA. */
+  employeeDateOfBirth?: string | null; employer?: string | null; providerSpecialty?: string | null;
   employeeName: string; providerName: string; claimNumber: string | null; status: string;
   /** Delivery/review lifecycle, separate from the clinical status and item outcomes. */
   lifecycleStatus?: import("./rfa-status").RfaLifecycleStatus;

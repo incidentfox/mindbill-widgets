@@ -65,10 +65,11 @@ export function RfaStatusCard({ rfa }: { rfa: RfaRecord }): ReactElement {
 export function RfaCard({ title, count, action, children, id, flush = false }: { title: string; count?: number | undefined; action?: ReactNode; children: ReactNode; id?: string; flush?: boolean }): ReactElement {
   return <section className="mbrfa-sheet" id={id} aria-label={title}><header><h3>{title}{count !== undefined ? <span className="mbrfa-count">{count}</span> : null}</h3>{action ? <div className="mbrfa-sheet-action">{action}</div> : null}</header><div className={flush ? "mbrfa-sheet-flush" : "mbrfa-sheet-body"}>{children}</div></section>;
 }
-/** Label and value rows; empty values are omitted so a card never shows a blank line. */
-export function RfaFacts({ entries }: { entries: ReadonlyArray<readonly [string, ReactNode]> }): ReactElement {
-  const shown = entries.filter(([, value]) => value !== null && value !== undefined && value !== "" && value !== false);
-  return shown.length ? <dl className="mbrfa-facts">{shown.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl> : <p className="mbrfa-empty">Not recorded.</p>;
+/** Form cards keep unfilled fields visible; other summaries omit empty values. */
+export function RfaFacts({ entries, showEmpty = false }: { entries: ReadonlyArray<readonly [string, ReactNode]>; showEmpty?: boolean }): ReactElement {
+  const empty = (value: ReactNode) => value === null || value === undefined || value === "" || value === false;
+  const shown = showEmpty ? entries : entries.filter(([, value]) => !empty(value));
+  return shown.length ? <dl className="mbrfa-facts">{shown.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{empty(value) ? "—" : value}</dd></div>)}</dl> : <p className="mbrfa-empty">Not recorded.</p>;
 }
 export const rfaAddress = (contact: { address?: string; city?: string; state?: string; zip?: string } | null | undefined): string => [contact?.address, [contact?.city, [contact?.state, contact?.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ");
 export const rfaRequestTypeLabel = (rfa: RfaRecord): string => rfa.requestType === "resubmission_material_change" ? "Resubmission – Change in Material Facts" : "New Request";
