@@ -1,4 +1,4 @@
-/* global document, innerWidth */
+/* global document, innerWidth, window */
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
