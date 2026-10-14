@@ -424,6 +424,8 @@ export type { BillClaimsAdministratorAuthorizationStatus, RfaAuthorizationDestin
 
 export { RfaDashboard } from "./rfa-dashboard";
 export type { RfaDashboardProps, RfaDashboardNavigation } from "./rfa-dashboard";
+export { rfaForwardContactOptions } from "./rfa-duplicate-dialog";
+export type { RfaForwardContact } from "./rfa-duplicate-dialog";
 export type { RfaRecord, RfaSigningPreview, RfaCreateDraftInput } from "@mindbill/browser";
 
 export { RfaLifecycleControls } from "./rfa-lifecycle-controls";

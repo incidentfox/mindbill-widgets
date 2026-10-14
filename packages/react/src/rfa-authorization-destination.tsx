@@ -25,15 +25,22 @@ export type RfaAuthorizationDestinationProps = {
   method?: "fax" | "email";
   /** Start on the destination already saved on the request, so the user reviews it instead of choosing again. */
   preselectSaved?: boolean;
+  /** Host destinations listed after the saved contact, such as the claim's adjuster (Forward). */
+  extraOptions?: readonly RfaAuthorizationDestinationOption[];
 };
 
 /** Choose a destination without sending an RFA or treating email as fax. */
-export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart, compact = false, onManualEntry, autoSelectSingle = false, method, preselectSaved = false }: RfaAuthorizationDestinationProps): ReactElement {
+export function RfaAuthorizationDestination({ contextKey, directory, savedContact, loading = false, error, disabled = false, onChange, onSelectionStart, compact = false, onManualEntry, autoSelectSingle = false, method, preselectSaved = false, extraOptions }: RfaAuthorizationDestinationProps): ReactElement {
   let options = loading || error ? [] : rfaAuthorizationDestinations(directory);
   const fax = savedContact?.fax ? normalizeRfaFax(savedContact.fax) : null;
   const savedLabel = savedContact?.contactName || savedContact?.name || "Saved request contact";
   if (fax && !options.some(option => option.method === "fax" && option.destination === fax)) options.unshift({ method: "fax", destination: fax, label: savedLabel, ...(savedContact?.contactName ? { recipientName: savedContact.contactName } : {}) });
   if (savedContact?.email?.trim() && !options.some(option => option.method === "email" && option.destination === savedContact.email?.trim())) options.unshift({ method: "email", destination: savedContact.email.trim(), label: savedLabel, ...(savedContact?.contactName ? { recipientName: savedContact.contactName } : {}) });
+  if (extraOptions?.length) {
+    const extra = extraOptions.filter(option => !options.some(existing => existing.method === option.method && existing.destination === option.destination));
+    const saved = options.filter(option => option.label === savedLabel);
+    options = [...saved, ...extra, ...options.filter(option => option.label !== savedLabel)];
+  }
   if (method) options = options.filter(option => option.method === method);
   const savedIndex = preselectSaved ? options.findIndex(option => option.method === "fax" ? option.destination === fax : option.destination === savedContact?.email?.trim()) : -1;
   const signature = JSON.stringify([contextKey, directory?.authorizationStatus, options, loading, error]);

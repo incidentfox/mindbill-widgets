@@ -2469,6 +2469,8 @@ export type RfaClient = {
   updateDraft: (rfaId: string, draft: RfaUpdateDraftInput, idempotencyKey: string) => Promise<RfaRecord>;
   getDocument: (rfaId: string, documentId: string) => Promise<Blob>;
   uploadDocument: (rfaId: string, input: RfaUploadDocumentInput, idempotencyKey: string) => Promise<RfaRecord>;
+  /** Remove an uploaded supporting document from an unsent request. The server refuses sent requests and required documents. */
+  removeDocument?: (rfaId: string, documentId: string, idempotencyKey: string) => Promise<RfaRecord>;
   prepareSigning: (rfaId: string, input: RfaSigningPreviewInput, idempotencyKey: string) => Promise<RfaSigningPreview>;
   sign: (rfaId: string, input: RfaSignInput, idempotencyKey: string) => Promise<RfaRecord>;
   prepareDelivery: (rfaId: string, input: RfaDeliveryPreviewInput, key?: string) => Promise<RfaDeliveryPreview>;
@@ -2590,6 +2592,10 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     sendFax: (id, input, key) => record(path(id, "fax"), mutation(input, key)),
     refreshFaxes: (id, key) => record(path(id, "fax/refresh"), mutation({}, key)),
     getDocument: async (id, documentId) => (await request(`/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`)).blob(),
+    removeDocument: (id, documentId, key) => {
+      if (!key.trim()) return Promise.reject(new Error("An idempotency key is required."));
+      return record(path(id, `documents/${encodeURIComponent(documentId)}`), { method: "DELETE", headers: { "idempotency-key": key } });
+    },
   };
 }
 
