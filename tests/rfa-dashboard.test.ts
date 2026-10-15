@@ -413,3 +413,16 @@ it("renders a request the host loaded with the page at once, then refreshes it q
   expect(container.textContent).toContain("Refreshed Patient");
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+it("filters a long chip list as you type",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const providers=Array.from({length:30},(_,index)=>({id:`provider_${index}`,name:`Synthetic Physician ${String(index).padStart(2,"0")}`}));
+ const fetcher=vi.fn<typeof fetch>(async(input)=>{const url=String(input);if(url.includes("creation-context"))return Response.json({data:{claims:[],renderingProviders:providers,nextCursor:null,renderingProvidersNextCursor:null}});return taskResponse(input) ?? Response.json({data:[record],summary:{total:1,byStatus:{},byLifecycleStatus:{}},nextCursor:null});});
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,initialOverviewView:"list"})));
+  await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Filter by physician"]')!.click());
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,20));});
+  const search=container.querySelector<HTMLInputElement>('input[aria-label="Search physician"]')!;
+  await act(async()=>{const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!;setter.call(search,"07");search.dispatchEvent(new Event("input",{bubbles:true}));});
+  expect([...container.querySelectorAll('[role="option"]')].map(node=>node.textContent)).toEqual(["Synthetic Physician 07"]);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});

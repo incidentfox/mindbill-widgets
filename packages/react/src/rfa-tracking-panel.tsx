@@ -109,11 +109,15 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
     } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "The record could not be saved. Refresh before retrying."); return false; }
     finally { pending.current = false; if (alive.current) setBusy(false); }
   };
-  const download = async (id: string, filename: string, kind: "document" | "packet" = "document") => {
+  // Evidence opens in a new tab to read, rather than downloading. The tab is opened during the click so it is not blocked.
+  const download = async (id: string, _filename: string, kind: "document" | "packet" = "document") => {
+    const tab = window.open("", "_blank");
     try {
-      const blob = await (kind === "packet" ? records.getPacket(rfa.id, id) : records.getDocument(rfa.id, id)); if (!alive.current) return;
-      const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "The evidence could not be opened."); }
+      const blob = await (kind === "packet" ? records.getPacket(rfa.id, id) : records.getDocument(rfa.id, id));
+      const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: "application/pdf" }));
+      if (tab) tab.location.href = url; else window.location.assign(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (reason) { tab?.close(); if (alive.current) setError(reason instanceof Error ? reason.message : "The evidence could not be opened."); }
   };
   // The complete packet a transmission sent, opened in a new tab like any other PDF.
   const packetOf = (transmission: RfaRecord["transmissions"][number]) => (transmission as { packetId?: string | null }).packetId ?? null;
@@ -184,7 +188,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
               </dl>
               {item.currentResponseDocumentId || item.currentImrDocumentId || correctable || closable || recordable ? <div className="mbtd-actions mbrfa-tx-actions">
                 {recordable ? <button type="button" className="mbtd-primary" disabled={disabled} onClick={() => onRecordDecision!(item.id)}>Record decision</button> : null}
-                {evidence(item.currentResponseDocumentId, "View decision")}{evidence(item.currentImrDocumentId, "View IMR form")}
+                {evidence(item.currentResponseDocumentId, "View UR decision letter")}{evidence(item.currentImrDocumentId, "View IMR application")}
                 {correctable ? <button type="button" disabled={disabled} onClick={() => open("correct")}>Correct decision</button> : null}
                 {closable ? <button type="button" disabled={disabled} onClick={() => open("close")}>{item.decisionClosure?.closed ? "Reopen" : "No longer needed"}</button> : null}
               </div> : null}
@@ -244,7 +248,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
             {item.authorizedProcedureCode || item.authorizedQuantity || item.authorizedUnits ? <p>Authorized: {item.authorizedProcedureCode || item.procedureCode || "Treatment"}{item.authorizedQuantity != null ? ` · Quantity ${item.authorizedQuantity}` : ""}{item.authorizedUnits != null ? ` · Units ${item.authorizedUnits}` : ""}</p> : null}
             {item.effectiveFrom || item.effectiveTo ? <p>Authorization dates: {item.effectiveFrom ?? "Not specified"} through {item.effectiveTo ?? "Not specified"}</p> : null}
             {item.decisionReason ? <p>{item.decisionReason}</p> : null}{item.reviewerName ? <p>Reviewer: {item.reviewerName}{item.reviewerPhone ? ` · ${item.reviewerPhone}` : ""}</p> : null}
-            {evidence(item.currentResponseDocumentId, "View decision evidence")} {evidence(item.currentImrDocumentId, "View independent medical review form")}</> : null}
+            {evidence(item.currentResponseDocumentId, "View UR decision letter")} {evidence(item.currentImrDocumentId, "View IMR application")}</> : null}
           {loading ? <p>Loading appointment…</p> : appointment ? <AppointmentForm key={`${item.id}:${appointment.version}:${appointment.authorizationToken}`} appointment={appointment} editable={permissions.includes("edit")} disabled={disabled || loadErrors.some(value => value.startsWith("Appointments"))} onError={setError} onSave={input => run(`appointment:${item.id}`, input, async key => { await client.updateScheduling(rfa.id, item.id, input, key); return records.get(rfa.id); })} /> : null}
           {canCorrect && item.currentDecisionEventId && item.outcome !== "pending" ? <details><summary>Correct this decision</summary><p>The original decision and its evidence remain in history. Corrections require a reason and response evidence. Requests already used for a bill or a scheduled appointment cannot be corrected.</p>
             <CorrectionForm key={`${item.id}:${item.currentDecisionEventId}`} item={item} documents={rfa.documents} disabled={disabled || loading || loadErrors.length > 0 || scheduling.some(value => value.disposition === "scheduled")} onError={setError} onSave={input => run(`correction:${item.id}`, input, key => client.correctDecision(rfa.id, input, key))} />

@@ -97,16 +97,16 @@ it("preserves original and corrected treatment decisions with evidence and exclu
  }finally{await view.close();}
 });
 
-it("downloads exact retained packets and documents through the authenticated RFA client",async()=>{
- const createUrl=vi.spyOn(URL,"createObjectURL").mockReturnValue("blob:synthetic-evidence");const click=vi.spyOn(HTMLAnchorElement.prototype,"click").mockImplementation(()=>undefined);
+it("opens exact retained packets and documents in a new tab through the authenticated RFA client",async()=>{
+ const createUrl=vi.spyOn(URL,"createObjectURL").mockReturnValue("blob:synthetic-evidence");const tab={location:{href:""},close:vi.fn()};const open=vi.spyOn(window,"open").mockImplementation(()=>tab as unknown as Window);
  const view=await setup({},historyFetch([event({packetId:"packet_one",responseDocumentId:"ur_one"},"rfa.transmission_recorded")]));
  try {
   for(const label of ["Download retained submission PDF","Download decision evidence: Synthetic response.pdf"]){await act(async()=>{[...view.container.querySelectorAll("button")].find(button=>button.textContent===label)!.click();});}
   const downloads=view.fetcher.mock.calls.filter(call=>/\/(packets|documents)\//.test(String(call[0])));
   expect(downloads).toHaveLength(2);expect(String(downloads[0]![0])).toContain("/rfas/rfa_synthetic/packets/packet_one");expect(String(downloads[1]![0])).toContain("/rfas/rfa_synthetic/documents/ur_one");
   for(const [,init] of downloads){expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer synthetic_token");expect(init?.method).toBeUndefined();}
-  expect(click).toHaveBeenCalledTimes(2);expect(createUrl).toHaveBeenCalledTimes(2);
- }finally{await view.close();click.mockRestore();createUrl.mockRestore();}
+  expect(open).toHaveBeenCalledTimes(2);expect(createUrl).toHaveBeenCalledTimes(2);expect(tab.location.href).toBe("blob:synthetic-evidence");
+ }finally{await view.close();open.mockRestore();createUrl.mockRestore();}
 });
 
 it("surfaces evidence download failures without leaving the RFA history",async()=>{

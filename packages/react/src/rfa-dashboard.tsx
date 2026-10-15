@@ -175,6 +175,11 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   const [physician, setPhysician] = useState(initialPhysicianId);
   const [decisionDue, setDecisionDue] = useState<NonNullable<RfaListQuery["decisionDue"]> | "">(initialDecisionDue);
   const [physicians, setPhysicians] = useState<{ id: string; name: string }[]>([]); const [physiciansLoading, setPhysiciansLoading] = useState(false);
+  // Typing in the physician filter also asks the server, so physicians beyond the first page can be found.
+  const searchPhysicians = (query: string) => {
+    if (!query) return;
+    client.getCreationContext({ providerSearch: query, limit: 50 }).then(context => { if (!active.current) return; setPhysicians(current => [...current, ...context.renderingProviders.filter(provider => !current.some(item => item.id === provider.id)).map(provider => ({ id: provider.id, name: provider.name }))].sort((a, b) => a.name.localeCompare(b.name))); }).catch(() => undefined);
+  };
   const loadPhysicians = () => {
     if (physicians.length || physiciansLoading) return;
     setPhysiciansLoading(true);
@@ -277,7 +282,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
         onClearAll={() => { setSearchInput(""); setSearch(""); setStatus(""); setAgingBucket(""); setPhysician(""); setDecisionDue(""); resetPage(); }}
         filters={[
           { key: "status", label: "Status", value: status, options: [{ value: "", label: "Any status" }, ...Object.keys(RFA_LIFECYCLE_LABELS).map(value => ({ value, label: rfaStatusLabel(value as keyof typeof RFA_LIFECYCLE_LABELS) }))], onChange: value => { setStatus(value); resetPage(); } },
-          ...(renderingProviderId ? [] : [{ key: "physician", label: "Physician", value: physician, loading: physiciansLoading, onOpen: loadPhysicians, options: [{ value: "", label: "Any physician" }, ...(physician && !physicians.some(item => item.id === physician) ? [{ value: physician, label: result?.data.find(rfa => rfa.renderingProviderId === physician)?.providerName ?? "Selected physician" }] : []), ...[...physicians, ...(result?.data ?? []).filter(rfa => rfa.renderingProviderId && rfa.renderingProviderId !== physician && !physicians.some(item => item.id === rfa.renderingProviderId)).map(rfa => ({ id: rfa.renderingProviderId, name: rfa.providerName }))].filter((item, index, all) => all.findIndex(other => other.id === item.id) === index).map(item => ({ value: item.id, label: item.name }))], onChange: (value: string) => { setPhysician(value); resetPage(); } }]),
+          ...(renderingProviderId ? [] : [{ key: "physician", label: "Physician", value: physician, loading: physiciansLoading, onOpen: loadPhysicians, searchable: true, onSearch: searchPhysicians, options: [{ value: "", label: "Any physician" }, ...(physician && !physicians.some(item => item.id === physician) ? [{ value: physician, label: result?.data.find(rfa => rfa.renderingProviderId === physician)?.providerName ?? "Selected physician" }] : []), ...[...physicians, ...(result?.data ?? []).filter(rfa => rfa.renderingProviderId && rfa.renderingProviderId !== physician && !physicians.some(item => item.id === rfa.renderingProviderId)).map(rfa => ({ id: rfa.renderingProviderId, name: rfa.providerName }))].filter((item, index, all) => all.findIndex(other => other.id === item.id) === index).map(item => ({ value: item.id, label: item.name }))], onChange: (value: string) => { setPhysician(value); resetPage(); } }]),
           { key: "sent", label: "Sent", value: agingBucket, options: [{ value: "", label: "Any time" }, { value: "0_5", label: "0–5 days ago" }, { value: "6_14", label: "6–14 days ago" }, { value: "15_30", label: "15–30 days ago" }, { value: "31_plus", label: "31+ days ago" }], onChange: value => { setAgingBucket(value as typeof agingBucket); resetPage(); } },
           { key: "due", label: "Decision due", value: decisionDue, options: [{ value: "", label: "Any" }, { value: "overdue", label: "Overdue" }, { value: "next_7_days", label: "Within 7 days" }], onChange: value => { setDecisionDue(value as typeof decisionDue); resetPage(); } },
         ]} />
