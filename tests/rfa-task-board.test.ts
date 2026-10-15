@@ -26,7 +26,7 @@ it("loads all task pages with host filters and excludes the unassigned inbox in 
     expect(fetcher).toHaveBeenCalledTimes(4); expect(fetcher.mock.calls.filter(call => String(call[0]).includes("includeResolved=false"))).toHaveLength(2); expect(fetcher.mock.calls.every(call => String(call[0]).includes("patientId=patient_synthetic") && String(call[0]).includes("renderingProviderId=provider_synthetic"))).toBe(true);
     expect(h.container.querySelector('[aria-label="Match UR"]')).toBeNull();
     await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Post UR, total: 1 due tasks"]')!.click());
-    await act(async () => h.button("Review response").click()); expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "ur_synthetic");
+    expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "ur_synthetic");
   } finally { await h.close(); }
 });
 it("paginates unmatched faxes and requires review, selection and confirmation before Match UR", async () => {
@@ -102,16 +102,14 @@ it("drills into exactly the chosen age and kind without mixing scheduled or comp
     expect(h.container.textContent).not.toContain("transmission_unconfirmed");
     expect(h.container.textContent).toContain("To do (2)");
     expect(h.container.textContent).toContain("Follow up later (1)");
-    expect(h.container.textContent).toContain("Done (1)");
+    expect(h.container.textContent).not.toContain("Done (");
     await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Post UR, 31+ days: 1 due tasks"]')!.click());
-    expect(h.container.querySelectorAll('[aria-label="Selected tasks"] tbody tr')).toHaveLength(1);
-    await act(async () => h.button("Review response").click());
+    expect(h.container.querySelector('[aria-label="Selected tasks"]')).toBeNull();
     expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "document_synthetic");
     await act(async () => h.button("Follow up later (1)").click());
     expect(h.container.querySelector('[aria-label="Selected tasks"]')).toBeNull();
     expect(h.container.textContent).toContain("Tasks set aside until a later follow-up date");
-    await act(async () => h.button("Done (1)").click());
-    expect(h.container.textContent).toContain("Finishing a task does not close its RFA");
+    expect(h.button("Done (1)")).toBeUndefined();
   } finally { await h.close(); }
 });
 
@@ -133,9 +131,9 @@ it("routes counts, group totals and all tasks with state, kind and age without i
   const getTaskHref = vi.fn((query: import("../packages/react/src/rfa-task-board").RfaTaskQuery) => `/rfa-tasks?${new URLSearchParams({ state: query.state!, ...(query.kind ? { kind: query.kind } : {}), ...(query.kinds ? { kinds: query.kinds.join(",") } : {}), ...(query.bucket ? { age: query.bucket } : {}) })}`);
   const fetcher = vi.fn<typeof fetch>(async () => Response.json({ data: [{ ...task, kind: "send_rfa", createdAt: "2020-01-01" }, { ...task, id: "unknown", kind: "document_required", createdAt: "" }, { ...task, id: "scheduled", kind: "send_rfa", createdAt: "2020-01-01", snoozedUntil: "2099-01-01" }], nextCursor: null }));
   try {
-    await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, claimId: "claim_synthetic", onSelect: vi.fn(), getTaskHref, onNavigate })));
+    await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, claimId: "claim_synthetic", onSelect: vi.fn(), getRfaHref: id => `/requests/${id}`, getTaskHref, onNavigate })));
     const link = h.container.querySelector<HTMLAnchorElement>('[aria-label="Send RFA, 31+ days: 1 due tasks"]')!;
-    expect(link.getAttribute("href")).toBe("/rfa-tasks?state=Due&kind=send_rfa&age=31%2B");
+    expect(link.getAttribute("href")).toBe("/requests/rfa_synthetic");
     await act(async () => link.click());
     expect(onNavigate).toHaveBeenCalledWith(link.getAttribute("href"));
     expect(h.container.querySelector('[aria-label="Selected tasks"]')).toBeNull();
@@ -143,12 +141,12 @@ it("routes counts, group totals and all tasks with state, kind and age without i
     const modified = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
     await act(async () => link.dispatchEvent(modified));
     expect(modified.defaultPrevented).toBe(false); expect(onNavigate).not.toHaveBeenCalled();
-    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete, Unknown age: 1 due tasks"]')?.getAttribute("href")).toContain("kinds=document_required%2Csend_rfa&age=unknown");
+    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete, Unknown age: 1 due tasks"]')?.getAttribute("href")).toBe("/requests/rfa_synthetic");
     const total = h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete, Total: 2 due tasks"]')!;
     expect(total.getAttribute("href")).toBe("/rfa-tasks?state=Due&kinds=document_required%2Csend_rfa");
     expect([...h.container.querySelectorAll("a")].some(a => a.textContent?.startsWith("View all"))).toBe(false);
     await act(async () => h.button("Follow up later (1)").click());
-    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Send RFA, 31+ days: 1 scheduled tasks"]')?.getAttribute("href")).toContain("state=Scheduled");
+    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Send RFA, 31+ days: 1 scheduled tasks"]')?.getAttribute("href")).toBe("/requests/rfa_synthetic");
   } finally { await h.close(); }
 });
 

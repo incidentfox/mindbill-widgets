@@ -7,7 +7,7 @@ export function rfaDecisionDueText(rfa: DeadlineRecord): string {
     return new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Los_Angeles", month: "short", day: "numeric", year: "numeric",
       ...(rfa.expedited ? { hour: "numeric", minute: "2-digit", timeZoneName: "short" } as const : {}),
-    }).format(new Date(rfa.decisionDueAt)) + (rfa.expedited ? "" : " (Pacific)");
+    }).format(new Date(rfa.decisionDueAt));
   }
   if (rfa.decisionDeadlineBasis) return "Not calculated";
   if (!rfa.receivedAt) return rfa.submittedAt ? "Awaiting receipt" : "Not submitted";
