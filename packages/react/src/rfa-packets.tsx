@@ -46,7 +46,7 @@ function PacketsContent({ rfa, options, permissions = [], environment = "sandbox
   }, [client, rfa.id, reload]);
   const packet = history?.packets.find(value => value.id === selected);
   const blob = prepared?.id === selected ? prepared.blob : null;
-  const eligible = !!packet && !["draft", "incomplete", "canceled"].includes(rfa.status) && (packet.source === "download" || !!history?.transmissions.some(value => value.packetId === packet.id && value.purpose === "submission" && ["sent", "delivered", "received"].includes(value.status)));
+  const eligible = !!packet && !["draft", "incomplete", "canceled"].includes(rfa.status) && (packet.source !== "submission" || !!history?.transmissions.some(value => value.packetId === packet.id && value.purpose === "submission" && ["sent", "delivered", "received"].includes(value.status)));
   const canForward = permissions.includes("act") && environment === "live";
   const destination = channel === "email" ? recipient.trim().toLowerCase() : recipient.trim();
   const validRecipient = channel === "fax" ? /^\+[1-9]\d{7,14}$/.test(destination) : destination.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination);
@@ -77,7 +77,7 @@ function PacketsContent({ rfa, options, permissions = [], environment = "sandbox
     {loading ? <p role="status">Loading saved packets…</p> : null}
     {!loading && !history ? <button type="button" onClick={() => setReload(value => value + 1)}>Retry loading packets</button> : null}
     {history?.packets.length === 0 ? <p>No saved packets yet.</p> : history ? <>
-      <label>Saved packet<Select disabled={locked} value={selected} onChange={(choice) => { setSelected(choice); setPrepared(null); resetReview(); }}><option value="">Choose a saved packet</option>{history.packets.map(value => <option key={value.id} value={value.id}>{value.source === "submission" ? "Submission" : "Download"} · revision {value.contentRevision} · {value.createdAt}</option>)}</Select></label>
+      <label>Saved packet<Select disabled={locked} value={selected} onChange={(choice) => { setSelected(choice); setPrepared(null); resetReview(); }}><option value="">Choose a saved packet</option>{history.packets.map(value => <option key={value.id} value={value.id}>{value.source === "submission" ? "Submission" : value.source === "forward" ? "Forwarded copy" : "Download"} · revision {value.contentRevision} · {value.createdAt}</option>)}</Select></label>
       <button type="button" disabled={locked || !packet} onClick={() => void view()}>View saved PDF</button>
       {blob ? <RfaPdfReview blob={blob} title="Saved RFA packet" /> : null}
       {!canForward ? <p>{environment !== "live" ? "Sandbox: saved PDFs are available for review. External forwarding is disabled." : "Forwarding requires permission from your organization."}</p> : selected && !eligible ? <p>This packet is not eligible for forwarding. Submission packets require a successful original dispatch.</p> : <fieldset disabled={locked}>

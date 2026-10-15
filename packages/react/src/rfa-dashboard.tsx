@@ -276,7 +276,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
       setCreating(false); selectRfa(saved.id); onCreated?.(saved);
       if (intent === "preview" && attached === files.length && onPreviewRequest) { try { await onPreviewRequest(saved.id); } catch { if (active.current) setCreationWarning("Draft saved. Preview could not be opened; open the request to try again."); } }
     }} /> : selected ? <RfaDetail {...(initialRecord ? { initial: initialRecord } : {})} layout={layout} key={selected} {...(forwardContacts ? { forwardContacts } : {})} {...(initialDetailAction ? { initialAction: initialDetailAction } : {})} {...relatedLinks} {...(formPreviewUrl ? { formPreviewUrl } : {})} id={selected} selectedItem={selectedItem} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { selectRfa(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} {...(renderSendSignatureSetup ? { renderSendSignatureSetup } : {})} {...(readRfaResponse ? { readRfaResponse } : {})} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : <>
-      {view === "overview" ? <RfaTaskBoard {...relatedLinks} {...(getRfaHref ? { getRfaHref } : {})} {...(cacheKey ? { cacheKey } : {})} {...(taskPresentation ? { presentation: taskPresentation } : {})} {...(taskQuery ? { query: taskQuery } : {})} {...(renderTaskIdentity ? { renderTaskIdentity } : {})} {...(navigation?.getTaskHref ? { getTaskHref: navigation.getTaskHref } : {})} {...(navigation?.onNavigate ? { onNavigate: navigation.onNavigate } : {})} embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : lifecycleAvailable ? <RfaFilterBar search={searchInput} onSearch={setSearchInput} searchPlaceholder="Search patient, physician, claim, RFA or treatment"
+      {view === "overview" ? <RfaTaskBoard {...relatedLinks} {...(getRfaHref ? { getRfaHref } : {})} {...(cacheKey ? { cacheKey } : {})} {...(taskPresentation ? { presentation: taskPresentation } : {})} {...(taskQuery ? { query: taskQuery } : {})} {...(renderTaskIdentity ? { renderTaskIdentity } : {})} {...(navigation?.getTaskHref ? { getTaskHref: navigation.getTaskHref } : {})} {...(navigation?.onNavigate ? { onNavigate: navigation.onNavigate } : {})} embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : lifecycleAvailable ? <RfaFilterBar search={searchInput} onSearch={setSearchInput} searchPlaceholder="Search patient, physician, claim…"
         onClearAll={() => { setSearchInput(""); setSearch(""); setStatus(""); setAgingBucket(""); setPhysician(""); setDecisionDue(""); resetPage(); }}
         filters={[
           { key: "status", label: "Status", value: status, options: [{ value: "", label: "Any status" }, ...Object.keys(RFA_LIFECYCLE_LABELS).map(value => ({ value, label: rfaStatusLabel(value as keyof typeof RFA_LIFECYCLE_LABELS) }))], onChange: value => { setStatus(value); resetPage(); } },
@@ -425,7 +425,7 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
     });
   };
   // Forward re-sends the packet that went out; it needs a sent, non-canceled request.
-  const canForward = !!rfa && !unsent && !resendable && !!rfa.submittedAt && rfa.status !== "canceled" && permissions.includes("act");
+  const canForward = !!rfa && !unsent && !resendable && !!rfa.submittedAt && !["canceled", "incomplete"].includes(rfa.status) && permissions.includes("act");
   // The request shows one of a few statuses; what was decided is shown on each treatment.
   const statusPill = rfa ? <RfaPill tone={rfaLifecycleTone(rfa)}>{rfaStatusLabel(getRfaLifecycleStatus(rfa))}</RfaPill> : null;
   const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
@@ -435,7 +435,14 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
   const editClaimsAdministrator = () => {
     editRequest();
     let tries = 0;
-    const jump = () => { const section = document.getElementById(RFA_CLAIMS_ADMINISTRATOR_SECTION); if (section) { section.scrollIntoView?.({ block: "start", behavior: "smooth" }); section.focus({ preventScroll: true }); } else if (++tries < 20) setTimeout(jump, 100); };
+    const jump = () => {
+      const section = document.getElementById(RFA_CLAIMS_ADMINISTRATOR_SECTION);
+      if (!section) { if (++tries < 20) setTimeout(jump, 100); return; }
+      // scroll-margin-top keeps the heading clear of a host's sticky top bar; then focus the claims administrator picker itself.
+      section.scrollIntoView?.({ block: "start", behavior: "smooth" });
+      const picker = section.querySelector<HTMLElement>(".mbctl-trigger:not(:disabled), input:not([type=hidden]):not(.mbctl-proxy):not(:disabled)");
+      (picker ?? section).focus({ preventScroll: true });
+    };
     setTimeout(jump, 0);
   };
   // The card layout reads documents in a full-screen viewer; the classic layout keeps them inline.
@@ -568,7 +575,7 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
       </div></div> : null}
       {openedDocument && simple ? <RfaDocumentViewer documents={listedDocuments.map(document => ({ id: document.id, filename: document.filename, type: documentTypeLabel(document.documentType) }))} current={openedDocument} loading={!openedDocument.blob} onSelect={documentId => { const document = listedDocuments.find(item => item.id === documentId); if (document) openDocument(document.id, document.filename); }} onClose={() => setOpenedDocument(null)} /> : null}
       {simple && markingSent && (unsent || resendable) ? <RfaMarkSentDialog rfa={rfa} options={options} records={client} allowProof={!!unsent} onSaved={value => { adopt(value); setMarkingSent(false); }} onClose={() => setMarkingSent(false)} /> : null}
-      {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} {...(forwardContacts ? { forwardContacts } : {})} options={options} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
+      {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} {...(forwardContacts ? { forwardContacts } : {})} options={options} records={client} canUpload={permissions.includes("edit")} onUpdated={adopt} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
         onSent={() => { void run(async () => adopt(await client.get(id))); }} onClose={() => setDuplicating(false)} /> : null}
       {simple && sending && (unsent || resendable) ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog {...(permissions.includes("edit") && canEditRfaDraft(rfa) ? { onFix: resendable ? editClaimsAdministrator : editRequest } : {})} resend={resendable} rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
         signatureMissing={hostSignature?.missing}

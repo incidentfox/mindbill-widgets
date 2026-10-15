@@ -1,14 +1,20 @@
 import type { BillLifecycleSession, OrganizationClientOptions } from "./index";
 
-export type RfaSavedPacket = { id: string; source: "download" | "submission"; sha256: string; sizeBytes: number; contentRevision: number; createdAt: string };
+/** `forward` packets are forwarded copies MindBill composed: a forward cover sheet and the documents chosen. */
+export type RfaSavedPacket = { id: string; source: "download" | "submission" | "forward"; sha256: string; sizeBytes: number; contentRevision: number; createdAt: string };
 export type RfaPacketTransmission = { id: string; packetId: string | null; purpose: "submission" | "forward"; channel: string; status: string; destination: string | null; occurredAt: string; receivedAt: string | null };
 export type RfaPacketHistory = { packets: RfaSavedPacket[]; transmissions: RfaPacketTransmission[] };
-export type RfaForwardInput = { packetId: string; channel: "fax" | "email"; to: string };
+/**
+ * `packetId` alone re-sends that saved packet's exact bytes. With `documentIds` (empty only alongside `packetId`),
+ * MindBill composes a forwarded copy: a forward cover sheet that keeps the original dates and decision due date,
+ * the packet as sent when `packetId` is given, then the chosen documents. `message` and `recipientName` print on that cover.
+ */
+export type RfaForwardInput = { packetId?: string; documentIds?: string[]; channel: "fax" | "email"; to: string; message?: string; recipientName?: string };
 export type RfaForwardResult = { transmissionId: string; packetId: string };
 export type RfaPacketsClient = {
   list(id: string): Promise<RfaPacketHistory>;
   get(id: string, packetId: string): Promise<Blob>;
-  /** Forwards retained bytes without changing the original submission or review deadline. */
+  /** Forwards a saved packet or chosen documents without changing the original submission or review deadline. */
   forward(id: string, input: RfaForwardInput, idempotencyKey: string): Promise<RfaForwardResult>;
   clearSession(): void;
 };
@@ -62,12 +68,20 @@ export function createRfaPacketsClient({ sessionEndpoint = "/api/mindbill/sessio
       return response.blob();
     },
     async forward(id, input, idempotencyKey) {
-      if (!input.packetId.trim()) throw new Error("A saved packet ID is required.");
+      const packetId = input.packetId?.trim() ?? "";
+      const documentIds = input.documentIds;
+      if (!packetId && !documentIds?.length) throw new Error("Choose at least one document to forward.");
+      if (documentIds && new Set(documentIds).size !== documentIds.length) throw new Error("Each document can be included once.");
       if (!idempotencyKey.trim()) throw new Error("An idempotency key is required.");
       const to = input.to.trim();
       if (input.channel === "fax" ? !/^\+[1-9]\d{7,14}$/.test(to) : input.channel !== "email" || to.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error("Enter a valid recipient email or fax number with country code.");
-      const result = await (await request(id, "/forwards", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": idempotencyKey }, body: JSON.stringify({ packetId: input.packetId, channel: input.channel, to: input.channel === "email" ? to.toLowerCase() : to }) })).json() as { data?: RfaForwardResult };
-      if (!result.data?.transmissionId || result.data.packetId !== input.packetId) throw new Error("The forwarding response was invalid. Check delivery history before retrying.");
+      const message = input.message?.trim(); const recipientName = input.recipientName?.trim();
+      if (message && message.length > 1000) throw new Error("Keep the message under 1,000 characters.");
+      const exact = !documentIds && !message && !recipientName;
+      const body = { ...(packetId ? { packetId } : {}), ...(documentIds ? { documentIds } : {}), channel: input.channel, to: input.channel === "email" ? to.toLowerCase() : to, ...(message ? { message } : {}), ...(recipientName ? { recipientName: recipientName.slice(0, 200) } : {}) };
+      const result = await (await request(id, "/forwards", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": idempotencyKey }, body: JSON.stringify(body) })).json() as { data?: RfaForwardResult };
+      // An exact re-send answers with the packet it sent; a composed copy answers with its own new packet.
+      if (!result.data?.transmissionId || !result.data.packetId || (exact && result.data.packetId !== packetId)) throw new Error("The forwarding response was invalid. Check delivery history before retrying.");
       return result.data;
     },
     clearSession: () => { session = null; },

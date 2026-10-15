@@ -1,5 +1,6 @@
 "use client";
 import { Fragment, useEffect, useRef, useState, type ReactElement } from "react";
+import { FormControlStyles, Scrim, SheetHead, useAnchoredPopover, useSheet, useVisualViewportVars } from "./form-controls";
 
 export type RfaFilterOption = { value: string; label: string; group?: string; indent?: boolean };
 export type RfaFilter = {
@@ -24,7 +25,11 @@ const css = `.mbrfa-filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:ce
 function Chip({ filter }: { filter: RfaFilter }): ReactElement {
   const [open, setOpen] = useState(false); const [active, setActive] = useState(0); const ref = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState(""); const searchRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (open && filter.searchable) searchRef.current?.focus(); if (!open) setQuery(""); }, [open, filter.searchable]);
+  // On phones the list opens as the same bottom sheet the shared Select uses: search on top, 48px rows.
+  const sheet = useSheet(); const anchorRef = useRef<HTMLButtonElement>(null); const sheetRef = useRef<HTMLDivElement>(null);
+  useAnchoredPopover(open && sheet, anchorRef, sheetRef); useVisualViewportVars(open && sheet);
+  const searchable = filter.searchable || (sheet && filter.options.length > 12);
+  useEffect(() => { if (open && searchable) searchRef.current?.focus(); if (!open) setQuery(""); }, [open, searchable]);
   useEffect(() => { if (!filter.onSearch) return; const timer = setTimeout(() => filter.onSearch?.(query.trim()), 250); return () => clearTimeout(timer); }, [query]);
   useEffect(() => {
     if (!open) return;
@@ -36,8 +41,20 @@ function Chip({ filter }: { filter: RfaFilter }): ReactElement {
   const choices = filter.options.filter(option => option.value !== "" && (!needle || option.label.toLowerCase().includes(needle)));
   const pick = (value: string) => { setOpen(false); if (value !== filter.value) filter.onChange(value); };
   const toggle = () => { if (!open) { filter.onOpen?.(); setActive(Math.max(0, choices.findIndex(option => option.value === filter.value))); } setOpen(state => !state); };
+  const keys = (event: { key: string; preventDefault: () => void }) => {
+    if (event.key === "Escape") { setOpen(false); return; }
+    if (event.key === "ArrowDown") { event.preventDefault(); setActive(index => Math.min(choices.length - 1, index + 1)); }
+    if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(0, index - 1)); }
+    if (event.key === "Enter") { event.preventDefault(); const option = choices[active]; if (option) pick(option.value); }
+  };
+  const searchBox = (className: string) => <input ref={searchRef} type="search" className={className} placeholder={`Search ${filter.label.toLowerCase()}`} aria-label={`Search ${filter.label.toLowerCase()}`} value={query}
+    onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={keys} />;
+  const list = (groupClass: string, noteClass: string) => <ul role="listbox" aria-label={filter.label}>{filter.loading && !choices.length ? <li className={noteClass}>Loading…</li> : !choices.length ? <li className={noteClass}>{needle ? `No ${filter.label.toLowerCase()} matches “${query.trim()}”` : "No options"}</li> : choices.map((option, index) => <Fragment key={option.value}>
+    {option.group && option.group !== choices[index - 1]?.group ? <li role="presentation" className={groupClass}>{option.group}</li> : null}
+    <li role="option" aria-selected={option.value === filter.value} data-indent={option.indent || undefined} data-active={index === active || undefined} onMouseEnter={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => pick(option.value)}><span>{option.label}</span>{option.value === filter.value ? <span aria-hidden="true">✓</span> : null}</li>
+  </Fragment>)}</ul>;
   return <div className="mbrfa-chip" ref={ref} data-active={filter.value ? true : undefined}>
-    <button type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={filter.value ? `${filter.label}: ${current?.label ?? filter.value}. Change` : `Filter by ${filter.label.toLowerCase()}`} onClick={toggle}
+    <button ref={anchorRef} type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={filter.value ? `${filter.label}: ${current?.label ?? filter.value}. Change` : `Filter by ${filter.label.toLowerCase()}`} onClick={toggle}
       onKeyDown={event => {
         if (event.key === "Escape") { setOpen(false); return; }
         if (!open) return;
@@ -49,17 +66,12 @@ function Chip({ filter }: { filter: RfaFilter }): ReactElement {
         <span className="mbrfa-chip-clear" role="button" tabIndex={-1} aria-label={`Clear ${filter.label.toLowerCase()} filter`} onClick={event => { event.stopPropagation(); setOpen(false); filter.onChange(""); }}>×</span></>
         : <><span aria-hidden="true">+</span>{filter.label}</>}
     </button>
-    {open ? <div className="mbrfa-chip-pop">{filter.searchable ? <input ref={searchRef} type="search" className="mbrfa-chip-search" placeholder={`Search ${filter.label.toLowerCase()}`} aria-label={`Search ${filter.label.toLowerCase()}`} value={query}
-      onChange={event => { setQuery(event.target.value); setActive(0); }}
-      onKeyDown={event => {
-        if (event.key === "Escape") { setOpen(false); return; }
-        if (event.key === "ArrowDown") { event.preventDefault(); setActive(index => Math.min(choices.length - 1, index + 1)); }
-        if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(0, index - 1)); }
-        if (event.key === "Enter") { event.preventDefault(); const option = choices[active]; if (option) pick(option.value); }
-      }} /> : null}<ul role="listbox" aria-label={filter.label}>{filter.loading && !choices.length ? <li className="mbrfa-chip-note">Loading…</li> : !choices.length ? <li className="mbrfa-chip-note">{needle ? `No ${filter.label.toLowerCase()} matches “${query.trim()}”` : "No options"}</li> : choices.map((option, index) => <Fragment key={option.value}>
-      {option.group && option.group !== choices[index - 1]?.group ? <li role="presentation" className="mbrfa-chip-group">{option.group}</li> : null}
-      <li role="option" aria-selected={option.value === filter.value} data-indent={option.indent || undefined} data-active={index === active || undefined} onMouseEnter={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => pick(option.value)}>{option.label}{option.value === filter.value ? <span aria-hidden="true">✓</span> : null}</li>
-    </Fragment>)}</ul></div> : null}
+    {open && sheet ? <><FormControlStyles /><Scrim onClose={() => setOpen(false)} />
+      <div className="mbctl-pop" data-sheet="true" ref={sheetRef} onMouseDown={event => { if (event.target !== searchRef.current) event.preventDefault(); }}>
+        <SheetHead title={filter.label} onClose={() => setOpen(false)} />
+        {searchable ? searchBox("mbctl-pop-search") : null}
+        {list("mbctl-group", "mbctl-note")}
+      </div></> : open ? <div className="mbrfa-chip-pop">{searchable ? searchBox("mbrfa-chip-search") : null}{list("mbrfa-chip-group", "mbrfa-chip-note")}</div> : null}
   </div>;
 }
 
