@@ -55,3 +55,16 @@ it("restores native list filters and links creation back to the supplied route",
   expect(h.container.querySelector('a[href="/tasks/rfas"]')?.textContent).toBe("← RFA Tasks");
  } finally {await h.cleanup();}
 });
+
+it("opens a single awaiting-decision request directly using the current scope and age", async () => {
+ const urls: URL[] = []; const onSelectRfa = vi.fn(); const onNavigate = vi.fn();
+ const single = { ...result, summary: { ...result.summary, total: 1, byLifecycleStatus: { received: 1 }, aging: { ...result.summary.aging, byLifecycleStatus: { received: { "0_5": 0, "6_14": 0, "15_30": 1, "31_plus": 0 } } } } };
+ const fetcher: typeof fetch = async input => { const empty = taskResponse(input); if (empty) return empty; urls.push(new URL(String(input))); return Response.json(single); };
+ const h = mount(fetcher);
+ try {
+  await act(async () => h.root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher, patientId: "patient_synthetic", claimId: "claim_synthetic", renderingProviderId: "provider_synthetic", onSelectRfa, navigation: { allRfasHref: "/requests", onNavigate } })));
+  await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since submission: 1 requests"]')!.click());
+  expect(onSelectRfa).toHaveBeenCalledWith("rfa_synthetic", undefined); expect(onNavigate).not.toHaveBeenCalled();
+  expect(Object.fromEntries(urls.at(-1)!.searchParams)).toMatchObject({ lifecycleStatus: "received", agingBucket: "15_30", patientId: "patient_synthetic", claimId: "claim_synthetic", renderingProviderId: "provider_synthetic", limit: "2" });
+ } finally { await h.cleanup(); }
+});

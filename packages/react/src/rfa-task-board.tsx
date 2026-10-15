@@ -129,7 +129,7 @@ function TaskBoardContent({ options, patientId, claimId, renderingProviderId, pe
       if (pending) return; pending = true;
       if (!background) setLoading(true);
       try {
-        // Open tasks are what the page leads with; finished ones only feed the Done tab, so they follow.
+        // Open tasks lead; resolved tasks remain available through existing history links.
         const resolved = all(true);
         // Its failure is reported when it is awaited below, even if the open tasks fail first.
         resolved.catch(() => undefined);
@@ -183,8 +183,12 @@ function TaskBoardContent({ options, patientId, claimId, renderingProviderId, pe
   const selectedTitle = activeSelection?.kind ? rfaTaskLabel(activeSelection.kind) : activeSelection?.title ?? (activeSelection?.kinds ? taskGroups.find(group => group.kinds.length === activeSelection.kinds!.length && group.kinds.every(kind => activeSelection.kinds!.includes(kind)))?.title ?? activeSelection.kinds.map(rfaTaskLabel).join(", ") : "All tasks");
   const selectionControl = (next: RfaTaskQuery, text: ReactNode, ariaLabel?: string) => {
     const target = { ...next, state: view };
-    if (!getTaskHref) return <button type="button" className={ariaLabel ? "mbrfa-task-count" : undefined} {...(ariaLabel ? { "aria-label": ariaLabel } : {})} onClick={() => setSelection(next)}>{text}</button>;
-    const href = getTaskHref(target);
+    const matches = stateTasks.filter(task => (!next.kind || task.kind === next.kind) && (!next.kinds || next.kinds.includes(task.kind)) && (!next.bucket || rfaTaskAgeBucket(task.createdAt, now) === next.bucket));
+    const single = matches.length === 1 ? matches[0] : undefined;
+    const directHref = single && getRfaHref?.(single.rfaId, single.responseDocumentId ? { responseDocumentId: single.responseDocumentId } : undefined);
+    if (single && !directHref) return <button type="button" className={ariaLabel ? "mbrfa-task-count" : undefined} {...(ariaLabel ? { "aria-label": ariaLabel } : {})} onClick={() => onSelect(single.rfaId, single.responseDocumentId ?? undefined)}>{text}</button>;
+    if (!directHref && !getTaskHref) return <button type="button" className={ariaLabel ? "mbrfa-task-count" : undefined} {...(ariaLabel ? { "aria-label": ariaLabel } : {})} onClick={() => setSelection(next)}>{text}</button>;
+    const href = directHref || getTaskHref!(target);
     return <a href={href} className={ariaLabel ? "mbrfa-task-count" : "mbrfa-route-link"} {...(ariaLabel ? { "aria-label": ariaLabel } : {})} onClick={event => {
       if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault(); onNavigate(href);
@@ -197,7 +201,7 @@ function TaskBoardContent({ options, patientId, claimId, renderingProviderId, pe
       <div className="mbrfa-ur-inbox-head"><div><strong>{inboxCount === null || inboxCount === "0" ? "Incoming UR responses" : `${inboxCount} incoming UR response${inboxCount === "1" ? "" : "s"} to match`}</strong><span>Faxes we received that are not attached to an RFA yet. Match each one so its decision can be recorded.</span></div><button type="button" aria-expanded={inboxOpen} onClick={() => setInboxOpen(value => !value)}>{inboxOpen ? "Hide" : "Review"}</button></div>
       <div hidden={!inboxOpen}><InboundFaxInbox bare onCount={setInboxCount} options={options} editable={permissions.includes("act")} disabled={Boolean(appearance.disabled)} onSelect={onSelect} /></div>
     </section> : null}
-    <div className="mbrfa-task-tabs" role="group" aria-label="Tasks">{(["Due", "Scheduled", "Completed"] as const).map(state => <button key={state} type="button" aria-pressed={view === state} onClick={() => { if (list && getTaskHref) { const href = getTaskHref({ ...query, state }); if (onNavigate) onNavigate(href); else window.location.assign(href); } else { setView(state); setSelection(null); } }}>{taskViewLabels[state]}{state !== "Completed" || completedLoaded ? ` (${tasks.filter(task => rfaTaskState(task, now) === state).length})` : ""}</button>)}</div>
+    <div className="mbrfa-task-tabs" role="group" aria-label="Tasks">{(["Due", "Scheduled"] as const).map(state => <button key={state} type="button" aria-pressed={view === state} onClick={() => { if (list && getTaskHref) { const href = getTaskHref({ ...query, state }); if (onNavigate) onNavigate(href); else window.location.assign(href); } else { setView(state); setSelection(null); } }}>{taskViewLabels[state]}{` (${tasks.filter(task => rfaTaskState(task, now) === state).length})`}</button>)}</div>
     {list ? null : <p className="mbrfa-task-note">{taskViewDescriptions[view]}</p>}
     {error ? <p role="alert">{error}</p> : null}{loading ? <p role="status">Loading tasks…</p> : !error && !stateTasks.length && (view !== "Completed" || completedLoaded) ? <p>{({ Due: "Nothing to do right now.", Scheduled: "No tasks set for later.", Completed: "No finished tasks yet." } as const)[view]}</p> : null}
     {!list ? groups.map(group => { const groupTasks = stateTasks.filter(task => group.kinds.includes(task.kind)); return <section className="mbrfa-task-group" key={group.title} aria-label={group.title}><table><thead><tr><th scope="col">{group.title}<small>By date task opened</small></th>{columns.map(column => <th scope="col" key={column.key}><span className="mbrfa-task-age">{column.label}</span></th>)}<th scope="col">Task total</th></tr></thead><tbody>{group.kinds.filter(kind => groupTasks.some(task => task.kind === kind)).map(kind => { const items = groupTasks.filter(task => task.kind === kind); return <tr key={kind}><th scope="row">{rfaTaskLabel(kind)}{descriptions[kind] && <small>{descriptions[kind]}</small>}</th>{columns.map(column => <td key={column.key}>{countCell(items.filter(task => rfaTaskAgeBucket(task.createdAt, now) === column.key), kind, column.key)}</td>)}<td>{countCell(items, kind)}</td></tr>; })}</tbody><tfoot><tr><th scope="row">Total</th>{[...columns, { key: "total", label: "Total" }].map(column => { const items = column.key === "total" ? groupTasks : groupTasks.filter(task => rfaTaskAgeBucket(task.createdAt, now) === column.key); return <td key={column.key}>{items.length ? selectionControl({ kinds: group.kinds, title: group.title, ...(column.key !== "total" ? { bucket: column.key as RfaTaskAge } : {}) }, items.length, `${group.title}, ${column.label}: ${items.length} ${view.toLowerCase()} tasks`) : <span className="mbrfa-task-zero">0</span>}</td>; })}</tr></tfoot></table></section>; }) : null}

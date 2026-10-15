@@ -1,7 +1,7 @@
 "use client";
 import type { RfaTreatmentTemplate, RfaTreatmentTemplateInput } from "./rfa-template-bar";
 import { useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
+import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, createRfaClient, createBillReferenceClient, createOrganizationClient, type OrganizationProfileData, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaLifecycleStatus, type RfaListResult, type RfaListQuery, type RfaSigningPreview, type BillClaimsAdministratorDirectory } from "@mindbill/browser";
 import { RfaLink, rfaTitle, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
 import { RfaTaskBoard, type RfaTaskQuery } from "./rfa-task-board";
 import { RfaTrackingContent } from "./rfa-tracking-panel";
@@ -246,7 +246,17 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
         {searchInput || status || agingBucket ? <button type="button" className="mbrfa-clear" onClick={() => { setSearchInput(""); setSearch(""); setStatus(""); setAgingBucket(""); resetPage(); }}>Clear filters</button> : null}
       </div>}
       {error ? <p role="alert">{error}</p> : null}{loading ? <p className="mbrfa-loading" role="status">Loading authorization requests…</p> : null}
-      {!loading && resultVisible && result ? view === "overview" ? taskPresentation === "list" ? null : <RfaOverview combined summary={result.summary} onSelect={(nextStatus, bucket) => {
+      {!loading && resultVisible && result ? view === "overview" ? taskPresentation === "list" ? null : <RfaOverview combined summary={result.summary} onSelect={async (nextStatus, bucket) => {
+          const lifecycleStatus = nextStatus as RfaLifecycleStatus;
+          const count = bucket ? result.summary.aging?.byLifecycleStatus[lifecycleStatus]?.[bucket] : nextStatus ? result.summary.byLifecycleStatus ? result.summary.byLifecycleStatus[lifecycleStatus] : result.summary.byStatus[nextStatus] : result.summary.total;
+          if (count === 1) {
+            try {
+              const matches = await client.list({ ...(patientId ? { patientId } : {}), ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), ...(nextStatus ? lifecycleAvailable ? { lifecycleStatus: lifecycleStatus } : { status: nextStatus } : {}), ...(bucket ? { agingBucket: bucket } : {}), limit: 2 });
+              if (!active.current) return;
+              if (matches.data.length === 1 && !matches.nextCursor) { selectRfa(matches.data[0]!.id); return; }
+            } catch { /* Keep the filtered list available if the direct lookup fails. */ }
+            if (!active.current) return;
+          }
           if (navigation?.allRfasHref) {
             const url = new URL(navigation.allRfasHref, window.location.href);
             if (nextStatus) url.searchParams.set("status", nextStatus); else url.searchParams.delete("status");
