@@ -5,6 +5,7 @@ import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaPdfReview } from "./rfa-delivery-panel";
 import { isStaffRfaTask, rfaTaskLabel, rfaTaskState } from "./rfa-task-board";
 import { RfaModal } from "./rfa-modal";
+import { rfaDecisionPrerequisite, rfaLocalDateTime, RfaSentOutsideFields, rfaSentOutsideInput } from "./rfa-sent-outside";
 import { rfaShortDate } from "./rfa-detail-cards";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
@@ -129,14 +130,16 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
   const docs = (types?: string[]) => rfa.documents.filter(document => !types || types.includes(document.documentType));
   const documentSelect = (name: string, title: string, types?: string[], required = true) => <label>{title}<select name={name} required={required} defaultValue=""><option value="">Choose a document</option>{docs(types).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>;
   const pendingItems = rfa.items.filter(item => item.outcome === "pending" && !item.decisionClosure?.closed);
-  const decisionAllowed = ["received", "under_review", "information_requested"].includes(rfa.status);
+  // A decision can be recorded on any open request; one never marked sent or received first gets those dates.
+  const prerequisite = rfaDecisionPrerequisite(rfa);
+  const decisionAllowed = prerequisite === "none";
   // Stacked layout keeps expandable sections; the card layout opens each form in a dialog from a button.
   const block = (id: string, title: string, content: ReactNode, open = false, wide = false) => rows
     ? panel === id ? <RfaModal title={title} wide={wide} busy={Boolean(busy)} onClose={() => { setPanel(""); setError(""); }}>{error ? <p role="alert">{error}</p> : null}{content}</RfaModal> : null
     : <details open={open}><summary>{title}</summary>{content}</details>;
   const canUpload = edit;
   const canReceive = act && !rfa.receivedAt && !["draft", "ready", "canceled", "closed"].includes(rfa.status);
-  const canDecide = act && decisionAllowed && pendingItems.length > 0;
+  const canDecide = act && prerequisite !== "blocked" && pendingItems.length > 0;
   const outstandingRequests = rfa.informationRequests.filter(request => !request.respondedAt).length;
   const canInformation = rfa.informationRequests.length > 0 || (act && decisionAllowed);
   const openDocument = async (id: string) => { const tab = window.open("", "_blank"); try { const url = URL.createObjectURL(await records.getDocument(rfa.id, id)); if (tab) tab.location.href = url; else window.location.assign(url); setTimeout(() => URL.revokeObjectURL(url), 60_000); } catch (reason) { tab?.close(); setError(reason instanceof Error ? reason.message : "The document could not be opened."); } };
@@ -206,8 +209,24 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
         if (!decisions.length) throw new Error("Choose at least one treatment decision. Other treatments remain pending.");
         if (read && !readingChecked) throw new Error("Confirm that you checked these decisions against the response.");
         if (decisions.some(item => item.outcome !== "approved") && !text(data, "imrDocumentId")) throw new Error("An independent medical review form is required for modified or denied treatment.");
-        return { decidedAt: timestamp(data, "decidedAt"), responseDocumentId: text(data, "responseDocumentId"), ...(text(data, "imrDocumentId") ? { imrDocumentId: text(data, "imrDocumentId") } : {}), decisions };
-      }, (input, key) => client.recordDecisions(rfa.id, input, key))}><fieldset disabled={disabled}><legend>Treatment decisions</legend><p>Record only treatments addressed by this response. Unselected treatments remain pending.</p>
+        const sent = prerequisite === "sent" ? rfaSentOutsideInput(data) : null;
+        if (typeof sent === "string") throw new Error(sent);
+        const receivedAt = prerequisite === "receipt" ? timestamp(data, "receivedAt") : null;
+        if (receivedAt && rfa.submittedAt && Date.parse(receivedAt) < Date.parse(rfa.submittedAt)) throw new Error("It cannot have been received before it was sent.");
+        return { decisions: { decidedAt: timestamp(data, "decidedAt"), responseDocumentId: text(data, "responseDocumentId"), ...(text(data, "imrDocumentId") ? { imrDocumentId: text(data, "imrDocumentId") } : {}), decisions }, sent, receivedAt };
+      }, async ({ decisions, sent, receivedAt }, key) => {
+        // Each step keeps its own key, so retrying after a later step failed does not record an earlier one twice.
+        if (sent) await client.recordSentOutside(rfa.id, sent, `${key}:sent`);
+        if (receivedAt) {
+          const channel = rfa.transmissions.filter(item => item.direction === "outbound").at(-1)?.channel ?? "fax";
+          // The decision letter itself proves the request arrived.
+          await client.recordReceipt(rfa.id, { channel: channel as RfaReceiptInput["channel"], receivedAt, proofDocumentId: decisions.responseDocumentId }, `${key}:receipt`);
+        }
+        return client.recordDecisions(rfa.id, decisions, key);
+      })}><fieldset disabled={disabled}><legend>Treatment decisions</legend>
+        {prerequisite === "sent" ? <div className="mbrfa-decision-prereq"><p><strong>This RFA is not marked as sent.</strong> A decision means it was sent and received, so enter those dates too.</p><RfaSentOutsideFields receivedRequired receivedLabel="Received by the claims administrator on" /></div>
+          : prerequisite === "receipt" ? <div className="mbrfa-decision-prereq"><p><strong>Receipt is not recorded yet.</strong> A decision means the claims administrator received the RFA, so enter when.</p><label>Received by the claims administrator on<input type="datetime-local" name="receivedAt" required max={rfaLocalDateTime()} defaultValue={rfaLocalDateTime(rfa.submittedAt ? new Date(rfa.submittedAt) : undefined)} /></label></div> : null}
+        <p>Record only treatments addressed by this response. Unselected treatments remain pending.</p>
         {readingBusy ? <p role="status">Reading the response…</p> : read ? <p className="mbrfa-reading" role="status">These decisions were read from the response. Check each one against the document before saving{read.items.some(item => !item.confident || item.outcome === "not_addressed") ? "; the ones marked in orange need a closer look" : ""}.</p>
           : reading?.documentId === responseDocument ? <p className="mbrfa-reading" data-flag="true" role="status">This response could not be read automatically. Enter the decisions from the document.</p> : null}
         <div className="mbtd-grid"><label>Decision time<input key={`decidedAt:${read ? reading!.documentId : ""}`} type="datetime-local" name="decidedAt" required defaultValue={localDateTime(read?.decidedAt)} /></label><label>Utilization review response<select name="responseDocumentId" required value={responseDocument} onChange={event => setResponseDocument(event.target.value)}><option value="">Choose a document</option>{docs(["ur_response"]).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>{documentSelect("imrDocumentId", "Independent medical review form", ["imr_form"], false)}</div>

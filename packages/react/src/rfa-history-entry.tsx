@@ -6,7 +6,7 @@ type Evidence = { id: string; label: string; kind: "document" | "packet" };
 const object = (value: unknown): Fields => value && typeof value === "object" && !Array.isArray(value) ? value as Fields : {};
 const string = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value : undefined;
 const words = (value: string) => value.replace(/^rfa\./, "").replaceAll("_", " ");
-const actions: Record<string, string> = { created: "RFA created", note_added: "Note added", transmission_recorded: "Transmission recorded", followup_opened: "Follow-up opened", signed: "RFA signed", submitted: "RFA submitted", treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened" };
+const actions: Record<string, string> = { created: "RFA created", note_added: "Note added", transmission_recorded: "Transmission recorded", followup_opened: "Follow-up opened", signed: "RFA signed", submitted: "RFA submitted", sent_outside_recorded: "Marked as sent outside MindBill", sent_outside_undone: "Sent outside MindBill — undone", treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened" };
 const date = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "Not recorded";
 const fields = {
   status: "Status", from: "Previous status", to: "New status", channel: "Delivery method", direction: "Direction",

@@ -343,3 +343,36 @@ it("loads the dashboard counts once, as a single row, and shows them at once on 
  const second=await mount(pending);
  try{expect(second.container.textContent).toContain("Requests awaiting a decision");expect(second.container.textContent).not.toContain("Loading authorization requests");}finally{await second.close();}
 });
+it("marks an unsent request as sent outside MindBill, and undoes it from History",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const confirm=vi.spyOn(window,"confirm").mockReturnValue(true);
+ const sentAt="2026-09-10T16:00:00.000Z";
+ const marked={...record,status:"submitted",submittedAt:sentAt,transmissions:[{id:"tx_outside",direction:"outbound",purpose:"submission",channel:"mail",status:"sent",destination:"Synthetic address",occurredAt:sentAt,receivedAt:null,proofDocumentId:null,providerMessageId:null,metadata:{sentOutsideMindBill:true}}]};
+ let current:unknown=record;
+ const fetcher=vi.fn<typeof fetch>(async(input,init)=>{
+  const url=String(input);
+  if(url.includes("/events"))return Response.json({data:[]});
+  if(url.endsWith("/scheduling"))return Response.json({data:[]});
+  if(url.endsWith("/sent-outside")&&init?.method==="POST"){current=marked;return Response.json({data:marked},{status:201});}
+  if(url.includes("/sent-outside/")&&init?.method==="DELETE"){current=record;return Response.json({data:record});}
+  return taskResponse(input) ?? Response.json({data:current});
+ });
+ const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text);
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:record.id,permissions:["edit","send","act"]})));
+  await act(async()=>button("Mark as sent")!.click());
+  const dialog=container.querySelector('[role="dialog"]')!;
+  expect(dialog.getAttribute("aria-label")).toBe("Mark as sent");
+  const set=(name:string,value:string)=>{const element=dialog.querySelector<HTMLInputElement|HTMLSelectElement>(`[name="${name}"]`)!;element.value=value;element.dispatchEvent(new Event("change",{bubbles:true}));};
+  await act(async()=>{set("sentAt","2026-09-10T09:00");set("channel","mail");set("destination","Synthetic address");});
+  await act(async()=>{dialog.querySelector("form")!.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true}));});
+  const post=fetcher.mock.calls.find(([url,init])=>String(url).endsWith("/sent-outside")&&init?.method==="POST")!;
+  expect(JSON.parse(String(post[1]!.body))).toEqual({sentAt:new Date("2026-09-10T09:00").toISOString(),channel:"mail",destination:"Synthetic address"});
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(button("Mark as sent")).toBeUndefined();
+  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent?.startsWith("History"))!.click());
+  expect(container.textContent).toContain("Sent outside MindBill");
+  await act(async()=>button("Undo")!.click());
+  expect(fetcher.mock.calls.some(([url,init])=>String(url).endsWith("/sent-outside/tx_outside")&&init?.method==="DELETE")).toBe(true);
+ }finally{confirm.mockRestore();await act(async()=>root.unmount());container.remove();}
+});
