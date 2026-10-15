@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, type ReactElement, type ReactNode } from "react";
 import { rfaSendDialogCss } from "./rfa-send-dialog";
+import { useVisualViewportVars } from "./form-controls";
 
 export const rfaModalCss = `.mbrfa-send.mbrfa-modal-wide{width:min(880px,100%);max-height:min(92vh,960px)}.mbrfa-send.mbrfa-modal-full{width:min(1440px,100%);height:min(94vh,1200px);max-height:94vh;display:flex;flex-direction:column}.mbrfa-modal-full>.mbrfa-send-body{flex:1;min-height:0;overflow:hidden;padding:0}
 .mbrfa-review{display:grid;grid-template-columns:minmax(0,1fr) 500px;height:100%;min-height:0}.mbrfa-review-doc{background:#525659;min-height:0;position:relative}
@@ -22,13 +23,19 @@ export const rfaModalCss = `.mbrfa-send.mbrfa-modal-wide{width:min(880px,100%);m
 .mbrfa-outcome{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbtd .mbrfa-outcome button{border:0;border-right:1px solid var(--mb-border);border-radius:0;background:var(--mb-surface);min-height:36px;font-size:13px;font-weight:500;color:var(--mb-muted)}.mbtd .mbrfa-outcome button:last-child{border-right:0}.mbtd .mbrfa-outcome button:hover{background:var(--mb-soft);color:var(--mb-text)}
 .mbtd .mbrfa-outcome button[aria-checked=true]{color:#fff;font-weight:650}.mbtd .mbrfa-outcome button[aria-checked=true][data-outcome=approved]{background:#15803d}.mbtd .mbrfa-outcome button[aria-checked=true][data-outcome=modified]{background:#b45309}.mbtd .mbrfa-outcome button[aria-checked=true][data-outcome=denied]{background:var(--mb-danger,#b91c1c)}.mbtd .mbrfa-outcome button[aria-checked=true][data-outcome=pending]{background:var(--mb-muted);}
 .mbrfa-modal .mbrfa-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-@media(max-width:900px){.mbrfa-review{grid-template-columns:1fr;grid-template-rows:45vh minmax(0,1fr)}.mbrfa-review-side{border-left:0;border-top:1px solid var(--mb-border)}.mbtd .mbrfa-modal .mbrfa-send-body .mbrfa-review-scroll .mbtd-grid{grid-template-columns:minmax(0,1fr)}}
+/* The Save row of a dialog form stays in view while the fields scroll, including above a phone keyboard. */
+.mbrfa-modal .mbrfa-send-body .mbrfa-taskform-foot,.mbrfa-modal .mbrfa-send-body form>.mbtd-actions:last-child,.mbrfa-modal .mbrfa-send-body form>fieldset>.mbtd-actions:last-child{position:sticky;bottom:-18px;z-index:2;margin-bottom:-18px;padding-top:12px;padding-bottom:18px;background:var(--mb-surface);box-shadow:0 -8px 12px -10px rgba(0,0,0,.25)}
+.mbtd .mbrfa-outcome button{padding:0 4px;white-space:nowrap;min-width:0}
+.mbrfa-send.mbrfa-modal-full{max-height:calc(var(--mb-vv-height,100dvh) - 32px)}
+@media(max-width:640px){.mbrfa-modal .mbrfa-send-body .mbrfa-taskform-foot,.mbrfa-modal .mbrfa-send-body form>.mbtd-actions:last-child,.mbrfa-modal .mbrfa-send-body form>fieldset>.mbtd-actions:last-child{bottom:-14px;margin-bottom:-14px;padding-bottom:calc(14px + env(safe-area-inset-bottom))}.mbrfa-send.mbrfa-modal-full{height:calc(var(--mb-vv-height,100dvh) - 8px);max-height:none}}
+@media(max-width:900px){.mbrfa-review{grid-template-columns:1fr;grid-template-rows:min(45vh,35%) minmax(0,1fr)}.mbrfa-review-side{border-left:0;border-top:1px solid var(--mb-border)}.mbtd .mbrfa-modal .mbrfa-send-body .mbrfa-review-scroll .mbtd-grid{grid-template-columns:minmax(0,1fr)}}
 .mbrfa-modal .mbrfa-send-body fieldset{margin:0;padding:0;border:0;min-width:0;display:grid;gap:12px}.mbrfa-modal .mbrfa-send-body legend{display:none}
 .mbrfa-modal .mbrfa-send-body fieldset fieldset{padding:12px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbrfa-modal .mbrfa-send-body fieldset fieldset legend{display:block;padding:0 4px;font-size:13px;font-weight:600}
 .mbrfa-modal .mbrfa-send-body .mbtd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.mbrfa-modal .mbrfa-send-body button[type=submit]{justify-self:start;border-color:var(--mb-accent);background:var(--mb-accent);color:var(--mb-accent-contrast,#fff);font-weight:600}`;
 
 /** One task at a time: a form opens over the request instead of expanding inside the page. */
 export function RfaModal({ title, wide = false, full = false, busy = false, onClose, children }: { title: string; wide?: boolean; /** Nearly the whole window, for reviewing a document beside a form. */ full?: boolean; busy?: boolean; onClose: () => void; children: ReactNode }): ReactElement {
+  useVisualViewportVars();
   useEffect(() => {
     const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy && !event.defaultPrevented) onClose(); };
     window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close);

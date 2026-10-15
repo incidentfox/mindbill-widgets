@@ -4,6 +4,7 @@ import { createRfaPacketsClient, normalizeRfaFax, type BillClaimsAdministratorDi
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { formatRfaPhone } from "./rfa-official-fields";
 import { rfaSendDialogCss } from "./rfa-send-dialog";
+import { useVisualViewportVars } from "./form-controls";
 
 type Method = "fax" | "email";
 const SENT = ["sent", "delivered", "received"];
@@ -36,6 +37,7 @@ export function RfaDuplicateDialog({ rfa, forwardContacts, options, directory, d
   rfa: RfaRecord; forwardContacts?: readonly RfaForwardContact[]; options: OrganizationClientOptions; directory: BillClaimsAdministratorDirectory | null; directoryLoading: boolean; directoryError: string | null;
   environment: string; canAct: boolean; onSent: () => void; onClose: () => void;
 }): ReactElement {
+  useVisualViewportVars();
   const client = useMemo(() => createRfaPacketsClient(options), [options]);
   const [history, setHistory] = useState<RfaPacketHistory | null>(null);
   const [method, setMethod] = useState<Method>(() => !rfa.authorizationContact?.fax?.trim() && rfa.authorizationContact?.email?.trim() ? "email" : "fax");

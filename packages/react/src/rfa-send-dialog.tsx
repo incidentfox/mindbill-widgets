@@ -5,6 +5,7 @@ import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { formatRfaPhone } from "./rfa-official-fields";
 import { rfaSendFix } from "./rfa-send-fix";
 import { rfaFailureReason } from "./rfa-detail-cards";
+import { useVisualViewportVars } from "./form-controls";
 
 export const rfaSendDialogCss = `.mbrfa-send-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:16px;background:rgba(17,28,38,.44)}
 .mbrfa-send{display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:min(560px,100%);max-height:min(88vh,760px);border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);color:var(--mb-text);box-shadow:0 18px 48px #0003}
@@ -18,7 +19,14 @@ export const rfaSendDialogCss = `.mbrfa-send-backdrop{position:fixed;z-index:100
 .mbrfa-send-confirm{display:flex!important;align-items:flex-start;gap:10px;padding-top:4px;cursor:pointer}.mbrfa-send-confirm input{width:16px;height:16px;min-height:16px;margin:3px 0 0;padding:0;flex:none;accent-color:var(--mb-accent)}
 .mbrfa-send>footer{display:flex;flex-direction:row-reverse;gap:10px;padding:14px 20px;border-top:1px solid var(--mb-border)}.mbrfa-send>footer>a{margin-right:auto;align-self:center;font-size:13px}
 .mbrfa-send [role=alert]{color:var(--mb-danger,#b42318);font-size:13px}
-@media(max-width:640px){.mbrfa-send-backdrop{place-items:end stretch;padding:0}.mbrfa-send{width:100%;max-height:92vh;border-radius:var(--mb-radius) var(--mb-radius) 0 0}.mbrfa-send>footer{flex-direction:column}.mbrfa-send>footer>a{margin:0;align-self:center}}`;
+/* Never wider than the screen; the body scrolls inside the dialog; long numbers and file names wrap. */
+.mbrfa-send-backdrop{inset:auto 0;top:var(--mb-vv-top,0px);height:var(--mb-vv-height,100dvh);box-sizing:border-box;overflow:hidden;overscroll-behavior:contain}
+.mbrfa-send{box-sizing:border-box;max-width:100%;min-width:0;max-height:min(88dvh,760px,calc(var(--mb-vv-height,100dvh) - 32px));overflow:hidden}
+.mbrfa-send>header,.mbrfa-send>footer{min-width:0}.mbrfa-send>header h3{min-width:0;overflow-wrap:anywhere}
+.mbrfa-send-body{min-width:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;overflow-wrap:anywhere}
+.mbrfa-send-body :where(div,label,fieldset,section,ul,li,p,span,form){min-width:0;max-width:100%}.mbrfa-send-body :where(input,select,textarea){max-width:100%;box-sizing:border-box}
+@media(max-width:640px){.mbrfa-send-backdrop{place-items:end stretch;padding:0}.mbrfa-send{width:100%;max-height:calc(var(--mb-vv-height,100dvh) - 8px);border-radius:var(--mb-radius) var(--mb-radius) 0 0}.mbrfa-send>header{padding:12px 16px}.mbrfa-send-body{padding:14px 16px}.mbrfa-send>footer{flex-direction:column;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}.mbrfa-send>footer>a{margin:0;align-self:center}
+.mbrfa-send-backdrop .mbrfa-send input:not([type=checkbox]):not([type=radio]):not([type=file]),.mbrfa-send-backdrop .mbrfa-send textarea{font-size:16px}.mbrfa-send>footer button{min-height:44px}}`;
 
 type Method = "fax" | "email";
 const treatmentDetail = (item: RfaRecord["items"][number]): string => [item.procedureCode ? `CPT/HCPCS ${item.procedureCode}` : "", item.quantity ? `Qty ${item.quantity}` : "", item.frequency ?? "", item.duration ?? "", `Dx ${item.diagnosisCode}`].filter(Boolean).join(" · ");
@@ -37,6 +45,7 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
   onFix?: (() => void) | undefined;
   onUpdated: (rfa: RfaRecord) => void; onSent: (rfa: RfaRecord) => void; onClose: () => void;
 }): ReactElement {
+  useVisualViewportVars();
   // Start on how the request is already addressed: its saved fax, else its saved e-mail.
   const [method, setMethod] = useState<Method>(() => !rfa.authorizationContact?.fax?.trim() && rfa.authorizationContact?.email?.trim() ? "email" : "fax");
   const [destination, setDestination] = useState<RfaAuthorizationDestinationOption | null>(null);

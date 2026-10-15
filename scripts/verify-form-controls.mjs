@@ -20,7 +20,7 @@ import React from 'react';import {createRoot} from 'react-dom/client';import {Rf
 const scene=location.hash.slice(1)||'detail';
 const doc=(id,documentType,filename)=>({id,documentType,filename,sha256:'0',sizeBytes:1000,contentRevision:1,createdAt:'2026-10-07T13:14:00Z'});
 const sent=scene==='detail';const failed=scene==='failed';
-const row={id:'rfa_synthetic',contentRevision:1,claimId:'claim_synthetic',patientId:'patient_synthetic',renderingProviderId:'provider_synthetic',employeeName:'Sample patient',dateOfInjury:'2025-06-01',providerName:'Sample physician, D.C.',providerNpi:'1234567890',claimsAdminName:'Sample administrator',claimNumber:'SAMPLE-001',status:sent?'under_review':failed?'submitted':'ready',lifecycleStatus:failed?'failed':undefined,reviewType:'prospective',requestType:'new',writtenConfirmation:false,expedited:false,signedAt:'2026-10-02T00:20:00Z',submittedAt:sent||failed?'2026-10-02T00:30:00Z':null,receivedAt:sent?'2026-10-02T01:00:00Z':null,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-07T13:20:00Z',decisionDueAt:sent?'2026-10-09T00:00:00Z':null,readiness:{ready:true,missing:[]},
+const row={id:'rfa_synthetic',contentRevision:1,claimId:'claim_synthetic',patientId:'patient_synthetic',renderingProviderId:'provider_synthetic',employeeName:'Sample patient',dateOfInjury:'2025-06-01',providerName:'Sample physician, D.C.',providerNpi:'1234567890',claimsAdminId:'ca_synthetic',claimsAdminName:'Sample administrator',claimNumber:'SAMPLE-001',status:sent?'under_review':failed?'submitted':'ready',lifecycleStatus:failed?'failed':undefined,reviewType:'prospective',requestType:'new',writtenConfirmation:false,expedited:false,signedAt:'2026-10-02T00:20:00Z',submittedAt:sent||failed?'2026-10-02T00:30:00Z':null,receivedAt:sent?'2026-10-02T01:00:00Z':null,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-07T13:20:00Z',decisionDueAt:sent?'2026-10-09T00:00:00Z':null,readiness:{ready:true,missing:[]},
  items:[{id:'item_approved',serviceDescription:'Chiropractic manipulative treatment, spinal, 3–4 regions',diagnosisCode:'M54.2',diagnosisDescription:'Cervicalgia',procedureCode:'98941',quantity:6,units:6,frequency:'1 visit per week',duration:'6 weeks',requestedFrom:'2026-10-03',requestedTo:'2026-11-27',outcome:sent?'approved':'pending',decidedAt:sent?'2026-10-07T13:14:00Z':null,authorizationNumber:sent?'SAMPLE-UR-001':null,authorizedProcedureCode:'98941',authorizedQuantity:6,authorizedUnits:6,effectiveFrom:'2026-10-07',effectiveTo:'2026-12-06',currentResponseDocumentId:sent?'doc_ur':null,currentDecisionEventId:sent?'event_1':null},
   {id:'item_pending',serviceDescription:'Therapeutic exercise',diagnosisCode:'M54.2',diagnosisDescription:'Cervicalgia',procedureCode:'97110',quantity:8,frequency:'2 visits per week',duration:'4 weeks',outcome:'pending'}],
  documents:[doc('doc_report','clinical_report','PR-2 progress report.pdf'),doc('doc_form','rfa_form','DWC-RFA-signed.pdf'),...(sent?[doc('doc_ur','ur_response','UR determination - Sample administrator.pdf'),doc('doc_ur2','ur_response','UR determination (corrected) - Sample administrator.pdf'),doc('doc_imr','imr_form','IMR application - blank.pdf')]:[])],
@@ -33,6 +33,7 @@ const claims=[{claimId:'claim_synthetic',patientId:'patient_synthetic',employeeN
 window.__writes=[];
 const fetcher=async(input,init)=>{const url=new URL(String(input));const path=url.pathname;if((init?.method||'GET')!=='GET'){window.__writes.push(path);throw Error('Unexpected mutation');}
  if(path.endsWith('/creation-context')){const q=(url.searchParams.get('providerSearch')||'').toLowerCase();return Response.json({data:{claims,renderingProviders:physicians.filter(p=>!q||p.name.toLowerCase().includes(q)||p.npi.includes(q)),nextCursor:null,renderingProvidersNextCursor:null}});}
+ if(path.includes('/claims-administrators/'))return Response.json({data:{id:'ca_synthetic',name:'Sample administrator',authorization:[{location:'Utilization review unit',method:'fax',fax:'8005550142',name:'UR intake'},{location:'Northern region utilization review',method:'fax',fax:'8005550143'},{location:'Southern region utilization review',method:'fax',fax:'8005550144'},{location:'UR e-mail intake',method:'email',email:'ur-intake-very-long-address@sample-administrator.example.test'}]}});
  if(path.endsWith('/billing-profile'))return Response.json({data:profile});
  if(path.endsWith('/packets'))return Response.json({data:{packets:[],transmissions:[]}});
  if(path.endsWith('/scheduling'))return Response.json({data:scheduling});
@@ -63,19 +64,24 @@ await mkdir(output, { recursive: true });
 const NATIVE = "select, input[type=date], input[type=datetime-local], input[type=time], input[type=month], input[type=week]";
 const shots = [];
 try {
-  for (const width of [1440, 390]) {
-    const page = await browser.newPage({ viewport: { width, height: width > 500 ? 1000 : 860 } }); const errors = [];
+  for (const [width, height] of [[1440, 1000], [390, 844], [390, 430]]) {
+    // 390x430 stands in for a phone with the keyboard open.
+    const size = width > 500 ? String(width) : `${width}x${height}`;
+    const page = await browser.newPage({ viewport: { width, height } }); const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
     const shot = async (name) => {
       assert.equal(await page.locator(NATIVE).count(), 0, `${name}: native controls on the page`);
       // An open popover must be fully on screen and on top: its corners hit the popover itself, not a dialog edge.
       const clipped = await page.evaluate(() => [...document.querySelectorAll(".mbctl-pop")].flatMap(pop => {
-        const box = pop.getBoundingClientRect(); if (box.top < 0 || box.left < 0 || box.bottom > innerHeight || box.right > innerWidth) return ["off-screen"];
-        return [[box.left + 4, box.top + 4], [box.right - 4, box.top + 4], [box.left + 4, box.bottom - 4], [box.right - 4, box.bottom - 4]].filter(([x, y]) => !pop.contains(document.elementFromPoint(x, y))).map(String);
+        const box = pop.getBoundingClientRect(); if (box.top < -1 || box.left < -1 || box.bottom > innerHeight + 1 || box.right > innerWidth + 1) return [`off-screen ${Math.round(box.top)},${Math.round(box.bottom)},${innerHeight}`];
+        return [[box.left + 18, box.top + 18], [box.right - 18, box.top + 18], [box.left + 18, box.bottom - 18], [box.right - 18, box.bottom - 18]].filter(([x, y]) => !pop.contains(document.elementFromPoint(x, y))).map(String);
       }));
+      if (clipped.length) await page.screenshot({ path: resolve(output, `FAIL-${name}.png`) });
       assert.deepEqual(clipped, [], `${name}: popover clipped or covered`);
-      const path = resolve(output, `${name}-${width}.png`); await page.screenshot({ path }); shots.push(path);
+      const overflow = await page.evaluate(() => [...document.querySelectorAll(".mbrfa-send, .mbrfa-send-body, .mbctl-pop")].filter(node => node.scrollWidth > node.clientWidth + 1 || node.getBoundingClientRect().right > innerWidth + 1).map(node => node.className));
+      assert.deepEqual(overflow, [], `${name}: horizontal overflow`);
+      const path = resolve(output, `${name}-${size}.png`); await page.screenshot({ path }); shots.push(path);
     };
     const dialog = () => page.locator(".mbrfa-modal [role=dialog]").last();
     const openSelect = async (label) => { await dialog().getByRole("combobox", { name: label }).first().click(); await page.locator(".mbctl-pop").waitFor(); };
@@ -111,6 +117,19 @@ try {
     await openCalendar("appointment date"); await shot("appointment-calendar-open"); await close();
     await openSelect(/^Disposition/); await shot("appointment-disposition-open");
     await page.locator('.mbctl-pop li[data-value="no_appointment"]').click(); await shot("appointment-no-appointment");
+    await close(); await page.getByRole("dialog").waitFor({ state: "detached" });
+
+    // Forward: switch between fax and e-mail and open the destination list.
+    await page.getByRole("button", { name: "Forward" }).first().click();
+    await page.getByRole("dialog", { name: "Forward RFA" }).waitFor();
+    const forward = page.getByRole("dialog", { name: "Forward RFA" });
+    await shot("forward-fax");
+    await forward.getByRole("combobox").first().click(); await page.locator(".mbctl-pop").waitFor(); await shot("forward-fax-list-open");
+    const search = page.locator(".mbctl-pop-search");
+    if (await search.count()) { await search.fill("North"); await shot("forward-fax-list-search"); }
+    await close();
+    await forward.getByText("E-mail", { exact: true }).click(); await shot("forward-email");
+    await forward.getByRole("combobox").first().click(); await page.locator(".mbctl-pop").waitFor(); await shot("forward-email-list-open"); await close();
     await close(); await page.getByRole("dialog").waitFor({ state: "detached" });
 
     await approved.getByRole("button", { name: "Correct decision" }).click();

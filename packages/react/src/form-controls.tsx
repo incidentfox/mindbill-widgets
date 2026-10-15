@@ -89,6 +89,14 @@ const css = `.mbctl{position:relative;display:block;min-width:0;width:100%;font-
 .mbctl-pop .mbctl-cal button[aria-pressed=true]{background:var(--mb-accent,#1f6feb);color:var(--mb-accent-contrast,#fff);font-weight:600}.mbctl-pop .mbctl-cal button:disabled{opacity:.3;cursor:not-allowed}
 .mbctl-pop .mbctl-cal-grid button:focus-visible,.mbctl-pop .mbctl-cal-months button:focus-visible{outline:2px solid var(--mb-accent,#1f6feb);outline-offset:-2px}
 .mbctl-cal-foot{display:flex;justify-content:space-between;margin-top:8px}.mbctl-pop .mbctl-cal-foot button{min-height:28px;padding:2px 6px;border-radius:6px;font-size:13px;color:var(--mb-accent,#1f6feb)}
+.mbctl-scrim{position:fixed;inset:0;z-index:2147482999;background:rgba(15,23,42,.38)}
+.mbctl-sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--mb-border,#cfd8dc);font-size:16px}.mbctl-sheet-head strong{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mbctl-pop.mbctl-pop .mbctl-sheet-close{display:grid;place-items:center;flex:none;width:44px;height:44px;min-height:0;margin:0;padding:0;border:0;border-radius:8px;background:transparent;color:var(--mb-text,#1f2a30);font-size:26px;line-height:1;cursor:pointer}
+.mbctl-pop[data-sheet]{overflow-y:auto;overscroll-behavior:contain;left:0;right:0;width:100%;max-width:100%;min-width:0!important;display:flex;flex-direction:column;border-radius:16px 16px 0 0;border-width:1px 0 0;box-shadow:0 -12px 32px -8px rgba(15,23,42,.35);padding-bottom:env(safe-area-inset-bottom)}
+.mbctl-pop[data-sheet] ul{flex:1 1 auto;min-height:0;max-height:none;padding:6px 8px}.mbctl-pop[data-sheet] li[role=option]{min-height:48px;padding:10px 12px;font-size:16px;box-sizing:border-box}.mbctl-pop[data-sheet] li[role=option] small{font-size:13px}.mbctl-pop[data-sheet] li.mbctl-note{padding:14px 12px;font-size:15px}
+.mbctl-pop.mbctl-pop[data-sheet] .mbctl-pop-search{flex:none;min-height:52px;padding:12px 16px;font-size:16px}
+.mbctl-pop[data-sheet] .mbctl-cal{width:100%;max-width:400px;margin:0 auto;padding:12px 12px 16px}.mbctl-pop[data-sheet] .mbctl-cal-grid button{min-height:44px;height:44px;font-size:16px}@media(max-height:520px){.mbctl-pop[data-sheet] .mbctl-cal-grid button{min-height:36px;height:36px}.mbctl-pop[data-sheet] .mbctl-cal{padding-top:4px}}.mbctl-pop[data-sheet] .mbctl-cal-head button{min-height:44px;height:44px;font-size:16px}.mbctl-pop[data-sheet] .mbctl-cal-head button.mbctl-cal-step{width:44px}.mbctl-pop[data-sheet] .mbctl-cal-months button{min-height:48px;font-size:16px}.mbctl-pop[data-sheet] .mbctl-cal-foot button{min-height:44px;padding:4px 12px;font-size:16px}
+@media(max-width:640px){.mbctl.mbctl .mbctl-trigger,.mbctl.mbctl .mbctl-box{min-height:44px;font-size:16px}.mbctl.mbctl .mbctl-box input.mbctl-text{font-size:16px;min-height:42px}.mbctl-detail{font-size:13px}}
 .mbctl-datetime-field{container-type:inline-size}.mbctl-datetime{display:grid;grid-template-columns:minmax(0,1fr) minmax(104px,38%);gap:8px}@container (max-width:300px){.mbctl-datetime{grid-template-columns:minmax(0,1fr)}}`;
 
 export function FormControlStyles(): ReactElement { return <style href="mindbill-form-controls" precedence="default">{css}</style>; }
@@ -110,20 +118,58 @@ function useDismiss(open: boolean, root: RefObject<HTMLElement | null>, close: (
   }, [open, root]);
 }
 
-/** Positions a popover with `position: fixed` next to its anchor so scrolling containers and dialogs never clip it. */
+let viewportUsers = 0; let viewportDetach: (() => void) | null = null;
+/** Publishes the visible viewport (which shrinks when a phone keyboard opens) as --mb-vv-height and --mb-vv-top on <html>,
+ * so dialogs and sheets can stay above the keyboard. Shared by every open dialog and sheet. */
+export function useVisualViewportVars(active = true): void {
+  useEffect(() => {
+    if (!active || typeof window === "undefined") return;
+    viewportUsers += 1;
+    if (viewportUsers === 1) {
+      const root = document.documentElement; const vv = window.visualViewport;
+      const update = () => { root.style.setProperty("--mb-vv-height", `${vv ? vv.height : window.innerHeight}px`); root.style.setProperty("--mb-vv-top", `${vv ? vv.offsetTop : 0}px`); };
+      update(); vv?.addEventListener("resize", update); vv?.addEventListener("scroll", update); window.addEventListener("resize", update);
+      viewportDetach = () => { vv?.removeEventListener("resize", update); vv?.removeEventListener("scroll", update); window.removeEventListener("resize", update); root.style.removeProperty("--mb-vv-height"); root.style.removeProperty("--mb-vv-top"); };
+    }
+    return () => { viewportUsers -= 1; if (!viewportUsers) { viewportDetach?.(); viewportDetach = null; } };
+  }, [active]);
+}
+
+/** Phones get lists and calendars as a bottom sheet with large rows instead of a small floating popover. */
+function useSheet(): boolean {
+  const [sheet, setSheet] = useState(false);
+  useEffect(() => {
+    const query = typeof window === "undefined" ? undefined : window.matchMedia?.("(max-width: 640px)");
+    if (!query) return;
+    const update = () => setSheet(query.matches); update();
+    query.addEventListener?.("change", update); return () => query.removeEventListener?.("change", update);
+  }, []);
+  return sheet;
+}
+
+/** Positions a popover with `position: fixed` next to its anchor so scrolling containers and dialogs never clip it.
+ * As a sheet (`data-sheet`), it spans the width and sits at the bottom of the visible viewport, above a phone keyboard. */
 function useAnchoredPopover(open: boolean, anchor: RefObject<HTMLElement | null>, pop: RefObject<HTMLElement | null>, align: "start" | "end" = "start", matchWidth = true): void {
   useIsoLayoutEffect(() => {
     if (!open) return;
     const place = () => {
       const a = anchor.current; const p = pop.current; if (!a || !p) return;
-      const rect = a.getBoundingClientRect(); const vw = window.innerWidth || document.documentElement.clientWidth; const vh = window.innerHeight || document.documentElement.clientHeight;
-      if (matchWidth) p.style.minWidth = `${Math.min(rect.width, vw - 16)}px`;
-      const height = p.offsetHeight; const width = p.offsetWidth;
-      const below = vh - rect.bottom - 8; const above = rect.top - 8;
-      let top = below >= height + 4 || below >= above ? rect.bottom + 4 : rect.top - 4 - height;
-      top = Math.max(8, Math.min(top, vh - height - 8));
-      let left = align === "end" ? rect.right - width : rect.left;
-      left = Math.max(8, Math.min(left, vw - width - 8));
+      const vv = window.visualViewport;
+      const vw = window.innerWidth || document.documentElement.clientWidth; const vh = vv ? vv.height : window.innerHeight || document.documentElement.clientHeight; const vtop = vv ? vv.offsetTop : 0;
+      let top: number; let left: number;
+      if (p.dataset.sheet) {
+        p.style.maxHeight = `${Math.max(160, vh - 24)}px`;
+        top = vtop + vh - p.offsetHeight; left = 0;
+      } else {
+        const rect = a.getBoundingClientRect();
+        if (matchWidth) p.style.minWidth = `${Math.min(rect.width, vw - 16)}px`;
+        const height = p.offsetHeight; const width = p.offsetWidth;
+        const below = vtop + vh - rect.bottom - 8; const above = rect.top - vtop - 8;
+        top = below >= height + 4 || below >= above ? rect.bottom + 4 : rect.top - 4 - height;
+        top = Math.max(vtop + 8, Math.min(top, vtop + vh - height - 8));
+        left = align === "end" ? rect.right - width : rect.left;
+        left = Math.max(8, Math.min(left, vw - width - 8));
+      }
       p.style.top = `${top}px`; p.style.left = `${left}px`;
       // A transformed ancestor makes `fixed` relative to itself; correct for any offset.
       const actual = p.getBoundingClientRect();
@@ -132,10 +178,20 @@ function useAnchoredPopover(open: boolean, anchor: RefObject<HTMLElement | null>
     place();
     const frame = () => place();
     window.addEventListener("scroll", frame, true); window.addEventListener("resize", frame);
+    window.visualViewport?.addEventListener("resize", frame); window.visualViewport?.addEventListener("scroll", frame);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(frame);
     if (observer && pop.current) observer.observe(pop.current);
-    return () => { window.removeEventListener("scroll", frame, true); window.removeEventListener("resize", frame); observer?.disconnect(); };
+    return () => { window.removeEventListener("scroll", frame, true); window.removeEventListener("resize", frame); window.visualViewport?.removeEventListener("resize", frame); window.visualViewport?.removeEventListener("scroll", frame); observer?.disconnect(); };
   });
+}
+
+/** The title row of a sheet, with a close button. */
+function SheetHead({ title, onClose }: { title: string; onClose: () => void }): ReactElement {
+  return <div className="mbctl-sheet-head"><strong>{title}</strong><button type="button" className="mbctl-sheet-close" aria-label="Close" onClick={onClose}>×</button></div>;
+}
+/** Dims the page behind a sheet; tapping it closes the sheet (and never reaches an enclosing label). */
+function Scrim({ onClose }: { onClose: () => void }): ReactElement {
+  return <div className="mbctl-scrim" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={event => { event.preventDefault(); event.stopPropagation(); onClose(); }} />;
 }
 
 let focusClaimed = false;
@@ -211,6 +267,7 @@ export function Select(props: SelectProps): ReactElement {
   const close = (focusBack: boolean) => { setOpen(false); if (query && onSearch) onSearch(""); setQuery(""); if (focusBack) triggerRef.current?.focus(); };
   useDismiss(open, rootRef, close);
   useAnchoredPopover(open, triggerRef, popRef, align);
+  const sheet = useSheet(); useVisualViewportVars(open && sheet);
   useEffect(() => { if (open && searchable) searchRef.current?.focus(); }, [open, searchable]);
   useEffect(() => { if (!open) return; const node = popRef.current?.querySelector<HTMLElement>("[data-active]"); node?.scrollIntoView?.({ block: "nearest" }); }, [active, open]);
   useEffect(() => { if (effective || !required) setInvalid(false); }, [effective, required]);
@@ -270,7 +327,9 @@ export function Select(props: SelectProps): ReactElement {
     </button>
     {name || required ? <Proxy proxyRef={proxyRef} name={name} form={form} value={effective} required={required} disabled={disabled} onSet={next => commit(next)} onInvalid={() => { setInvalid(true); claimFocus(triggerRef.current); }} /> : null}
     {invalid && !effective ? <span className="mbctl-error" aria-live="polite">{requiredMessage ?? `Choose ${label ? label.toLowerCase() : "an option"}.`}</span> : null}
-    {open ? <div className="mbctl-pop" ref={popRef} onClick={event => event.preventDefault()} onMouseDown={event => { if (event.target !== searchRef.current) event.preventDefault(); }}>
+    {open && sheet ? <Scrim onClose={() => close(true)} /> : null}
+    {open ? <div className="mbctl-pop" ref={popRef} data-sheet={sheet || undefined} onClick={event => event.preventDefault()} onMouseDown={event => { if (event.target !== searchRef.current) event.preventDefault(); }}>
+      {sheet ? <SheetHead title={label ?? props["aria-label"]?.split(":")[0] ?? placeholder} onClose={() => close(true)} /> : null}
       {searchable ? <input ref={searchRef} type="text" className="mbctl-pop-search" role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" {...(activeId ? { "aria-activedescendant": activeId } : {})}
         placeholder={searchPlaceholder ?? (allowCustom ? "Search or type a new value" : "Type to search")} aria-label={`Search ${label ? label.toLowerCase() : "options"}`} value={query} autoComplete="off"
         onChange={event => { setQuery(event.target.value); setActive(0); onSearch?.(event.target.value); }} onKeyDown={event => { listKeys(event); }} /> : null}
@@ -380,6 +439,7 @@ export function DateField(props: DateFieldProps): ReactElement {
   const close = (focusBack: boolean) => { setOpen(false); if (focusBack) inputRef.current?.focus(); };
   useDismiss(open, rootRef, close);
   useAnchoredPopover(open, boxRef, popRef, "start", false);
+  const sheet = useSheet(); useVisualViewportVars(open && sheet);
   useEffect(() => { proxyRef.current?.setCustomValidity?.(problem); }, [problem]);
   useEffect(() => { if (current) setProblem(previous => previous && !previous.startsWith("Enter") ? range(current) : previous); }, [minIso, maxIso]);
   const settle = (strict: boolean) => {
@@ -406,7 +466,9 @@ export function DateField(props: DateFieldProps): ReactElement {
       onSet={next => { const iso = next ? parseDateText(next) : ""; if (iso !== null) { commit(iso); setText(formatDateText(iso)); } }}
       onInvalid={() => { setInvalid(true); claimFocus(inputRef.current); }} />
     {message ? <span className="mbctl-error" aria-live="polite">{message}</span> : null}
-    {open ? <div className="mbctl-pop" ref={popRef} role="dialog" aria-label={accessibleName ? `Choose ${accessibleName.toLowerCase()}` : "Choose a date"} onMouseDown={event => event.preventDefault()} onClick={event => event.preventDefault()}>
+    {open && sheet ? <Scrim onClose={() => close(true)} /> : null}
+    {open ? <div className="mbctl-pop" ref={popRef} data-sheet={sheet || undefined} role="dialog" aria-label={accessibleName ? `Choose ${accessibleName.toLowerCase()}` : "Choose a date"} onMouseDown={event => event.preventDefault()} onClick={event => event.preventDefault()}>
+      {sheet ? <SheetHead title={accessibleName ?? "Choose a date"} onClose={() => close(true)} /> : null}
       <Calendar value={current} {...(minIso ? { min: minIso } : {})} {...(maxIso ? { max: maxIso } : {})} onClose={() => close(true)}
         onPick={iso => { commit(iso); setText(formatDateText(iso)); close(true); }} {...(!required ? { onClear: () => { commit(""); setText(""); close(true); } } : {})} />
     </div> : null}
@@ -489,6 +551,7 @@ export function MultiSelect(props: MultiSelectProps): ReactElement {
   const listed = all.filter(option => !option.hidden && matches(option, needle));
   const close = (focusBack: boolean) => { setOpen(false); setQuery(""); if (focusBack) triggerRef.current?.focus(); };
   useDismiss(open, rootRef, close); useAnchoredPopover(open, triggerRef, popRef, align);
+  const sheet = useSheet(); useVisualViewportVars(open && sheet);
   useEffect(() => { if (open && searchable) searchRef.current?.focus(); }, [open, searchable]);
   const toggle = (next: string) => { const updated = current.includes(next) ? current.filter(item => item !== next) : [...current, next]; if (value === undefined) setOwn(updated); onChange?.(updated); if (updated.length) setInvalid(false); };
   const keys = (event: ReactKeyboardEvent) => {
@@ -511,7 +574,9 @@ export function MultiSelect(props: MultiSelectProps): ReactElement {
     {current.length ? current.map(item => <input key={item} type="hidden" {...(name ? { name } : {})} {...(form ? { form } : {})} value={item} disabled={disabled} />)
       : required ? <Proxy proxyRef={proxyRef} name={undefined} form={form} value="" required disabled={disabled} onSet={() => undefined} onInvalid={() => { setInvalid(true); claimFocus(triggerRef.current); }} /> : null}
     {invalid && !current.length ? <span className="mbctl-error" aria-live="polite">{requiredMessage ?? `Choose at least one ${label ? label.toLowerCase() : "option"}.`}</span> : null}
-    {open ? <div className="mbctl-pop" ref={popRef} onClick={event => event.preventDefault()} onMouseDown={event => { if (event.target !== searchRef.current) event.preventDefault(); }}>
+    {open && sheet ? <Scrim onClose={() => close(true)} /> : null}
+    {open ? <div className="mbctl-pop" ref={popRef} data-sheet={sheet || undefined} onClick={event => event.preventDefault()} onMouseDown={event => { if (event.target !== searchRef.current) event.preventDefault(); }}>
+      {sheet ? <SheetHead title={label ?? placeholder} onClose={() => close(true)} /> : null}
       {searchable ? <input ref={searchRef} type="text" className="mbctl-pop-search" aria-label={`Search ${label ? label.toLowerCase() : "options"}`} placeholder={searchPlaceholder ?? "Type to search"} value={query} onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={keys} {...(activeId ? { "aria-activedescendant": activeId } : {})} /> : null}
       <ul role="listbox" id={listId} aria-multiselectable="true" {...(label ? { "aria-label": label } : {})}>
         {!listed.length ? <li className="mbctl-note">{needle ? `No matches for “${query.trim()}”` : "No options"}</li> : listed.map((option, index) => <li key={option.value} role="option" id={`${baseId}-opt-${index}`} aria-selected={current.includes(option.value)} aria-disabled={option.disabled || undefined} data-value={option.value}
