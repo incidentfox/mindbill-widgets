@@ -3,9 +3,10 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOption, RfaClient, RfaDeliveryPreview, RfaRecord } from "@mindbill/browser";
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 
-export function RfaPdfReview({ blob, title }: { blob: Blob; title: string }): ReactElement {
+export function RfaPdfReview({ blob, title, fill = false }: { blob: Blob; title: string; /** Fill the container's height, fitted to page width without the thumbnail sidebar. */ fill?: boolean }): ReactElement {
   const [url, setUrl] = useState("");
   useEffect(() => { const next = URL.createObjectURL(blob); setUrl(next); return () => URL.revokeObjectURL(next); }, [blob]);
+  if (fill) return url ? <iframe title={title} src={`${url}#view=FitH&navpanes=0`} style={{ width: "100%", height: "100%", border: 0, display: "block" }} /> : <></>;
   return <div>{url ? <><div className="mbtd-actions"><a href={url} target="_blank" rel="noopener noreferrer">Open {title} PDF</a><a href={url} download="authorization-packet.pdf">Download PDF</a></div><iframe title={title} src={url} style={{ width: "100%", height: 420, border: "1px solid var(--mb-border)", marginTop: 10 }} /></> : null}</div>;
 }
 

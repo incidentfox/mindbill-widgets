@@ -37,6 +37,7 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
     if (value.endsWith("/content")) return new Response("%PDF-synthetic");
     if (value.endsWith("/match")) return Response.json({ data: { faxId: fax.id, rfaId: record.id, documentId: "ur_synthetic", alreadyAttached: false } });
     if (value.includes("rfa-inbound-faxes")) return Response.json({ data: [{ ...fax, suggestedRfaIds: [record.id, "rfa_draft"] }], nextCursor: value.includes("cursor=") ? null : "two", hasMore: !value.includes("cursor=") });
+    if (value.includes("/rfas?")) return Response.json({ data: [{ ...record, id: "rfa_other", employeeName: "Other Synthetic Patient" }], nextCursor: null, summary: { total: 1, byStatus: {} } });
     return Response.json({ data: value.endsWith("rfa_draft") ? { ...record, id: "rfa_draft", status: "draft", submittedAt: null } : record });
   });
   try {
@@ -56,16 +57,29 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
     await act(async () => h.button("Previous fax page").click());
     await act(async () => h.button("Review fax").click()); expect(h.container.textContent).toContain("Incoming utilization review response");
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
-    const select = [...h.container.querySelectorAll("select")].find(element => element.parentElement?.textContent?.startsWith("Matching request"))!;
-    expect(select.querySelector<HTMLOptionElement>('option[value="rfa_draft"]')!.disabled).toBe(true);
-    await act(async () => { select.value = record.id; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    // The fax opens beside the suggested matches; a request never sent cannot take a response.
+    // Suggestions come first, then every other request without searching; typing filters the list.
+    expect(h.container.querySelector('[role="dialog"]')?.textContent).toContain("Suggested");
+    expect(h.container.querySelector('[role="dialog"]')?.textContent).toContain("Other Synthetic Patient");
+    const filter = h.container.querySelector<HTMLInputElement>('[role="dialog"] input[type="search"]')!;
+    await act(async () => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; setter.call(filter, "Other"); filter.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+    expect(fetcher.mock.calls.some(call => String(call[0]).includes("/rfas?") && String(call[0]).includes("search=Other"))).toBe(true);
+    expect(h.container.querySelector('[role="dialog"]')?.textContent).not.toContain("Suggested");
+    await act(async () => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; setter.call(filter, ""); filter.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+    const choice = (id: string) => h.container.querySelector<HTMLInputElement>(`input[type="radio"][value="${id}"]`)!;
+    expect(choice("rfa_draft").disabled).toBe(true);
+    // A request from the full list, not only a suggestion, can be chosen.
+    expect(choice("rfa_other").disabled).toBe(false);
+    await act(async () => choice(record.id).click());
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
     await act(async () => h.container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
     const inboxReads = () => fetcher.mock.calls.filter(call => String(call[0]).includes("rfa-inbound-faxes") && !String(call[0]).endsWith("/content")).length;
     const beforeFocus = inboxReads();
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(inboxReads()).toBe(beforeFocus);
-    expect(select.value).toBe(record.id);
+    expect(choice(record.id).checked).toBe(true);
     expect(h.container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
     await act(async () => h.button("Match response and open Post UR").click());
     expect(onSelect).toHaveBeenCalledWith(record.id, "ur_synthetic");
@@ -192,6 +206,13 @@ it("enriches only visible requests once with scoped patient, claim and treatment
     expect(fetcher.mock.calls.filter(call => !String(call[0]).includes("rfa-follow-ups"))).toHaveLength(1);
     expect(fetcher.mock.calls.some(call => String(call[0]).includes("rfa_hidden"))).toBe(false);
     expect(fetcher.mock.calls.every(call => !call[1]?.method || call[1].method === "GET")).toBe(true);
+    // The filters show what the link selected and can be changed in place.
+    const taskFilter = [...h.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Task"))!;
+    expect(taskFilter.value).toBe("kind:post_ur_decision");
+    expect(h.container.textContent).toContain("2 tasks");
+    await act(async () => { taskFilter.value = ""; taskFilter.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(h.container.textContent).toContain("3 tasks");
+    await act(async () => { taskFilter.value = "kind:post_ur_decision"; taskFilter.dispatchEvent(new Event("change", { bubbles: true })); });
     // Rows read like the injury page's RFA table, and the whole row opens the request.
     expect([...h.container.querySelectorAll(".mbrfa-task-list th")].map(th => th.textContent)).toEqual(["RFA ID", "Patient", "Requesting physician", "Requested treatment", "RFA sent", "Decision due", "Status", "Follow up"]);
     await act(async () => h.container.querySelector<HTMLElement>(".mbrfa-task-row .mbrfa-task-treatment")!.click());
