@@ -336,12 +336,12 @@ it("loads the dashboard counts once, as a single row, and shows them at once on 
  try{
   const lists=fetcher.mock.calls.map(x=>String(x[0])).filter(url=>url.includes("/rfas?"));
   expect(lists).toHaveLength(1);expect(lists[0]).toContain("limit=1");
-  expect(first.container.textContent).toContain("Requests awaiting a decision");expect(first.container.textContent).not.toContain("All requests");
+  expect(first.container.textContent).toContain("Awaiting a decision");expect(first.container.textContent).not.toContain("All requests");
  }finally{await first.close();}
  // Coming back, the last counts render before any request answers.
  const pending=vi.fn<typeof fetch>(()=>new Promise<Response>(()=>{}));
  const second=await mount(pending);
- try{expect(second.container.textContent).toContain("Requests awaiting a decision");expect(second.container.textContent).not.toContain("Loading authorization requests");}finally{await second.close();}
+ try{expect(second.container.textContent).toContain("Awaiting a decision");expect(second.container.textContent).not.toContain("Loading authorization requests");}finally{await second.close();}
 });
 it("marks an unsent request as sent outside MindBill, and undoes it from History",async()=>{
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);

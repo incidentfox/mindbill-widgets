@@ -13,10 +13,10 @@ const result = { data: [row], nextCursor: null, summary: { total: 150, byStatus:
 function mount(fetcher: typeof fetch) { const container = document.createElement("div"); document.body.append(container); const root = createRoot(container); const click = async (text: string) => act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === text)!.click()); return { container, root, click, render: () => act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher, patientId: "patient_synthetic", claimId: "claim_synthetic" }))), cleanup: async () => { await act(async () => root.unmount()); container.remove(); } }; }
 it("opens with global lifecycle and aging counts and drills into scoped server-filtered requests", async () => {
  const urls: URL[] = []; const h = mount(async input => { const empty = taskResponse(input); if (empty) return empty; urls.push(new URL(String(input))); return Response.json(result); });
- try { await h.render(); expect(h.container.textContent).toContain("150 total requests"); expect(h.container.textContent).not.toContain("Synthetic Patient"); expect(h.container.textContent).not.toContain("Refresh requests");
+ try { await h.render(); expect(h.container.querySelector(`[aria-label="Awaiting a decision"]`)).not.toBeNull(); expect(h.container.textContent).not.toContain("Synthetic Patient"); expect(h.container.textContent).not.toContain("Refresh requests");
  expect(h.container.querySelector('.mbrfa-finished-links')).toBeNull();
  expect(h.container.textContent).not.toContain("Incomplete"); expect(h.container.textContent).not.toContain("Canceled");
- await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since submission: 150 requests"]')!.click());
+ await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since sent: 150 requests"]')!.click());
  expect(urls.at(-1)!.searchParams.get("lifecycleStatus")).toBe("received"); expect(urls.at(-1)!.searchParams.get("agingBucket")).toBe("15_30"); expect(urls.at(-1)!.searchParams.get("claimId")).toBe("claim_synthetic"); expect(h.container.textContent).toContain("Sent:15–30 days ago"); expect(h.container.textContent).toContain("Status:Received");
  await act(async () => [...h.container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(button => button.textContent?.startsWith("Requested treatments"))!.click()); expect(h.container.textContent).toContain("Not required"); expect(h.container.textContent).not.toContain("9/10/2026");
  } finally { await h.cleanup(); }
@@ -35,13 +35,13 @@ it("opens simple task overview with native links and preserves filters in routed
  const navigation={createHref:"/tasks/rfas/new?claimId=claim_synthetic",allRfasHref:"/tasks/rfas/all?claimId=claim_synthetic",tasksHref:"/tasks/rfas",backHref:"/tasks/rfas/all",onNavigate};
  try {
   await act(async()=>h.root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:async input=>taskResponse(input)??Response.json(result),layout:"simple",initialOverviewView:"tasks",permissions:["create"],navigation})));
-  expect(h.container.querySelector('.mbrfa-nav')).toBeNull(); expect(h.container.textContent).toContain("150 total requests");
+  expect(h.container.querySelector('.mbrfa-nav')).toBeNull(); expect(h.container.querySelector(`[aria-label="Awaiting a decision"]`)).not.toBeNull();
   const link=h.container.querySelector<HTMLAnchorElement>('a[href="/tasks/rfas/new?claimId=claim_synthetic"]')!;
   expect(link.textContent).toBe("+ Add RFA");
   await act(async()=>link.dispatchEvent(new MouseEvent("click",{bubbles:true,cancelable:true,ctrlKey:true}))); expect(onNavigate).not.toHaveBeenCalled();
   await act(async()=>link.click()); expect(onNavigate).toHaveBeenLastCalledWith("/tasks/rfas/new?claimId=claim_synthetic");
   expect(h.container.textContent).not.toContain("New authorization request");
-  await act(async()=>h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since submission: 150 requests"]')!.click());
+  await act(async()=>h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since sent: 150 requests"]')!.click());
   expect(onNavigate).toHaveBeenLastCalledWith("/tasks/rfas/all?claimId=claim_synthetic&status=received&agingBucket=15_30");
  } finally {await h.cleanup();}
 });
@@ -63,7 +63,7 @@ it("opens a single awaiting-decision request directly using the current scope an
  const h = mount(fetcher);
  try {
   await act(async () => h.root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher, patientId: "patient_synthetic", claimId: "claim_synthetic", renderingProviderId: "provider_synthetic", onSelectRfa, navigation: { allRfasHref: "/requests", onNavigate } })));
-  await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since submission: 1 requests"]')!.click());
+  await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Received · 15–30 days since sent: 1 requests"]')!.click());
   expect(onSelectRfa).toHaveBeenCalledWith("rfa_synthetic", undefined); expect(onNavigate).not.toHaveBeenCalled();
   expect(Object.fromEntries(urls.at(-1)!.searchParams)).toMatchObject({ lifecycleStatus: "received", agingBucket: "15_30", patientId: "patient_synthetic", claimId: "claim_synthetic", renderingProviderId: "provider_synthetic", limit: "2" });
  } finally { await h.cleanup(); }
