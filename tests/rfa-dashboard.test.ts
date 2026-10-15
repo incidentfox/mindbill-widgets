@@ -348,7 +348,7 @@ it("marks an unsent request as sent outside MindBill, and undoes it from History
  const confirm=vi.spyOn(window,"confirm").mockReturnValue(true);
  const sentAt="2026-09-10T16:00:00.000Z";
  const marked={...record,status:"submitted",submittedAt:sentAt,transmissions:[{id:"tx_outside",direction:"outbound",purpose:"submission",channel:"mail",status:"sent",destination:"Synthetic address",occurredAt:sentAt,receivedAt:null,proofDocumentId:null,providerMessageId:null,metadata:{sentOutsideMindBill:true}}]};
- let current:typeof record=record;
+ let current:unknown=record;
  const fetcher=vi.fn<typeof fetch>(async(input,init)=>{
   const url=String(input);
   if(url.includes("/events"))return Response.json({data:[]});
