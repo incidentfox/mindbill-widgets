@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaDashboard } from "../packages/react/src/rfa-dashboard";
+import { choose, selectByLabel } from "./form-control-helpers";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const context = { claims: [{ claimId: "claim_synthetic", patientId: "patient_synthetic", employeeName: "Synthetic Patient", claimNumber: "TEST-001", dateOfInjury: "2026-09-01", claimsAdminId: "admin_synthetic" }], renderingProviders: [{ id: "provider_synthetic", name: "Synthetic Physician", npi: "1234567890" }], nextCursor: null, renderingProvidersNextCursor: null };
 const list = { data: [], summary: { total: 0, byStatus: {} }, nextCursor: null };
@@ -12,8 +13,7 @@ function harness() {
   close: async () => { await act(async () => root.unmount()); container.remove(); } };
 }
 async function select(container: HTMLElement, label: string, value: string) {
- const input = [...container.querySelectorAll("select")].find(input => input.parentElement?.textContent?.startsWith(label))!;
- await act(async () => { input.value = value; input.dispatchEvent(new Event("change", { bubbles: true })); });
+ await choose(selectByLabel(container, label), value);
 }
 async function type(container: HTMLElement, label: string, value: string) {
  const input = [...container.querySelectorAll("input,textarea")].find(input => input.parentElement?.textContent === label)!;

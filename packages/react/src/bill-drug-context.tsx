@@ -1,4 +1,5 @@
 import type { BilledDrug, BillFeeContext } from "@mindbill/browser";
+import { Select } from "./form-controls";
 
 export type DrugDetails = {
   drugEnabled?: boolean | undefined;
@@ -47,17 +48,17 @@ export function DrugLineFields({ code, index, details, update }: { code: string;
   const enabled = drugFieldsEnabled(code, details);
   const field = (key: keyof DrugDetails, label: string, mode: "text" | "decimal" = "text") => <label className="mbsf-field"><span>{label}</span><input className="mbsf-input" aria-label={`${label} for line ${index + 1}`} inputMode={mode} value={String(details[key] ?? "")} onChange={(event) => update({ [key]: event.target.value })} /></label>;
   return <details open={enabled}><summary>Injectable drug details</summary>
-    <label className="mbsf-field"><span>Service type</span><select className="mbsf-input" aria-label={`Drug service type for line ${index + 1}`} value={enabled ? "injectable" : "other"} onChange={(event) => update({ drugEnabled: event.target.value === "injectable", drugDocumentation: "" })}><option value="other">Other procedure</option><option value="injectable">Physician-administered injectable drug</option></select></label>
+    <label className="mbsf-field"><span>Service type</span><Select aria-label={`Drug service type for line ${index + 1}`} value={enabled ? "injectable" : "other"} onChange={(choice) => update({ drugEnabled: choice === "injectable", drugDocumentation: "" })}><option value="other">Other procedure</option><option value="injectable">Physician-administered injectable drug</option></Select></label>
     {enabled ? <div className="mbsf-grid" aria-label={`Drug details for line ${index + 1}`}>
       {field("ndcNumber", "11-digit NDC")}{field("drugName", "Drug name")}
       {field("administeredAmount", "Administered dose", "decimal")}
-      <label className="mbsf-field"><span>Dose unit</span><select className="mbsf-input" aria-label={`Dose unit for line ${index + 1}`} value={details.doseUnit ?? ""} onChange={(event) => update({ doseUnit: event.target.value as DrugDetails["doseUnit"] })}><option value="">Select unit…</option>{["mg", "mcg", "g", "mL", "units"].map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+      <label className="mbsf-field"><span>Dose unit</span><Select aria-label={`Dose unit for line ${index + 1}`} value={details.doseUnit ?? ""} onChange={(choice) => update({ doseUnit: choice as DrugDetails["doseUnit"] })}><option value="">Select unit…</option>{["mg", "mcg", "g", "mL", "units"].map((unit) => <option key={unit}>{unit}</option>)}</Select></label>
       {field("amountPerHcpcsUnit", "Dose per procedure billing unit", "decimal")}
       {field("amountPerNdcUnit", "Dose per NDC quantity unit", "decimal")}
       {field("metricQuantity", "NDC quantity", "decimal")}
-      <label className="mbsf-field"><span>NDC quantity unit</span><select className="mbsf-input" aria-label={`NDC quantity unit for line ${index + 1}`} value={details.drugQuantityUnit ?? ""} onChange={(event) => update({ drugQuantityUnit: event.target.value as DrugDetails["drugQuantityUnit"] })}><option value="">Select unit…</option><option value="ML">mL</option><option value="UN">Units</option><option value="GR">Grams</option></select></label>
+      <label className="mbsf-field"><span>NDC quantity unit</span><Select aria-label={`NDC quantity unit for line ${index + 1}`} value={details.drugQuantityUnit ?? ""} onChange={(choice) => update({ drugQuantityUnit: choice as DrugDetails["drugQuantityUnit"] })}><option value="">Select unit…</option><option value="ML">mL</option><option value="UN">Units</option><option value="GR">Grams</option></Select></label>
       {field("hcpcsUnitSource", "Procedure unit reference URL")}{field("productLabelSource", "Product label URL")}
-      <label className="mbsf-field mbsf-span"><span>Documented drug circumstances</span><select className="mbsf-input" aria-label={`Documented drug circumstances for line ${index + 1}`} value={details.drugDocumentation ?? ""} onChange={(event) => update({ drugDocumentation: event.target.value as DrugDetails["drugDocumentation"] })}><option value="">Select from the documentation…</option><option value="verified">Verified units and separately payable office injection</option><option value="review">Other circumstances — review needed</option></select></label>
+      <label className="mbsf-field mbsf-span"><span>Documented drug circumstances</span><Select aria-label={`Documented drug circumstances for line ${index + 1}`} value={details.drugDocumentation ?? ""} onChange={(choice) => update({ drugDocumentation: choice as DrugDetails["drugDocumentation"] })}><option value="">Select from the documentation…</option><option value="verified">Verified units and separately payable office injection</option><option value="review">Other circumstances — review needed</option></Select></label>
       <p className="mbsf-help mbsf-span">Confirm the procedure billing unit and product concentration from the references. Both dose-per-unit values use the selected dose unit. Include every same-day service. The product must be a documented physician-administered office injection, separately payable rather than bundled or packaged. Administration is a separate procedure line. The fee check validates procedure units against the dose and NDC quantity.</p>
     </div> : null}
   </details>;

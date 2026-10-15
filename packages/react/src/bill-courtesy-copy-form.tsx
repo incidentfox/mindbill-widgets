@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { BillCourtesyCopyInput, BillCourtesyCopyPreview, BillCourtesyCopyResult } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { Select } from "./form-controls";
 
 /** Host-provided suggestions only: never selected, saved, or emailed automatically. */
 export type CourtesyCopyRecipientOption = { email: string; name?: string };
@@ -51,10 +52,10 @@ export function BillCourtesyCopyForm({ documents, recipientOptions = [], subject
   const choices = courtesyCopyRecipientOptions(recipientOptions);
   const selected = new Set([...input.to, ...(input.cc ?? [])].map((email) => email.toLowerCase()));
   const recipientPicker = (field: "To" | "CC", value: string, update: (value: string) => void) => choices.length ?
-    <label>Add saved contact to {field}<select value="" onChange={(event) => {
-      const email = event.target.value;
+    <label>Add saved contact to {field}<Select value="" onChange={(choice) => {
+      const email = choice;
       if (email && !selected.has(email.toLowerCase())) update([...addresses(value), email].join(", "));
-    }}><option value="">Choose a contact…</option>{choices.map((option) => <option key={option.email.toLowerCase()} value={option.email} disabled={selected.has(option.email.toLowerCase())}>{option.name ? `${option.name} — ${option.email}` : option.email}</option>)}</select></label> : null;
+    }}><option value="">Choose a contact…</option>{choices.map((option) => <option key={option.email.toLowerCase()} value={option.email} disabled={selected.has(option.email.toLowerCase())}>{option.name ? `${option.name} — ${option.email}` : option.email}</option>)}</Select></label> : null;
   const fingerprint = JSON.stringify(input);
   useEffect(() => { setPreview(null); setConfirmed(false); retryKey.current = ""; setResult(null); }, [fingerprint]);
   useEffect(() => {

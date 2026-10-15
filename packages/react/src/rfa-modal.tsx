@@ -2,7 +2,7 @@
 import { useEffect, type ReactElement, type ReactNode } from "react";
 import { rfaSendDialogCss } from "./rfa-send-dialog";
 
-const rfaModalCss = `.mbrfa-send.mbrfa-modal-wide{width:min(880px,100%);max-height:min(92vh,960px)}.mbrfa-send.mbrfa-modal-full{width:min(1440px,100%);height:min(94vh,1200px);max-height:94vh;display:flex;flex-direction:column}.mbrfa-modal-full>.mbrfa-send-body{flex:1;min-height:0;overflow:hidden;padding:0}
+export const rfaModalCss = `.mbrfa-send.mbrfa-modal-wide{width:min(880px,100%);max-height:min(92vh,960px)}.mbrfa-send.mbrfa-modal-full{width:min(1440px,100%);height:min(94vh,1200px);max-height:94vh;display:flex;flex-direction:column}.mbrfa-modal-full>.mbrfa-send-body{flex:1;min-height:0;overflow:hidden;padding:0}
 .mbrfa-review{display:grid;grid-template-columns:minmax(0,1fr) 500px;height:100%;min-height:0}.mbrfa-review-doc{background:#525659;min-height:0;position:relative}
 .mbrfa-review-empty{height:100%;display:grid;place-items:center;padding:24px;color:#fff;text-align:center}.mbrfa-review-empty p{margin:0}
 .mbtd .mbrfa-review-drop{display:grid;gap:8px;justify-items:center;max-width:380px;padding:32px 28px;border:2px dashed rgba(255,255,255,.45);border-radius:12px;color:#fff;cursor:pointer;font-weight:400}.mbrfa-review-drop strong{font-size:16px}.mbrfa-review-drop span{font-size:13px;opacity:.85}.mbtd .mbrfa-review-drop input{color:#fff;font-size:13px;max-width:100%}

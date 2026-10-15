@@ -28,6 +28,7 @@ import { RfaLifecycleControls } from "./rfa-lifecycle-controls";
 import { RfaDeliveryPanel, RfaPdfReview as PdfReview } from "./rfa-delivery-panel";
 import { RfaProviderSignatureSetup } from "./rfa-provider-signature-setup";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
+import { Select } from "./form-controls";
 
 export type RfaDashboardNavigation = {
   getTaskHref?: (query: RfaTaskQuery) => string;
@@ -288,7 +289,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
         ]} />
       : <div className="mbrfa-filters">
         <label className="mbrfa-search">Search requests<input type="search" maxLength={200} value={searchInput} placeholder="Patient, physician, claim, RFA, service or code" onChange={event => setSearchInput(event.target.value)} /></label>
-        <label>Clinical status<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{CLINICAL_STATUSES.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+        <label>Clinical status<Select value={status} onChange={(choice) => { setStatus(choice); resetPage(); }}><option value="">All statuses</option>{CLINICAL_STATUSES.map(value => <option key={value} value={value}>{label(value)}</option>)}</Select></label>
         {searchInput || status ? <button type="button" className="mbrfa-clear" onClick={() => { setSearchInput(""); setSearch(""); setStatus(""); resetPage(); }}>Clear filters</button> : null}
       </div>}
       {error ? <p role="alert">{error}</p> : null}{loading && !(resultVisible && result) ? <p className="mbrfa-loading" role="status">Loading authorization requests…</p> : null}

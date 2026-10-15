@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactElement } from "react";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { Select } from "./form-controls";
 
 export type NotificationAgingDay = 30 | 60 | 90;
 export type NotificationReportDigest = "off" | "daily" | "weekly";
@@ -163,7 +164,7 @@ function NotificationSettingsSession({ adapter, appearance, className, style, on
           <label className="mbns-check"><input type="checkbox" checked={draft.statusUpdates} onChange={event => update({ statusUpdates: event.target.checked })} /><span><strong>Bill status changes</strong><small>Follow accepted, rejected, processed and payment updates.</small></span></label>
           <p className="mbns-muted">Remind me when a bill is still waiting for a payer:</p><div className="mbns-days">{([30, 60, 90] as const).map(day => <label key={day} className="mbns-check"><input type="checkbox" checked={draft.agingDays.includes(day)} onChange={event => update({ agingDays: event.target.checked ? [...draft.agingDays, day] : draft.agingDays.filter(value => value !== day) })} /><span>{day} days</span></label>)}</div>
           <label className="mbns-check"><input type="checkbox" checked={draft.quietHours} onChange={event => update({ quietHours: event.target.checked })} /><span><strong>Quiet hours</strong><small>Hold emails from 7 pm to 7 am Pacific time.</small></span></label>
-          <label className="mbns-digest"><strong>Scheduled activity digest</strong><select value={draft.reportDigest ?? "off"} onChange={event => update({ reportDigest: event.target.value as NotificationReportDigest })}><option value="off">Off</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select><small className="mbns-muted">Activity counts at 9 am Pacific, every day or every Monday. No patient details, financial reports or attachments.</small></label>
+          <label className="mbns-digest"><strong>Scheduled activity digest</strong><Select value={draft.reportDigest ?? "off"} onChange={(choice) => update({ reportDigest: choice as NotificationReportDigest })}><option value="off">Off</option><option value="daily">Daily</option><option value="weekly">Weekly</option></Select><small className="mbns-muted">Activity counts at 9 am Pacific, every day or every Monday. No patient details, financial reports or attachments.</small></label>
         </fieldset>
         {draft.enabled && !hasCategory && <p className="mbns-notice">Select at least one update type to enable notifications.</p>}
         {needsConsent && <label className="mbns-check mbns-consent"><input type="checkbox" checked={consent} disabled={busy || !snapshot.canEnable} onChange={event => setConsent(event.target.checked)} /><span>I agree to receive the selected billing emails {snapshot.audience === "practice" ? "for this practice" : "for bills assigned to me"} at the address above. I can unsubscribe at any time.</span></label>}

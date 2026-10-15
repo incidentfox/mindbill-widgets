@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import type { BillClaimsAdministratorDirectory, RfaContact } from "../packages/browser/src/index";
 import { RfaContactPicker } from "../packages/react/src/rfa-contact-picker";
+import { choose, optionValues, selects } from "./form-control-helpers";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 it("preserves saved contact on load, supports keyboard directory selection and autofills the selected office", async () => {
  const host=document.createElement("div");document.body.append(host);const root=createRoot(host);
@@ -20,9 +21,9 @@ it("preserves saved contact on load, supports keyboard directory selection and a
  expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
  await act(async()=>input.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true})));
  expect(changes).toHaveBeenCalledWith("synthetic_new",null);expect(host.textContent).not.toContain("Saved custom");
- const select=host.querySelector<HTMLSelectElement>("select")!;
- expect(select.options.length).toBeGreaterThan(1);
- await act(async()=>{select.value=select.options[1]!.value;select.dispatchEvent(new Event("change",{bubbles:true}));});
+ const select=selects(host)[0]!;const values=await optionValues(select);
+ expect(values.length).toBeGreaterThan(1);
+ await choose(select,values[1]!);
  expect(changes.mock.lastCall?.[1]).toMatchObject({name:"synthetic_new",fax:"+12125550100",phone:"2125550199"});
  expect(host.querySelector("details")?.open).toBe(false);
  }finally{await act(async()=>root.unmount());host.remove();}
@@ -34,6 +35,6 @@ it("ignores stale directory results after switching the claim and reports failed
  try{
  await act(async()=>root.render(render("synthetic_old")));await act(async()=>root.render(render("synthetic_new")));
  await act(async()=>resolveOld({name:"Stale administrator",authorization:[{fax:"2125550100"}]}));
- expect(host.textContent).not.toContain("Stale administrator");expect(host.textContent).toContain("Directory details are unavailable");expect(host.querySelectorAll("option")).toHaveLength(3);expect(change).not.toHaveBeenCalled();
+ expect(host.textContent).not.toContain("Stale administrator");expect(host.textContent).toContain("Directory details are unavailable");expect(await optionValues(selects(host)[0]!)).toHaveLength(3);expect(change).not.toHaveBeenCalled();
  }finally{await act(async()=>root.unmount());}
 });

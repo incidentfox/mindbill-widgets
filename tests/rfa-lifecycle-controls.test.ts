@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaLifecycleControls, type RfaLifecycleControlsProps } from "../packages/react/src/rfa-lifecycle-controls";
 import type { RfaRecord } from "../packages/browser/src/index";
+import { choose, optionDisabled, selectByLabel } from "./form-control-helpers";
 vi.mock("../packages/react/src/rfa-delivery-panel", () => ({ RfaPdfReview: ({ title }: { title: string }) => createElement("div", { "data-testid": "pdf-preview" }, title) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const record: RfaRecord = { patientId: "patient_synthetic", renderingProviderId: "provider_synthetic", claimsAdminId: null, employeeName: "Synthetic patient", providerName: "Synthetic physician", claimNumber: "SYNTHETIC", reviewType: "prospective", expedited: false, createdAt: null, updatedAt: null, signedAt: null, submittedAt: null, incompleteReason: null, deferredReason: null, closedReason: null, readiness: { ready: true, missing: [] }, transmissions: [], events: [], id: "rfa_synthetic", claimId: "claim_synthetic", contentRevision: 1, status: "under_review", receivedAt: "2026-09-15T00:00:00Z", decisionDueAt: null, decisionDeadlineBasis: null, documents: [{ id: "ur_one", documentType: "ur_response", filename: "Synthetic response.pdf", contentUrl: "", contentRevision: 1, createdAt: null }, { id: "imr_one", documentType: "imr_form", filename: "Synthetic IMR.pdf", contentUrl: "", contentRevision: 1, createdAt: null }], informationRequests: [], items: [{ id: "item_one", procedureCode: "97110", serviceDescription: "Synthetic therapy", outcome: "pending", diagnosisCode: "M54.5", quantity: 1, units: 1, authorizationNumber: null, decisionReason: null }, { id: "item_two", procedureCode: "99213", serviceDescription: "Synthetic visit", outcome: "pending", diagnosisCode: "M54.5", quantity: 1, units: 1, authorizationNumber: null, decisionReason: null }] };
@@ -17,7 +18,8 @@ async function setup(props: Partial<RfaLifecycleControlsProps> = {}) {
 }
 function set(container: HTMLElement, name: string, value: string) {
   const element = container.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${name}"]`)!;
-  element.value = value; element.dispatchEvent(new Event("change", { bubbles: true }));
+  const prototype = element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value); element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 it("defaults to read-only without mutation or upload controls", async () => {
   const view = await setup();
@@ -54,8 +56,8 @@ it("prefills decisions read from the response and saves them only after a person
 it("records a partial treatment decision and keeps unselected treatments pending", async () => {
   const onUpdated = vi.fn(); const view = await setup({ permissions: ["act"], onUpdated });
   try {
-    const outcome = [...view.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Decision for 97110"))!;
-    await act(async () => { outcome.value = "approved"; outcome.dispatchEvent(new Event("change", { bubbles: true })); });
+    const outcome = selectByLabel(view.container, "Decision for 97110");
+    await choose(outcome, "approved");
     await act(async () => {
       set(view.container, "decidedAt", "2026-09-16T10:00"); set(view.container, "responseDocumentId", "ur_one"); set(view.container, "item_one:authorizationNumber", "SYNTHETIC-AUTH");
       outcome.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -69,8 +71,8 @@ it("requires IMR evidence for denied treatment and surfaces server scope errors"
   const fetcher = vi.fn<typeof fetch>(async url => String(url).includes("rfa-follow-ups") ? Response.json({ data: [], nextCursor: null }) : Response.json({ detail: "rfas:act is required" }, { status: 403 }));
   const view = await setup({ permissions: ["act"], fetch: fetcher });
   try {
-    const outcome = [...view.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Decision for 97110"))!;
-    await act(async () => { outcome.value = "denied"; outcome.dispatchEvent(new Event("change", { bubbles: true })); });
+    const outcome = selectByLabel(view.container, "Decision for 97110");
+    await choose(outcome, "denied");
     const submit = () => outcome.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await act(async () => { set(view.container, "decidedAt", "2026-09-16T10:00"); set(view.container, "responseDocumentId", "ur_one"); submit(); });
     expect(view.container.textContent).toContain("independent medical review form is required");
@@ -111,7 +113,8 @@ it("records delivered information responses without sending documents", async ()
     expect(view.container.textContent).toContain("It does not send these documents");
     const button = [...view.container.querySelectorAll("button")].find(node => node.textContent === "Record delivered response")!;
     expect(button.closest("form")!.querySelector('input[type="checkbox"][required]')).not.toBeNull();
-    await act(async () => { set(view.container, "respondedAt", "2026-09-16T10:00"); set(view.container, "responseDocumentIds", "ur_one"); button.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await choose(selectByLabel(view.container, "Response documents"), "ur_one");
+    await act(async () => { set(view.container, "respondedAt", "2026-09-16T10:00"); button.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
     const request = view.fetcher.mock.calls.find(call => String(call[0]).endsWith("information-requests/request_one"));
     expect(JSON.parse(String(request?.[1]?.body)).responseDocumentIds).toEqual(["ur_one"]);
     expect(view.fetcher.mock.calls.some(call => String(call[0]).endsWith("/fax"))).toBe(false);
@@ -136,13 +139,12 @@ it("requires a saved decision and explicit confirmation before completing Post U
   const view = await setup({ fetch: fetcher, permissions: ["act"], selectedResponseDocumentId: "ur_one" });
   try {
     expect(view.container.querySelector('[data-testid="pdf-preview"]')?.textContent).toContain("Utilization review response");
-    const savedChoice = () => view.container.querySelector<HTMLOptionElement>('option[value="decisions_recorded"]')!;
-    expect(savedChoice().disabled).toBe(true);
+    const reviewChoice = () => selectByLabel(view.container, "Response review");
+    expect(await optionDisabled(reviewChoice(), "decisions_recorded")).toBe(true);
     await view.rerender({ rfa: { ...record, items: record.items.map(item => item.id === "item_one" ? { ...item, outcome: "approved", currentResponseDocumentId: "ur_one" } : item) } });
-    expect(savedChoice().disabled).toBe(false);
-    const choice = savedChoice().parentElement as HTMLSelectElement;
-    await act(async () => { choice.value = "decisions_recorded"; choice.dispatchEvent(new Event("change", { bubbles: true })); });
-    const form = choice.closest("form")!;
+    expect(await optionDisabled(reviewChoice(), "decisions_recorded")).toBe(false);
+    await choose(reviewChoice(), "decisions_recorded");
+    const form = reviewChoice().closest("form")!;
     await act(async () => { set(form, "note", "Recorded the one decision in the synthetic response"); form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
     expect(fetcher.mock.calls.some(call => call[1]?.method === "PATCH")).toBe(false);
     await act(async () => form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
@@ -194,8 +196,8 @@ it("records a decision on an RFA never marked sent by asking when it was sent an
   const view = await setup({ rfa: draft, permissions: ["act"] });
   try {
     expect(view.container.textContent).toContain("This RFA is not marked as sent");
-    const outcome = [...view.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Decision for 97110"))!;
-    await act(async () => { outcome.value = "approved"; outcome.dispatchEvent(new Event("change", { bubbles: true })); });
+    const outcome = selectByLabel(view.container, "Decision for 97110");
+    await choose(outcome, "approved");
     // Sent and received default to now; the channel is chosen in the styled dropdown.
     await act(async () => view.container.querySelector<HTMLButtonElement>('[aria-label^="How it was sent"]')!.click());
     await act(async () => [...view.container.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent?.startsWith("Mail"))!.click());
@@ -214,8 +216,8 @@ it("records receipt from the decision letter when a sent RFA has no receipt yet"
   const view = await setup({ rfa: sent, permissions: ["act"] });
   try {
     expect(view.container.textContent).toContain("Receipt is not recorded yet");
-    const outcome = [...view.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Decision for 97110"))!;
-    await act(async () => { outcome.value = "approved"; outcome.dispatchEvent(new Event("change", { bubbles: true })); });
+    const outcome = selectByLabel(view.container, "Decision for 97110");
+    await choose(outcome, "approved");
     await act(async () => {
       set(view.container, "receivedAt", "2026-09-11T09:00");
       set(view.container, "decidedAt", "2026-09-16T10:00"); set(view.container, "responseDocumentId", "ur_one"); set(view.container, "item_one:authorizationNumber", "SYNTHETIC-AUTH");

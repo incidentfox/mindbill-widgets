@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { RfaDashboard } from "../packages/react/src/rfa-dashboard";
+import { choose } from "./form-control-helpers";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 function taskResponse(input: RequestInfo | URL): Response | undefined {
  const url = String(input);
@@ -55,8 +56,7 @@ it("keeps legacy clinical filters for servers without lifecycle summaries", asyn
   expect(container.textContent).toContain("Clinical review counts");
   await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "All RFAs")!.click());
   expect(container.textContent).toContain("Closed");
-  const select = container.querySelector<HTMLSelectElement>(".mbrfa-filters select")!;
-  await act(async () => { select.value = "approved"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  await choose(container.querySelector(".mbrfa-filters .mbctl-select")!, "approved");
   expect(urls.at(-1)!.searchParams.get("status")).toBe("approved"); expect(urls.at(-1)!.searchParams.has("lifecycleStatus")).toBe(false);
  } finally { await act(async () => root.unmount()); container.remove(); }
 });

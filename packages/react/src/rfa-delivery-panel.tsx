@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOption, RfaClient, RfaDeliveryPreview, RfaRecord } from "@mindbill/browser";
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
+import { Select } from "./form-controls";
 
 export function RfaPdfReview({ blob, title, fill = false }: { blob: Blob; title: string; /** Fill the container's height, fitted to page width without the thumbnail sidebar. */ fill?: boolean }): ReactElement {
   const [url, setUrl] = useState("");
@@ -27,7 +28,7 @@ export function RfaDeliveryPanel({ rfa, client, documentIds, directory, director
   const packet = prepared?.fingerprint === fingerprint ? prepared : null;
   return <fieldset><legend>Review packet and send</legend>
     {!rfa.readiness.ready ? <p>Still needed: {rfa.readiness.missing.map(value => value === "signedAt" ? "physician signature" : value.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").toLowerCase()).join(", ") || "Complete the request details"}.</p> : null}
-    <label>Delivery method<select disabled={locked} value={mode} onChange={event => setMode(event.target.value as "send" | "download")}><option value="send">Send to claims administrator</option><option value="download">Download for manual submission</option></select></label>
+    <label>Delivery method<Select disabled={locked} value={mode} onChange={(choice) => setMode(choice as "send" | "download")}><option value="send">Send to claims administrator</option><option value="download">Download for manual submission</option></Select></label>
     {mode === "send" ? <RfaAuthorizationDestination contextKey={`${rfa.id}:${rfa.claimsAdminId ?? "manual"}`} directory={directory} savedContact={rfa.authorizationContact} loading={directoryLoading} error={directoryError} disabled={locked} onChange={setDestination} /> : <p>Downloading does not mark this request as sent. Keep proof of any submission made outside this dashboard.</p>}
     <label>{destination?.method === "email" && mode === "send" ? "Email message (optional)" : "Fax cover sheet message (optional)"}<textarea disabled={locked} maxLength={1000} rows={3} value={message} onChange={event => setMessage(event.target.value)} /></label>
     <button type="button" disabled={locked || !rfa.signedAt || documentIds.length < 2 || (mode === "send" && !destination)} onClick={() => void run(async () => {
