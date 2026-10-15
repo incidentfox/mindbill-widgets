@@ -189,3 +189,38 @@ it("opens decisions for a requested treatment and attaches the UR decision PDF i
     expect(container.querySelector<HTMLSelectElement>('[name="responseDocumentId"]')!.value).toBe("ur_new");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+it("records a decision on an RFA never marked sent by asking when it was sent and received first", async () => {
+  const draft: RfaRecord = { ...record, status: "draft", receivedAt: null, submittedAt: null };
+  const view = await setup({ rfa: draft, permissions: ["act"] });
+  try {
+    expect(view.container.textContent).toContain("This RFA is not marked as sent");
+    const outcome = [...view.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Decision for 97110"))!;
+    await act(async () => { outcome.value = "approved"; outcome.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => {
+      set(view.container, "sentAt", "2026-09-10T09:00"); set(view.container, "channel", "mail"); set(view.container, "receivedAt", "2026-09-12T09:00");
+      set(view.container, "decidedAt", "2026-09-16T10:00"); set(view.container, "responseDocumentId", "ur_one"); set(view.container, "item_one:authorizationNumber", "SYNTHETIC-AUTH");
+      outcome.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    const posts = view.fetcher.mock.calls.filter(call => call[1]?.method === "POST").map(call => String(call[0]));
+    expect(posts.map(url => url.split("/").pop())).toEqual(["sent-outside", "decisions"]);
+    const sent = JSON.parse(String(view.fetcher.mock.calls.find(call => String(call[0]).endsWith("/sent-outside"))![1]!.body));
+    expect(sent).toMatchObject({ channel: "mail", sentAt: new Date("2026-09-10T09:00").toISOString(), receivedAt: new Date("2026-09-12T09:00").toISOString() });
+  } finally { await view.close(); }
+});
+it("records receipt from the decision letter when a sent RFA has no receipt yet", async () => {
+  const sent: RfaRecord = { ...record, status: "submitted", receivedAt: null, submittedAt: "2026-09-10T16:00:00.000Z", transmissions: [{ id: "tx_one", direction: "outbound", channel: "fax", status: "sent", destination: "+15555550100", occurredAt: "2026-09-10T16:00:00.000Z", receivedAt: null, proofDocumentId: null, providerMessageId: null }] };
+  const view = await setup({ rfa: sent, permissions: ["act"] });
+  try {
+    expect(view.container.textContent).toContain("Receipt is not recorded yet");
+    const outcome = [...view.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Decision for 97110"))!;
+    await act(async () => { outcome.value = "approved"; outcome.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => {
+      set(view.container, "receivedAt", "2026-09-11T09:00");
+      set(view.container, "decidedAt", "2026-09-16T10:00"); set(view.container, "responseDocumentId", "ur_one"); set(view.container, "item_one:authorizationNumber", "SYNTHETIC-AUTH");
+      outcome.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    const receipt = view.fetcher.mock.calls.find(call => String(call[0]).endsWith("/transmissions"));
+    expect(JSON.parse(String(receipt?.[1]?.body))).toMatchObject({ direction: "inbound", status: "received", channel: "fax", proofDocumentId: "ur_one" });
+    expect(view.fetcher.mock.calls.some(call => String(call[0]).endsWith("/decisions"))).toBe(true);
+  } finally { await view.close(); }
+});

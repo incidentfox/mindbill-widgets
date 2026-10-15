@@ -6,6 +6,15 @@ export type RfaReceiptInput = {
   proofDocumentId?: string;
   providerMessageId?: string;
 };
+/** An RFA the office sent itself: printed and faxed, mailed, e-mailed or hand-delivered (manual). */
+export type RfaSentOutsideInput = {
+  sentAt: string;
+  channel: "fax" | "mail" | "email" | "manual";
+  destination?: string;
+  proofDocumentId?: string;
+  /** When the claims administrator received it, if known. Starts the decision clock. */
+  receivedAt?: string;
+};
 export type RfaInformationRequestInput = { requestedAt: string; requestText: string; dueAt?: string };
 export type RfaInformationResponseInput = { respondedAt: string; responseDocumentIds: string[] };
 export type RfaTreatmentDecisionInput = {
@@ -57,6 +66,10 @@ export type RfaLifecycleClient = {
   listHistory(id: string): Promise<RfaHistoryEvent[]>;
   addNote(id: string, text: string, idempotencyKey: string): Promise<RfaHistoryEvent>;
   recordReceipt(id: string, input: RfaReceiptInput, idempotencyKey: string): Promise<RfaRecord>;
+  /** Record a send made outside MindBill, while the request is unsent or every attempt failed. */
+  recordSentOutside(id: string, input: RfaSentOutsideInput, idempotencyKey: string): Promise<RfaRecord>;
+  /** Undo a send recorded with recordSentOutside, while nothing has happened since. */
+  undoSentOutside(id: string, transmissionId: string, idempotencyKey: string): Promise<RfaRecord>;
   recordInformationRequest(id: string, input: RfaInformationRequestInput, idempotencyKey: string): Promise<RfaRecord>;
   recordInformationResponse(id: string, requestId: string, input: RfaInformationResponseInput, idempotencyKey: string): Promise<RfaRecord>;
   recordDecisions(id: string, input: RfaDecisionsInput, idempotencyKey: string): Promise<RfaRecord>;
@@ -151,6 +164,13 @@ export function createRfaLifecycleClient({ sessionEndpoint = "/api/mindbill/sess
     recordReceipt: (id, input, key) => {
       if (!input.proofDocumentId?.trim() && !input.providerMessageId?.trim()) return Promise.reject(new Error("Receipt requires a proof document or provider reference."));
       return mutate(path(id, "transmissions"), { ...input, direction: "inbound", status: "received", occurredAt: input.receivedAt }, key);
+    },
+    recordSentOutside: (id, input, key) => mutate(path(id, "sent-outside"), input, key),
+    undoSentOutside: async (id, transmissionId, key) => {
+      if (!key.trim()) throw new Error("An idempotency key is required.");
+      const result = await request<{ data: RfaRecord }>(path(id, `sent-outside/${encodeURIComponent(transmissionId)}`), { method: "DELETE", headers: { "idempotency-key": key } });
+      if (!result.data?.id) throw new Error("The RFA response was invalid.");
+      return result.data;
     },
     recordInformationRequest: (id, input, key) => mutate(path(id, "information-requests"), input, key),
     recordInformationResponse: (id, requestId, input, key) => mutate(path(id, `information-requests/${encodeURIComponent(requestId)}`), input, key),

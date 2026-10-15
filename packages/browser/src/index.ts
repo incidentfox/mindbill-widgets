@@ -2433,7 +2433,9 @@ export type RfaRecord = {
   /** `source`: where the file came from (upload, mindbill, fax, bill, injury, library). `internal`: a working file such as a signing preview, not part of the request. */
   documents: Array<{ id: string; documentType: string; filename: string; contentUrl: string; contentRevision: number | null; createdAt: string | null; source?: string; internal?: boolean }>;
   transmissions: Array<{ id: string; purpose?: string; direction: string; channel: string; status: string; destination: string | null;
-    occurredAt: string | null; receivedAt: string | null; proofDocumentId: string | null; providerMessageId: string | null }>;
+    occurredAt: string | null; receivedAt: string | null; proofDocumentId: string | null; providerMessageId: string | null;
+    /** sentOutsideMindBill is true for a send the office recorded itself; such a send can be undone. */
+    metadata?: Record<string, unknown> }>;
   informationRequests: Array<{ id: string; requestText: string; requestedAt: string | null; dueAt: string | null; respondedAt: string | null }>;
   events: Array<{ id: string; type: string; occurredAt: string | null; text?: string }>;
 };

@@ -5,6 +5,7 @@ import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-
 import { rfaDetailCss } from "./rfa-detail-header";
 import { RfaHistoryEntry } from "./rfa-history-entry";
 import { rfaDecisionDueText } from "./rfa-decision-due";
+import { rfaDecisionPrerequisite, rfaSentOutside, rfaSentOutsideUndoable } from "./rfa-sent-outside";
 import { RfaModal } from "./rfa-modal";
 import { RfaCard, RfaPill, rfaCalendarDate, rfaFailureReason, rfaOutcome, rfaShortDate } from "./rfa-detail-cards";
 
@@ -116,6 +117,13 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
   };
   // The complete packet a transmission sent, opened in a new tab like any other PDF.
   const packetOf = (transmission: RfaRecord["transmissions"][number]) => (transmission as { packetId?: string | null }).packetId ?? null;
+  const [undoError, setUndoError] = useState("");
+  const undoSentOutside = async (transmissionId: string) => {
+    setUndoError("");
+    if (!window.confirm("Undo this send? The RFA goes back to how it was before it was marked as sent. History keeps a record of both.")) return;
+    try { const updated = await client.undoSentOutside(rfa.id, transmissionId, `rfa-undo-sent-${transmissionId}`); setRfa(updated); onUpdated?.(updated); setReload(value => value + 1); }
+    catch (reason) { setUndoError(reason instanceof Error && /transition is not allowed/i.test(reason.message) ? "This send can no longer be undone: something was recorded after it." : reason instanceof Error ? reason.message : "The send could not be undone."); }
+  };
   const viewPacket = async (packetId: string) => {
     const tab = window.open("", "_blank");
     try { const url = URL.createObjectURL(await records.getPacket(rfa.id, packetId)); if (tab) tab.location.href = url; else window.location.assign(url); setTimeout(() => URL.revokeObjectURL(url), 60_000); }
@@ -143,7 +151,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
         const closable = canClose && item.outcome === "pending" && !item.decidedAt;
         const correctable = canCorrect && !!item.currentDecisionEventId && item.outcome !== "pending";
         const decided = item.outcome !== "pending";
-        const recordable = !!onRecordDecision && permissions.includes("act") && !decided && !item.decisionClosure?.closed && ["received", "under_review", "information_requested"].includes(rfa.status);
+        const recordable = !!onRecordDecision && permissions.includes("act") && !decided && !item.decisionClosure?.closed && rfaDecisionPrerequisite(rfa) !== "blocked";
         const authorized = decided && (item.authorizedProcedureCode || item.authorizedQuantity != null || item.authorizedUnits != null)
           ? [item.authorizedProcedureCode || item.procedureCode, item.authorizedQuantity != null ? `Qty ${item.authorizedQuantity}` : "", item.authorizedUnits != null ? `Units ${item.authorizedUnits}` : ""].filter(Boolean).join(" · ") : "";
         const field = (title: string, value: ReactNode) => value === null || value === undefined || value === "" ? null : <div><dt>{title}</dt><dd>{value}</dd></div>;
@@ -203,16 +211,17 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
           ? <RfaHistoryEntry timeline key={entry.event.id} event={entry.event} rfa={rfa} disabled={disabled} onDownload={(kind, id, filename) => void download(id, filename, kind)} />
           : <li key={entry.key} data-kind={entry.state}><div className="mbrfa-tl-head"><strong>{entry.title}</strong><span>{entry.when}</span></div>{entry.detail ? <p className="mbrfa-tl-meta">{entry.detail}</p> : null}</li>)}</ol></div> : !loadErrors.some(value => value.startsWith("History")) ? <p className="mbrfa-sheet-body mbrfa-empty">No history entries have been recorded.</p> : null}
       </RfaCard>
+      {undoError ? <p role="alert">{undoError}</p> : null}
       {rfa.transmissions.length ? <RfaCard title="Delivery" count={rfa.transmissions.length} flush><div className="mbrfa-table-scroll"><table className="mbrfa-grid-table"><thead><tr><th scope="col">Date</th><th scope="col">Sent by</th><th scope="col">To</th><th scope="col">Status</th><th scope="col">Receipt confirmed</th><th scope="col"><span className="mbrfa-sr-only">Packet</span></th></tr></thead><tbody>{rfa.transmissions.map(transmission => {
         const sending = !["delivered", "received", "sent", "failed", "canceled"].includes(transmission.status);
         const packetId = packetOf(transmission);
         return <tr key={transmission.id}>
           <td>{rfaShortDate(transmission.occurredAt)}</td>
-          <td>{capital(words(transmission.channel))}<small>{transmission.direction === "inbound" ? "Received" : transmission.purpose === "forward" ? "Forwarded" : "Submission"}</small></td>
+          <td>{transmission.channel === "manual" ? "Hand delivery" : capital(words(transmission.channel))}<small>{transmission.direction === "inbound" ? "Received" : transmission.purpose === "forward" ? "Forwarded" : rfaSentOutside(transmission) ? "Sent outside MindBill" : "Submission"}</small></td>
           <td>{transmission.destination || "—"}{transmission.providerMessageId ? <small>Ref {transmission.providerMessageId}</small> : null}{rfaFailureReason(transmission) ? <small>{rfaFailureReason(transmission)}</small> : null}</td>
           <td><RfaPill tone={["delivered", "received", "sent"].includes(transmission.status) ? "ok" : transmission.status === "failed" ? "bad" : "muted"}>{capital(words(transmission.status))}</RfaPill>{sending && onRefreshDelivery && transmission.channel === "fax" ? <button type="button" className="mbrfa-text-link" style={{ display: "block", marginTop: 4 }} disabled={disabled} title="Ask the fax provider for the latest status. MindBill also checks automatically." onClick={onRefreshDelivery}>Refresh status</button> : null}</td>
           <td>{rfaShortDate(transmission.receivedAt)}{transmission.proofDocumentId ? <small>{evidence(transmission.proofDocumentId, "Receipt")}</small> : null}</td>
-          <td className="mbrfa-row-actions">{packetId ? <button type="button" disabled={disabled} title="The complete packet that was sent" onClick={() => void viewPacket(packetId)}>View PDF</button> : null}</td>
+          <td className="mbrfa-row-actions">{packetId ? <button type="button" disabled={disabled} title="The complete packet that was sent" onClick={() => void viewPacket(packetId)}>View PDF</button> : null}{permissions.includes("act") && rfaSentOutsideUndoable(rfa, transmission) ? <button type="button" disabled={disabled} title="Remove this send and return the RFA to how it was before" onClick={() => void undoSentOutside(transmission.id)}>Undo</button> : null}</td>
         </tr>;
       })}</tbody></table></div></RfaCard> : null}
     </> : null}
