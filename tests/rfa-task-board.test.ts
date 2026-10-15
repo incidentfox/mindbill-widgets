@@ -56,16 +56,18 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
     await act(async () => h.button("Previous fax page").click());
     await act(async () => h.button("Review fax").click()); expect(h.container.textContent).toContain("Incoming utilization review response");
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
-    const select = [...h.container.querySelectorAll("select")].find(element => element.parentElement?.textContent?.startsWith("Matching request"))!;
-    expect(select.querySelector<HTMLOptionElement>('option[value="rfa_draft"]')!.disabled).toBe(true);
-    await act(async () => { select.value = record.id; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    // The fax opens beside the suggested matches; a request never sent cannot take a response.
+    expect(h.container.querySelector('[role="dialog"]')?.textContent).toContain("Suggested matches");
+    const choice = (id: string) => h.container.querySelector<HTMLInputElement>(`input[type="radio"][value="${id}"]`)!;
+    expect(choice("rfa_draft").disabled).toBe(true);
+    await act(async () => choice(record.id).click());
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
     await act(async () => h.container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
     const inboxReads = () => fetcher.mock.calls.filter(call => String(call[0]).includes("rfa-inbound-faxes") && !String(call[0]).endsWith("/content")).length;
     const beforeFocus = inboxReads();
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(inboxReads()).toBe(beforeFocus);
-    expect(select.value).toBe(record.id);
+    expect(choice(record.id).checked).toBe(true);
     expect(h.container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
     await act(async () => h.button("Match response and open Post UR").click());
     expect(onSelect).toHaveBeenCalledWith(record.id, "ur_synthetic");
