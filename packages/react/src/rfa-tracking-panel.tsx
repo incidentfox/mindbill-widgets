@@ -19,7 +19,7 @@ export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
 };
 const words = (value: string) => value.replace(/^rfa\./, "").replaceAll("_", " ");
 const capital = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
-const date = (value: string | null | undefined) => value ? new Date(value).toLocaleString() : "Not recorded";
+const date = (value: string | null | undefined) => value ? new Date(value).toLocaleString(undefined, { year: "numeric", month: "2-digit", day: "2-digit", hour: "numeric", minute: "2-digit" }) : "Not recorded";
 const text = (data: FormData, key: string) => String(data.get(key) ?? "").trim();
 const required = (data: FormData, key: string, name: string) => { const value = text(data, key); if (!value) throw new Error(`Enter ${name}.`); return value; };
 const timestamp = (data: FormData, key: string) => { const value = new Date(required(data, key, "a date and time")); if (!Number.isFinite(value.getTime())) throw new Error("Enter a valid date and time."); return value.toISOString(); };
@@ -305,9 +305,16 @@ const rfaTaskFormCss = `.mbrfa-taskform{display:grid;gap:16px;margin:0}.mbrfa-ta
 .mbrfa-taskform-hint{display:block;font-size:12px;font-weight:400;color:var(--mb-muted)}
 .mbrfa-taskform .mbrfa-outcome{grid-template-columns:repeat(3,1fr)}
 .mbrfa-taskform-foot{display:flex;justify-content:flex-end;align-items:center;gap:12px;padding-top:14px;border-top:1px solid var(--mb-border)}.mbtd .mbrfa-taskform-foot button[type=submit]{flex:none;width:200px;max-width:100%;height:44px;min-height:0;justify-self:auto}
-@media(max-width:640px){.mbrfa-taskform-grid{grid-template-columns:minmax(0,1fr)}.mbtd .mbrfa-taskform-foot button[type=submit]{width:100%}}`;
+.mbtd .mbrfa-taskform-foot .mbrfa-remove-link{margin-right:auto;border:0;background:none;padding:0;min-height:0;height:auto;color:var(--mb-danger,#b42318);font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.mbrfa-remove-confirm{border-top:1px solid var(--mb-border);padding-top:14px}.mbrfa-remove-confirm p{margin:0;font-size:14px;line-height:1.45;color:var(--mb-text)}
+.mbrfa-remove-confirm .mbrfa-taskform-foot{border-top:0;padding-top:12px}
+.mbtd .mbrfa-remove-confirm button{flex:none;width:auto;height:44px;min-height:0;padding:0 18px;white-space:nowrap}
+.mbtd .mbrfa-remove-confirm .mbrfa-danger{width:200px;max-width:100%;background:var(--mb-danger,#b42318);border-color:var(--mb-danger,#b42318);color:#fff}
+@media(max-width:640px){.mbrfa-taskform-grid{grid-template-columns:minmax(0,1fr)}.mbtd .mbrfa-taskform-foot button[type=submit]{width:100%}.mbrfa-taskform>fieldset>.mbrfa-taskform-foot{flex-direction:column-reverse;align-items:stretch}.mbtd .mbrfa-taskform-foot .mbrfa-remove-link{margin:4px auto 0}.mbtd .mbrfa-remove-confirm button{flex:1 1 0;width:auto}}`;
 
 function AppointmentForm({ appointment, options, editable, disabled, onError, onSave, bare = false }: { bare?: boolean; appointment: RfaScheduling; options: OrganizationClientOptions; editable: boolean; disabled: boolean; onError: (message: string) => void; onSave: (input: RfaSchedulingInput) => Promise<boolean> }): ReactElement {
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const removable = editable && appointment.version > 0 && appointment.disposition !== "pending";
   const [disposition, setDisposition] = useState(appointment.disposition === "canceled" && appointment.version > 0 ? "canceled" : appointment.eligible && appointment.disposition === "no_appointment" ? "no_appointment" : appointment.eligible ? "scheduled" : "canceled");
   const physicians = useMemo(() => createRfaClient(options), [options]);
   // The provider is a saved treating physician (its id) or a name typed for someone outside the list.
@@ -351,7 +358,16 @@ function AppointmentForm({ appointment, options, editable, disabled, onError, on
           {location.choice === OTHER_LOCATION ? <label className="mbrfa-wide"><span className="mbrfa-field-label">Other location{requiredMark}</span><input name="location" maxLength={500} autoComplete="off" placeholder="Clinic name and address" value={location.other} onChange={event => { const other = event.target.value; setLocation(current => ({ ...current, other })); }} /></label> : null}
         </> : <label className="mbrfa-wide"><span className="mbrfa-field-label">Reason{requiredMark}</span><textarea name="reason" maxLength={2000} defaultValue={appointment.reason ?? ""} /></label>}
       </div>
-      <div className="mbrfa-taskform-foot"><button type="submit" className="mbtd-primary">Save appointment</button></div></fieldset></form>;
+      {confirmRemove ? <div className="mbrfa-remove-confirm" role="alertdialog" aria-label="Remove appointment">
+        <p>Remove this appointment? The treatment goes back to not scheduled. The change stays in History.</p>
+        <div className="mbrfa-taskform-foot">
+          <button type="button" onClick={() => setConfirmRemove(false)}>Keep</button>
+          <button type="button" className="mbrfa-danger" onClick={() => { if (!disabled) void onSave({ expectedVersion: appointment.version, authorizationToken: appointment.authorizationToken, disposition: "pending" }); }}>Remove appointment</button>
+        </div>
+      </div> : <div className="mbrfa-taskform-foot">
+        {removable ? <button type="button" className="mbrfa-remove-link" onClick={() => setConfirmRemove(true)}>Remove appointment</button> : null}
+        <button type="submit" className="mbtd-primary">Save appointment</button>
+      </div>}</fieldset></form>;
   if (bare) return form;
   return <section><h4>Appointment</h4><p>{words(appointment.disposition)}{appointment.appointmentAt ? ` · ${date(appointment.appointmentAt)}` : ""}</p>{appointment.providerName ? <p>{appointment.providerName} · {appointment.location}</p> : null}{appointment.reason ? <p>{appointment.reason}</p> : null}
     {appointment.version > 0 && !appointment.current ? <p role="status">Authorization has changed. Review the current decision before updating this appointment.</p> : null}

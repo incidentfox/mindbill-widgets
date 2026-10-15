@@ -31,7 +31,9 @@ export type RfaScheduling = {
 };
 export type RfaSchedulingInput = { expectedVersion: number; authorizationToken: string } & (
   { disposition: "scheduled"; appointmentAt: string; providerName: string; location: string } |
-  { disposition: "no_appointment" | "canceled"; reason: string }
+  { disposition: "no_appointment" | "canceled"; reason: string } |
+  /** Removes a scheduling record entered by mistake; the treatment is unscheduled again. */
+  { disposition: "pending" }
 );
 export type RfaTreatmentClosureInput = { closed: boolean; reason: string; expectedVersion: number };
 export type RfaTreatmentClosure = { closed: boolean; reason: string; version: number; updatedAt: string; updatedBy: string };

@@ -158,3 +158,20 @@ it("shows actor-attributed closure and reopening reasons in history",async()=>{
  const view=await setup({},historyFetch([event({action:"treatment_closed",itemId:"item_one",reason:"Synthetic closure reason",version:1}),{...event({action:"treatment_reopened",itemId:"item_one",reason:"Synthetic reopen reason",version:2}),id:"event_reopened"}]));
  try{expect(view.container.textContent).toContain("Treatment closed — decision no longer required");expect(view.container.textContent).toContain("Treatment follow-up reopened");expect(view.container.textContent).toContain("Synthetic closure reason");expect(view.container.textContent).toContain("Synthetic reopen reason");expect(view.container.textContent).toContain("Synthetic operator");}finally{await view.close();}
 });
+
+it("removes an appointment entered by mistake after confirmation",async()=>{
+ const scheduled={...appointment,version:2,disposition:"scheduled" as const,current:true,appointmentAt:"2026-09-18T10:00:00Z",providerName:"Synthetic clinic",location:"Synthetic office"};
+ const view=await setup({permissions:["edit"]},async(url,init)=>String(url).includes("/scheduling")?Response.json({data:[init?.method?appointment:scheduled]}):String(url).endsWith("/events")?Response.json({data:history}):Response.json({data:record}));try{
+ const button=(name:string)=>[...view.container.querySelectorAll("button")].find(node=>node.textContent===name);
+ await act(async()=>button("Remove appointment")!.click());
+ expect(view.container.textContent).toContain("The treatment goes back to not scheduled");expect(view.fetcher.mock.calls.some(call=>call[1]?.method==="PATCH")).toBe(false);
+ await act(async()=>button("Keep")!.click());expect(button("Save appointment")).toBeTruthy();
+ await act(async()=>button("Remove appointment")!.click());
+ await act(async()=>[...view.container.querySelectorAll("button.mbrfa-danger")][0]!.dispatchEvent(new MouseEvent("click",{bubbles:true})));
+ const request=view.fetcher.mock.calls.find(call=>call[1]?.method==="PATCH");expect(JSON.parse(String(request?.[1]?.body))).toEqual({expectedVersion:2,authorizationToken:"a".repeat(64),disposition:"pending"});
+ }finally{await view.close();}
+});
+
+it("offers no removal before anything is scheduled",async()=>{
+ const view=await setup({permissions:["edit"]});try{expect([...view.container.querySelectorAll("button")].some(node=>node.textContent==="Remove appointment")).toBe(false);}finally{await view.close();}
+});

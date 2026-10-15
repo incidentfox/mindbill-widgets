@@ -6,7 +6,7 @@ type Evidence = { id: string; label: string; kind: "document" | "packet" };
 const object = (value: unknown): Fields => value && typeof value === "object" && !Array.isArray(value) ? value as Fields : {};
 const string = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value : undefined;
 const words = (value: string) => value.replace(/^rfa\./, "").replaceAll("_", " ");
-const actions: Record<string, string> = { created: "RFA created", note_added: "Note added", transmission_recorded: "Transmission recorded", followup_opened: "Follow-up opened", signed: "RFA signed", submitted: "RFA submitted", sent_outside_recorded: "Marked as sent outside MindBill", sent_outside_undone: "Sent outside MindBill — undone", treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened" };
+const actions: Record<string, string> = { created: "RFA created", note_added: "Note added", transmission_recorded: "Transmission recorded", followup_opened: "Follow-up opened", signed: "RFA signed", submitted: "RFA submitted", sent_outside_recorded: "Marked as sent outside MindBill", sent_outside_undone: "Sent outside MindBill — undone", treatment_closed: "Treatment closed — decision no longer required", treatment_reopened: "Treatment follow-up reopened", scheduling_updated: "Appointment updated", appointment_removed: "Appointment removed" };
 const date = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "Not recorded";
 const fields = {
   status: "Status", from: "Previous status", to: "New status", channel: "Delivery method", direction: "Direction",
@@ -61,7 +61,9 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload, timeline = f
     destination: payload.destination ?? transmission?.destination,
     providerMessageId: payload.providerMessageId ?? transmission?.providerMessageId,
   }, ["reason"]);
-  const appointment = payload.action === "scheduling_updated" ? rows(object(payload.details)) : [];
+  // A removal (disposition pending) has no appointment details to show; its title says what happened.
+  const removedAppointment = payload.action === "scheduling_updated" && payload.disposition === "pending";
+  const appointment = payload.action === "scheduling_updated" && !removedAppointment ? rows(object(payload.details)) : [];
   const replacement = object(payload.replacement);
   const decisionGroups = Object.keys(replacement).length ? [["Original decision", object(payload.before)], ["Corrected decision", replacement]] as const : [["Treatment decisions", payload]] as const;
   const decisionSections = decisionGroups.map(([title, value]) => ({ title, value,
@@ -94,7 +96,7 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload, timeline = f
   const changed = Array.isArray(payload.changedFields) ? payload.changedFields.flatMap(value => typeof value === "string" && Object.hasOwn(changedFieldNames, value) ? [changedFieldNames[value]!] : []) : [];
   const hasDetails = entries.length || appointment.length || decisionSections.length || evidence.length || changed.length;
   const actor = /^(system:|system$)/.test(event.actor) ? "System" : /^(native-user:|user:)/.test(event.actor) || /^partner:[^:]+:browser:/.test(event.actor) ? "Team member" : /^partner:/.test(event.actor) ? "Integration" : /^(developer:|integration:|api:)/.test(event.actor) ? "Integration" : event.actor;
-  const action = string(payload.action) ?? event.eventType.replace(/^rfa\./, "");
+  const action = removedAppointment ? "appointment_removed" : string(payload.action) ?? event.eventType.replace(/^rfa\./, "");
   if (timeline) {
     const kind = /submitted|transmission|forward/.test(action) ? "sent" : /decision|decided|approved|denied|modified/.test(action) || decisionSections.length ? "decision" : /note/.test(action) ? "note" : "event";
     const short: Record<string, string> = { "Download retained submission PDF": "View sent packet (PDF)", "Download transmission receipt": "Fax receipt", "Download decision evidence": "View UR decision letter", "Download document": "View document" };
