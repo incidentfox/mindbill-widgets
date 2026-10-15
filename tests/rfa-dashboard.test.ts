@@ -336,12 +336,12 @@ it("loads the dashboard counts once, as a single row, and shows them at once on 
  try{
   const lists=fetcher.mock.calls.map(x=>String(x[0])).filter(url=>url.includes("/rfas?"));
   expect(lists).toHaveLength(1);expect(lists[0]).toContain("limit=1");
-  expect(first.container.textContent).toContain("Requests awaiting a decision");expect(first.container.textContent).not.toContain("All requests");
+  expect(first.container.textContent).toContain("Awaiting a decision");expect(first.container.textContent).not.toContain("All requests");
  }finally{await first.close();}
  // Coming back, the last counts render before any request answers.
  const pending=vi.fn<typeof fetch>(()=>new Promise<Response>(()=>{}));
  const second=await mount(pending);
- try{expect(second.container.textContent).toContain("Requests awaiting a decision");expect(second.container.textContent).not.toContain("Loading authorization requests");}finally{await second.close();}
+ try{expect(second.container.textContent).toContain("Awaiting a decision");expect(second.container.textContent).not.toContain("Loading authorization requests");}finally{await second.close();}
 });
 it("marks an unsent request as sent outside MindBill, and undoes it from History",async()=>{
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
@@ -385,5 +385,19 @@ it("opens the decision dialog on an unsent request, which has no review section"
   expect(container.querySelector('[id$="-review"]')).toBeNull();
   await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Record decision")!.click());
   expect(container.querySelector('[role="dialog"]')?.textContent).toContain("This RFA is not marked as sent");
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("reads a document full-screen and switches to the request's other documents in place",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ try{
+  const fetcher=vi.fn<typeof fetch>(async(input)=>{const url=String(input);if(url.includes("/documents/"))return new Response("%PDF-synthetic",{headers:{"content-type":"application/pdf"}});return taskResponse(input) ?? Response.json({data:record});});
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:record.id,permissions:["edit","send"]})));
+  const names=record.documents.map(document=>document.filename);
+  await act(async()=>[...container.querySelectorAll<HTMLButtonElement>(".mbrfa-documents-table button")].find(button=>button.textContent===names[0])!.click());
+  const dialog=()=>container.querySelector('[role="dialog"]');
+  expect(dialog()?.getAttribute("aria-label")).toBe(names[0]);
+  expect([...dialog()!.querySelectorAll(".mbrfa-viewer-list button")].map(button=>button.firstChild?.textContent)).toEqual(names);
+  await act(async()=>[...dialog()!.querySelectorAll<HTMLButtonElement>(".mbrfa-viewer-list button")].find(button=>button.firstChild?.textContent===names[1])!.click());
+  expect(dialog()?.getAttribute("aria-label")).toBe(names[1]);
  }finally{await act(async()=>root.unmount());container.remove();}
 });

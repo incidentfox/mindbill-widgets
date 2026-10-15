@@ -110,6 +110,7 @@ export const rfaCardsCss = `${rfaPillCss}
 .mbrfa-simple .mbrfa-detail-toolbar h2{font-size:20px!important;font-weight:600;letter-spacing:-.01em}
 .mbrfa-simple .mbrfa-detail-toolbar .mbtd-actions{margin-top:0}
 .mbrfa-simple .mbrfa-detail-toolbar button,.mbrfa-simple .mbrfa-form-link{min-height:34px;padding:6px 12px;font-size:13px;font-weight:500;background:var(--mb-surface)}
+.mbtd .mbrfa-simple .mbrfa-header-action{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:7px 14px;font-weight:600;color:var(--mb-accent);border:1px solid color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));border-radius:var(--mb-control-radius);text-decoration:none}.mbtd .mbrfa-simple .mbrfa-header-action:hover{background:color-mix(in srgb,var(--mb-accent) 14%,var(--mb-surface));border-color:var(--mb-accent)}
 .mbrfa-simple .mbrfa-detail-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px}
 .mbrfa-simple .mbrfa-detail-tabs button{min-height:34px;padding:6px 12px;font-size:13px}
 .mbrfa-sheet{border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);min-width:0;overflow:hidden}

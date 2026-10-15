@@ -9,6 +9,19 @@ export function RfaOverview({ summary, onSelect, combined = false }: { combined?
   const aging = summary.aging;
   const countButton = (count: number, title: string, status: string, bucket?: Bucket) => count ? <button type="button" className="mbrfa-count" aria-label={`${title}: ${count} requests`} onClick={() => onSelect(status, bucket)}>{count.toLocaleString()}</button> : <span className="mbrfa-zero">0</span>;
   if (!summary.byLifecycleStatus) return <section className="mbrfa-overview" aria-label="Clinical review overview"><h3>Clinical review counts</h3><div className="mbrfa-legacy-grid">{Object.entries(summary.byStatus).map(([status, count]) => <button type="button" key={status} onClick={() => onSelect(status)}><span>{status.replaceAll("_", " ")}</span><strong>{count}</strong></button>)}</div></section>;
+  // On the RFA Tasks dashboard this is one more group, drawn exactly like the task groups above it.
+  if (combined && aging) {
+    const states = ["sent", "received"] as const;
+    const count = (value: number, title: string, status: string, bucket?: Bucket) => value ? <button type="button" className="mbrfa-task-count" aria-label={`${title}: ${value} requests`} onClick={() => onSelect(status, bucket)}>{value.toLocaleString()}</button> : <span className="mbrfa-task-zero">0</span>;
+    const bucketTotal = (bucket: Bucket) => states.reduce((sum, status) => sum + (aging.byLifecycleStatus[status]?.[bucket] ?? 0), 0);
+    const total = states.reduce((sum, status) => sum + (summary.byLifecycleStatus?.[status] ?? 0), 0);
+    return <section className="mbrfa-task-group" aria-label="Awaiting a decision"><table><thead><tr><th scope="col">Awaiting a decision<small>By date sent</small></th>{buckets.map(bucket => <th scope="col" key={bucket.id}><span className="mbrfa-task-age">{bucket.label}</span></th>)}<th scope="col">Total</th></tr></thead>
+      <tbody>{states.map(status => <tr key={status}><th scope="row">{rfaStatusLabel(status)}<small>{status === "sent" ? "Sent; receipt not confirmed yet." : "The claims administrator has it; decision pending."}</small></th>
+        {buckets.map(bucket => <td key={bucket.id}>{count(aging.byLifecycleStatus[status]?.[bucket.id] ?? 0, `${rfaStatusLabel(status)} · ${bucket.label} since sent`, status, bucket.id)}</td>)}
+        <td>{count(summary.byLifecycleStatus?.[status] ?? 0, rfaStatusLabel(status), status)}</td></tr>)}</tbody>
+      <tfoot><tr><th scope="row">Total</th>{buckets.map(bucket => <td key={bucket.id}>{count(bucketTotal(bucket.id), `Awaiting a decision · ${bucket.label} since sent`, "", bucket.id)}</td>)}<td>{total ? total.toLocaleString() : <span className="mbrfa-task-zero">0</span>}</td></tr></tfoot>
+    </table></section>;
+  }
   return <div className="mbrfa-overview">
     <div className="mbrfa-overview-title"><div><h3>{combined ? "Requests awaiting a decision" : "Status and aging"}</h3><p className="mbrfa-aging-basis">Calendar days since submission</p></div><span>{summary.total.toLocaleString()} total requests</span></div>
     {groups.filter(group => !combined || group.tone === "waiting").map(group => <section className={`mbrfa-status-group mbrfa-${group.tone}`} key={group.title} aria-label={group.title}>
