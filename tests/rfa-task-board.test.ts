@@ -37,6 +37,7 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
     if (value.endsWith("/content")) return new Response("%PDF-synthetic");
     if (value.endsWith("/match")) return Response.json({ data: { faxId: fax.id, rfaId: record.id, documentId: "ur_synthetic", alreadyAttached: false } });
     if (value.includes("rfa-inbound-faxes")) return Response.json({ data: [{ ...fax, suggestedRfaIds: [record.id, "rfa_draft"] }], nextCursor: value.includes("cursor=") ? null : "two", hasMore: !value.includes("cursor=") });
+    if (value.includes("/rfas?")) return Response.json({ data: [{ ...record, id: "rfa_other", employeeName: "Other Synthetic Patient" }], nextCursor: null, summary: { total: 1, byStatus: {} } });
     return Response.json({ data: value.endsWith("rfa_draft") ? { ...record, id: "rfa_draft", status: "draft", submittedAt: null } : record });
   });
   try {
@@ -57,7 +58,16 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
     await act(async () => h.button("Review fax").click()); expect(h.container.textContent).toContain("Incoming utilization review response");
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
     // The fax opens beside the suggested matches; a request never sent cannot take a response.
-    expect(h.container.querySelector('[role="dialog"]')?.textContent).toContain("Suggested matches");
+    // Suggestions come first, then every other request without searching; typing filters the list.
+    expect(h.container.querySelector('[role="dialog"]')?.textContent).toContain("Suggested");
+    expect(h.container.querySelector('[role="dialog"]')?.textContent).toContain("Other Synthetic Patient");
+    const filter = h.container.querySelector<HTMLInputElement>('[role="dialog"] input[type="search"]')!;
+    await act(async () => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; setter.call(filter, "Other"); filter.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+    expect(fetcher.mock.calls.some(call => String(call[0]).includes("/rfas?") && String(call[0]).includes("search=Other"))).toBe(true);
+    expect(h.container.querySelector('[role="dialog"]')?.textContent).not.toContain("Suggested");
+    await act(async () => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; setter.call(filter, ""); filter.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
     const choice = (id: string) => h.container.querySelector<HTMLInputElement>(`input[type="radio"][value="${id}"]`)!;
     expect(choice("rfa_draft").disabled).toBe(true);
     await act(async () => choice(record.id).click());
