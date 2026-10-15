@@ -70,6 +70,8 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
     const choice = (id: string) => h.container.querySelector<HTMLInputElement>(`input[type="radio"][value="${id}"]`)!;
     expect(choice("rfa_draft").disabled).toBe(true);
+    // A request from the full list, not only a suggestion, can be chosen.
+    expect(choice("rfa_other").disabled).toBe(false);
     await act(async () => choice(record.id).click());
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
     await act(async () => h.container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
