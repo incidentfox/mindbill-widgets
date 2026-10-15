@@ -463,7 +463,8 @@ function RfaDetail({ layout, forwardContacts, id, selectedItem, selectedResponse
         </tr>)}</tbody></table></div> : <p className="mbrfa-sheet-body mbrfa-empty">{unsent ? "Add the clinical reports that support this request (PDF, up to 25 MB each)." : "No documents are attached to this request."}</p>}
         {openedDocument ? <div className="mbrfa-sheet-body"><PdfReview blob={openedDocument.blob} title={openedDocument.title} /></div> : null}
       </RfaCard>
-      {unsent ? null : reviewable ? <RfaCard id={`${tabId}-review`} title="Utilization Review" flush>
+      {/* An unsent request has no review section, but a decision that came back anyway can still be recorded. */}
+      {unsent ? decisionRequest ? <RfaLifecycleControls rows dialogOnly decisionRequest={decisionRequest} {...options} {...(readRfaResponse ? { readResponse: readRfaResponse } : {})} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} /> : null : reviewable ? <RfaCard id={`${tabId}-review`} title="Utilization Review" flush>
         {rfa.informationRequests.some(item => !item.respondedAt) ? <div className="mbrfa-rows">{rfa.informationRequests.filter(item => !item.respondedAt).map(item => <p key={item.id}><RfaPill tone="warn">Information requested</RfaPill> {item.requestText} · Due {date(item.dueAt)}</p>)}</div> : null}
         <RfaLifecycleControls rows {...(decisionRequest ? { decisionRequest } : {})} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} {...options} {...(readRfaResponse ? { readResponse: readRfaResponse } : {})} rfa={rfa} disabled={!!locked} permissions={permissions.filter((permission): permission is "act" | "edit" => permission === "act" || permission === "edit")} onUpdated={adopt} />
       </RfaCard> : null}
