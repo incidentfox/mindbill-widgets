@@ -276,7 +276,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
       setCreating(false); selectRfa(saved.id); onCreated?.(saved);
       if (intent === "preview" && attached === files.length && onPreviewRequest) { try { await onPreviewRequest(saved.id); } catch { if (active.current) setCreationWarning("Draft saved. Preview could not be opened; open the request to try again."); } }
     }} /> : selected ? <RfaDetail {...(initialRecord ? { initial: initialRecord } : {})} layout={layout} key={selected} {...(forwardContacts ? { forwardContacts } : {})} {...(initialDetailAction ? { initialAction: initialDetailAction } : {})} {...relatedLinks} {...(formPreviewUrl ? { formPreviewUrl } : {})} id={selected} selectedItem={selectedItem} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { selectRfa(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} {...(renderSendSignatureSetup ? { renderSendSignatureSetup } : {})} {...(readRfaResponse ? { readRfaResponse } : {})} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : <>
-      {view === "overview" ? <RfaTaskBoard {...relatedLinks} {...(getRfaHref ? { getRfaHref } : {})} {...(cacheKey ? { cacheKey } : {})} {...(taskPresentation ? { presentation: taskPresentation } : {})} {...(taskQuery ? { query: taskQuery } : {})} {...(renderTaskIdentity ? { renderTaskIdentity } : {})} {...(navigation?.getTaskHref ? { getTaskHref: navigation.getTaskHref } : {})} {...(navigation?.onNavigate ? { onNavigate: navigation.onNavigate } : {})} embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : lifecycleAvailable ? <RfaFilterBar search={searchInput} onSearch={setSearchInput} searchPlaceholder="Search patient, physician, claim, RFA or treatment"
+      {view === "overview" ? <RfaTaskBoard {...relatedLinks} {...(getRfaHref ? { getRfaHref } : {})} {...(cacheKey ? { cacheKey } : {})} {...(taskPresentation ? { presentation: taskPresentation } : {})} {...(taskQuery ? { query: taskQuery } : {})} {...(renderTaskIdentity ? { renderTaskIdentity } : {})} {...(navigation?.getTaskHref ? { getTaskHref: navigation.getTaskHref } : {})} {...(navigation?.onNavigate ? { onNavigate: navigation.onNavigate } : {})} embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : lifecycleAvailable ? <RfaFilterBar search={searchInput} onSearch={setSearchInput} searchPlaceholder="Search patient, physician, claim…"
         onClearAll={() => { setSearchInput(""); setSearch(""); setStatus(""); setAgingBucket(""); setPhysician(""); setDecisionDue(""); resetPage(); }}
         filters={[
           { key: "status", label: "Status", value: status, options: [{ value: "", label: "Any status" }, ...Object.keys(RFA_LIFECYCLE_LABELS).map(value => ({ value, label: rfaStatusLabel(value as keyof typeof RFA_LIFECYCLE_LABELS) }))], onChange: value => { setStatus(value); resetPage(); } },
@@ -435,7 +435,14 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
   const editClaimsAdministrator = () => {
     editRequest();
     let tries = 0;
-    const jump = () => { const section = document.getElementById(RFA_CLAIMS_ADMINISTRATOR_SECTION); if (section) { section.scrollIntoView?.({ block: "start", behavior: "smooth" }); section.focus({ preventScroll: true }); } else if (++tries < 20) setTimeout(jump, 100); };
+    const jump = () => {
+      const section = document.getElementById(RFA_CLAIMS_ADMINISTRATOR_SECTION);
+      if (!section) { if (++tries < 20) setTimeout(jump, 100); return; }
+      // scroll-margin-top keeps the heading clear of a host's sticky top bar; then focus the claims administrator picker itself.
+      section.scrollIntoView?.({ block: "start", behavior: "smooth" });
+      const picker = section.querySelector<HTMLElement>(".mbctl-trigger:not(:disabled), input:not([type=hidden]):not(.mbctl-proxy):not(:disabled)");
+      (picker ?? section).focus({ preventScroll: true });
+    };
     setTimeout(jump, 0);
   };
   // The card layout reads documents in a full-screen viewer; the classic layout keeps them inline.

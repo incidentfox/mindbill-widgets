@@ -136,7 +136,7 @@ export function useVisualViewportVars(active = true): void {
 }
 
 /** Phones get lists and calendars as a bottom sheet with large rows instead of a small floating popover. */
-function useSheet(): boolean {
+export function useSheet(): boolean {
   const [sheet, setSheet] = useState(false);
   useEffect(() => {
     const query = typeof window === "undefined" ? undefined : window.matchMedia?.("(max-width: 640px)");
@@ -149,7 +149,7 @@ function useSheet(): boolean {
 
 /** Positions a popover with `position: fixed` next to its anchor so scrolling containers and dialogs never clip it.
  * As a sheet (`data-sheet`), it spans the width and sits at the bottom of the visible viewport, above a phone keyboard. */
-function useAnchoredPopover(open: boolean, anchor: RefObject<HTMLElement | null>, pop: RefObject<HTMLElement | null>, align: "start" | "end" = "start", matchWidth = true): void {
+export function useAnchoredPopover(open: boolean, anchor: RefObject<HTMLElement | null>, pop: RefObject<HTMLElement | null>, align: "start" | "end" = "start", matchWidth = true): void {
   useIsoLayoutEffect(() => {
     if (!open) return;
     const place = () => {
@@ -186,11 +186,11 @@ function useAnchoredPopover(open: boolean, anchor: RefObject<HTMLElement | null>
 }
 
 /** The title row of a sheet, with a close button. */
-function SheetHead({ title, onClose }: { title: string; onClose: () => void }): ReactElement {
+export function SheetHead({ title, onClose }: { title: string; onClose: () => void }): ReactElement {
   return <div className="mbctl-sheet-head"><strong>{title}</strong><button type="button" className="mbctl-sheet-close" aria-label="Close" onClick={onClose}>×</button></div>;
 }
 /** Dims the page behind a sheet; tapping it closes the sheet (and never reaches an enclosing label). */
-function Scrim({ onClose }: { onClose: () => void }): ReactElement {
+export function Scrim({ onClose }: { onClose: () => void }): ReactElement {
   return <div className="mbctl-scrim" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={event => { event.preventDefault(); event.stopPropagation(); onClose(); }} />;
 }
 
