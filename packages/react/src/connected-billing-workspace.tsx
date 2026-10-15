@@ -37,6 +37,7 @@ import {
   type ProductivityReport,
   type ServiceLineItemsReport,
 } from "./billing-operations-client";
+import { DateField, Select } from "./form-controls";
 
 type ConnectedSurfaceProps = BillingOperationsClientOptions & {
   appearance?: MindBillReactAppearance;
@@ -70,11 +71,11 @@ function EntityFilter({ value, options, onChange, label, plural }: {
   plural: string;
 }): ReactElement | null {
   if (!options && !value) return null;
-  return <select className="mbow-select" aria-label={`${label} filter`} value={value} onChange={(event) => onChange(event.target.value)}>
+  return <Select aria-label={`${label} filter`} value={value} onChange={(choice) => onChange(choice)}>
     <option value="">All {plural}</option>
     {value && !options?.some((option) => option.id === value) ? <option value={value}>Selected {label.toLowerCase()}</option> : null}
     {options?.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-  </select>;
+  </Select>;
 }
 
 function RenderingProviderFilter(props: { value: string; options: Array<{ id: string; name: string }> | undefined; onChange: (value: string) => void }): ReactElement | null {
@@ -182,12 +183,12 @@ function BillSearchContent({
     {heading ? <div className="mbow-head"><div>{typeof heading === "string" ? <h2>{heading}</h2> : heading}</div></div> : null}
     <form className="mbow-toolbar" onSubmit={(event) => { event.preventDefault(); if (!invalidDates) update({ q: draft.trim(), ...dates }); }}>
       <input className="mbow-input" type="search" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Patient, claims administrator, bill, claim, status, or date…" aria-label="Search bills" aria-describedby={searchHelpId} />
-      <select className="mbow-select" value={query.status ?? "all"} onChange={(event) => update({ status: event.target.value })} aria-label="Bill status">
+      <Select value={query.status ?? "all"} onChange={(choice) => update({ status: choice })} aria-label="Bill status">
         <option value="all">All statuses</option><option value="incomplete">Incomplete</option><option value="sent">Sent</option><option value="accepted">Accepted</option><option value="accepted_no_response">Accepted — response overdue</option><option value="rejected">Rejected</option><option value="processed">Processed</option><option value="paid">Paid</option><option value="closed">Closed</option>
-      </select>
-      <select className="mbow-select" value={query.age ?? "all"} onChange={(event) => update({ age: event.target.value as BillRegistryAge })} aria-label="A/R age">
+      </Select>
+      <Select value={query.age ?? "all"} onChange={(choice) => update({ age: choice as BillRegistryAge })} aria-label="A/R age">
         <option value="all">All A/R ages</option><option value="0-30">0–30 days</option><option value="31-60">31–60 days</option><option value="61-90">61–90 days</option><option value="91+">91+ days</option><option value="91-180">91–180 days</option><option value="181+">181+ days</option>
-      </select>
+      </Select>
       <EntityFilter label="Patient" plural="patients" value={query.patientId ?? ""} options={result?.filters?.patients} onChange={(value) => update({ patientId: value })} />
       <EntityFilter label="Claims administrator" plural="claims administrators" value={query.claimsAdministrator ?? ""} options={result?.filters?.claimsAdministrators} onChange={(value) => update({ claimsAdministrator: value })} />
       <RenderingProviderFilter value={query.renderingProviderId ?? ""} options={result?.filters?.renderingProviders} onChange={(value) => update({ renderingProviderId: value })} />
@@ -248,7 +249,7 @@ function BillTasksContent({ client, onDrillDown, appearance }: { client: ReturnT
     <p className="mbow-task-note">Open follow-up work grouped by task and age. {result.waiting ? "Sent and accepted bills waiting for a payer are shown below." : "Find sent and accepted bills in All bills."}</p>
     {loading ? <p role="status">Updating bill tasks…</p> : null}
     {error ? <p role="alert" className="mbow-error">{error.message}</p> : null}
-    <BillTasksDashboard data={result.dashboard} appearance={appearance ?? { preset: "mindbill" }} toolbar={<div className="mbow-toolbar"><select aria-label="Claims administrator filter" className="mbow-select" value={claimsAdminId} onChange={(event) => setClaimsAdminId(event.target.value)}><option value="">All claims administrators</option>{result.filters.claimsAdministrators.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><RenderingProviderFilter value={renderingProviderId} options={result.filters.renderingProviders} onChange={setRenderingProviderId} /></div>} {...selectionProps} />
+    <BillTasksDashboard data={result.dashboard} appearance={appearance ?? { preset: "mindbill" }} toolbar={<div className="mbow-toolbar"><Select aria-label="Claims administrator filter" value={claimsAdminId} onChange={(choice) => setClaimsAdminId(choice)}><option value="">All claims administrators</option>{result.filters.claimsAdministrators.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><RenderingProviderFilter value={renderingProviderId} options={result.filters.renderingProviders} onChange={setRenderingProviderId} /></div>} {...selectionProps} />
     {result.waiting ? <BillTasksDashboard data={result.waiting} appearance={appearance ?? { preset: "mindbill" }}
       heading="Bills waiting for payer" totalLabel="Bill Total" itemLabel="bills" grandTotalLabel="Waiting Bills Total" emptyLabel="No waiting bills"
       {...selectionProps}
@@ -264,7 +265,7 @@ export function ConnectedBillTasksDashboard({ appearance, className, style, onDr
 type ReportProps = ConnectedSurfaceProps & { initialFrom?: string; initialTo?: string; onSelectBill?: (billId: string) => void };
 
 function RangeToolbar({ from, to, setFrom, setTo }: { from: string; to: string; setFrom: (value: string) => void; setTo: (value: string) => void }): ReactElement {
-  return <div className="mbow-toolbar"><label>From <input className="mbow-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To <input className="mbow-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label></div>;
+  return <div className="mbow-toolbar"><label>From <DateField value={from} onChange={(choice) => setFrom(choice)} /></label><label>To <DateField value={to} onChange={(choice) => setTo(choice)} /></label></div>;
 }
 
 export function ConnectedServiceLineItemsReport({ appearance, className, style, initialFrom, initialTo, onSelectBill, ...options }: ReportProps): ReactElement {

@@ -13,6 +13,7 @@ import {
 } from "./bill-submission-form";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { parseSecondReviewCorrection, type CorrectionDraft } from "./second-review-corrections";
+import { Select } from "./form-controls";
 
 export const SECOND_REVIEW_REASON_TEMPLATES = [
   {
@@ -201,7 +202,7 @@ export function SecondReviewForm({
     <style>{css}</style>
     <section className="mb-second-review">
       <div><h3>Submit Second Review</h3><p>Select each disputed service and explain why it should be reconsidered.</p></div>
-      <label className="mb-second-review-template"><span className="mb-second-review-label">Apply a saved reason to selected lines</span><select className="mb-second-review-select" defaultValue="" onChange={(event) => { applyTemplate(event.target.value); event.target.value = ""; }}><option value="">Choose a reason template (optional)</option>{SECOND_REVIEW_REASON_TEMPLATES.map((template) => <option key={template.label} value={template.value}>{template.label}</option>)}</select></label>
+      <label className="mb-second-review-template"><span className="mb-second-review-label">Apply a saved reason to selected lines</span><Select defaultValue="" onChange={(choice) => { applyTemplate(choice); choice = ""; }}><option value="">Choose a reason template (optional)</option>{SECOND_REVIEW_REASON_TEMPLATES.map((template) => <option key={template.label} value={template.value}>{template.label}</option>)}</Select></label>
       <section className="mb-second-review-lines" aria-label="Service lines in dispute">
         {selectableLines.map((line) => {
           const draft = lines[line.id];

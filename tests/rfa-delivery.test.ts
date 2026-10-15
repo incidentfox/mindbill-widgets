@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import type { RfaClient, RfaRecord } from "../packages/browser/src/index";
 import { RfaDeliveryPanel } from "../packages/react/src/rfa-delivery-panel";
+import { choose, selects } from "./form-control-helpers";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const record: RfaRecord = { claimId: "claim_synthetic", patientId: "patient_synthetic", renderingProviderId: "provider_synthetic", employeeName: "Synthetic Patient", providerName: "Synthetic Physician", claimNumber: "SYNTHETIC", status: "signed", reviewType: "prospective", expedited: false, createdAt: null, updatedAt: null, receivedAt: null, decisionDueAt: null, decisionDeadlineBasis: null, incompleteReason: null, deferredReason: null, closedReason: null, items: [], documents: [], transmissions: [], informationRequests: [], events: [], id: "rfa_synthetic", contentRevision: 2, signedAt: "2026-09-17T00:00:00Z", submittedAt: null, claimsAdminId: null, readiness: { ready: true, missing: [] }, authorizationContact: { email: "authorization@example.test", fax: "+18005550100" } };
 async function setup(environment = "live") {
@@ -17,7 +18,7 @@ async function setup(environment = "live") {
   await render();
   const button = (text: string) => [...container.querySelectorAll("button")].find(node => node.textContent === text)!;
   const click = async (text: string) => act(async () => button(text).click());
-  const select = async (index: number, value: string) => act(async () => { const node = container.querySelectorAll("select")[index]!; node.value = value; node.dispatchEvent(new Event("change", { bubbles: true })); });
+  const select = async (index: number, value: string) => choose(selects(container)[index]!, value);
   const prepare = () => click("Prepare packet with cover sheet");
   const attest = async () => { for (const node of container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) await act(async () => node.click()); };
   const destroy = async () => { await act(async () => root.unmount()); container.remove(); };

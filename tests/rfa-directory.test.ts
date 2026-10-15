@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import { createBillReferenceClient, normalizeRfaFax, rfaAuthorizationDestinations, type BillClaimsAdministratorDirectory } from "../packages/browser/src/index";
 import { RfaAuthorizationDestination } from "../packages/react/src/rfa-authorization-destination";
 import { ClaimsAdministratorDirectoryDialog } from "../packages/react/src/claims-administrator-directory-dialog";
+import { choose as pick, optionLabels, optionValues, selects, selectValue } from "./form-control-helpers";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const directory: BillClaimsAdministratorDirectory = {
@@ -38,23 +39,23 @@ it("requires explicit choice, separates email, clears retired destinations and t
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container); const changed = vi.fn();
   const render = (data: BillClaimsAdministratorDirectory | null, key = "synthetic_request") => act(async () => root.render(createElement(RfaAuthorizationDestination, { contextKey: key, directory: data, onChange: value => changed(value) })));
-  const choose = async (value: string) => act(async () => { const select = container.querySelector("select")!; select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  const choose = async (value: string) => pick(selects(container)[0]!, value);
   try {
     await render(directory); expect(changed).toHaveBeenLastCalledWith(null);
     expect(container.textContent).not.toContain("Directory observed");
     expect(container.querySelector(`a[href="${directory.authorizationSource?.url}"]`)).toBeNull();
-    expect(container.querySelector("select")?.value).toBe("");
+    expect(selectValue(selects(container)[0]!)).toBe("");
     await choose("0"); expect(changed.mock.lastCall?.[0]?.destination).toBe("+18005550100");
     const calls = changed.mock.calls.length;
     await render(structuredClone(directory)); expect(changed.mock.calls).toHaveLength(calls);
-    expect(container.querySelector("select")?.value).toBe("0");
+    expect(selectValue(selects(container)[0]!)).toBe("0");
     await choose("1"); expect(changed.mock.lastCall?.[0]?.method).toBe("email");
     expect(container.textContent).toContain("Review this recipient before preparing and sending the packet");
     await render({ ...directory, authorizationStatus: "profile_not_published" });
-    expect(changed).toHaveBeenLastCalledWith(null); expect(container.querySelectorAll("option")).toHaveLength(3);
+    expect(changed).toHaveBeenLastCalledWith(null); expect(await optionValues(selects(container)[0]!)).toHaveLength(3);
     await choose("manual");
     expect(container.querySelector('input[type="tel"]')).not.toBeNull();
-    await render(null, "different_synthetic_request"); expect(container.querySelector("select")?.value).toBe("");
+    await render(null, "different_synthetic_request"); expect(selectValue(selects(container)[0]!)).toBe("");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 it("does not expose directory-source provenance in the claims administrator dialog", async () => {
@@ -76,7 +77,7 @@ it("requires the handling adjuster's name and fax and clears them when routing c
   const type = (selector: string, value: string) => act(async () => { const input = container.querySelector<HTMLInputElement>(selector)!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
   try {
     await render({ ...directory, authorizationStatus: "adjuster_specific_required" });
-    await act(async () => { const select = container.querySelector("select")!; select.value = "manual"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await pick(selects(container)[0]!, "manual");
     await type('input[type="tel"]', "8005550100");
     expect(changed).toHaveBeenLastCalledWith(null);
     expect(container.textContent).toContain("Handling adjuster name (required)");
@@ -84,7 +85,7 @@ it("requires the handling adjuster's name and fax and clears them when routing c
     expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ method: "fax", destination: "+18005550100", recipientName: "Synthetic Adjuster" }));
     await type('input:not([type])', " "); expect(changed).toHaveBeenLastCalledWith(null);
     await render(directory); expect(changed).toHaveBeenLastCalledWith(null);
-    expect(container.textContent).toContain("Enter another confirmed authorization fax");
+    expect(await optionLabels(selects(container)[0]!)).toContain("Enter another confirmed authorization fax");
     expect(container.querySelector('input[type="tel"]')).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

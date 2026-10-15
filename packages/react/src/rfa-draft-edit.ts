@@ -1,8 +1,15 @@
 import type { RfaRecord, RfaUpdateDraftInput } from "@mindbill/browser";
 import type { RfaDraftInput } from "./rfa-draft-form";
 
-/** The server repeats these checks under a lock; client gating is only a convenience. */
+/** True when every attempt to send the request failed and no receipt was ever recorded. */
+export function rfaCanResend(rfa: Pick<RfaRecord, "status" | "receivedAt" | "transmissions">): boolean {
+  const attempts = rfa.transmissions.filter(sent => sent.direction === "outbound" && (sent.purpose ?? "submission") === "submission");
+  return rfa.status === "submitted" && !rfa.receivedAt && attempts.length > 0 && attempts.every(sent => sent.status === "failed");
+}
+/** The server repeats these checks under a lock; client gating is only a convenience.
+ * A request whose every send failed can be corrected too: saving reopens it as a draft for a new signature. */
 export function canEditRfaDraft(rfa: RfaRecord): boolean {
+  if (rfaCanResend(rfa)) return true;
   return !rfa.submittedAt && !rfa.receivedAt && ["draft", "ready"].includes(rfa.status)
     && !rfa.transmissions.some(item => item.purpose === "submission" && (item.status === "queued" || item.status === "received" || (item.direction === "outbound" && ["sent", "delivered"].includes(item.status))));
 }

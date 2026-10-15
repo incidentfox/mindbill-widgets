@@ -15,6 +15,7 @@ import { ClaimLineSummary, CLAIM_FORM_LABELS } from "./claim-form-summary";
 import { BillDetailLayout, BillDetailSection, type BillDetailValidationIssue } from "./bill-detail-layout";
 import type { MindBillReactAppearance } from "./appearance";
 import { mindBillAppearanceStyle } from "./appearance";
+import { Select } from "./form-controls";
 
 export type BillDetailSectionKey = "patient" | "claim" | "providers" | "services" | "attachments";
 
@@ -186,7 +187,7 @@ export function BillReadOnlyForm({ data, appearance, className, style, onOpenAtt
     <BillDetailSection title="Attachments" validationIssues={validationIssues?.attachments ?? []}>{bill.attachments.length ? <ul className="mb-read-documents">{bill.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.filename}</strong><span>{attachment.description || attachment.documentType.replace(/_/g, " ")}</span></div>{onOpenAttachment ? <button type="button" onClick={() => void onOpenAttachment(attachment)}>Preview</button> : null}</li>)}</ul> : <p className="mb-read-empty">No attachments.</p>}</BillDetailSection>
     </BillDetailLayout>
     {payerOpen ? <div className="mb-read-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPayerOpen(false); }}><section className="mb-read-dialog" role="dialog" aria-modal="true" aria-labelledby="mb-read-payer-title"><header><div><h3 id="mb-read-payer-title">{payerName}</h3><span>Claims administrator</span></div><button type="button" aria-label="Close claims administrator details" onClick={() => setPayerOpen(false)}>×</button></header>
-      <label className="mb-read-dialog-mobile-nav"><span>Information section</span><select aria-label="Claims administrator information section" value={payerTab} onChange={(event) => setPayerTab(event.target.value as PayerTab)}>{PAYER_TABS.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></label>
+      <label className="mb-read-dialog-mobile-nav"><span>Information section</span><Select aria-label="Claims administrator information section" value={payerTab} onChange={(choice) => setPayerTab(choice as PayerTab)}>{PAYER_TABS.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</Select></label>
       <div className="mb-read-dialog-tabs" role="tablist" aria-label="Claims administrator information">
         {PAYER_TABS.map(([id, label]) => <button type="button" role="tab" aria-selected={payerTab === id} key={id} onClick={() => setPayerTab(id)}>{label}</button>)}
       </div>

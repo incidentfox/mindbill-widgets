@@ -15,6 +15,7 @@ import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appeara
 import { OrganizationAdministration } from "./organization-administration";
 import { TaxIdInput, taxIdWrite } from "./tax-id-input";
 import { W9Upload } from "./w9-upload";
+import { Select } from "./form-controls";
 
 // Embeddable organization onboarding (INC-1470): capture the practice name,
 // tax ID, group NPI, billing provider, locations, and W-9 ONCE, saved straight
@@ -247,10 +248,10 @@ export function OrganizationOnboarding({
       <p className="mbob-status">The selected billing provider supplies the billing name, tax ID, NPI, and address on the claim.</p>
       <h3 className="mbob-subhead">Billing provider (pay-to)</h3>
       <label className="mbob-field">Saved billing provider
-        <select disabled={saving} value={provider.id ?? ""} onChange={(event) => setProvider({ ...(profile?.billingProviders.find((item) => item.id === event.target.value) ?? { name: "", taxId: "", npi: "" }) })}>
+        <Select disabled={saving} value={provider.id ?? ""} onChange={(choice) => setProvider({ ...(profile?.billingProviders.find((item) => item.id === choice) ?? { name: "", taxId: "", npi: "" }) })}>
           <option value="">Add a billing provider</option>
           {profile?.billingProviders.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
+        </Select>
       </label>
       <div className="mbob-grid">
         {field("Billing provider name", provider.name, (name) => setProvider((c) => ({ ...c, name })))}
@@ -281,10 +282,10 @@ export function OrganizationOnboarding({
 
   const renderingSection = <div>
     <label className="mbob-field">Saved rendering provider
-      <select disabled={saving} value={rendering.id ?? ""} onChange={(event) => setRendering({ ...(profile?.renderingProviders?.find((item) => item.id === event.target.value) ?? blankRendering()) })}>
+      <Select disabled={saving} value={rendering.id ?? ""} onChange={(choice) => setRendering({ ...(profile?.renderingProviders?.find((item) => item.id === choice) ?? blankRendering()) })}>
         <option value="">Add a rendering provider</option>
         {profile?.renderingProviders?.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active === false ? " (inactive)" : ""}</option>)}
-      </select>
+      </Select>
     </label>
     <div className="mbob-grid" style={{ marginTop: 16 }}>
       {field("Rendering provider name", rendering.name, (name) => setRendering((c) => ({ ...c, name })))}

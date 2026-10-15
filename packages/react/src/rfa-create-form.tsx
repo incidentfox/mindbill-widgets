@@ -2,10 +2,12 @@
 import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from "react";
 import type { RfaClient, RfaCreationContext } from "@mindbill/browser";
 import { RfaIdentitySelect } from "./rfa-identity-select";
+import { RfaPhysicianSelect } from "./rfa-physician-select";
 import { RfaClaimSetup } from "./rfa-claim-setup";
 import { RfaDraftForm, type RfaDraftInput, type RfaDraftFormProps } from "./rfa-draft-form";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 import { RfaPicker, useRfaFormDetails, type RfaFormDetails } from "./rfa-official-fields";
+import { Select } from "./form-controls";
 
 export type RfaClaimSelectorProps = {
   selectedClaimId: string;
@@ -146,10 +148,10 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
           onSearch={value => { setSearchInput(value); supportingDocuments.onChange([]); setSelectedClaim(""); setCreatedClaimId(undefined); }}
           onSelect={value => { setSelectedClaim(value); supportingDocuments.onChange([]); }} /> : <>
         {!claimId ? <label>Search patients or claim numbers<input type="search" maxLength={200} value={searchInput} onChange={event => { setSearchInput(event.target.value); supportingDocuments.onChange([]); setSelectedClaim(""); setCreatedClaimId(undefined); }} /></label> : null}
-        <label>Saved patient claim<select disabled={locked || !!error} value={claim?.claimId ?? ""} onChange={event => { setSelectedClaim(event.target.value); supportingDocuments.onChange([]); }}>
+        <label>Saved patient claim<Select disabled={locked || !!error} value={claim?.claimId ?? ""} onChange={(choice) => { setSelectedClaim(choice); supportingDocuments.onChange([]); }}>
           <option value="">Choose a patient claim</option>
           {context?.claims.map(value => <option key={value.claimId} value={value.claimId}>{value.employeeName} · {value.claimNumber || "Claim number not recorded"}{value.dateOfInjury ? ` · Injury ${value.dateOfInjury}` : ""}</option>)}
-        </select></label>
+        </Select></label>
         </>}
         {!loading && !error && context?.claims.length === 0 ? <p>{query.search ? "No claims match this search. Try another patient name or claim number." : "No saved claims are available. Add a patient claim to start an authorization request; no bill is required."}</p> : null}
         {!claimId && canCreateClaim && client.provisionClaim && client.searchClaimsAdministrators ? <button type="button" disabled={locked || addingClaim} onClick={() => setAddingClaim(true)}>New patient and injury</button> : null}
@@ -158,14 +160,10 @@ function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCr
   </>;
   const providerFields = <>
         {renderProviderSelector ? renderProviderSelector({ options: (context?.renderingProviders ?? []).map(value => ({ id: value.id, label: value.name, ...(value.npi ? { npi: value.npi } : {}) })), selectedProviderId: effectiveProviderId ?? "", search: providerSearchInput, onSearchProvider: value => { if (!disabled && !renderingProviderId) setProviderSearchInput(value); }, hasNext: !!context?.renderingProvidersNextCursor, hasPrevious: !!query.providerCursor, onNext: () => { if (!disabled && !renderingProviderId && context?.renderingProvidersNextCursor) setQuery(value => ({ ...value, providerCursor: context.renderingProvidersNextCursor! })); }, onFirst: () => { if (!disabled && !renderingProviderId) setQuery(value => ({ ...value, providerCursor: "" })); }, loading, error, disabled: disabled || !!renderingProviderId, onSelectProvider: selectHostProvider }) : <>
-        {searchableSelectors ? <RfaIdentitySelect label="Requesting physician" placeholder="Choose a rendering provider" searchPlaceholder="Search physicians by name or NPI" query={providerSearchInput} searchable={!renderingProviderId} disabled={disabled} loading={loading || query.providerSearch !== providerSearchInput.trim()} error={error} value={provider?.id ?? ""}
-          options={(context?.renderingProviders ?? []).map(value => ({ id: value.id, label: value.name, detail: value.npi ? `NPI ${value.npi}` : "" }))}
-          onSearch={value => { setProviderSearchInput(value); setSelectedProvider(""); }} onSelect={setSelectedProvider} /> : <>
+        {searchableSelectors ? <RfaPhysicianSelect aria-label="Requesting physician" label="Requesting physician" placeholder="Choose a rendering provider" searchable={!renderingProviderId} disabled={disabled} loading={loading || query.providerSearch !== providerSearchInput.trim()} error={error || undefined} value={provider?.id ?? ""}
+          providers={context?.renderingProviders ?? []} onSearch={value => { setProviderSearchInput(value); setSelectedProvider(""); }} onChange={setSelectedProvider} /> : <>
         {!renderingProviderId ? <label>Search physicians by name or NPI<input type="search" maxLength={200} value={providerSearchInput} onChange={event => { setProviderSearchInput(event.target.value); setSelectedProvider(""); }} /></label> : null}
-        <label>Saved rendering provider<select disabled={locked || !!error} value={provider?.id ?? ""} onChange={event => setSelectedProvider(event.target.value)}>
-          <option value="">Choose a rendering provider</option>
-          {context?.renderingProviders.map(value => <option key={value.id} value={value.id}>{value.name}{value.npi ? ` · NPI ${value.npi}` : ""}</option>)}
-        </select></label>
+        <label>Saved rendering provider<RfaPhysicianSelect label="Saved rendering provider" placeholder="Choose a rendering provider" disabled={locked || !!error} value={provider?.id ?? ""} providers={context?.renderingProviders ?? []} onChange={setSelectedProvider} /></label>
         </>}
         {!loading && !error && context?.renderingProviders.length === 0 ? <p>{query.providerSearch ? "No physicians match this search. Try another name or NPI." : "No saved rendering providers are available. Add a rendering provider in Settings, then reopen this form."}</p> : null}
         <div className="mbtd-actions">{query.providerCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: "" })); }}>First physicians page</button> : null}{context?.renderingProvidersNextCursor ? <button type="button" disabled={locked} onClick={() => { setSelectedProvider(""); setQuery(value => ({ ...value, providerCursor: context.renderingProvidersNextCursor! })); }}>Next physicians page</button> : null}</div>

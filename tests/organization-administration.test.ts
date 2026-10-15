@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BillingSettings } from "../packages/react/src/organization-onboarding";
 import { createOrganizationClient } from "../packages/browser/src/index";
 import { MindBillClient } from "../packages/node/src/index";
+import { choose, selects } from "./form-control-helpers";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const getSession = async () => ({ token: "synthetic" });
@@ -31,8 +32,7 @@ describe("organization administration", () => {
       expect(container.querySelector("details")?.textContent).toContain("Organization details");
       await click(container, "Claims administrators"); expect(container.textContent).toContain(admin.name);
       await click(container, "Team"); expect(container.textContent).toContain(member.email);
-      const select = container.querySelector("select")!;
-      await act(async () => { select.value = "biller"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+      await choose(selects(container)[0]!, "biller");
       expect(fetcher.mock.calls.at(-1)?.[1]?.body).toBe(JSON.stringify({ role: "biller" }));
       expect(container.textContent).toContain("Saved to MindBill.");
     });
@@ -41,7 +41,7 @@ describe("organization administration", () => {
     const fetcher = vi.fn<typeof fetch>(async input => String(input).endsWith("/team") ? Response.json({ detail: "Team access denied" }, { status: 403 }) : Response.json({ data: profile }));
     await mounted(createElement(BillingSettings, { getSession, fetch: fetcher }), async container => {
       await click(container, "Team"); expect(container.querySelector('[role="alert"]')?.textContent).toContain("Team access denied");
-      expect(container.querySelector("select")).toBeNull(); expect(container.textContent).not.toContain("Deactivate");
+      expect(selects(container)).toHaveLength(0); expect(container.textContent).not.toContain("Deactivate");
     });
   });
   it("requires confirmation before removing a custom administrator", async () => {

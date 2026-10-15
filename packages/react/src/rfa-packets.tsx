@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createRfaPacketsClient, type OrganizationClientOptions, type RfaForwardResult, type RfaPacketHistory, type RfaRecord } from "@mindbill/browser";
 import { RfaPdfReview } from "./rfa-delivery-panel";
+import { Select } from "./form-controls";
 
 export type RfaPacketsPanelProps = OrganizationClientOptions & {
   rfa: RfaRecord;
@@ -76,13 +77,13 @@ function PacketsContent({ rfa, options, permissions = [], environment = "sandbox
     {loading ? <p role="status">Loading saved packets…</p> : null}
     {!loading && !history ? <button type="button" onClick={() => setReload(value => value + 1)}>Retry loading packets</button> : null}
     {history?.packets.length === 0 ? <p>No saved packets yet.</p> : history ? <>
-      <label>Saved packet<select disabled={locked} value={selected} onChange={event => { setSelected(event.target.value); setPrepared(null); resetReview(); }}><option value="">Choose a saved packet</option>{history.packets.map(value => <option key={value.id} value={value.id}>{value.source === "submission" ? "Submission" : "Download"} · revision {value.contentRevision} · {value.createdAt}</option>)}</select></label>
+      <label>Saved packet<Select disabled={locked} value={selected} onChange={(choice) => { setSelected(choice); setPrepared(null); resetReview(); }}><option value="">Choose a saved packet</option>{history.packets.map(value => <option key={value.id} value={value.id}>{value.source === "submission" ? "Submission" : "Download"} · revision {value.contentRevision} · {value.createdAt}</option>)}</Select></label>
       <button type="button" disabled={locked || !packet} onClick={() => void view()}>View saved PDF</button>
       {blob ? <RfaPdfReview blob={blob} title="Saved RFA packet" /> : null}
       {!canForward ? <p>{environment !== "live" ? "Sandbox: saved PDFs are available for review. External forwarding is disabled." : "Forwarding requires permission from your organization."}</p> : selected && !eligible ? <p>This packet is not eligible for forwarding. Submission packets require a successful original dispatch.</p> : <fieldset disabled={locked}>
         <legend>Forward saved packet</legend>
         <p>The saved packet may contain the original recipient’s cover sheet. Review all pages before forwarding.</p>
-        <label>Forward by<select value={channel} onChange={event => { setChannel(event.target.value as "fax" | "email"); resetReview(); }}><option value="fax">Fax</option><option value="email">Email</option></select></label>
+        <label>Forward by<Select value={channel} onChange={(choice) => { setChannel(choice as "fax" | "email"); resetReview(); }}><option value="fax">Fax</option><option value="email">Email</option></Select></label>
         {channel === "email" ? <p>Email forwarding requires email delivery to be enabled for your organization. The server will reject requests when it is unavailable.</p> : null}
         <label>{channel === "fax" ? "Recipient fax (with country code)" : "Recipient email"}<input type={channel === "fax" ? "tel" : "email"} value={recipient} onChange={event => { setRecipient(event.target.value); resetReview(); }} /></label>
         <label className="mbrfa-check"><input type="checkbox" disabled={!blob || !eligible} checked={reviewed} onChange={event => { setReviewed(event.target.checked); setConfirmed(false); }} />I reviewed this saved packet and its attachments.</label>

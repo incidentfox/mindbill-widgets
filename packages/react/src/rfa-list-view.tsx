@@ -1,7 +1,7 @@
 "use client";
 import { type MouseEvent, type ReactElement } from "react";
 import { getRfaLifecycleStatus, type RfaListQuery, type RfaRecord } from "@mindbill/browser";
-import { RfaPill, rfaLifecycleTone, rfaOutcome, rfaPillCss, rfaStatusLabel } from "./rfa-detail-cards";
+import { RfaPill, rfaLifecycleTone, rfaPillCss, rfaStatusLabel, rfaTreatmentOutcome } from "./rfa-detail-cards";
 import { RfaLink, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
 type Sort = NonNullable<RfaListQuery["sortBy"]>;
 const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString() : "—";
@@ -66,7 +66,7 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
         </tr>)}
       </tbody></table>
       : <table className="mbrfa-table"><thead><tr>{heading("createdAt", "RFA ID")}{heading("employeeName", "Patient")}{heading("providerName", "Requesting physician")}<th scope="col">Service / good</th><th scope="col">CPT/HCPCS</th><th scope="col">Quantity / frequency / duration</th>{heading("submittedAt", "RFA sent")}<th scope="col">Decision due</th><th scope="col">Decision date</th><th scope="col">Decision</th><th scope="col">Auth #</th></tr></thead><tbody>
-        {rows.flatMap(rfa => rfa.items.map((item, index) => { const outcome = rfaOutcome(item); const unsent = ["draft", "ready", "canceled"].includes(rfa.status); return <tr key={`${rfa.id}:${item.id}`} {...rowProps(rfa.id, item.id)}>
+        {rows.flatMap(rfa => rfa.items.map((item, index) => { const outcome = rfaTreatmentOutcome(rfa, item); const unsent = ["draft", "ready", "canceled"].includes(rfa.status); return <tr key={`${rfa.id}:${item.id}`} {...rowProps(rfa.id, item.id)}>
           <td className="mbrfa-cell-ref"><RfaLink href={getRfaHref?.(rfa.id, { treatmentId: item.id })} onSelect={() => onSelect(rfa.id, item.id)}>{`${reference(rfa)}-${index + 1}`}</RfaLink></td>
           <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td>
           <td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>

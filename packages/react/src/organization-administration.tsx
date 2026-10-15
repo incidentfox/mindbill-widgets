@@ -10,6 +10,7 @@ import {
 } from "@mindbill/browser";
 import { mindBillAppearanceStyle } from "./appearance";
 import type { OrganizationOnboardingProps } from "./organization-onboarding";
+import { Select } from "./form-controls";
 
 const blank = (): OrganizationClaimsAdministratorInput => ({ name: "", fax: "", email: "", mailingAddress: "", notes: "" });
 const css = `
@@ -85,10 +86,10 @@ export function OrganizationAdministration({ section, sessionEndpoint, getSessio
       {team?.members.length === 0 ? <p>No MindBill accounts are assigned to this organization.</p> : null}
       {team?.members.map(member => <div className="mbad-member" key={member.id}>
         <div><strong>{member.name || member.email}</strong><small>{member.email}</small><small>{member.active ? "Active" : "Inactive"}{!member.canManage ? " · Protected account" : ""}</small></div>
-        <label>Role for {member.name || member.email}<select aria-label={`Role for ${member.name || member.email}`} value={member.role} disabled={busy || !team.capabilities.canManage || !member.canManage} onChange={event => { const role = event.target.value as OrganizationTeamRole; void mutate(async () => { const saved = await client.updateTeamMember(member.id, { role }); if (current.current === connection) setTeam(value => value ? { ...value, members: value.members.map(row => row.id === saved.id ? saved : row) } : value); }); }}>
+        <label>Role for {member.name || member.email}<Select aria-label={`Role for ${member.name || member.email}`} value={member.role} disabled={busy || !team.capabilities.canManage || !member.canManage} onChange={(choice) => { const role = choice as OrganizationTeamRole; void mutate(async () => { const saved = await client.updateTeamMember(member.id, { role }); if (current.current === connection) setTeam(value => value ? { ...value, members: value.members.map(row => row.id === saved.id ? saved : row) } : value); }); }}>
           {!team.roles.some(role => role.id === member.role) ? <option value={member.role}>{member.role}</option> : null}
           {team.roles.map(role => <option key={role.id} value={role.id}>{role.label}</option>)}
-        </select></label>
+        </Select></label>
         <button type="button" disabled={busy || !team.capabilities.canManage || !member.canManage} onClick={() => void mutate(async () => { const saved = await client.updateTeamMember(member.id, { active: !member.active }); if (current.current === connection) setTeam(value => value ? { ...value, members: value.members.map(row => row.id === saved.id ? saved : row) } : value); })}>{member.active ? "Deactivate" : "Reactivate"}</button>
       </div>)}
     </> : <div className="mbad-grid">

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BillingDashboard, type BillingDashboardBill } from "../packages/react/src/billing-dashboard";
 import { ConnectedBillSearch } from "../packages/react/src/connected-billing-workspace";
 import { billDateInRange, billSearchDateText, matchesBillSearch } from "../packages/react/src/bill-search";
+import { control, controlValue, setControl } from "./form-control-helpers";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const bills: BillingDashboardBill[] = [
@@ -17,16 +18,7 @@ async function mounted(element: ReactElement, run: (container: HTMLDivElement) =
   try { await act(async () => root.render(element)); await run(container); }
   finally { await act(async () => root.unmount()); container.remove(); }
 }
-function control(container: HTMLElement, label: string) {
-  return [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input,select")].find((item) => item.getAttribute("aria-label") === label || item.closest("label")?.textContent?.startsWith(label))!;
-}
-async function change(element: HTMLInputElement | HTMLSelectElement, value: string) {
-  await act(async () => {
-    const prototype = element.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value);
-    element.dispatchEvent(new Event(element.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
-  });
-}
+const change = setControl;
 function button(container: HTMLElement, name: string) { return [...container.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent === name)!; }
 
 describe("bill search", () => {
@@ -60,7 +52,7 @@ describe("bill search", () => {
       expect(container.textContent).toContain("No bills match these filters.");
       await act(async () => button(container, "Clear filters").click());
       expect(container.querySelector("tbody")?.textContent).toContain("Jordan Sample");
-      expect(control(container, "From date").value).toBe("");
+      expect(controlValue(control(container, "From date"))).toBe("");
     });
   });
   it("submits connected text and inclusive dates, resets pagination, and clears previous filters", async () => {
@@ -84,7 +76,7 @@ describe("bill search", () => {
       expect(queries).toHaveLength(2);
       await act(async () => button(container, "Clear filters").click());
       expect(queries.at(-1)).toEqual({ status: "all", age: "all", page: "1", pageSize: "25", sort: "submitted", dir: "desc" });
-      expect(control(container, "Search bills").value).toBe("");
+      expect(controlValue(control(container, "Search bills"))).toBe("");
     });
   });
   it("does not request bills for an inverted initial range", async () => {

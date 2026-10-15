@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRfaPacketsClient, type RfaRecord, type RfaPacketHistory } from "@mindbill/browser";
 import { RfaPacketsPanel, type RfaPacketsPanelProps } from "../packages/react/src/rfa-packets";
+import { choose, selects } from "./form-control-helpers";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const record: RfaRecord = { id: "rfa_synthetic", contentRevision: 1, claimId: "claim_synthetic", patientId: "patient_synthetic", renderingProviderId: "provider_synthetic", claimsAdminId: null, employeeName: "Synthetic patient", providerName: "Synthetic physician", claimNumber: "SYNTHETIC-001", status: "sent", reviewType: "prospective", expedited: false, signedAt: null, submittedAt: null, receivedAt: null, createdAt: null, updatedAt: null, decisionDueAt: null, decisionDeadlineBasis: null, incompleteReason: null, deferredReason: null, closedReason: null, readiness: { ready: false, missing: [] }, items: [], documents: [], transmissions: [], informationRequests: [], events: [] };
 
@@ -22,7 +23,7 @@ async function mount(props: Partial<RfaPacketsPanelProps> = {}) {
   const render = async (extra: Partial<RfaPacketsPanelProps> = {}) => act(async () => root.render(createElement(RfaPacketsPanel, { rfa:record,getSession,permissions:["act"],environment:"live",...props,...extra })));
   const button = (text: string) => [...container.querySelectorAll("button")].find(item => item.textContent === text);
   const click = async (text: string) => act(async () => { const target = button(text); expect(target).toBeDefined(); target!.click(); });
-  const select = async (index:number,value:string) => act(async () => { const target=container.querySelectorAll("select")[index]!;target.value=value;target.dispatchEvent(new Event("change",{bubbles:true})); });
+  const select = async (index:number,value:string) => choose(selects(container)[index]!,value);
   const recipient = async (value:string) => act(async () => { const target=container.querySelector('input[type="tel"],input[type="email"]') as HTMLInputElement; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(target,value);target.dispatchEvent(new Event("input",{bubbles:true})); });
   const confirm = async () => act(async () => { for (const target of container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) target.click(); });
   cleanups.push(async () => { await act(async () => root.unmount());container.remove(); });
@@ -81,5 +82,5 @@ it("does not repeat a forward already recorded or pending",async()=>{
   const data={...history,transmissions:[...history.transmissions,{...history.transmissions[0]!,id:"forward_synthetic",purpose:"forward" as const,status:"queued",destination:"+15555550123"}]};const fetcher=fetcherFor(data);const ui=await mount({fetch:fetcher});await ui.select(0,"packet_synthetic");await ui.click("View saved PDF");await ui.recipient("+15555550123");await ui.confirm();expect(ui.button("Forward packet by fax")?.disabled).toBe(true);expect(fetcher.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(0);
 });
 it("lets a failed packet list load retry without exposing forwarding",async()=>{
-  const fetcher=fetcherFor();fetcher.mockRejectedValueOnce(new Error("Connection interrupted"));const ui=await mount({fetch:fetcher});expect(ui.button("Forward packet by fax")).toBeUndefined();expect(ui.container.textContent).toContain("Connection interrupted");await ui.click("Retry loading packets");expect(ui.container.querySelector("select")).not.toBeNull();
+  const fetcher=fetcherFor();fetcher.mockRejectedValueOnce(new Error("Connection interrupted"));const ui=await mount({fetch:fetcher});expect(ui.button("Forward packet by fax")).toBeUndefined();expect(ui.container.textContent).toContain("Connection interrupted");await ui.click("Retry loading packets");expect(selects(ui.container)).not.toHaveLength(0);
 });

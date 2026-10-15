@@ -5,6 +5,8 @@ import { expect, it, vi } from "vitest";
 import { RfaDashboard, rfaCanResend } from "../packages/react/src/rfa-dashboard";
 import { rfaDuplicatePacket, rfaForwardContactOptions } from "../packages/react/src/rfa-duplicate-dialog";
 import { rfaDecisionSummary, rfaFailureReason } from "../packages/react/src/rfa-detail-cards";
+import { canEditRfaDraft } from "../packages/react/src/rfa-draft-edit";
+import { RfaSendDialog } from "../packages/react/src/rfa-send-dialog";
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
 function taskResponse(input: RequestInfo | URL): Response | undefined {
  const url = String(input);
@@ -412,4 +414,41 @@ it("renders a request the host loaded with the page at once, then refreshes it q
   await act(async()=>release(Response.json({data:{...record,employeeName:"Refreshed Patient"}})));
   expect(container.textContent).toContain("Refreshed Patient");
  }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("filters a long chip list as you type",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const providers=Array.from({length:30},(_,index)=>({id:`provider_${index}`,name:`Synthetic Physician ${String(index).padStart(2,"0")}`}));
+ const fetcher=vi.fn<typeof fetch>(async(input)=>{const url=String(input);if(url.includes("creation-context"))return Response.json({data:{claims:[],renderingProviders:providers,nextCursor:null,renderingProvidersNextCursor:null}});return taskResponse(input) ?? Response.json({data:[record],summary:{total:1,byStatus:{},byLifecycleStatus:{}},nextCursor:null});});
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,initialOverviewView:"list"})));
+  await act(async()=>container.querySelector<HTMLButtonElement>('[aria-label="Filter by physician"]')!.click());
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,20));});
+  const search=container.querySelector<HTMLInputElement>('input[aria-label="Search physician"]')!;
+  await act(async()=>{const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!;setter.call(search,"07");search.dispatchEvent(new Event("input",{bubbles:true}));});
+  expect([...container.querySelectorAll('[role="option"]')].map(node=>node.textContent)).toEqual(["Synthetic Physician 07"]);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
+
+it("lets a request whose every send failed be corrected: Edit request, and the resend dialog's link and pencil",async()=>{
+ const failed={...record,status:"submitted",submittedAt:"2026-09-02T00:00:00Z",signedAt:"2026-09-01T00:00:00Z",receivedAt:null,lifecycleStatus:"failed",transmissions:[{id:"t_failed",purpose:"submission",direction:"outbound",channel:"fax",status:"failed",destination:"+18005550100",occurredAt:"2026-09-02T00:00:00Z",receivedAt:null,proofDocumentId:null,providerMessageId:null}]};
+ expect(canEditRfaDraft(failed as never)).toBe(true);
+ expect(canEditRfaDraft({...failed,transmissions:[{...failed.transmissions[0]!,status:"delivered"}]} as never)).toBe(false);
+ const onFix=vi.fn();
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ try{
+  await act(async()=>root.render(createElement(RfaSendDialog,{rfa:failed as never,client:{} as never,documentIds:[],diagnosisDescriptions:{},directory:null,directoryLoading:false,directoryError:null,environment:"live",canSend:true,canSign:true,resend:true,onFix,onUpdated:vi.fn(),onSent:vi.fn(),onClose:vi.fn()})));
+  expect(container.textContent).toContain("The last attempt did not go through");
+  expect(container.textContent).toContain("earlier attempts stay in History");
+  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Edit claims administrator or request")!.click());
+  await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Edit claims administrator details"]')!.click());
+  expect(onFix).toHaveBeenCalledTimes(2);
+ }finally{await act(async()=>root.unmount());container.remove();}
+ const dashboard=document.createElement("div");document.body.append(dashboard);const view=createRoot(dashboard);
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:failed}));
+ try{
+  await act(async()=>view.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:failed.id,permissions:["send","act","edit"]})));
+  const labels=[...dashboard.querySelectorAll("button")].map(x=>x.textContent);
+  expect(labels).toContain("Edit request");expect(labels).toContain("Send again");
+  expect(dashboard.textContent).toContain("Failed");
+ }finally{await act(async()=>view.unmount());dashboard.remove();}
 });

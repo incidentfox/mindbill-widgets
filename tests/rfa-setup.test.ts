@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import type { RfaClient } from "../packages/browser/src/index";
 import { RfaClaimSetup } from "../packages/react/src/rfa-claim-setup";
 import { RfaProviderSignatureSetup } from "../packages/react/src/rfa-provider-signature-setup";
+import { choose, selectByLabel } from "./form-control-helpers";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 function harness() {
  const container=document.createElement("div"); document.body.append(container); const root=createRoot(container);
@@ -15,8 +16,7 @@ async function type(container:HTMLElement,label:string,value:string) {
  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new Event("input",{bubbles:true}));});
 }
 async function select(container:HTMLElement,label:string,value:string) {
- const input=[...container.querySelectorAll("select")].find(input=>input.parentElement?.textContent?.startsWith(label))!;
- await act(async()=>{input.value=value;input.dispatchEvent(new Event("change",{bubbles:true}));});
+ await choose(selectByLabel(container,label),value);
 }
 it("requires a selected administrator and active payer, then retries with stable patient/claim identities and idempotency",async()=>{
  const h=harness();const onCreated=vi.fn();const provisionClaim=vi.fn().mockRejectedValueOnce(new Error("connection lost")).mockResolvedValue({patientId:"patient_synthetic",claimId:"claim_synthetic"});

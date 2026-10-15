@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { BillingDashboard, type BillingDashboardBill } from "../packages/react/src/billing-dashboard";
 import { ConnectedBillSearch } from "../packages/react/src/connected-billing-workspace";
+import { control, optionValues, selectValue, setControl } from "./form-control-helpers";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const bills: BillingDashboardBill[] = [
@@ -16,13 +17,8 @@ async function mounted(element: ReactElement, run: (container: HTMLDivElement) =
   try { await act(async () => root.render(element)); await run(container); }
   finally { await act(async () => root.unmount()); container.remove(); }
 }
-function select(container: HTMLElement, label: string) { return container.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!; }
-async function change(element: HTMLSelectElement, value: string) {
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(element, value);
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-}
+function select(container: HTMLElement, label: string) { return control(container, label); }
+const change = setControl;
 async function clear(container: HTMLElement) {
   const button = [...container.querySelectorAll("button")].find((item) => item.textContent === "Clear filters")!;
   await act(async () => button.click());
@@ -32,11 +28,11 @@ describe("bill entity filters", () => {
   it("distinguishes same-named patients by stable IDs and combines entity and status filters", async () => {
     await mounted(createElement(BillingDashboard, { bills }), async (container) => {
       const patient = select(container, "Patient filter");
-      expect([...patient.options].map((item) => item.value)).toEqual(["", "id:patient-one", "id:patient-two"]);
+      expect(await optionValues(patient)).toEqual(["", "id:patient-one", "id:patient-two"]);
       await change(patient, "id:patient-one");
       expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
       expect(container.querySelector("tbody")?.textContent).toContain("Northstar Claims");
-      expect(select(container, "Claims administrator filter").options).toHaveLength(3);
+      expect(await optionValues(select(container, "Claims administrator filter"))).toHaveLength(3);
       await change(select(container, "Rendering provider filter"), "id:doctor-two");
       expect(container.textContent).toContain("No bills match these filters.");
       await change(select(container, "Rendering provider filter"), "id:doctor-one");
@@ -45,7 +41,7 @@ describe("bill entity filters", () => {
       expect(container.textContent).toContain("No bills match these filters.");
       await clear(container);
       expect(container.querySelectorAll("tbody tr")).toHaveLength(2);
-      expect(patient.value).toBe("");
+      expect(selectValue(patient)).toBe("");
     });
   });
   it("supports host-supplied names when optional entity IDs are unavailable", async () => {
@@ -58,7 +54,7 @@ describe("bill entity filters", () => {
       await change(select(container, "Rendering provider filter"), "name:Dr. Sample");
       expect(container.querySelector("tbody")?.textContent).toContain("Harbor Claims");
       expect(container.querySelector("tbody")?.textContent).not.toContain("Northstar Claims");
-      expect(select(container, "Patient filter").options).toHaveLength(2);
+      expect(await optionValues(select(container, "Patient filter"))).toHaveLength(2);
     });
   });
   it("uses full server inventories, serializes stable entity IDs, resets pagination, and clears all filters", async () => {
@@ -72,12 +68,12 @@ describe("bill entity filters", () => {
       } } });
     });
     await mounted(createElement(ConnectedBillSearch, { fetch: fetcher, getSession: async () => ({ token: "synthetic" }), initialQuery: { page: 4 } }), async (container) => {
-      expect(select(container, "Patient filter").options).toHaveLength(3);
+      expect(await optionValues(select(container, "Patient filter"))).toHaveLength(3);
       await change(select(container, "Patient filter"), "patient-two");
       await change(select(container, "Claims administrator filter"), "admin-one");
       await change(select(container, "Rendering provider filter"), "doctor-one");
       expect(queries.at(-1)).toMatchObject({ patientId: "patient-two", claimsAdminId: "admin-one", renderingProviderId: "doctor-one", page: "1" });
-      expect(select(container, "Patient filter").options).toHaveLength(3);
+      expect(await optionValues(select(container, "Patient filter"))).toHaveLength(3);
       await clear(container);
       expect(queries.at(-1)).not.toHaveProperty("patientId");
       expect(queries.at(-1)).not.toHaveProperty("claimsAdminId");
@@ -87,9 +83,9 @@ describe("bill entity filters", () => {
   it("keeps initial selected identities visible when absent from returned inventories", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => Response.json({ data: { items: [], total: 0, balanceTotal: 0, page: 1, pageSize: 25, filters: { patients: [], claimsAdministrators: [], renderingProviders: [] } } }));
     await mounted(createElement(ConnectedBillSearch, { fetch: fetcher, getSession: async () => ({ token: "synthetic" }), initialQuery: { patientId: "patient-archived", claimsAdministrator: "admin-archived" } }), async (container) => {
-      expect(select(container, "Patient filter").value).toBe("patient-archived");
-      expect(select(container, "Patient filter").selectedOptions[0]?.textContent).toBe("Selected patient");
-      expect(select(container, "Claims administrator filter").value).toBe("admin-archived");
+      expect(selectValue(select(container, "Patient filter"))).toBe("patient-archived");
+      expect(select(container, "Patient filter").querySelector(".mbctl-value")?.textContent).toBe("Selected patient");
+      expect(selectValue(select(container, "Claims administrator filter"))).toBe("admin-archived");
     });
   });
 });

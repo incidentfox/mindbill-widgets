@@ -97,7 +97,7 @@ export function RfaHistoryEntry({ event, rfa, disabled, onDownload, timeline = f
   const action = string(payload.action) ?? event.eventType.replace(/^rfa\./, "");
   if (timeline) {
     const kind = /submitted|transmission|forward/.test(action) ? "sent" : /decision|decided|approved|denied|modified/.test(action) || decisionSections.length ? "decision" : /note/.test(action) ? "note" : "event";
-    const short: Record<string, string> = { "Download retained submission PDF": "View sent packet (PDF)", "Download transmission receipt": "Fax receipt", "Download decision evidence": "View decision", "Download document": "View document" };
+    const short: Record<string, string> = { "Download retained submission PDF": "View sent packet (PDF)", "Download transmission receipt": "Fax receipt", "Download decision evidence": "View UR decision letter", "Download document": "View document" };
     const details = entries.length || appointment.length || changed.length || decisionSections.some(group => group.value !== payload || group.decisions.some(value => rows(value).length));
     return <li data-kind={kind}>
       <div className="mbrfa-tl-head"><strong>{actions[action] ?? words(action).replace(/^./, letter => letter.toUpperCase())}</strong><span><time dateTime={event.occurredAt ?? undefined}>{date(event.occurredAt)}</time> · {actor}</span></div>

@@ -12,6 +12,7 @@ import { acceptedNoResponseLabel } from "./bill-status-label";
 import { medicalLegalModifierApplies } from "./billing-catalog";
 import type { CSSProperties, FormEvent, KeyboardEvent, ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { DateField, Select } from "./form-controls";
 
 export type BillReviewDocumentType =
   | "final_report"
@@ -489,14 +490,14 @@ function Field({
       <span>
         {label}{required ? <span className="mb-native-required" aria-hidden="true"> *</span> : null}{optional ? <> <small>Optional</small></> : null}
       </span>
-      <input
+      {type === "date" ? <DateField value={value} required={required} disabled={disabled} onChange={onChange} /> : <input
         type={type}
         value={value}
         required={required}
         disabled={disabled}
         autoComplete="off"
         onChange={(event) => onChange(event.target.value)}
-      />
+      />}
       {hint ? <small className="mb-native-hint">{hint}</small> : null}
     </label>
   );
@@ -984,7 +985,7 @@ export function BillReviewForm({
         <div className="mb-native-section-head"><div><h3>Billing practice</h3><p>Payee identity and billing address for this claim.</p></div></div>
         <div className="mb-native-grid three">
           <Field label="Practice name" required disabled={!editable} value={draft.billingProvider.name} onChange={(value) => updateBillingProvider("name", value)} />
-          <label className="mb-native-field"><span>Tax ID type</span><select disabled={!editable} value={draft.billingProvider.taxIdType ?? "EIN"} onChange={(event) => setDraft((current) => ({ ...current, billingProvider: { ...current.billingProvider, taxIdType: event.target.value as "EIN" | "SSN", taxId: "", taxIdConfigured: false, taxIdLast4: "" } }))}><option value="EIN">EIN (business)</option><option value="SSN">SSN (individual)</option></select></label>
+          <label className="mb-native-field"><span>Tax ID type</span><Select disabled={!editable} value={draft.billingProvider.taxIdType ?? "EIN"} onChange={(choice) => setDraft((current) => ({ ...current, billingProvider: { ...current.billingProvider, taxIdType: choice as "EIN" | "SSN", taxId: "", taxIdConfigured: false, taxIdLast4: "" } }))}><option value="EIN">EIN (business)</option><option value="SSN">SSN (individual)</option></Select></label>
           <Field label="Tax ID" type={draft.billingProvider.taxIdType === "SSN" ? "password" : "text"} required={!(draft.billingProvider.taxIdType === "SSN" && draft.billingProvider.taxIdConfigured)} disabled={!editable} value={draft.billingProvider.taxId} {...(draft.billingProvider.taxIdType === "SSN" && draft.billingProvider.taxIdConfigured ? { hint: `Saved SSN ending in ${draft.billingProvider.taxIdLast4 ?? "••••"}. Leave blank to keep this bill's saved number.` } : {})} onChange={(value) => updateBillingProvider("taxId", value)} />
           <Field label="Billing NPI" required disabled={!editable} value={draft.billingProvider.npi} onChange={(value) => updateBillingProvider("npi", value)} />
           <Field label="Phone" optional disabled={!editable} value={draft.billingProvider.phone || ""} onChange={(value) => updateBillingProvider("phone", value)} />
@@ -1031,8 +1032,8 @@ export function BillReviewForm({
               <label className="mb-native-field"><span>Procedure{draft.claimForm !== "ub04" && draft.claimForm !== "ncpdp" ? <span className="mb-native-required" aria-hidden="true"> *</span> : null}</span>{data.bill.billingMode === "professional" ? <input disabled={!editable} placeholder={draft.claimForm === "ada" ? "CDT code" : "CPT / HCPCS code"} value={line.code} onChange={(event) => {
                 const code = event.target.value.toUpperCase();
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, code } : item)) }));
-              }} /> : <select disabled={!editable} value={line.code} onChange={(event) => {
-                const code = event.target.value;
+              }} /> : <Select disabled={!editable} value={line.code} onChange={(choice) => {
+                const code = choice;
                 setDraft((current) => {
                   const lineItems = current.lineItems.map((item, itemIndex) => {
                     if (itemIndex !== index) return item;
@@ -1041,19 +1042,19 @@ export function BillReviewForm({
                   });
                   return { ...current, lineItems: ensureTrailingProcedureLine(lineItems) };
                 });
-              }}><option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</select>}{data.bill.billingMode === "med_legal" && line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}<ClaimLineSummary line={line} /></label>
+              }}><option value="">Select code…</option>{PROCEDURES.map(([code,label]) => <option value={code} key={code}>{code} — {label}</option>)}</Select>}{data.bill.billingMode === "med_legal" && line.code ? <small>{PROCEDURES.find(([code]) => code === line.code)?.[1]}</small> : null}<ClaimLineSummary line={line} /></label>
               <div className="mb-native-modifiers">{data.bill.billingMode === "professional" ? <label className="mb-native-field"><span>Modifiers</span><input disabled={!editable} placeholder="e.g. 25, 59" value={line.modifiers.join(", ")} onChange={(event) => {
                 const modifiers = event.target.value.toUpperCase().split(/[ ,]+/).map((value) => value.replace(/^-/, "")).filter(Boolean);
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers } : item)) }));
-              }} /></label> : <label className="mb-native-field"><span>Modifiers</span><select disabled={!editable} value="" onChange={(event) => {
-                const modifier = event.target.value;
+              }} /></label> : <label className="mb-native-field"><span>Modifiers</span><Select disabled={!editable} value="" onChange={(choice) => {
+                const modifier = choice;
                 if (!modifier) return;
                 setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: [...new Set([...item.modifiers, modifier])] } : item)) }));
-              }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</select></label>}<div className="mb-native-chips">{data.bill.billingMode === "med_legal" ? line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item)) }))}>-{modifier} ×</button>) : null}</div></div>
+              }}><option value="">Add modifier…</option>{MODIFIERS.filter(([value]) => !line.modifiers.includes(value) && modifierAppliesToCode(value, line.code)).map(([value,label]) => <option value={value} key={value}>-{value} — {label}</option>)}</Select></label>}<div className="mb-native-chips">{data.bill.billingMode === "med_legal" ? line.modifiers.map((modifier) => <button type="button" disabled={!editable} key={modifier} onClick={() => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, modifiers: item.modifiers.filter((value) => value !== modifier) } : item)) }))}>-{modifier} ×</button>) : null}</div></div>
               <label className="mb-native-field"><span>Units<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min={line.drug || draft.claimForm === "ncpdp" ? "0.001" : "1"} step={line.drug || draft.claimForm === "ncpdp" ? "any" : "1"} required disabled={!editable} value={line.units} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, units: Number(event.target.value) } : item)) }))} /></label>
               {data.bill.billingMode === "professional" ? <>
-                <label className="mb-native-field"><span>Service date<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="date" required={hasBillReviewService(line)} disabled={!editable} value={line.serviceDate || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDate: event.target.value } : item)) }))} /></label>
-                <label className="mb-native-field"><span>End date <small>Optional</small></span><input type="date" disabled={!editable} value={line.serviceDateEnd || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDateEnd: event.target.value } : item)) }))} /></label>
+                <label className="mb-native-field"><span>Service date<span className="mb-native-required" aria-hidden="true"> *</span></span><DateField required={hasBillReviewService(line)} disabled={!editable} value={line.serviceDate || ""} onChange={(choice) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDate: choice } : item)) }))} /></label>
+                <label className="mb-native-field"><span>End date <small>Optional</small></span><DateField disabled={!editable} value={line.serviceDateEnd || ""} onChange={(choice) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, serviceDateEnd: choice } : item)) }))} /></label>
                 <label className="mb-native-field"><span>Charge<span className="mb-native-required" aria-hidden="true"> *</span></span><input type="number" min="0.01" step="0.01" required={hasBillReviewService(line)} disabled={!editable} value={line.charge || ""} onChange={(event) => setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, charge: Number(event.target.value) } : item)) }))} /></label>
                 <label className="mb-native-field"><span>Diagnosis pointers <small>1–12</small></span><input inputMode="numeric" disabled={!editable} value={(line.diagnosisPointers || []).join(", ")} onChange={(event) => { const diagnosisPointers = event.target.value.split(/[ ,]+/).map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 12); setDraft((current) => ({ ...current, lineItems: ensureTrailingProcedureLine(current.lineItems.map((item, itemIndex) => itemIndex === index ? { ...item, diagnosisPointers } : item)) })); }} /></label>
               </> : null}
@@ -1079,7 +1080,7 @@ export function BillReviewForm({
         </ul>
         <div className="mb-native-attach">
           <div><strong>Add supporting PDF</strong><span>Choose any additional document intentionally. Up to 25 MB.</span></div>
-          <select aria-label="Document type" value={documentType} disabled={!editable} onChange={(event) => setDocumentType(event.target.value as BillReviewDocumentType)}>{Object.entries(DOCUMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <Select aria-label="Document type" value={documentType} disabled={!editable} onChange={(choice) => setDocumentType(choice as BillReviewDocumentType)}>{Object.entries(DOCUMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>
           <input aria-label="Choose supporting PDF" type="file" accept="application/pdf,.pdf" disabled={!editable} onChange={(event) => setFile(event.target.files?.[0] || null)} />
           <button className="mb-native-button secondary" type="button" disabled={!editable || !file || busy === "attachment"} onClick={() => void attach()}>{busy === "attachment" ? "Attaching…" : "Attach document"}</button>
         </div>

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import { RfaIdentitySelect } from "./rfa-identity-select";
 import { formatRfaPhone } from "./rfa-official-fields";
 import { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance, type BillClaimsAdministratorDirectory, type RfaAuthorizationDestinationOption } from "@mindbill/browser";
+import { Select } from "./form-controls";
 
 export type RfaAuthorizationDestinationProps = {
   /** Change this when switching the RFA, claims administrator, or injury state. */
@@ -88,11 +89,11 @@ export function RfaAuthorizationDestination({ contextKey, directory, savedContac
       options={[...options.map((option, index) => ({ id: String(index), ...(/[a-z]/i.test(option.label) ? { label: option.label, detail: option.method === "fax" ? `Fax ${formatRfaPhone(option.destination)}` : option.destination } : { label: option.method === "fax" ? "Authorization fax" : "Authorization e-mail", detail: option.method === "fax" ? formatRfaPhone(option.destination) : option.destination }) })), ...(onManualEntry ? [{ id: "manual-entry", action: true, label: needsAdjuster ? "Enter the handling adjuster’s contact manually" : "Enter a different contact manually" }] : [...(method === "email" ? [] : [{ id: "manual", action: true, label: needsAdjuster ? "Enter the handling adjuster’s fax" : options.length ? "Enter a different fax number" : "Enter a fax number" }]), ...(method === "fax" ? [] : [{ id: "manual-email", action: true, label: options.length ? "Enter a different e-mail address" : "Enter an e-mail address" }])])].filter(option => option.id === selection || `${option.label} ${"detail" in option ? option.detail : ""}`.toLowerCase().includes(query.trim().toLowerCase()))}
       onSelect={value => { setQuery(""); if (value === "manual-entry") { onManualEntry?.(); return; } pick(value); }} /> :
     <label style={{ display: "grid", gap: 6, minWidth: 0 }}>{directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}
-      <select value={selection} onChange={(event) => pick(event.target.value)} style={{ padding: 10, width: "100%", minWidth: 0, maxWidth: "100%", font: "inherit" }}>
+      <Select value={selection} onChange={(choice) => pick(choice)}>
         <option value="">Choose a destination…</option>
         {options.map((option, index) => <option key={`${option.method}:${option.destination}:${index}`} value={String(index)}>{option.label} · {option.method === "fax" ? "Fax" : "Email"}: {option.destination}</option>)}
         <option value="manual">{needsAdjuster ? "Enter the handling adjuster’s fax" : "Enter another confirmed authorization fax"}</option><option value="manual-email">Enter a confirmed authorization email</option>
-      </select>
+      </Select>
     </label>}
     {selection !== "" && (needsAdjuster || selection === "manual" || selection === "manual-email") ? <label style={{ display: "grid", gap: 6 }}>{needsAdjuster ? "Handling adjuster name (required)" : "Recipient / attention (optional)"}<input value={contactName} maxLength={200} required={needsAdjuster} onChange={event => { setContactName(event.target.value); emit(selection, manual, event.target.value); }} /></label> : null}
     {selection === "manual-email" ? <label style={{ display: "grid", gap: 6, minWidth: 0 }}>Authorization e-mail address<input type="email" placeholder="name@example.com" value={manual} onChange={event => { const value = event.target.value; setManual(value); emit(selection, value, contactName); }} /></label> : selection === "manual" ? <label style={{ display: "grid", gap: 6, minWidth: 0 }}>Authorization fax number<input type="tel" placeholder="(555) 555-0100" value={manual} onChange={(event) => { const digits = event.target.value.replace(/\D/g, "").replace(/^1(?=\d{10})/, "").slice(0, 10); const value = digits.length > 6 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : digits.length > 3 ? `(${digits.slice(0, 3)}) ${digits.slice(3)}` : digits; setManual(value); emit(selection, value, contactName); }} style={{ padding: 10, width: "100%", minWidth: 0, boxSizing: "border-box", font: "inherit" }} /></label> : selection !== "" && chosen ? <>

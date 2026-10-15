@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { BillReviewPayer, RfaClient, RfaProvisionClaimInput, RfaProvisionClaimResult } from "@mindbill/browser";
+import { Select } from "./form-controls";
 
 export type RfaClaimSetupProps = {
   client: RfaClient;
@@ -69,9 +70,9 @@ export function RfaClaimSetup({ client, disabled, onCreated, onCancel }: RfaClai
       </div>
       <label>Search claims administrators<input type="search" maxLength={200} value={search} onChange={event => { setSearch(event.target.value); setAdministratorId(""); setPayerId(""); setError(""); }} /></label>
       {searching ? <p role="status">Searching claims administrators…</p> : null}
-      <label>Claims administrator<select required disabled={searching} value={administratorId} onChange={event => { setAdministratorId(event.target.value); setPayerId(""); }}><option value="">Choose a claims administrator</option>{administrators.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>
+      <label>Claims administrator<Select required disabled={searching} value={administratorId} onChange={(choice) => { setAdministratorId(choice); setPayerId(""); }}><option value="">Choose a claims administrator</option>{administrators.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</Select></label>
       {searched && !administrators.length ? <p>No administrators match this search. Try another name, or add a custom claims administrator in Settings.</p> : null}
-      {availablePayers.length ? <label>Payer{administrator?.payerSelectionRequired ? "" : " (optional)"}<select required={administrator?.payerSelectionRequired} value={payerId} onChange={event => setPayerId(event.target.value)}><option value="">Choose a payer</option>{availablePayers.map(value => <option key={value.id} value={value.id}>{value.label}</option>)}</select></label> : null}
+      {availablePayers.length ? <label>Payer{administrator?.payerSelectionRequired ? "" : " (optional)"}<Select required={administrator?.payerSelectionRequired} value={payerId} onChange={(choice) => setPayerId(choice)}><option value="">Choose a payer</option>{availablePayers.map(value => <option key={value.id} value={value.id}>{value.label}</option>)}</Select></label> : null}
       {administrator?.payerSelectionRequired && !availablePayers.length ? <p role="alert">This administrator needs a payer selection, but no active payers are available. Choose another administrator or contact your administrator.</p> : null}
       {error ? <p role="alert">{error}</p> : null}
       <div className="mbtd-actions"><button type="button" onClick={onCancel}>Cancel new patient</button><button className="mbtd-primary" type="submit" disabled={!administrator || !client.provisionClaim || !!(administrator.payerSelectionRequired && !payerId)}>{busy ? "Saving patient and injury…" : "Save patient and injury"}</button></div>

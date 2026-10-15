@@ -30,7 +30,7 @@ it("practice selection prefers its unique location and excludes another practice
  try{
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,organizationProfile:profile})));
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Saved practice"]')!.click());
-  await act(async()=>[...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')].find(el=>el.textContent==="Synthetic Practice A")!.click());
+  await act(async()=>[...container.querySelectorAll<HTMLElement>('[role="option"]')].find(el=>el.textContent!.startsWith("Synthetic Practice A"))!.click());
   const physician=[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent==="Requesting Physician Information")!;
   const shown=(label:string)=>[...physician.querySelectorAll(".mbrfa-saved")].find(el=>el.firstChild!.textContent===label)!.querySelector("strong")!.textContent;
   // A chosen saved practice shows as information, not as boxes to type into.
@@ -49,7 +49,7 @@ it("fills the contact saved on the practice, and a location's own contact replac
   await act(async()=>root.render(createElement(RfaDraftForm,{initialDraft,officialForm:true,onSave,organizationProfile:profile})));
   const physician=[...container.querySelectorAll("form > fieldset")].find(el=>el.querySelector("legend")!.textContent==="Requesting Physician Information")!;
   const shown=(label:string)=>[...physician.querySelectorAll(".mbrfa-saved")].find(el=>el.firstChild!.textContent===label)!.querySelector("strong")!.textContent;
-  const choose=async(text:string)=>{await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());await act(async()=>[...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')].find(el=>el.textContent!.includes(text))!.click());};
+  const choose=async(text:string)=>{await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.click());await act(async()=>[...container.querySelectorAll<HTMLElement>('[role="option"]')].find(el=>el.textContent!.includes(text))!.click());};
   // The only practice is chosen automatically. With two locations (one of them primary) none is chosen for the user.
   expect(container.querySelector<HTMLButtonElement>('button[aria-label="Practice location"]')!.textContent).toContain("Choose a location");
   // The practice's contact shows before any location is picked.
@@ -124,7 +124,7 @@ it("fills requested treatments from a template and saves the current ones withou
   await click("Save template");
   expect(onSaveTreatmentTemplate).toHaveBeenCalledWith({name:"Synthetic therapy plan",items:[{diagnosisCode:"",serviceDescription:"Synthetic therapy",quantity:6,frequency:"Twice weekly"}]});
   await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="RFA template"]')!.click());
-  const options=[...container.querySelectorAll<HTMLButtonElement>('button[role="option"]')];
+  const options=[...container.querySelectorAll<HTMLElement>('[role="option"]')];
   expect(options.map(el=>el.textContent).join(" ")).not.toContain("Other physician only");
   await act(async()=>options.find(el=>el.textContent!.startsWith("Synthetic MRI"))!.click());
   expect(container.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Synthetic MRI of the shoulder");

@@ -1,6 +1,7 @@
 "use client";
 import { useState, type ReactElement } from "react";
 import { isDraftDate, TreatmentDraftShell, useDraftSave, type TreatmentDraftAppearance } from "./treatment-draft-shared";
+import { DateField } from "./form-controls";
 
 /** Existing source records supplied by the host; saving does not sign or verify them. */
 export type DentalAttestationsInput = {
@@ -115,7 +116,7 @@ export function DentalDraftEditor({ initialContent, onSave, disabled = false, ..
       {content.lines.map((line, index) => <fieldset key={index} disabled={locked}><legend>Service {index + 1}</legend><div className="mbtd-grid">
         <label>Dental code<input placeholder="D0120" maxLength={5} value={line.code ?? ""} onChange={(event) => updateLine(index, { code: nullable(event.target.value.toUpperCase()) })} /></label>
         <label>Code edition year<input type="number" min={1900} max={2200} value={line.editionYear ?? ""} onChange={(event) => updateLine(index, { editionYear: event.target.value === "" ? null : Number(event.target.value) })} /></label>
-        <label>Date of service<input type="date" value={line.serviceDate ?? ""} onChange={(event) => updateLine(index, { serviceDate: nullable(event.target.value) })} /></label>
+        <label>Date of service<DateField value={line.serviceDate ?? ""} onChange={(choice) => updateLine(index, { serviceDate: nullable(choice) })} /></label>
         <label>Quantity<input type="number" min={1} max={100000} step={1} value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} /></label>
         <label>Extended line charge ($)<input inputMode="decimal" placeholder="Unknown" value={charges[index] ?? ""} onChange={(event) => { action.clear(); setCharges(charges.map((value, position) => position === index ? event.target.value : value)); }} /><small>Includes all units. This is the practice charge, not a fee allowance.</small></label>
         <label>Charge source / reference<input maxLength={1000} value={line.chargeReference ?? ""} onChange={(event) => updateLine(index, { chargeReference: nullable(event.target.value) })} /></label>

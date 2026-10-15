@@ -6,6 +6,7 @@ import { createBillReferenceClient, type CaClaimFeeQuoteInput, type CaClaimFeeQu
 import { parseCaClaimFeeQuote } from "../packages/browser/src/claim-fees";
 import { billSubmissionQuoteContext } from "../packages/react/src/bill-submission-form";
 import { FeeScheduleCalculator } from "../packages/react/src/fee-schedule-calculator";
+import { controlValue, setControl } from "./form-control-helpers";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const input: CaClaimFeeQuoteInput = { completeDateOfServiceContext: true, lines: [{ id: "synthetic-line-1", code: "99214", dateOfService: "2024-02-15", units: 1, modifiers: ["95"], serviceZip: "90012" }] };
 function result(request = input): CaClaimFeeQuoteResult { return { status: "requires_review", lines: request.lines.map((line) => ({ id: line.id, input: line, assessment: "requires_review", findings: [{ code: "synthetic_missing_source", lineIds: [line.id], message: "Synthetic edit source requires review.", citationUrl: "https://www.dir.ca.gov/dwc/omfs.htm" }], quote: { status: "priced", amountCents: 20207, scheduleMaximumCents: 20207, basis: "ca_physician_rbrvs", notes: [], provenance: [{ id: "Synthetic regulation", url: "https://www.dir.ca.gov/dwc/omfs.htm", effectiveFrom: "2024-02-15" }] } })), totals: { submittedChargeCents: null, pricedSubtotalCents: 20207 * request.lines.length, scheduleMaximumCents: null, estimatedPayableCents: null, reviewLineCount: request.lines.length }, claimEdits: [{ dateOfService: "2024-02-15", lineIds: request.lines.map((l) => l.id), status: "source_unavailable", reason: "Synthetic missing edit file", findings: [] }], limitations: ["Synthetic test: no real fee determination."] }; }
@@ -59,15 +60,10 @@ const imagingLines: CaClaimFeeQuoteInput["lines"] = ["72148", "72141"].map((code
   id: `imaging-${index + 1}`, code, dateOfService: "2026-09-17", units: 1, modifiers: ["26"], serviceZip: "90012",
   professionalComponentContext: { interpretationLocation: "same_as_patient_service", supervisionLevel: "general", imagingSessionReference: "session-1", completeSameDayImagingServices: true },
 }));
-function field(container: HTMLElement, name: string, index = 0): HTMLInputElement | HTMLSelectElement {
-  return [...container.querySelectorAll("label")].filter(label => label.firstChild?.textContent === name)[index]!.querySelector("input,select")!;
+function field(container: HTMLElement, name: string, index = 0): HTMLElement {
+  return [...container.querySelectorAll("label")].filter(label => label.firstChild?.textContent === name)[index]!.querySelector<HTMLElement>(".mbctl-select, input:not(.mbctl-proxy)")!;
 }
-async function edit(element: HTMLInputElement | HTMLSelectElement, value: string) {
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value")!.set!.call(element, value);
-    element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
-  });
-}
+const edit = setControl;
 it.each([true, false, undefined])("uses the full encounter while preserving explicit host incompleteness %s and actual sessions", async (complete) => {
   const lines = imagingLines.map(line => { const context = { ...line.professionalComponentContext! }; delete context.completeSameDayImagingServices; return { ...line, professionalComponentContext: { ...context, ...(complete === undefined ? {} : { completeSameDayImagingServices: complete }) } }; });
   const fetcher = vi.fn<typeof fetch>(async (_url, init) => Response.json({ data: result(JSON.parse(init!.body as string)) }));
@@ -179,7 +175,7 @@ it("collects a manual three-service technical encounter without inventing clinic
       await edit(field(ui.container, "Date of service", index), "2026-07-15");
       await edit(field(ui.container, "Service ZIP", index), "90001");
       await edit(field(ui.container, "Modifiers", index), "tc");
-      for (const name of technicalFields) expect(field(ui.container, name, index).value).toBe("");
+      for (const name of technicalFields) expect(controlValue(field(ui.container, name, index))).toBe("");
       for (let fact = 0; fact < technicalFields.length; fact++) await edit(field(ui.container, technicalFields[fact]!, index), technicalValues[fact]!);
     }
     await ui.submit();
@@ -261,7 +257,7 @@ it("collects initial PT history without timing requirements and clears stale fac
   const ui = await mount(client, [{ id: "evaluation", code: "97161", dateOfService: "2026-09-17", units: 1, therapyContext: { priorInitialEvaluationInEpisode: false, directOneOnOneMinutes: 60, totalVisitMinutes: 60, completeSameDayServices: false, otherSameDayServices: true }, hasFeeAgreement: false }]);
   try {
     expect(ui.container.textContent).not.toContain("Direct one-on-one minutes");
-    expect(field(ui.container, "Prior initial evaluation in this care episode").value).toBe("false");
+    expect(controlValue(field(ui.container, "Prior initial evaluation in this care episode"))).toBe("false");
     await ui.submit();
     const sent = client.quoteClaimFees.mock.calls[0]![0].lines[0]!;
     expect(sent.therapyContext).toMatchObject({ priorInitialEvaluationInEpisode: false, completeSameDayServices: false, otherSameDayServices: true });
@@ -279,7 +275,7 @@ it("does not invent therapy facts when changing service type", async () => {
   try {
     await edit(field(ui.container, "Service type"), "therapy"); await ui.submit();
     expect(client.quoteClaimFees.mock.calls[0]![0].lines[0]!.therapyContext).toEqual({ placeOfService: "11", completeSameDayServices: true, otherSameDayServices: false });
-    expect(field(ui.container, "Therapy pricing basis").value).toBe("");
+    expect(controlValue(field(ui.container, "Therapy pricing basis"))).toBe("");
   } finally { await ui.cleanup(); }
 });
 it("ignores a pending evaluation quote when episode history changes", async () => {
