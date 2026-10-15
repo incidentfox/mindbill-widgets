@@ -388,6 +388,10 @@ remain scoped to the authorized organization and environment.
 
 The detail view lists retained packet PDFs and their transmission history. Opening a packet loads the immutable PDF that was prepared for that submission; it does not regenerate a new document from current data.
 
+**Forward** (simple layout) sends a sent request, including one sent outside MindBill or with no saved packet, to the claims administrator, an adjuster or anyone else by fax or e-mail. Choose the documents to include (the signed DWC Form RFA is chosen by default; clinical reports, supporting records, UR responses and other documents are listed, plus **Packet as sent** when a sent packet was saved), drop in or choose PDF attachments (saved to the request as *Other document* or *Supporting record*; needs the `edit` permission), pick the destination and an optional cover sheet message. MindBill composes a forwarded copy with its own cover sheet that keeps the original sent and received dates and the decision due date, and retains it as a packet with `source: "forward"`. Incomplete requests cannot be forwarded.
+
+With the browser client, `createRfaPacketsClient().forward(id, { documentIds, packetId?, channel, to, message?, recipientName? }, idempotencyKey)` composes that copy; `{ packetId, channel, to }` alone still re-sends the saved packet's exact bytes.
+
 `RfaPacketsPanel` is also exported for standalone use. Forwarding requires `environment="live"`, the `act` permission, an eligible retained packet, review of its exact PDF, and explicit confirmation of the recipient. A forward creates a separate transmission and does not replace the original submission or reset the review timeline. Sandbox forwarding is disabled. Available delivery channels are enforced by the backend; an unavailable email channel returns an error rather than claiming delivery succeeded.
 
 ## Response tasks and supporting documents

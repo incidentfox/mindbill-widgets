@@ -425,7 +425,7 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
     });
   };
   // Forward re-sends the packet that went out; it needs a sent, non-canceled request.
-  const canForward = !!rfa && !unsent && !resendable && !!rfa.submittedAt && rfa.status !== "canceled" && permissions.includes("act");
+  const canForward = !!rfa && !unsent && !resendable && !!rfa.submittedAt && !["canceled", "incomplete"].includes(rfa.status) && permissions.includes("act");
   // The request shows one of a few statuses; what was decided is shown on each treatment.
   const statusPill = rfa ? <RfaPill tone={rfaLifecycleTone(rfa)}>{rfaStatusLabel(getRfaLifecycleStatus(rfa))}</RfaPill> : null;
   const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
@@ -568,7 +568,7 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
       </div></div> : null}
       {openedDocument && simple ? <RfaDocumentViewer documents={listedDocuments.map(document => ({ id: document.id, filename: document.filename, type: documentTypeLabel(document.documentType) }))} current={openedDocument} loading={!openedDocument.blob} onSelect={documentId => { const document = listedDocuments.find(item => item.id === documentId); if (document) openDocument(document.id, document.filename); }} onClose={() => setOpenedDocument(null)} /> : null}
       {simple && markingSent && (unsent || resendable) ? <RfaMarkSentDialog rfa={rfa} options={options} records={client} allowProof={!!unsent} onSaved={value => { adopt(value); setMarkingSent(false); }} onClose={() => setMarkingSent(false)} /> : null}
-      {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} {...(forwardContacts ? { forwardContacts } : {})} options={options} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
+      {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} {...(forwardContacts ? { forwardContacts } : {})} options={options} records={client} canUpload={permissions.includes("edit")} onUpdated={adopt} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
         onSent={() => { void run(async () => adopt(await client.get(id))); }} onClose={() => setDuplicating(false)} /> : null}
       {simple && sending && (unsent || resendable) ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog {...(permissions.includes("edit") && canEditRfaDraft(rfa) ? { onFix: resendable ? editClaimsAdministrator : editRequest } : {})} resend={resendable} rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
         signatureMissing={hostSignature?.missing}
