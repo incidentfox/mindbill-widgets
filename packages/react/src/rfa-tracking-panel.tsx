@@ -7,7 +7,7 @@ import { RfaHistoryEntry } from "./rfa-history-entry";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 import { rfaDecisionPrerequisite, rfaSentOutside, rfaSentOutsideUndoable } from "./rfa-sent-outside";
 import { RfaModal } from "./rfa-modal";
-import { RfaCard, RfaPill, rfaCalendarDate, rfaFailureReason, rfaOutcome, rfaShortDate } from "./rfa-detail-cards";
+import { RfaCard, RfaPill, rfaCalendarDate, rfaFailureReason, rfaShortDate, rfaTreatmentOutcome } from "./rfa-detail-cards";
 
 export type RfaTrackingPanelProps = TreatmentDraftAppearance & {
   rfa: RfaRecord;
@@ -146,7 +146,8 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
         const appointment = scheduling.find(value => value.itemId === item.id);
         // A treatment the response did not decide is still being waited on: mark it so it is not overlooked.
         const awaiting = item.outcome === "pending" && !item.decisionClosure?.closed && rfa.items.some(other => other.outcome !== "pending");
-        const outcome = awaiting ? { label: "No response", tone: "warn" as const } : rfaOutcome(item);
+        const recorded = rfaTreatmentOutcome(rfa, item);
+        const outcome = awaiting && recorded.label === "No response" ? { label: "No response", tone: "warn" as const } : recorded;
         const showAppointment = !!appointment && (appointment.eligible || appointment.version > 0);
         const closable = canClose && item.outcome === "pending" && !item.decidedAt;
         const correctable = canCorrect && !!item.currentDecisionEventId && item.outcome !== "pending";

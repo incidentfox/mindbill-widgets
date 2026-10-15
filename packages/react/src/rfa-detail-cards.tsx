@@ -12,6 +12,12 @@ const sentence = (value: string) => { const text = value.replaceAll("_", " "); r
 /** The few request statuses people see, as daisyBill names them: Incomplete (not yet sent), Sent, Failed, Received,
  * Closed (or Canceled). Decisions belong to each treatment, not to the request. */
 export const rfaStatusLabel = (status: RfaLifecycleStatus): string => RFA_LIFECYCLE_LABELS[status];
+/** A treatment's decision as the request shows it: a UR letter already attached but not yet recorded reads as
+ * such, rather than "No response", so the next step (record it) is clear. */
+export function rfaTreatmentOutcome(rfa: Pick<RfaRecord, "documents">, item: RfaRecord["items"][number]): { label: string; tone: "ok" | "warn" | "bad" | "muted" } {
+  if (item.outcome === "pending" && !item.decisionClosure?.closed && rfa.documents.some(document => document.documentType === "ur_response")) return { label: "Response received · not recorded", tone: "warn" };
+  return rfaOutcome(item);
+}
 export function rfaOutcome(item: RfaRecord["items"][number]): { label: string; tone: "ok" | "warn" | "bad" | "muted" } {
   if (item.decisionClosure?.closed) return { label: "Not required", tone: "muted" };
   if (item.outcome === "approved") return { label: "Approved", tone: "ok" };

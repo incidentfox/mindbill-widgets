@@ -6,6 +6,7 @@ import { RfaPdfReview } from "./rfa-delivery-panel";
 import { isStaffRfaTask, rfaTaskLabel, rfaTaskState } from "./rfa-task-board";
 import { RfaModal } from "./rfa-modal";
 import { rfaDecisionPrerequisite, rfaLocalDateTime, RfaSentOutsideFields, rfaSentOutsideInput } from "./rfa-sent-outside";
+import { RfaDateField, RfaSelect } from "./rfa-form-controls";
 import { rfaShortDate } from "./rfa-detail-cards";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
@@ -65,13 +66,16 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
   // Decisions read from the chosen response. They prefill the form; a person still checks and saves them.
   const [reading, setReading] = useState<{ documentId: string; value: RfaResponseReading } | null>(null);
   const [readingBusy, setReadingBusy] = useState(false); const [readingChecked, setReadingChecked] = useState(false);
+  // Load the letter once per chosen document. Refreshing the request returns a new documents list; that must
+  // not reload the viewer, which made the letter flash while someone was reading it.
+  const responseAvailable = Boolean(responseDocument) && rfa.documents.some(document => document.id === responseDocument && document.documentType === "ur_response");
   useEffect(() => {
     let active = true; setResponsePdf(null); setPreviewError("");
-    if (responseDocument && rfa.documents.some(document => document.id === responseDocument && document.documentType === "ur_response")) {
+    if (responseAvailable) {
       records.getDocument(rfa.id, responseDocument).then(blob => { if (active) setResponsePdf(blob); }).catch(() => { if (active) setPreviewError("The response preview could not be loaded. Retry to review the document."); });
     }
     return () => { active = false; };
-  }, [records, rfa.id, responseDocument, rfa.documents, previewReload]);
+  }, [records, rfa.id, responseDocument, responseAvailable, previewReload]);
   const [outcomes, setOutcomes] = useState<Record<string, string>>({});
   useEffect(() => {
     let active = true; setReading(null); setReadingChecked(false);
@@ -129,6 +133,8 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
     try { const value = input(new FormData(event.currentTarget)); void run(operation, value, key => action(value, key)); }
     catch (reason) { setMessage(""); setError(reason instanceof Error ? reason.message : "Review the form values."); }
   };
+  const requiredMark = <span className="mbrfa-required" aria-hidden="true"> *</span>;
+  const optionalMark = <span className="mbrfa-optional"> (optional)</span>;
   const docs = (types?: string[]) => rfa.documents.filter(document => !types || types.includes(document.documentType));
   const documentSelect = (name: string, title: string, types?: string[], required = true) => <label>{title}<select name={name} required={required} defaultValue=""><option value="">Choose a document</option>{docs(types).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select></label>;
   const pendingItems = rfa.items.filter(item => item.outcome === "pending" && !item.decisionClosure?.closed);
@@ -213,6 +219,8 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
           for (const field of ["authorizedQuantity", "authorizedUnits"] as const) if (text(data, prefix + field)) decision[field] = Number(text(data, prefix + field));
           return decision;
         });
+        if (!text(data, "responseDocumentId")) throw new Error("Choose the utilization review response.");
+        if (!text(data, "decidedAt")) throw new Error("Enter the decision date.");
         if (!decisions.length) throw new Error("Choose at least one treatment decision. Other treatments remain pending.");
         if (read && !readingChecked) throw new Error("Confirm that you checked these decisions against the response.");
         if (decisions.some(item => item.outcome !== "approved") && !text(data, "imrDocumentId")) throw new Error("An independent medical review form is required for modified or denied treatment.");
@@ -230,18 +238,36 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
           await client.recordReceipt(rfa.id, { channel: channel as RfaReceiptInput["channel"], receivedAt, proofDocumentId: decisions.responseDocumentId }, `${key}:receipt`);
         }
         return client.recordDecisions(rfa.id, decisions, key);
-      })}><fieldset className="mbrfa-review-scroll" disabled={disabled}><legend className="mbrfa-sr-only">Treatment decisions</legend>
+      })}><div className="mbrfa-review-scroll"><fieldset className="mbrfa-review-fields" disabled={disabled}><legend className="mbrfa-sr-only">Treatment decisions</legend>
             {error ? <p role="alert">{error}</p> : null}
-            
-        {prerequisite === "sent" ? <div className="mbrfa-decision-prereq"><p><strong>This RFA is not marked as sent.</strong> A decision means it was sent and received, so enter those dates too.</p><RfaSentOutsideFields receivedRequired receivedLabel="Received by the claims administrator on" /></div>
-          : prerequisite === "receipt" ? <div className="mbrfa-decision-prereq"><p><strong>Receipt is not recorded yet.</strong> A decision means the claims administrator received the RFA, so enter when.</p><label>Received by the claims administrator on<input type="datetime-local" name="receivedAt" required max={rfaLocalDateTime()} defaultValue={rfaLocalDateTime(rfa.submittedAt ? new Date(rfa.submittedAt) : undefined)} /></label></div> : null}
-        <p>Record only treatments addressed by this response. Unselected treatments remain pending.</p>
-        {readingBusy ? <p role="status">Reading the response…</p> : read ? <p className="mbrfa-reading" role="status">These decisions were read from the response. Check each one against the document before saving{read.items.some(item => !item.confident || item.outcome === "not_addressed") ? "; the ones marked in orange need a closer look" : ""}.</p>
-          : reading?.documentId === responseDocument ? <p className="mbrfa-reading" data-flag="true" role="status">This response could not be read automatically. Enter the decisions from the document.</p> : null}
-        <div className="mbtd-grid"><label>Decision time<input key={`decidedAt:${read ? reading!.documentId : ""}`} type="datetime-local" name="decidedAt" required defaultValue={localDateTime(read?.decidedAt)} /></label><label className="mbrfa-review-response">Utilization review response<select name="responseDocumentId" required value={responseDocument} onChange={event => setResponseDocument(event.target.value)}><option value="">Choose a document</option>{docs(["ur_response"]).map(document => <option key={document.id} value={document.id}>{document.filename}</option>)}</select>{edit && responses.length ? <span className="mbrfa-review-attach">Wrong letter? <span className="mbrfa-review-attach-link">Attach a different PDF<input type="file" accept="application/pdf,.pdf" disabled={Boolean(disabled)} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void uploadResponse(file); }} /></span></span> : null}</label>{documentSelect("imrDocumentId", "Independent medical review form", ["imr_form"], false)}</div>
-        {orderedPending.map(item => { const found = readItem(item.id); const flag = read ? !found || found.outcome === "not_addressed" ? "No decision for this treatment was found in the response. It stays pending unless you choose one." : !found.confident ? "This one was hard to read. Check it carefully." : "" : ""; const k = `${item.id}:${read ? reading!.documentId : ""}`; return <fieldset key={k} {...(flag ? { "data-flag": "true" } : {})}><legend>{item.procedureCode || "Treatment"}: {item.serviceDescription}</legend>{flag ? <p className="mbrfa-reading" data-flag="true">{flag}</p> : null}<div className="mbrfa-outcome" role="radiogroup" aria-label={`Decision for ${item.procedureCode || item.serviceDescription}`}>{([["approved", "Approved"], ["modified", "Modified"], ["denied", "Denied"], ["", "Pending"]] as const).map(([value, text]) => <button key={value || "pending"} type="button" role="radio" aria-checked={(outcomes[item.id] ?? "") === value} data-outcome={value || "pending"} onClick={() => setOutcomes(current => ({ ...current, [item.id]: value }))}>{text}</button>)}</div>{outcomes[item.id] ? <div className="mbtd-grid">{outcomes[item.id] !== "denied" ? <><label>Authorization number<input name={`${item.id}:authorizationNumber`} defaultValue={found?.authorizationNumber ?? ""} required /></label><label>Authorized procedure code<input name={`${item.id}:authorizedProcedureCode`} defaultValue={found?.authorizedProcedureCode ?? ""} /></label><label>Authorized quantity<input name={`${item.id}:authorizedQuantity`} defaultValue={found?.authorizedQuantity ?? ""} type="number" min="0.001" max="100000" step="any" /></label><label>Authorized units<input name={`${item.id}:authorizedUnits`} defaultValue={found?.authorizedUnits ?? ""} type="number" min="1" max="100000" /></label><label>Effective from<input name={`${item.id}:effectiveFrom`} defaultValue={found?.effectiveFrom ?? ""} type="date" /></label><label>Effective through<input name={`${item.id}:effectiveTo`} defaultValue={found?.effectiveTo ?? ""} type="date" /></label></> : null}{outcomes[item.id] !== "approved" ? <><label>Decision reason<textarea name={`${item.id}:decisionReason`} required defaultValue={found?.decisionReason ?? ""} /></label><label>Reviewer name<input name={`${item.id}:reviewerName`} defaultValue={found?.reviewerName ?? ""} required /></label><label>Reviewer phone<input name={`${item.id}:reviewerPhone`} defaultValue={found?.reviewerPhone ?? ""} required /></label></> : null}</div> : null}</fieldset>; })}
-          </fieldset>
-          <div className="mbrfa-review-foot">{read ? <label className="mbrfa-check"><input type="checkbox" checked={readingChecked} onChange={event => setReadingChecked(event.target.checked)} /><span>I checked each decision against the response document.</span></label> : null}<button type="submit" className="mbtd-primary" disabled={Boolean(disabled)}>{busy ? "Saving…" : "Save decisions"}</button></div></form>
+            {prerequisite === "sent" ? <div className="mbrfa-decision-prereq"><p><strong>This RFA is not marked as sent.</strong> A decision means it was sent and received, so enter those dates too.</p><RfaSentOutsideFields receivedRequired receivedLabel="Received by the claims administrator on" /></div>
+              : prerequisite === "receipt" ? <div className="mbrfa-decision-prereq"><p><strong>Receipt is not recorded yet.</strong> A decision means the claims administrator received the RFA, so enter when.</p><div className="mbrfa-field"><span className="mbrfa-field-label">Received by the claims administrator on{requiredMark}</span><RfaDateField withTime required name="receivedAt" label="Received on" max={rfaLocalDateTime()} defaultValue={rfaLocalDateTime(rfa.submittedAt ? new Date(rfa.submittedAt) : undefined)} /></div></div> : null}
+            {readingBusy ? <p role="status" className="mbrfa-reading">Reading the response…</p> : read ? <p className="mbrfa-reading" role="status">These decisions were read from the response. Check each one against the letter before saving{read.items.some(item => !item.confident || item.outcome === "not_addressed") ? "; the ones marked in orange need a closer look" : ""}.</p>
+              : reading?.documentId === responseDocument ? <p className="mbrfa-reading" data-flag="true" role="status">This response could not be read automatically. Enter the decisions from the letter.</p> : null}
+            <div className="mbtd-grid">
+              <div className="mbrfa-field mbrfa-review-response"><span className="mbrfa-field-label">Utilization review response{requiredMark}</span><RfaSelect name="responseDocumentId" label="Utilization review response" required value={responseDocument} onChange={setResponseDocument} placeholder="Choose the letter" options={docs(["ur_response"]).map(document => ({ value: document.id, label: document.filename }))} />{edit && responses.length ? <span className="mbrfa-review-attach">Wrong letter? <span className="mbrfa-review-attach-link">Attach a different PDF<input type="file" accept="application/pdf,.pdf" disabled={Boolean(disabled)} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void uploadResponse(file); }} /></span></span> : null}</div>
+              <div className="mbrfa-field"><span className="mbrfa-field-label">Decision date{requiredMark}</span><RfaDateField key={`decidedAt:${read ? reading!.documentId : ""}`} withTime required name="decidedAt" label="Decision date" defaultValue={localDateTime(read?.decidedAt)} /></div>
+              <div className="mbrfa-field"><span className="mbrfa-field-label">Independent medical review form{Object.values(outcomes).some(value => value === "modified" || value === "denied") ? requiredMark : optionalMark}</span><RfaSelect name="imrDocumentId" label="Independent medical review form" placeholder="Choose a document" options={[{ value: "", label: "None" }, ...docs(["imr_form"]).map(document => ({ value: document.id, label: document.filename }))]} /></div>
+            </div>
+            <p className="mbrfa-review-hint">Record only the treatments this letter decides. The rest stay pending.</p>
+            {orderedPending.map(item => { const found = readItem(item.id); const flag = read ? !found || found.outcome === "not_addressed" ? "No decision for this treatment was found in the letter. It stays pending unless you choose one." : !found.confident ? "This one was hard to read. Check it carefully." : "" : ""; const k = `${item.id}:${read ? reading!.documentId : ""}`; const outcome = outcomes[item.id] ?? "";
+              // What was authorized usually matches what was requested, so those fields start from the request.
+              return <fieldset key={k} {...(flag ? { "data-flag": "true" } : {})}><legend>{item.procedureCode || "Treatment"}: {item.serviceDescription}</legend>{flag ? <p className="mbrfa-reading" data-flag="true">{flag}</p> : null}
+                <div className="mbrfa-outcome" role="radiogroup" aria-label={`Decision for ${item.procedureCode || item.serviceDescription}`}>{([["approved", "Approved"], ["modified", "Modified"], ["denied", "Denied"], ["", "Pending"]] as const).map(([value, text]) => <button key={value || "pending"} type="button" role="radio" aria-checked={outcome === value} data-outcome={value || "pending"} onClick={() => setOutcomes(current => ({ ...current, [item.id]: value }))}>{text}</button>)}</div>
+                {outcome ? <div className="mbtd-grid">{outcome !== "denied" ? <>
+                  <label className="mbrfa-wide">Authorization number{requiredMark}<input name={`${item.id}:authorizationNumber`} defaultValue={found?.authorizationNumber ?? ""} required /></label>
+                  <label>Authorized procedure code{optionalMark}<input name={`${item.id}:authorizedProcedureCode`} defaultValue={found?.authorizedProcedureCode ?? item.procedureCode ?? ""} /></label>
+                  <label>Authorized quantity{optionalMark}<input name={`${item.id}:authorizedQuantity`} defaultValue={found?.authorizedQuantity ?? (outcome === "approved" ? item.quantity ?? "" : "")} inputMode="decimal" /></label>
+                  <label>Authorized units{optionalMark}<input name={`${item.id}:authorizedUnits`} defaultValue={found?.authorizedUnits ?? (outcome === "approved" ? item.units ?? "" : "")} inputMode="numeric" /></label>
+                  <div className="mbrfa-field"><span className="mbrfa-field-label">Effective from{optionalMark}</span><RfaDateField name={`${item.id}:effectiveFrom`} label="Effective from" defaultValue={found?.effectiveFrom ?? item.requestedFrom ?? ""} /></div>
+                  <div className="mbrfa-field"><span className="mbrfa-field-label">Effective through{optionalMark}</span><RfaDateField name={`${item.id}:effectiveTo`} label="Effective through" defaultValue={found?.effectiveTo ?? item.requestedTo ?? ""} /></div>
+                </> : null}{outcome !== "approved" ? <>
+                  <label className="mbrfa-wide">Decision reason{requiredMark}<textarea rows={6} name={`${item.id}:decisionReason`} required defaultValue={found?.decisionReason ?? ""} /></label>
+                  <label>Reviewer name{requiredMark}<input name={`${item.id}:reviewerName`} defaultValue={found?.reviewerName ?? ""} required /></label>
+                  <label>Reviewer phone{requiredMark}<input name={`${item.id}:reviewerPhone`} defaultValue={found?.reviewerPhone ?? ""} required /></label>
+                </> : null}</div> : null}</fieldset>; })}
+          </fieldset></div>
+          <div className="mbrfa-review-foot">{read ? <label className="mbrfa-check"><input type="checkbox" checked={readingChecked} onChange={event => setReadingChecked(event.target.checked)} /><span>I checked each decision against the letter.</span></label> : null}<button type="submit" className="mbtd-primary" disabled={Boolean(disabled)}>{busy ? "Saving…" : "Save decisions"}</button></div></form>
         </div>
       </RfaModal> : null : canDecide ? block("decisions", `Record treatment decisions (${pendingItems.length} pending)`, <><form onSubmit={event => submit(event, "decisions", data => {
         const decisions: RfaTreatmentDecisionInput[] = pendingItems.filter(item => outcomes[item.id]).map(item => {

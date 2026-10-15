@@ -196,15 +196,17 @@ it("records a decision on an RFA never marked sent by asking when it was sent an
     expect(view.container.textContent).toContain("This RFA is not marked as sent");
     const outcome = [...view.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Decision for 97110"))!;
     await act(async () => { outcome.value = "approved"; outcome.dispatchEvent(new Event("change", { bubbles: true })); });
+    // Sent and received default to now; the channel is chosen in the styled dropdown.
+    await act(async () => view.container.querySelector<HTMLButtonElement>('[aria-label^="How it was sent"]')!.click());
+    await act(async () => [...view.container.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent?.startsWith("Mail"))!.click());
     await act(async () => {
-      set(view.container, "sentAt", "2026-09-10T09:00"); set(view.container, "channel", "mail"); set(view.container, "receivedAt", "2026-09-12T09:00");
       set(view.container, "decidedAt", "2026-09-16T10:00"); set(view.container, "responseDocumentId", "ur_one"); set(view.container, "item_one:authorizationNumber", "SYNTHETIC-AUTH");
       outcome.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     const posts = view.fetcher.mock.calls.filter(call => call[1]?.method === "POST").map(call => String(call[0]));
     expect(posts.map(url => url.split("/").pop())).toEqual(["sent-outside", "decisions"]);
     const sent = JSON.parse(String(view.fetcher.mock.calls.find(call => String(call[0]).endsWith("/sent-outside"))![1]!.body));
-    expect(sent).toMatchObject({ channel: "mail", sentAt: new Date("2026-09-10T09:00").toISOString(), receivedAt: new Date("2026-09-12T09:00").toISOString() });
+    expect(sent.channel).toBe("mail"); expect(Date.parse(sent.sentAt)).not.toBeNaN(); expect(sent.receivedAt).toBe(sent.sentAt);
   } finally { await view.close(); }
 });
 it("records receipt from the decision letter when a sent RFA has no receipt yet", async () => {
