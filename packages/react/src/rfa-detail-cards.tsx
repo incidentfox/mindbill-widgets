@@ -81,7 +81,14 @@ export function RfaFacts({ entries, showEmpty = false }: { entries: ReadonlyArra
 export const rfaAddress = (contact: { address?: string; city?: string; state?: string; zip?: string } | null | undefined): string => [contact?.address, [contact?.city, [contact?.state, contact?.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ");
 export const rfaRequestTypeLabel = (rfa: RfaRecord): string => rfa.requestType === "resubmission_material_change" ? "Resubmission – Change in Material Facts" : "New Request";
 
-export const rfaCardsCss = `
+/** Status and decision badges, shared by every RFA surface. */
+export const rfaPillCss = `.mbrfa-pill{display:inline-flex;align-items:center;font-size:12px;font-weight:500;line-height:18px;padding:1px 9px;border-radius:999px;border:1px solid var(--mb-border);background:var(--mb-soft);color:var(--mb-text);white-space:nowrap}
+.mbrfa-pill[data-tone=ok]{background:color-mix(in srgb,#16a34a 12%,var(--mb-surface));border-color:color-mix(in srgb,#16a34a 35%,var(--mb-surface));color:#166534}
+.mbrfa-pill[data-tone=warn]{background:color-mix(in srgb,#d97706 14%,var(--mb-surface));border-color:color-mix(in srgb,#d97706 35%,var(--mb-surface));color:#92400e}
+.mbrfa-pill[data-tone=bad]{background:color-mix(in srgb,var(--mb-danger) 10%,var(--mb-surface));border-color:color-mix(in srgb,var(--mb-danger) 35%,var(--mb-surface));color:var(--mb-danger)}
+.mbrfa-pill[data-tone=accent]{background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));border-color:color-mix(in srgb,var(--mb-accent) 30%,var(--mb-surface));color:var(--mb-accent)}
+.mbrfa-pill[data-tone=mono]{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:400}`;
+export const rfaCardsCss = `${rfaPillCss}
 .mbrfa-simple{font-size:13px}
 .mbrfa-status{background:var(--mb-surface);border:1px solid var(--mb-border);border-radius:var(--mb-radius);padding:18px 20px 16px}
 .mbrfa-status-heading{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
@@ -103,12 +110,6 @@ export const rfaCardsCss = `
 .mbrfa-simple .mbrfa-detail-toolbar h2{font-size:20px!important;font-weight:600;letter-spacing:-.01em}
 .mbrfa-simple .mbrfa-detail-toolbar .mbtd-actions{margin-top:0}
 .mbrfa-simple .mbrfa-detail-toolbar button,.mbrfa-simple .mbrfa-form-link{min-height:34px;padding:6px 12px;font-size:13px;font-weight:500;background:var(--mb-surface)}
-.mbrfa-pill{display:inline-flex;align-items:center;font-size:12px;font-weight:500;line-height:18px;padding:1px 9px;border-radius:999px;border:1px solid var(--mb-border);background:var(--mb-soft);color:var(--mb-text);white-space:nowrap}
-.mbrfa-pill[data-tone=ok]{background:color-mix(in srgb,#16a34a 12%,var(--mb-surface));border-color:color-mix(in srgb,#16a34a 35%,var(--mb-surface));color:#166534}
-.mbrfa-pill[data-tone=warn]{background:color-mix(in srgb,#d97706 14%,var(--mb-surface));border-color:color-mix(in srgb,#d97706 35%,var(--mb-surface));color:#92400e}
-.mbrfa-pill[data-tone=bad]{background:color-mix(in srgb,var(--mb-danger) 10%,var(--mb-surface));border-color:color-mix(in srgb,var(--mb-danger) 35%,var(--mb-surface));color:var(--mb-danger)}
-.mbrfa-pill[data-tone=accent]{background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));border-color:color-mix(in srgb,var(--mb-accent) 30%,var(--mb-surface));color:var(--mb-accent)}
-.mbrfa-pill[data-tone=mono]{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:400}
 .mbrfa-simple .mbrfa-detail-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px}
 .mbrfa-simple .mbrfa-detail-tabs button{min-height:34px;padding:6px 12px;font-size:13px}
 .mbrfa-sheet{border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);min-width:0;overflow:hidden}

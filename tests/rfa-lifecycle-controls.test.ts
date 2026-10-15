@@ -178,9 +178,9 @@ it("opens decisions for a requested treatment and attaches the UR decision PDF i
     const itemId = record.items.at(-1)!.id;
     await act(async () => root.render(createElement(RfaLifecycleControls, { ...props, decisionRequest: { itemId, nonce: 1 } })));
     const dialog = container.querySelector('[role="dialog"]')!;
-    expect(dialog.getAttribute("aria-label")).toContain("Record treatment decisions");
+    expect(dialog.getAttribute("aria-label")).toContain("Record UR decision");
     expect(dialog.querySelector("fieldset fieldset legend")!.textContent).toContain(record.items.at(-1)!.serviceDescription);
-    const input = [...dialog.querySelectorAll<HTMLInputElement>('input[type="file"]')].find(node => /UR decision/i.test(node.parentElement?.textContent ?? ""))!;
+    const input = [...dialog.querySelectorAll<HTMLInputElement>('input[type="file"]')].find(node => /UR decision|different PDF/i.test(node.parentElement?.textContent ?? ""))!;
     const file = new File(["%PDF-1.4"], "UR decision.pdf", { type: "application/pdf" });
     Object.defineProperty(input, "files", { value: [file] });
     await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
