@@ -46,6 +46,7 @@ export type SelectProps = Common & {
   /** Allow a value that is not in the list: the search text can be used as typed. */ allowCustom?: boolean | undefined;
   /** Show the placeholder for an empty or unknown value instead of falling back to the first option as a native select does. */ allowEmpty?: boolean | undefined;
   /** Width of the list relative to the field. */ align?: "start" | "end" | undefined;
+  /** Show the chosen option's description after its label in the field, e.g. a physician's NPI. */ detailInField?: boolean | undefined;
 };
 
 type DateCommon = Common & {
@@ -77,7 +78,7 @@ const css = `.mbctl{position:relative;display:block;min-width:0;width:100%;font-
 .mbctl-pop li[role=option]>span:first-child{min-width:0;overflow-wrap:anywhere}.mbctl-pop li[role=option] small{display:block;margin-top:2px;font-size:12px;color:var(--mb-muted,#6b7a82);font-weight:400}
 .mbctl-pop li[role=option][data-active]{background:var(--mb-soft,#eef3f6)}.mbctl-pop li[aria-selected=true]{color:var(--mb-accent,#1f6feb);font-weight:600}.mbctl-pop li[aria-disabled=true]{opacity:.45;cursor:not-allowed}
 .mbctl-pop li.mbctl-group{padding:8px 10px 3px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mb-muted,#6b7a82)}.mbctl-pop li.mbctl-note{padding:9px 10px;color:var(--mb-muted,#6b7a82)}
-.mbctl-pop .mbctl-pop-search{display:block;box-sizing:border-box;width:100%;min-height:42px;margin:0;padding:10px 12px;border:0;border-bottom:1px solid var(--mb-border,#cfd8dc);border-radius:0;background:var(--mb-surface,#fff);color:inherit;font:inherit;font-size:14px;box-shadow:none;outline:0}.mbctl-pop .mbctl-pop-search:focus{box-shadow:inset 0 -2px 0 var(--mb-accent,#1f6feb)}
+.mbctl-pop.mbctl-pop .mbctl-pop-search{display:block;box-sizing:border-box;width:100%;min-height:42px;margin:0;padding:10px 12px;border:0;border-bottom:1px solid var(--mb-border,#cfd8dc);border-radius:0;background:var(--mb-surface,#fff);color:inherit;font:inherit;font-size:14px;box-shadow:none;outline:0}.mbctl-pop.mbctl-pop .mbctl-pop-search:focus{outline:0;border-bottom-color:var(--mb-accent,#1f6feb);box-shadow:inset 0 -1px 0 var(--mb-accent,#1f6feb)}
 .mbctl-cal{padding:10px;width:272px;box-sizing:border-box}.mbctl-cal-head{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:6px}
 .mbctl-pop .mbctl-cal button{box-sizing:border-box;margin:0;border:0;background:transparent;color:var(--mb-text,#1f2a30);font:inherit;box-shadow:none;cursor:pointer}
 .mbctl-pop .mbctl-cal-head button{min-height:30px;height:30px;padding:0 8px;border-radius:6px;font-size:14px;font-weight:600}.mbctl-pop .mbctl-cal-head button.mbctl-cal-step{width:30px;padding:0;font-size:18px;font-weight:400}.mbctl-pop .mbctl-cal-head button:hover{background:var(--mb-soft,#eef3f6)}
@@ -88,7 +89,7 @@ const css = `.mbctl{position:relative;display:block;min-width:0;width:100%;font-
 .mbctl-pop .mbctl-cal button[aria-pressed=true]{background:var(--mb-accent,#1f6feb);color:var(--mb-accent-contrast,#fff);font-weight:600}.mbctl-pop .mbctl-cal button:disabled{opacity:.3;cursor:not-allowed}
 .mbctl-pop .mbctl-cal-grid button:focus-visible,.mbctl-pop .mbctl-cal-months button:focus-visible{outline:2px solid var(--mb-accent,#1f6feb);outline-offset:-2px}
 .mbctl-cal-foot{display:flex;justify-content:space-between;margin-top:8px}.mbctl-pop .mbctl-cal-foot button{min-height:28px;padding:2px 6px;border-radius:6px;font-size:13px;color:var(--mb-accent,#1f6feb)}
-.mbctl-datetime{display:grid;grid-template-columns:minmax(0,1fr) minmax(104px,40%);gap:8px}`;
+.mbctl-datetime-field{container-type:inline-size}.mbctl-datetime{display:grid;grid-template-columns:minmax(0,1fr) minmax(104px,38%);gap:8px}@container (max-width:300px){.mbctl-datetime{grid-template-columns:minmax(0,1fr)}}`;
 
 export function FormControlStyles(): ReactElement { return <style href="mindbill-form-controls" precedence="default">{css}</style>; }
 
@@ -110,13 +111,13 @@ function useDismiss(open: boolean, root: RefObject<HTMLElement | null>, close: (
 }
 
 /** Positions a popover with `position: fixed` next to its anchor so scrolling containers and dialogs never clip it. */
-function useAnchoredPopover(open: boolean, anchor: RefObject<HTMLElement | null>, pop: RefObject<HTMLElement | null>, align: "start" | "end" = "start"): void {
+function useAnchoredPopover(open: boolean, anchor: RefObject<HTMLElement | null>, pop: RefObject<HTMLElement | null>, align: "start" | "end" = "start", matchWidth = true): void {
   useIsoLayoutEffect(() => {
     if (!open) return;
     const place = () => {
       const a = anchor.current; const p = pop.current; if (!a || !p) return;
       const rect = a.getBoundingClientRect(); const vw = window.innerWidth || document.documentElement.clientWidth; const vh = window.innerHeight || document.documentElement.clientHeight;
-      p.style.minWidth = `${Math.min(rect.width, vw - 16)}px`;
+      if (matchWidth) p.style.minWidth = `${Math.min(rect.width, vw - 16)}px`;
       const height = p.offsetHeight; const width = p.offsetWidth;
       const below = vh - rect.bottom - 8; const above = rect.top - 8;
       let top = below >= height + 4 || below >= above ? rect.bottom + 4 : rect.top - 4 - height;
@@ -187,7 +188,7 @@ const matches = (option: SelectOption, needle: string) => { if (!needle) return 
 /** A styled single-choice dropdown. Long lists get a search box. */
 export function Select(props: SelectProps): ReactElement {
   const { id, name, form, value, defaultValue = "", onChange, options: optionList, children, placeholder = "Choose…", label, required, disabled, className, style, title,
-    searchable: searchableProp, onSearch, filter = !onSearch, error, onOpen, loading, searchPlaceholder, allowCustom, allowEmpty, align, requiredMessage, autoFocus } = props;
+    searchable: searchableProp, onSearch, filter = !onSearch, error, onOpen, loading, searchPlaceholder, allowCustom, allowEmpty, align, requiredMessage, autoFocus, detailInField } = props;
   const all = useMemo(() => optionList ?? optionsFromChildren(children), [optionList, children]);
   const [current, commit] = useControllable(value, defaultValue, onChange);
   const known = all.some(option => option.value === current);
@@ -265,12 +266,12 @@ export function Select(props: SelectProps): ReactElement {
         if (event.key === " ") { event.preventDefault(); const option = listed[active]; if (option && !option.disabled) pick(option.value); }
         else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) typeahead(event.key);
       }}>
-      <span className={`mbctl-value${effective ? "" : " mbctl-placeholder"}`}>{shown || placeholder}{selected?.description ? <small className="mbctl-detail"> · {selected.description}</small> : null}</span>{chevron}
+      <span className={`mbctl-value${effective ? "" : " mbctl-placeholder"}`}>{shown || placeholder}{selected?.description && detailInField ? <small className="mbctl-detail"> · {selected.description}</small> : null}</span>{chevron}
     </button>
     {name || required ? <Proxy proxyRef={proxyRef} name={name} form={form} value={effective} required={required} disabled={disabled} onSet={next => commit(next)} onInvalid={() => { setInvalid(true); claimFocus(triggerRef.current); }} /> : null}
     {invalid && !effective ? <span className="mbctl-error" aria-live="polite">{requiredMessage ?? `Choose ${label ? label.toLowerCase() : "an option"}.`}</span> : null}
     {open ? <div className="mbctl-pop" ref={popRef} onClick={event => event.preventDefault()} onMouseDown={event => { if (event.target !== searchRef.current) event.preventDefault(); }}>
-      {searchable ? <input ref={searchRef} type="search" className="mbctl-pop-search" role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" {...(activeId ? { "aria-activedescendant": activeId } : {})}
+      {searchable ? <input ref={searchRef} type="text" className="mbctl-pop-search" role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" {...(activeId ? { "aria-activedescendant": activeId } : {})}
         placeholder={searchPlaceholder ?? (allowCustom ? "Search or type a new value" : "Type to search")} aria-label={`Search ${label ? label.toLowerCase() : "options"}`} value={query} autoComplete="off"
         onChange={event => { setQuery(event.target.value); setActive(0); onSearch?.(event.target.value); }} onKeyDown={event => { listKeys(event); }} /> : null}
       <ul role="listbox" id={listId} {...(accessibleName || label ? { "aria-label": label ?? accessibleName } : {})}>
@@ -378,7 +379,7 @@ export function DateField(props: DateFieldProps): ReactElement {
   const commit = (iso: string) => { committed.current = iso; commitRaw(iso); setProblem(iso ? range(iso) : ""); setInvalid(false); };
   const close = (focusBack: boolean) => { setOpen(false); if (focusBack) inputRef.current?.focus(); };
   useDismiss(open, rootRef, close);
-  useAnchoredPopover(open, boxRef, popRef);
+  useAnchoredPopover(open, boxRef, popRef, "start", false);
   useEffect(() => { proxyRef.current?.setCustomValidity?.(problem); }, [problem]);
   useEffect(() => { if (current) setProblem(previous => previous && !previous.startsWith("Enter") ? range(current) : previous); }, [minIso, maxIso]);
   const settle = (strict: boolean) => {
@@ -461,7 +462,7 @@ export function DateTimeField(props: DateTimeFieldProps): ReactElement {
   return <div className={`mbctl mbctl-datetime-field${className ? ` ${className}` : ""}`} ref={rootRef} {...(style ? { style } : {})}>
     <div className="mbctl-datetime">
       <DateField {...(id ? { id } : {})} value={parts.date} onChange={date => update({ ...parts, date })} disabled={disabled} autoFocus={autoFocus}
-        {...(name_ ? { "aria-label": `${name_} date` } : {})} {...(min ? { min: min.slice(0, 10) } : {})} {...(max ? { max: max.slice(0, 10) } : {})} {...(props["aria-describedby"] ? { "aria-describedby": props["aria-describedby"] } : {})} />
+        {...(name_ ? { "aria-label": /date/i.test(name_) ? name_ : `${name_} date` } : {})} {...(min ? { min: min.slice(0, 10) } : {})} {...(max ? { max: max.slice(0, 10) } : {})} {...(props["aria-describedby"] ? { "aria-describedby": props["aria-describedby"] } : {})} />
       <TimeField value={parts.time} onChange={time => update({ ...parts, time })} disabled={disabled} {...(name_ ? { "aria-label": `${name_} time` } : { "aria-label": "Time" })} />
     </div>
     <Proxy proxyRef={proxyRef} name={name} form={form} value={combined} required={required} disabled={disabled}
@@ -511,7 +512,7 @@ export function MultiSelect(props: MultiSelectProps): ReactElement {
       : required ? <Proxy proxyRef={proxyRef} name={undefined} form={form} value="" required disabled={disabled} onSet={() => undefined} onInvalid={() => { setInvalid(true); claimFocus(triggerRef.current); }} /> : null}
     {invalid && !current.length ? <span className="mbctl-error" aria-live="polite">{requiredMessage ?? `Choose at least one ${label ? label.toLowerCase() : "option"}.`}</span> : null}
     {open ? <div className="mbctl-pop" ref={popRef} onClick={event => event.preventDefault()} onMouseDown={event => { if (event.target !== searchRef.current) event.preventDefault(); }}>
-      {searchable ? <input ref={searchRef} type="search" className="mbctl-pop-search" aria-label={`Search ${label ? label.toLowerCase() : "options"}`} placeholder={searchPlaceholder ?? "Type to search"} value={query} onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={keys} {...(activeId ? { "aria-activedescendant": activeId } : {})} /> : null}
+      {searchable ? <input ref={searchRef} type="text" className="mbctl-pop-search" aria-label={`Search ${label ? label.toLowerCase() : "options"}`} placeholder={searchPlaceholder ?? "Type to search"} value={query} onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={keys} {...(activeId ? { "aria-activedescendant": activeId } : {})} /> : null}
       <ul role="listbox" id={listId} aria-multiselectable="true" {...(label ? { "aria-label": label } : {})}>
         {!listed.length ? <li className="mbctl-note">{needle ? `No matches for “${query.trim()}”` : "No options"}</li> : listed.map((option, index) => <li key={option.value} role="option" id={`${baseId}-opt-${index}`} aria-selected={current.includes(option.value)} aria-disabled={option.disabled || undefined} data-value={option.value}
           data-active={index === active || undefined} onMouseEnter={() => setActive(index)} onClick={() => { if (!option.disabled) toggle(option.value); }}><span>{option.label}</span>{current.includes(option.value) ? <span aria-hidden="true">✓</span> : null}</li>)}

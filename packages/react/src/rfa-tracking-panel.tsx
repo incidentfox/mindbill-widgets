@@ -264,7 +264,7 @@ export function RfaTrackingContent({ rfa: provided, options, permissions = [], o
             {item.decisionReason ? <p>{item.decisionReason}</p> : null}{item.reviewerName ? <p>Reviewer: {item.reviewerName}{item.reviewerPhone ? ` · ${item.reviewerPhone}` : ""}</p> : null}
             {evidence(item.currentResponseDocumentId, "View UR decision letter")} {evidence(item.currentImrDocumentId, "View IMR application")}</> : null}
           {loading ? <p>Loading appointment…</p> : appointment ? <AppointmentForm options={options} key={`${item.id}:${appointment.version}:${appointment.authorizationToken}`} appointment={appointment} editable={permissions.includes("edit")} disabled={disabled || loadErrors.some(value => value.startsWith("Appointments"))} onError={setError} onSave={input => run(`appointment:${item.id}`, input, async key => { await client.updateScheduling(rfa.id, item.id, input, key); return records.get(rfa.id); })} /> : null}
-          {canCorrect && item.currentDecisionEventId && item.outcome !== "pending" ? <details><summary>Correct this decision</summary><p>The original decision and its evidence remain in history. Corrections require a reason and response evidence. Requests already used for a bill or a scheduled appointment cannot be corrected.</p>
+          {canCorrect && item.currentDecisionEventId && item.outcome !== "pending" ? <details><summary>Correct this decision</summary>
             <CorrectionForm key={`${item.id}:${item.currentDecisionEventId}`} item={item} documents={rfa.documents} disabled={disabled || loading || loadErrors.length > 0 || scheduling.some(value => value.disposition === "scheduled")} onError={setError} onUpload={uploadEvidence} onSave={input => run(`correction:${item.id}`, input, key => client.correctDecision(rfa.id, input, key))} />
           </details> : null}
         </fieldset>;
@@ -341,15 +341,15 @@ function AppointmentForm({ appointment, options, editable, disabled, onError, on
       } catch (reason) { onError(reason instanceof Error ? reason.message : "Review the appointment details."); }
     }}><style>{rfaModalCss}{rfaTaskFormCss}</style><fieldset disabled={disabled}><legend>Appointment details</legend>
       <div className="mbrfa-taskform-grid">
-        <label className="mbrfa-wide">Disposition{requiredMark}<Select value={disposition} onChange={choice => setDisposition(choice)}>{appointment.eligible ? <><option value="scheduled">Scheduled</option><option value="no_appointment">No appointment needed</option></> : null}{appointment.version > 0 ? <option value="canceled">Canceled</option> : null}</Select></label>
+        <label className="mbrfa-wide"><span className="mbrfa-field-label">Disposition{requiredMark}</span><Select value={disposition} onChange={choice => setDisposition(choice)}>{appointment.eligible ? <><option value="scheduled">Scheduled</option><option value="no_appointment">No appointment needed</option></> : null}{appointment.version > 0 ? <option value="canceled">Canceled</option> : null}</Select></label>
         {disposition === "scheduled" ? <>
-          <label className="mbrfa-wide">Date and time{requiredMark}<span className="mbrfa-taskform-hint">Your local time</span><DateTimeField name="appointmentAt" label="Appointment" required defaultValue={localTime(appointment.appointmentAt)} /></label>
-          <label className="mbrfa-wide">Provider{requiredMark}<RfaPhysicianSelect label="Provider" client={physicians} allowCustom required value={provider.value} placeholder="Choose a treating physician" onChange={(value, chosen) => setProvider({ value, name: chosen?.name ?? value })} /></label>
-          <label className="mbrfa-wide">Location{requiredMark}<Select label="Location" searchable allowEmpty required loading={!locations} value={location.choice} placeholder="Choose a practice location" searchPlaceholder="Search saved locations"
+          <label className="mbrfa-wide"><span className="mbrfa-field-label">Date and time{requiredMark} <span className="mbrfa-optional">(your local time)</span></span><DateTimeField name="appointmentAt" label="Appointment" required defaultValue={localTime(appointment.appointmentAt)} /></label>
+          <label className="mbrfa-wide"><span className="mbrfa-field-label">Provider{requiredMark}</span><RfaPhysicianSelect label="Provider" client={physicians} allowCustom required value={provider.value} placeholder="Choose a treating physician" onChange={(value, chosen) => setProvider({ value, name: chosen?.name ?? value })} /></label>
+          <label className="mbrfa-wide"><span className="mbrfa-field-label">Location{requiredMark}</span><Select label="Location" searchable allowEmpty required loading={!locations} value={location.choice} placeholder="Choose a practice location" searchPlaceholder="Search saved locations"
             options={[...(locations ?? []).map(item => ({ value: item.id, label: item.name || item.street, description: rfaLocationText({ ...item, name: "" }) })), { value: OTHER_LOCATION, label: "Other location…", action: true }]}
             onChange={choice => setLocation(current => ({ ...current, choice }))} /></label>
-          {location.choice === OTHER_LOCATION ? <label className="mbrfa-wide">Other location{requiredMark}<input name="location" maxLength={500} autoComplete="off" placeholder="Clinic name and address" value={location.other} onChange={event => { const other = event.target.value; setLocation(current => ({ ...current, other })); }} /></label> : null}
-        </> : <label className="mbrfa-wide">Reason{requiredMark}<textarea name="reason" maxLength={2000} defaultValue={appointment.reason ?? ""} /></label>}
+          {location.choice === OTHER_LOCATION ? <label className="mbrfa-wide"><span className="mbrfa-field-label">Other location{requiredMark}</span><input name="location" maxLength={500} autoComplete="off" placeholder="Clinic name and address" value={location.other} onChange={event => { const other = event.target.value; setLocation(current => ({ ...current, other })); }} /></label> : null}
+        </> : <label className="mbrfa-wide"><span className="mbrfa-field-label">Reason{requiredMark}</span><textarea name="reason" maxLength={2000} defaultValue={appointment.reason ?? ""} /></label>}
       </div>
       <div className="mbrfa-taskform-foot"><button type="submit" className="mbtd-primary">Save appointment</button></div></fieldset></form>;
   if (bare) return form;
@@ -399,23 +399,23 @@ function CorrectionForm({ item, documents, disabled, onError, onSave, onUpload }
     <div className="mbrfa-taskform-grid">
       <div className="mbrfa-field mbrfa-wide"><span className="mbrfa-field-label" id={`correct-outcome-${item.id}`}>Corrected decision{requiredMark}</span>
         <div className="mbrfa-outcome" role="radiogroup" aria-labelledby={`correct-outcome-${item.id}`}>{([["approved", "Approved"], ["modified", "Modified"], ["denied", "Denied"]] as const).map(([value, title]) => <button key={value} type="button" role="radio" aria-checked={outcome === value} data-outcome={value} onClick={() => setOutcome(value)}>{title}</button>)}</div></div>
-      <label className="mbrfa-wide">Why are you correcting it?{requiredMark}<textarea name="reason" maxLength={20000} placeholder="For example: the letter was entered against the wrong treatment" /></label>
+      <label className="mbrfa-wide"><span className="mbrfa-field-label">Why are you correcting it?{requiredMark}</span><textarea name="reason" maxLength={20000} placeholder="For example: the letter was entered against the wrong treatment" /></label>
       {outcome !== "denied" ? <>
-        <label>Authorization number{requiredMark}<input key={`auth:${outcome}`} name="authorizationNumber" maxLength={100} defaultValue={item.authorizationNumber ?? ""} /></label>
-        <label>Authorized procedure code{optionalMark}<input key={`code:${outcome}`} name="authorizedProcedureCode" maxLength={20} defaultValue={prefill.code} /></label>
-        <label>Authorized quantity{optionalMark}<input key={`qty:${outcome}`} name="authorizedQuantity" inputMode="decimal" defaultValue={prefill.quantity} /></label>
-        <label>Authorized units{optionalMark}<input key={`units:${outcome}`} name="authorizedUnits" inputMode="numeric" defaultValue={prefill.units} /></label>
-        <label>Effective from{optionalMark}<DateField name="effectiveFrom" label="Effective from" defaultValue={prefill.from} /></label>
-        <label>Effective through{optionalMark}<DateField name="effectiveTo" label="Effective through" defaultValue={prefill.to} /></label>
+        <label><span className="mbrfa-field-label">Authorization number{requiredMark}</span><input key={`auth:${outcome}`} name="authorizationNumber" maxLength={100} defaultValue={item.authorizationNumber ?? ""} /></label>
+        <label><span className="mbrfa-field-label">Authorized procedure code{optionalMark}</span><input key={`code:${outcome}`} name="authorizedProcedureCode" maxLength={20} defaultValue={prefill.code} /></label>
+        <label><span className="mbrfa-field-label">Authorized quantity{optionalMark}</span><input key={`qty:${outcome}`} name="authorizedQuantity" inputMode="decimal" defaultValue={prefill.quantity} /></label>
+        <label><span className="mbrfa-field-label">Authorized units{optionalMark}</span><input key={`units:${outcome}`} name="authorizedUnits" inputMode="numeric" defaultValue={prefill.units} /></label>
+        <label><span className="mbrfa-field-label">Effective from{optionalMark}</span><DateField name="effectiveFrom" label="Effective from" defaultValue={prefill.from} /></label>
+        <label><span className="mbrfa-field-label">Effective through{optionalMark}</span><DateField name="effectiveTo" label="Effective through" defaultValue={prefill.to} /></label>
       </> : null}
       {outcome !== "approved" ? <>
-        <label className="mbrfa-wide">Decision reason{requiredMark}<textarea className="mbrfa-taskform-long" name="decisionReason" maxLength={20000} defaultValue={item.decisionReason ?? ""} /></label>
-        <label>Reviewer name{requiredMark}<input name="reviewerName" maxLength={200} defaultValue={item.reviewerName ?? ""} /></label>
-        <label>Reviewer phone{requiredMark}<input name="reviewerPhone" maxLength={40} inputMode="tel" defaultValue={item.reviewerPhone ?? ""} /></label>
-        <label className="mbrfa-wide">IMR application{requiredMark}<Select label="IMR application" allowEmpty value={imr} placeholder="Choose the IMR application form" options={documentOptions(forms, "Upload an IMR form…")} onChange={choice => { if (choice === UPLOAD) imrFile.current?.click(); else setImr(choice); }} /></label>
+        <label className="mbrfa-wide"><span className="mbrfa-field-label">Decision reason{requiredMark}</span><textarea className="mbrfa-taskform-long" name="decisionReason" maxLength={20000} defaultValue={item.decisionReason ?? ""} /></label>
+        <label><span className="mbrfa-field-label">Reviewer name{requiredMark}</span><input name="reviewerName" maxLength={200} defaultValue={item.reviewerName ?? ""} /></label>
+        <label><span className="mbrfa-field-label">Reviewer phone{requiredMark}</span><input name="reviewerPhone" maxLength={40} inputMode="tel" defaultValue={item.reviewerPhone ?? ""} /></label>
+        <label className="mbrfa-wide"><span className="mbrfa-field-label">IMR application{requiredMark}</span><Select label="IMR application" allowEmpty value={imr} placeholder="Choose the IMR application form" options={documentOptions(forms, "Upload an IMR form…")} onChange={choice => { if (choice === UPLOAD) imrFile.current?.click(); else setImr(choice); }} /></label>
       </> : null}
-      <label>UR decision letter{optionalMark}<Select label="UR decision letter" allowEmpty value={letter} placeholder="Keep the current letter" options={documentOptions(letters, "Upload a new letter…")} onChange={choice => { if (choice === UPLOAD) letterFile.current?.click(); else setLetter(choice); }} /></label>
-      <label>Decision date{optionalMark}<DateTimeField name="decidedAt" label="Decision date" max={localTime(new Date().toISOString())} defaultValue={localTime(item.decidedAt)} /></label>
+      <label><span className="mbrfa-field-label">UR decision letter{optionalMark}</span><Select label="UR decision letter" allowEmpty value={letter} placeholder="Keep the current letter" options={documentOptions(letters, "Upload a new letter…")} onChange={choice => { if (choice === UPLOAD) letterFile.current?.click(); else setLetter(choice); }} /></label>
+      <label><span className="mbrfa-field-label">Decision date{optionalMark}</span><DateTimeField name="decidedAt" label="Decision date" max={localTime(new Date().toISOString())} defaultValue={localTime(item.decidedAt)} /></label>
     </div>
     <input ref={letterFile} type="file" accept="application/pdf,.pdf" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void upload(file, "ur_response"); }} />
     <input ref={imrFile} type="file" accept="application/pdf,.pdf" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void upload(file, "imr_form"); }} />

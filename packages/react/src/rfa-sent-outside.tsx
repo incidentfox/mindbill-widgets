@@ -34,7 +34,7 @@ export function RfaSentOutsideFields({ defaultDestination, receivedRequired = fa
   return <div className="mbrfa-sent-outside-fields">
     <div className="mbrfa-field"><span className="mbrfa-field-label">Sent on<span className="mbrfa-required" aria-hidden="true"> *</span></span><DateTimeField required name="sentAt" label="Sent on" max={now} defaultValue={now} /></div>
     <div className="mbrfa-field"><span className="mbrfa-field-label">How it was sent<span className="mbrfa-required" aria-hidden="true"> *</span></span><Select name="channel" label="How it was sent" defaultValue="fax" options={RFA_SENT_OUTSIDE_CHANNELS} /></div>
-    <label>Sent to<span className="mbrfa-optional"> (optional)</span><input name="destination" maxLength={500} defaultValue={defaultDestination ?? ""} placeholder="Fax number, address or e-mail" /></label>
+    <label><span className="mbrfa-field-label">Sent to<span className="mbrfa-optional"> (optional)</span></span><input name="destination" maxLength={500} defaultValue={defaultDestination ?? ""} placeholder="Fax number, address or e-mail" /></label>
     {receivedRequired ? null : <label className="mbrfa-check"><input type="checkbox" checked={received} onChange={event => setReceived(event.target.checked)} />The claims administrator received it (for example, the fax confirmation shows it went through)</label>}
     {received ? <div className="mbrfa-field"><span className="mbrfa-field-label">{receivedLabel ?? "Received on"}<span className="mbrfa-required" aria-hidden="true"> *</span></span><DateTimeField required name="receivedAt" label={receivedLabel ?? "Received on"} max={now} defaultValue={now} /></div> : null}
   </div>;

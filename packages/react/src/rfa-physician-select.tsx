@@ -48,7 +48,7 @@ export function RfaPhysicianSelect({ value, onChange, providers, client, onSearc
     if (chosen && !list.some(provider => provider.id === value)) shown.push({ ...rfaPhysicianOptions([chosen])[0]!, hidden: true });
     return shown;
   }, [list, value]);
-  return <Select {...rest} label={label} placeholder={placeholder} searchable={searchable} allowEmpty allowCustom={allowCustom} value={value} options={options}
+  return <Select detailInField {...rest} label={label} placeholder={placeholder} searchable={searchable} allowEmpty allowCustom={allowCustom} value={value} options={options}
     searchPlaceholder={allowCustom ? "Search physicians or type a name" : "Search physicians by name or NPI"}
     loading={loading ?? busy} error={error ?? (failure && !allowCustom ? failure : undefined)}
     onSearch={providers ? onSearch : setQuery} {...(providers && !onSearch ? { filter: true } : {})}

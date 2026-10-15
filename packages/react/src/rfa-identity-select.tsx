@@ -13,6 +13,6 @@ export function RfaIdentitySelect({ label, placeholder, searchPlaceholder, query
   const choices: SelectOption[] = options.map(option => ({ value: option.id, label: option.label, ...(option.detail ? { description: option.detail } : {}), ...(option.action ? { action: true } : {}) }));
   if (value && !options.some(option => option.id === value) && current?.id === value) choices.push({ value: current.id, label: current.label, ...(current.detail ? { description: current.detail } : {}), hidden: true });
   void query;
-  return <Select aria-label={label} label={label} placeholder={placeholder} searchPlaceholder={searchPlaceholder} searchable={searchable} disabled={disabled} loading={loading} error={error || undefined}
+  return <Select detailInField aria-label={label} label={label} placeholder={placeholder} searchPlaceholder={searchPlaceholder} searchable={searchable} disabled={disabled} loading={loading} error={error || undefined}
     value={options.some(option => option.id === value) || current?.id === value ? value : ""} options={choices} allowEmpty onSearch={onSearch} onChange={onSelect} />;
 }
