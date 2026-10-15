@@ -37,7 +37,8 @@ it("filters and sorts lifecycle status while retaining treatment outcomes", asyn
   expect(container.querySelector('[aria-label="Closed: 2 requests"]')).toBeNull(); expect(container.textContent).toContain("RFA tasks");
   await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "All RFAs")!.click());
   expect(container.textContent).not.toContain("Clinical review: approved");
-  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="RFA status"] [data-status="failed"]')!.click());
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Filter by status"]')!.click());
+  await act(async () => [...container.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Failed")!.click());
   expect(urls.at(-1)!.searchParams.get("lifecycleStatus")).toBe("failed"); expect(urls.at(-1)!.searchParams.has("status")).toBe(false);
   await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Status↕")!.click());
   expect(urls.at(-1)!.searchParams.get("sortBy")).toBe("lifecycleStatus");

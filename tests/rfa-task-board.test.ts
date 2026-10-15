@@ -207,11 +207,11 @@ it("enriches only visible requests once with scoped patient, claim and treatment
     expect(fetcher.mock.calls.some(call => String(call[0]).includes("rfa_hidden"))).toBe(false);
     expect(fetcher.mock.calls.every(call => !call[1]?.method || call[1].method === "GET")).toBe(true);
     // The filters show what the link selected and can be changed in place.
-    const taskFilter = h.container.querySelector<HTMLButtonElement>(".mbrfa-task-filters .mbrfa-dropdown button")!;
-    expect(taskFilter.textContent).toBe("Post UR");
+    const taskFilter = h.container.querySelector<HTMLButtonElement>(".mbrfa-task-filters .mbrfa-chip button")!;
+    expect(taskFilter.textContent).toBe("Task:Post UR×");
     expect(h.container.textContent).toContain("2 tasks");
-    const choose = async (text: string) => { await act(async () => taskFilter.click()); await act(async () => [...h.container.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent?.startsWith(text))!.click()); };
-    await choose("All tasks");
+    const choose = async (text: string) => { await act(async () => h.container.querySelector<HTMLButtonElement>(".mbrfa-task-filters .mbrfa-chip button")!.click()); await act(async () => [...h.container.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent?.startsWith(text))!.click()); };
+    await act(async () => h.container.querySelector<HTMLElement>(".mbrfa-task-filters .mbrfa-chip-clear")!.click());
     expect(h.container.textContent).toContain("3 tasks");
     await choose("Post UR");
     // Rows read like the injury page's RFA table, and the whole row opens the request.

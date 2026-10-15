@@ -16,9 +16,9 @@ it("keeps sandbox delivery disabled and clears selected records when the claim f
  const container=document.createElement("div");document.body.append(container);const root=createRoot(container);const getSession=async()=>({token:"synthetic_token"});
  const render=async(claimId:string)=>act(async()=>root.render(createElement(RfaDashboard,{getSession,fetch:fetcher,claimId,permissions:["send"]})));
  try{
- await render("claim_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());const review=[...container.querySelectorAll("button")].find(x=>x.textContent==="Request for authorization")!;
+ await render("claim_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());const review=[...container.querySelectorAll("button")].find(x=>x.textContent==="SYNTHETI")!;
  await act(async()=>review.click());expect(container.textContent).toContain("External fax delivery is disabled");expect(container.textContent).not.toContain("Send authorization fax");
- await render("claim_other_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());expect(container.textContent).not.toContain("Review packet and send");expect(container.textContent).toContain("Request for authorization");
+ await render("claim_other_synthetic");await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());expect(container.textContent).not.toContain("Review packet and send");expect(container.textContent).toContain("SYNTHETI");
  expect(fetcher.mock.calls.every(x=>(x[1]?.method??"GET")==="GET")).toBe(true);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
@@ -28,7 +28,7 @@ it("requires packet review and deliberate recipient confirmation before live sen
  try{
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,environment:"live",permissions:["send"]})));
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
- await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Request for authorization")!.click());
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="SYNTHETI")!.click());
  const send=[...container.querySelectorAll("button")].find(x=>x.textContent==="Send authorization fax")!;expect(send.disabled).toBe(true);
  await act(async()=>send.click());expect(fetcher.mock.calls.some(x=>String(x[0]).endsWith("/fax"))).toBe(false);
  }finally{await act(async()=>root.unmount());container.remove();}
@@ -40,7 +40,7 @@ it("selects only the newest signed form for the current content revision",async(
  try{
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher})));
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
- await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Request for authorization")!.click());
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="SYNTHETI")!.click());
  const boxes=[...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
  const named=(name:string)=>boxes.find(box=>box.parentElement?.textContent?.includes(name))!;
  expect(named("Synthetic form.pdf").disabled).toBe(true);expect(named("Synthetic form.pdf").checked).toBe(false);
@@ -61,7 +61,7 @@ it("edits retained service rows without losing metadata, invalidates the signed 
  try{
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["edit"]})));
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
- await act(async()=>button("Existing service").click());await act(async()=>button("Edit request draft").click());
+ await act(async()=>button("SYNTHETI").click());await act(async()=>button("Edit request draft").click());
  expect(container.textContent).toContain("clears its signature");expect(button("Refresh request")).toBeUndefined();
  const input=[...container.querySelectorAll("input")].find(x=>x.parentElement?.textContent==="Frequency")!;
  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"Twice weekly");input.dispatchEvent(new Event("input",{bubbles:true}));});
@@ -80,7 +80,7 @@ it("does not expose content editing without permission or after submission",asyn
  const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? (String(input).includes("?")?Response.json({data:[current],summary:{total:1,byStatus:{ready:1}},nextCursor:null}):Response.json({data:current})));
  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions})));
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
- await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Request for authorization")!.click());expect(container.textContent).not.toContain("Edit request draft");
+ await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="SYNTHETI")!.click());expect(container.textContent).not.toContain("Edit request draft");
  }}finally{await act(async()=>root.unmount());container.remove();}
 });
 
@@ -97,7 +97,7 @@ it("organizes status, details, and history into accessible tabs while automatica
  const button=(text:string)=>[...container.querySelectorAll("button")].find(x=>x.textContent===text)!;
  try{
   await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,permissions:["edit"]})));
-  await act(async()=>button("All RFAs").click());await act(async()=>button("Request for authorization").click());
+  await act(async()=>button("All RFAs").click());await act(async()=>button("SYNTHETI").click());
   expect(container.querySelector('[aria-label="Authorization progress"] [aria-current="step"]')?.textContent).toContain("Sent");
   expect(button("Refresh request")).toBeUndefined();
   const details=button("RFA details");const history=button("History & activity");
@@ -136,8 +136,8 @@ it("offers an opt-in focused layout while retaining deliberate sandbox delivery 
  const panel=(text:string)=>document.getElementById(button(text).getAttribute("aria-controls")!)!;
  try{
   await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",permissions:["send"]})));
-  expect(button("Request for authorization")).toBeDefined();
-  await act(async()=>button("Request for authorization").click());
+  expect(button("SYNTHETI")).toBeDefined();
+  await act(async()=>button("SYNTHETI").click());
   expect([...container.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)).toEqual(["RFA Details","History & Activity"]);
   expect([...container.querySelectorAll('[aria-label="Authorization progress"] li')].map(step=>[step.textContent!.replace(/^[\d✓]+/,""),step.getAttribute("data-state")])).toEqual([["Incomplete","current"],["Sent","todo"],["Received","todo"],["Closed","todo"]]);
   expect(panel("RFA Details").hidden).toBe(false);

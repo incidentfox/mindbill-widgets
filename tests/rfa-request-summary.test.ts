@@ -33,7 +33,7 @@ it("opens the current directory for a submitted request while retaining its save
  try {
   await act(async () => root.render(createElement(RfaDashboard, { getSession: async () => ({ token: "synthetic_token" }), fetch: fetcher })));
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
-  await act(async () => [...container.querySelectorAll("button")].find(el => el.textContent === "Synthetic therapy")!.click());
+  await act(async () => [...container.querySelectorAll("button")].find(el => el.textContent === "SYNTHETI")!.click());
   expect(container.textContent).toContain("Saved administrator");
   await act(async () => [...container.querySelectorAll("button")].find(el => el.textContent === "Saved administrator")!.click());
   expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Current administrator");

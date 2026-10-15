@@ -2,10 +2,11 @@
 import { type MouseEvent, type ReactElement } from "react";
 import { getRfaLifecycleStatus, type RfaListQuery, type RfaRecord } from "@mindbill/browser";
 import { RfaPill, rfaLifecycleTone, rfaOutcome, rfaPillCss, rfaStatusLabel } from "./rfa-detail-cards";
-import { rfaDecisionDueText } from "./rfa-decision-due";
-import { RfaLink, rfaTitle, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
+import { RfaLink, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
 type Sort = NonNullable<RfaListQuery["sortBy"]>;
 const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString() : "—";
+const reference = (rfa: RfaRecord) => rfa.displayReference || rfa.id.replace(/^rfa_/, "").slice(0, 8).toUpperCase();
+const latestDecision = (rfa: RfaRecord) => rfa.items.map(item => item.decidedAt).filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
 const LIFECYCLE_ORDER = ["incomplete", "failed", "sent", "received", "closed", "canceled"];
 /** Sort a complete result set in the browser so a header click reorders at once. Blank values sort last. */
 export function rfaSortRecords(records: RfaRecord[], sortBy: Sort, direction: "asc" | "desc"): RfaRecord[] {
@@ -45,7 +46,7 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
     onSelect(id, itemId);
   } });
   return <div className="mbrfa-list">
-    <style>{rfaPillCss + `.mbrfa-table-scroll{overflow-x:auto;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);transition:opacity .15s}.mbrfa-table-scroll[data-updating]{opacity:.6}.mbrfa-table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}.mbrfa-table th,.mbrfa-table td{padding:12px 14px;border-bottom:1px solid var(--mb-border);vertical-align:top}.mbrfa-table th{font-size:12px;font-weight:600;color:var(--mb-muted);white-space:nowrap;background:var(--mb-surface)}.mbrfa-table td small{display:block;color:var(--mb-muted);margin-top:3px;font-size:12px}.mbrfa-table tbody tr:last-child td{border-bottom:0}.mbrfa-row-link{cursor:pointer}.mbtd .mbrfa-table .mbrfa-text-link{border:0;background:none;padding:0;min-height:0;font:inherit;font-weight:500;color:var(--mb-accent);text-align:left;cursor:pointer;text-decoration:none}.mbtd .mbrfa-table .mbrfa-text-link:hover{text-decoration:underline}.mbrfa-row-link:hover td{background:var(--mb-soft)}.mbrfa-table .mbrfa-cell-title{max-width:300px}
+    <style>{rfaPillCss + `.mbrfa-table-scroll{overflow-x:auto;border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);transition:opacity .15s}.mbrfa-table-scroll[data-updating]{opacity:.6}.mbrfa-table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}.mbrfa-table th,.mbrfa-table td{padding:12px 14px;border-bottom:1px solid var(--mb-border);vertical-align:top}.mbrfa-table th{font-size:12px;font-weight:600;color:var(--mb-muted);white-space:nowrap;background:var(--mb-surface)}.mbrfa-table td small{display:block;color:var(--mb-muted);margin-top:3px;font-size:12px}.mbrfa-table tbody tr:last-child td{border-bottom:0}.mbrfa-row-link{cursor:pointer}.mbtd .mbrfa-table .mbrfa-text-link{border:0;background:none;padding:0;min-height:0;font:inherit;font-weight:500;color:var(--mb-accent);text-align:left;cursor:pointer;text-decoration:none}.mbtd .mbrfa-table .mbrfa-text-link:hover{text-decoration:underline}.mbrfa-row-link:hover td{background:var(--mb-soft)}.mbrfa-table .mbrfa-cell-title{max-width:300px;min-width:180px}.mbrfa-table th,.mbrfa-table td{white-space:nowrap}.mbrfa-table td.mbrfa-cell-title,.mbrfa-table td:nth-child(2),.mbrfa-table td:nth-child(3){white-space:normal}.mbrfa-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.mbrfa-cell-ref .mbrfa-text-link{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.mbrfa-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .mbtd .mbrfa-sort{display:inline-flex;gap:6px;align-items:center;white-space:nowrap;border:0;background:transparent;padding:0;min-height:0;font:inherit;color:inherit;cursor:pointer}.mbrfa-sort span{opacity:.45;font-size:11px}.mbrfa-sort[data-active]{color:var(--mb-text)}.mbrfa-sort[data-active] span{opacity:1}
 .mbrfa-view-tabs{display:flex;gap:4px;border-bottom:1px solid var(--mb-border);margin:4px 0 14px}.mbtd .mbrfa-view-tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:8px 12px;min-height:0;font-size:13px;color:var(--mb-muted)}.mbtd .mbrfa-view-tabs button[aria-selected=true]{color:var(--mb-text);font-weight:600;border-bottom-color:var(--mb-accent)}`}</style>
     {!hideViewSwitch ? <div className="mbrfa-view-tabs" role="tablist" aria-label="Show">
@@ -53,19 +54,30 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
       <button type="button" role="tab" aria-selected={view === "treatments"} onClick={() => onViewChange("treatments")}>Requested treatments ({treatmentCount})</button>
     </div> : null}
     {!records.length ? <p>No requests match this view.</p> : <div className="mbrfa-table-scroll" data-updating={updating || undefined} tabIndex={0} role="region" aria-label={view === "rfas" ? "RFA table" : "Requested treatments table"}>
-      <table className="mbrfa-table"><thead><tr><th scope="col">{view === "rfas" ? "Request" : "Requested treatment"}</th>{heading("employeeName", "Patient")}{heading("providerName", "Requesting physician")}<th scope="col">{view === "rfas" ? "Claims administrator" : "CPT / ICD-10"}</th>{heading("submittedAt", "Sent")}<th scope="col">Decision due</th>{view === "rfas" ? heading(lifecycleAvailable ? "lifecycleStatus" : "status", "Status") : <th scope="col">Decision</th>}{heading("createdAt", "Created")}</tr></thead><tbody>
-        {rows.flatMap(rfa => view === "rfas" ? [<tr key={rfa.id} {...rowProps(rfa.id)}>
-          <td className="mbrfa-cell-title"><RfaLink href={getRfaHref?.(rfa.id)} onSelect={() => onSelect(rfa.id)}>{rfaTitle(rfa)}</RfaLink>{rfa.displayReference ? <small>RFA {rfa.displayReference}</small> : null}</td>
-          <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td><td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>
-          <td>{rfa.claimsAdminName || rfa.authorizationContact?.name || "Not recorded"}</td>
-          <td>{date(rfa.submittedAt)}</td><td>{rfa.submittedAt ? rfaDecisionDueText(rfa) : "—"}</td><td><RfaPill tone={rfaLifecycleTone(rfa)}>{rfaStatusLabel(getRfaLifecycleStatus(rfa))}</RfaPill></td><td>{date(rfa.createdAt)}</td>
-        </tr>] : rfa.items.map((item) => { const outcome = rfaOutcome(item); return <tr key={`${rfa.id}:${item.id}`} {...rowProps(rfa.id, item.id)}>
-          <td className="mbrfa-cell-title"><RfaLink href={getRfaHref?.(rfa.id, { treatmentId: item.id })} onSelect={() => onSelect(rfa.id, item.id)}>{item.serviceDescription}</RfaLink>{rfa.displayReference ? <small>RFA {rfa.displayReference}</small> : null}</td>
-          <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td><td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>
-          <td>{item.procedureCode || "—"}<small>{item.diagnosisCode}</small></td>
-          <td>{date(rfa.submittedAt)}</td><td>{item.decisionClosure?.closed || !rfa.submittedAt ? "—" : rfaDecisionDueText(rfa)}</td><td><RfaPill tone={outcome.tone}>{outcome.label}</RfaPill>{item.decidedAt ? <small>{date(item.decidedAt)}</small> : null}{item.authorizationNumber ? <small>Auth {item.authorizationNumber}</small> : null}</td><td>{date(rfa.createdAt)}</td>
-        </tr>; }))}
+      {/* Same columns as the injury page's RFA section, plus the patient, since this list spans patients. */}
+      {view === "rfas" ? <table className="mbrfa-table"><thead><tr>{heading("createdAt", "RFA ID")}{heading("employeeName", "Patient")}{heading("providerName", "Requesting physician")}<th scope="col">Requested treatment</th>{heading("submittedAt", "RFA sent")}<th scope="col">Decision due</th><th scope="col">Decision date</th>{heading(lifecycleAvailable ? "lifecycleStatus" : "status", "Status")}</tr></thead><tbody>
+        {rows.map(rfa => <tr key={rfa.id} {...rowProps(rfa.id)}>
+          <td className="mbrfa-cell-ref"><RfaLink href={getRfaHref?.(rfa.id)} onSelect={() => onSelect(rfa.id)}>{reference(rfa)}</RfaLink>{rfa.expedited ? <small>Expedited</small> : null}</td>
+          <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td>
+          <td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>
+          <td className="mbrfa-cell-title"><span className="mbrfa-clamp">{rfa.items.map(item => item.serviceDescription).filter(Boolean).join(" · ") || "—"}</span></td>
+          <td>{date(rfa.submittedAt)}</td><td>{rfa.submittedAt ? date(rfa.decisionDueAt) : "—"}</td><td>{date(latestDecision(rfa))}</td>
+          <td><RfaPill tone={rfaLifecycleTone(rfa)}>{rfaStatusLabel(getRfaLifecycleStatus(rfa))}</RfaPill></td>
+        </tr>)}
       </tbody></table>
+      : <table className="mbrfa-table"><thead><tr>{heading("createdAt", "RFA ID")}{heading("employeeName", "Patient")}{heading("providerName", "Requesting physician")}<th scope="col">Service / good</th><th scope="col">CPT/HCPCS</th><th scope="col">Quantity / frequency / duration</th>{heading("submittedAt", "RFA sent")}<th scope="col">Decision due</th><th scope="col">Decision date</th><th scope="col">Decision</th><th scope="col">Auth #</th></tr></thead><tbody>
+        {rows.flatMap(rfa => rfa.items.map((item, index) => { const outcome = rfaOutcome(item); const unsent = ["draft", "ready", "canceled"].includes(rfa.status); return <tr key={`${rfa.id}:${item.id}`} {...rowProps(rfa.id, item.id)}>
+          <td className="mbrfa-cell-ref"><RfaLink href={getRfaHref?.(rfa.id, { treatmentId: item.id })} onSelect={() => onSelect(rfa.id, item.id)}>{`${reference(rfa)}-${index + 1}`}</RfaLink></td>
+          <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td>
+          <td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>
+          <td className="mbrfa-cell-title">{item.serviceDescription}{item.diagnosisCode ? <small className="mbrfa-mono">ICD-10 {item.diagnosisCode}</small> : null}</td>
+          <td className="mbrfa-mono">{item.procedureCode || "—"}</td>
+          <td>{[item.quantity, item.frequency, item.duration].filter(part => part != null && part !== "").join(" · ") || "—"}</td>
+          <td>{date(rfa.submittedAt)}</td><td>{unsent || item.decisionClosure?.closed ? "—" : date(rfa.decisionDueAt)}</td><td>{date(item.decidedAt)}</td>
+          <td><RfaPill tone={unsent ? "muted" : outcome.tone}>{unsent ? (rfa.status === "canceled" ? "Canceled" : "Not sent") : outcome.label}</RfaPill></td>
+          <td className="mbrfa-mono">{item.authorizationNumber || "—"}</td>
+        </tr>; }))}
+      </tbody></table>}
     </div>}
   </div>;
 }
