@@ -20,11 +20,12 @@ it("loads all task pages with host filters and excludes the unassigned inbox in 
   const fetcher = vi.fn<typeof fetch>(async url => Response.json(String(url).includes("cursor=two") ? { data: [{ ...task, id: "post_synthetic", kind: "post_ur_decision", responseDocumentId: "ur_synthetic" }], nextCursor: null } : { data: [task], nextCursor: "two" }));
   try {
     await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, patientId: "patient_synthetic", renderingProviderId: "provider_synthetic", onSelect })));
-    expect(h.container.textContent).toContain("Due (2)"); expect(h.container.textContent).toContain("Decision overdue");
+    expect(h.container.textContent).toContain("To do (2)"); expect(h.container.textContent).toContain("Decision overdue");
     expect(h.container.textContent).toContain("The decision deadline passed without a recorded decision.");
-    expect(fetcher).toHaveBeenCalledTimes(2); expect(fetcher.mock.calls.every(call => String(call[0]).includes("patientId=patient_synthetic") && String(call[0]).includes("renderingProviderId=provider_synthetic"))).toBe(true);
+    // Open tasks load first, then every task including finished ones, each across both pages.
+    expect(fetcher).toHaveBeenCalledTimes(4); expect(fetcher.mock.calls.filter(call => String(call[0]).includes("includeResolved=false"))).toHaveLength(2); expect(fetcher.mock.calls.every(call => String(call[0]).includes("patientId=patient_synthetic") && String(call[0]).includes("renderingProviderId=provider_synthetic"))).toBe(true);
     expect(h.container.querySelector('[aria-label="Match UR"]')).toBeNull();
-    await act(async () => h.button("View all due tasks (2)").click());
+    await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Post UR, total: 1 due tasks"]')!.click());
     await act(async () => h.button("Review response").click()); expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "ur_synthetic");
   } finally { await h.close(); }
 });
@@ -40,16 +41,18 @@ it("paginates unmatched faxes and requires review, selection and confirmation be
   });
   try {
     await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, permissions: ["act"], onSelect })));
-    expect(h.container.querySelector("summary")?.textContent).toContain("Incoming responses (1+)");
+    const inbox = () => h.container.querySelector('[aria-label="Incoming UR responses"] strong')?.textContent;
+    expect(inbox()).toBe("1+ incoming UR responses to match");
+    await act(async () => h.button("Review").click());
     await act(async () => h.button("Next fax page").click()); expect(fetcher.mock.calls.some(call => String(call[0]).includes("cursor=two"))).toBe(true);
     expect(h.button("Next fax page").disabled).toBe(true);
-    expect(h.container.querySelector("summary")?.textContent).toContain("Incoming responses (1+)");
+    expect(inbox()).toBe("1+ incoming UR responses to match");
     const beforeRefresh = fetcher.mock.calls.length;
     await act(async () => window.dispatchEvent(new Event("focus")));
     const refreshReads = fetcher.mock.calls.slice(beforeRefresh).map(call => String(call[0])).filter(url => url.includes("rfa-inbound-faxes"));
     expect(refreshReads.some(url => url.includes("cursor=two"))).toBe(true);
     expect(refreshReads.some(url => !url.includes("cursor="))).toBe(true);
-    expect(h.container.querySelector("summary")?.textContent).toContain("Incoming responses (1+)");
+    expect(inbox()).toBe("1+ incoming UR responses to match");
     await act(async () => h.button("Previous fax page").click());
     await act(async () => h.button("Review fax").click()); expect(h.container.textContent).toContain("Incoming utilization review response");
     expect(h.button("Match response and open Post UR").disabled).toBe(true);
@@ -94,22 +97,21 @@ it("drills into exactly the chosen age and kind without mixing scheduled or comp
   ], nextCursor: null }));
   try {
     await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, claimId: "claim_synthetic", onSelect })));
-    expect(h.container.textContent).toContain("Task status");
-    expect(h.container.textContent).toContain("Tasks that need attention now");
+    expect(h.container.textContent).toContain("Columns count days since each task opened");
     expect(h.container.textContent).not.toContain("Delivery unconfirmed");
     expect(h.container.textContent).not.toContain("transmission_unconfirmed");
-    expect(h.container.textContent).toContain("Due (2)");
-    expect(h.container.textContent).toContain("Scheduled (1)");
-    expect(h.container.textContent).toContain("Completed (1)");
+    expect(h.container.textContent).toContain("To do (2)");
+    expect(h.container.textContent).toContain("Follow up later (1)");
+    expect(h.container.textContent).toContain("Done (1)");
     await act(async () => h.container.querySelector<HTMLButtonElement>('[aria-label="Post UR, 31+ days: 1 due tasks"]')!.click());
     expect(h.container.querySelectorAll('[aria-label="Selected tasks"] tbody tr')).toHaveLength(1);
     await act(async () => h.button("Review response").click());
     expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "document_synthetic");
-    await act(async () => h.button("Scheduled (1)").click());
+    await act(async () => h.button("Follow up later (1)").click());
     expect(h.container.querySelector('[aria-label="Selected tasks"]')).toBeNull();
-    expect(h.container.textContent).toContain("Open tasks with a future follow-up date");
-    await act(async () => h.button("Completed (1)").click());
-    expect(h.container.textContent).toContain("Completing a task does not necessarily close its RFA");
+    expect(h.container.textContent).toContain("Tasks set aside until a later follow-up date");
+    await act(async () => h.button("Done (1)").click());
+    expect(h.container.textContent).toContain("Finishing a task does not close its RFA");
   } finally { await h.close(); }
 });
 
@@ -141,11 +143,11 @@ it("routes counts, group totals and all tasks with state, kind and age without i
     const modified = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
     await act(async () => link.dispatchEvent(modified));
     expect(modified.defaultPrevented).toBe(false); expect(onNavigate).not.toHaveBeenCalled();
-    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete RFAs, Unknown age: 1 due tasks"]')?.getAttribute("href")).toContain("kinds=document_required%2Csend_rfa&age=unknown");
-    const total = h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete RFAs, Total: 2 due tasks"]')!;
+    expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete, Unknown age: 1 due tasks"]')?.getAttribute("href")).toContain("kinds=document_required%2Csend_rfa&age=unknown");
+    const total = h.container.querySelector<HTMLAnchorElement>('[aria-label="Incomplete, Total: 2 due tasks"]')!;
     expect(total.getAttribute("href")).toBe("/rfa-tasks?state=Due&kinds=document_required%2Csend_rfa");
-    expect([...h.container.querySelectorAll("a")].find(a => a.textContent === "View all due tasks (2)")?.getAttribute("href")).toBe("/rfa-tasks?state=Due");
-    await act(async () => h.button("Scheduled (1)").click());
+    expect([...h.container.querySelectorAll("a")].some(a => a.textContent?.startsWith("View all"))).toBe(false);
+    await act(async () => h.button("Follow up later (1)").click());
     expect(h.container.querySelector<HTMLAnchorElement>('[aria-label="Send RFA, 31+ days: 1 scheduled tasks"]')?.getAttribute("href")).toContain("state=Scheduled");
   } finally { await h.close(); }
 });
@@ -171,7 +173,7 @@ it("renders a separate filtered list, retaining response context and routed stat
     expect(fetcher.mock.calls.some(call => /lifecycleStatus=|status=/.test(String(call[0])))).toBe(false);
     await act(async () => h.button("Review response").click());
     expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "response_synthetic");
-    await act(async () => h.button("Due (1)").click());
+    await act(async () => h.button("To do (1)").click());
     expect(getTaskHref).toHaveBeenLastCalledWith({ state: "Due", kind: "post_ur_decision", bucket: "unknown" });
     expect(onNavigate).toHaveBeenCalledWith("/rfa-tasks?state=Due&kind=post_ur_decision&age=unknown");
   } finally { await h.close(); }
@@ -215,4 +217,20 @@ it("lists a response-review task by what the response decided once decisions are
   expect(rfaTaskByResponseOutcome({ ...task, responseOutcome: "denied_or_modified" } as typeof task).kind).toBe("post_ur_denied");
   expect(rfaTaskByResponseOutcome({ ...task, kind: "no_response", responseOutcome: "approved" } as typeof task).kind).toBe("no_response");
   expect(rfaTaskLabel("post_ur_approved")).toBe("Approved — confirm and bill");
+});
+
+it("shows the last loaded tasks at once on return, then refreshes them", async () => {
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json({ data: [{ ...task, id: "cached_synthetic", createdAt: "2026-01-01" }], nextCursor: null }));
+  const first = harness();
+  try { await act(async () => first.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, cacheKey: "org_synthetic", onSelect: vi.fn() }))); expect(first.container.textContent).toContain("To do (1)"); } finally { await first.close(); }
+  const pending = vi.fn<typeof fetch>(async url => String(url).includes("rfa-inbound-faxes") ? Response.json({ data: [], nextCursor: null }) : new Promise<Response>(() => {}));
+  const second = harness();
+  try {
+    await act(async () => second.root.render(createElement(RfaTaskBoard, { getSession, fetch: pending, cacheKey: "org_synthetic", onSelect: vi.fn() })));
+    expect(second.container.textContent).toContain("To do (1)"); expect(second.container.textContent).not.toContain("Loading tasks");
+    expect(pending.mock.calls.some(call => String(call[0]).includes("rfa-follow-ups"))).toBe(true);
+  } finally { await second.close(); }
+  // Another organization never sees them.
+  const other = harness();
+  try { await act(async () => other.root.render(createElement(RfaTaskBoard, { getSession, fetch: pending, cacheKey: "org_other_synthetic", onSelect: vi.fn() }))); expect(other.container.textContent).toContain("Loading tasks"); } finally { await other.close(); }
 });

@@ -9,10 +9,9 @@ export const rfaCalendarDate = (value: string | null | undefined): string => { c
 const sentence = (value: string) => { const text = value.replaceAll("_", " "); return text.charAt(0).toUpperCase() + text.slice(1); };
 
 /** Decision wording and tone for one requested treatment. */
-/** The few request statuses people see: Draft, Sent, Failed, Received, Closed (or Canceled). Decisions belong to
- * each treatment, not to the request. The lifecycle's "incomplete" means not yet sent, so it reads Draft here
- * (an RFA the administrator returns as incomplete is a different thing). */
-export const rfaStatusLabel = (status: RfaLifecycleStatus): string => status === "incomplete" ? "Draft" : RFA_LIFECYCLE_LABELS[status];
+/** The few request statuses people see, as daisyBill names them: Incomplete (not yet sent), Sent, Failed, Received,
+ * Closed (or Canceled). Decisions belong to each treatment, not to the request. */
+export const rfaStatusLabel = (status: RfaLifecycleStatus): string => RFA_LIFECYCLE_LABELS[status];
 export function rfaOutcome(item: RfaRecord["items"][number]): { label: string; tone: "ok" | "warn" | "bad" | "muted" } {
   if (item.decisionClosure?.closed) return { label: "Not required", tone: "muted" };
   if (item.outcome === "approved") return { label: "Approved", tone: "ok" };
@@ -55,7 +54,7 @@ export function RfaStatusCard({ rfa }: { rfa: RfaRecord }): ReactElement {
   const status = getRfaLifecycleStatus(rfa);
   const decided = DECIDED.includes(rfa.status) || (rfa.items.length > 0 && rfa.items.every(item => item.outcome !== "pending" || item.decisionClosure?.closed));
   // Signing is part of sending, so it is not a step of its own.
-  const stages = ["Draft", "Sent", "Received", "Closed"];
+  const stages = ["Incomplete", "Sent", "Received", "Closed"];
   const current = rfa.submittedAt && decided ? 3 : rfa.receivedAt ? 2 : rfa.submittedAt ? 1 : 0;
   const stopped = status === "canceled" || status === "failed";
   const failure = status === "failed" ? rfa.transmissions.map(rfaFailureReason).filter(Boolean).at(-1) : "";
@@ -65,7 +64,7 @@ export function RfaStatusCard({ rfa }: { rfa: RfaRecord }): ReactElement {
   const answered = open.filter(item => item.outcome !== "pending").length;
   const progress = rfa.submittedAt && !stopped && open.length && answered ? ` · ${answered} of ${open.length} treatment${open.length === 1 ? "" : "s"} decided` : "";
   return <section className="mbrfa-status" aria-label="Request status" data-stopped={stopped || undefined}>
-    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Draft" : rfaStatusLabel(status)}</h3><p>{detail}{progress}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
+    <div className="mbrfa-status-heading"><div><h3>{!rfa.submittedAt && !stopped ? "Incomplete" : rfaStatusLabel(status)}</h3><p>{detail}{progress}</p></div>{rfa.submittedAt && !stopped ? <div className="mbrfa-status-due"><span>Decision due</span><strong>{rfaDecisionDueText(rfa)}</strong></div> : null}</div>
     <ol aria-label="Authorization progress">{stages.map((stage, index) => <li key={stage} data-state={index < current ? "done" : index === current ? "current" : "todo"} aria-current={index === current ? "step" : undefined}><span>{index < current ? "✓" : index + 1}</span><strong>{stage}</strong></li>)}</ol>
   </section>;
 }

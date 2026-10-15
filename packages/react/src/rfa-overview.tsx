@@ -20,7 +20,7 @@ export function RfaOverview({ summary, onSelect, combined = false }: { combined?
       </div>)}
     </section>)}
     <p className="mbrfa-overview-footnote">Aging counts calendar days since submission, separately from the decision deadline. Only requests awaiting a treatment decision are aged.{!aging ? " Aging is unavailable from this server." : ""}</p>
-    <button type="button" className="mbrfa-all-requests" onClick={() => onSelect("")}><strong>All requests</strong><span>{summary.total.toLocaleString()} <span aria-hidden="true">→</span></span></button>
+    {combined ? null : <button type="button" className="mbrfa-all-requests" onClick={() => onSelect("")}><strong>All requests</strong><span>{summary.total.toLocaleString()} <span aria-hidden="true">→</span></span></button>}
   </div>;
 }
 export const rfaDashboardCss = `

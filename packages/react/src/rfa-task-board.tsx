@@ -29,6 +29,8 @@ export type RfaTaskBoardProps = OrganizationClientOptions & TreatmentDraftAppear
   /** Optional host rendering for the request/patient/claim identity on each task. */
   renderTaskIdentity?: (task: RfaFollowUp) => ReactNode;
   onSelect: (rfaId: string, responseDocumentId?: string) => void;
+  /** Identifies the signed-in organization. When set, the last loaded tasks show instantly on return while they refresh. */
+  cacheKey?: string;
 };
 export function rfaTaskState(task: Pick<RfaFollowUp, "status" | "resolvedAt" | "snoozedUntil" | "dueAt">, now = Date.now()): "Due" | "Scheduled" | "Completed" {
   if (task.status === "resolved" || task.resolvedAt) return "Completed";
@@ -36,10 +38,12 @@ export function rfaTaskState(task: Pick<RfaFollowUp, "status" | "resolvedAt" | "
 }
 // Delivery reconciliation stays server-managed, outside staff task queues.
 export const isStaffRfaTask = (task: Pick<RfaFollowUp, "kind">): boolean => task.kind !== "transmission_unconfirmed";
+// Tabs read as what to do with a task; the query values stay Due/Scheduled/Completed for existing links.
+const taskViewLabels: Record<RfaTaskState, string> = { Due: "To do", Scheduled: "Follow up later", Completed: "Done" };
 const taskViewDescriptions: Record<string, string> = {
-  Due: "Tasks that need attention now, including overdue follow-ups.",
-  Scheduled: "Open tasks with a future follow-up date. This does not mean a treatment appointment is scheduled.",
-  Completed: "Tasks that have been resolved. Completing a task does not necessarily close its RFA.",
+  Due: "Columns count days since each task opened. Select a number to see those tasks.",
+  Scheduled: "Tasks set aside until a later follow-up date.",
+  Completed: "Finished tasks. Finishing a task does not close its RFA.",
 };
 const names: Record<string, string> = { send_rfa: "Send RFA", no_response: "Decision overdue", transmission_failed: "Submission failed", information_requested: "Respond to information request", clock_review: "Deadline needs review", schedule_treatment: "Schedule treatment", post_ur_decision: "Post UR", post_ur_approved: "Approved — confirm and bill", post_ur_denied: "Denied or modified — review", document_required: "Add supporting documents" };
 const descriptions: Record<string, string> = {
@@ -60,13 +64,16 @@ export function rfaTaskByResponseOutcome(task: RfaFollowUp): RfaFollowUp {
 }
 export const rfaTaskLabel = (kind: string): string => names[kind] ?? kind.replaceAll("_", " ");
 const taskAgeColumns: { key: RfaTaskAge; label: string }[] = [{ key: "0-5", label: "0–5 days" }, { key: "6-14", label: "6–14 days" }, { key: "15-30", label: "15–30 days" }, { key: "31+", label: "31+ days" }];
+// Grouped by where the RFA stands, in daisyBill's status words, rather than by kind of work.
 const taskGroups = [
-  { title: "Incomplete RFAs", kinds: ["document_required", "send_rfa"] },
-  { title: "Delivery issues", kinds: ["transmission_failed"] },
-  { title: "Decision deadlines", kinds: ["no_response", "clock_review"] },
-  { title: "Responses to process", kinds: ["post_ur_decision", "post_ur_approved", "post_ur_denied", "information_requested"] },
-  { title: "Treatment scheduling", kinds: ["schedule_treatment"] },
+  { title: "Incomplete", kinds: ["document_required", "send_rfa"] },
+  { title: "Failed", kinds: ["transmission_failed"] },
+  { title: "Sent · Decision overdue", kinds: ["no_response", "clock_review"] },
+  { title: "Response received", kinds: ["post_ur_decision", "post_ur_approved", "post_ur_denied", "information_requested"] },
+  { title: "Approved", kinds: ["schedule_treatment"] },
 ];
+/** Last loaded tasks per board, so returning to the dashboard shows them at once while they refresh. */
+const taskCache = new Map<string, RfaFollowUp[]>();
 /** Calendar dates in the viewer's timezone, rather than elapsed 24-hour periods. */
 export function rfaTaskAgeBucket(createdAt: string, now = Date.now()): string {
   const opened = new Date(createdAt); const current = new Date(now);
@@ -82,13 +89,17 @@ export function RfaTaskBoard({ sessionEndpoint, getSession, apiBaseUrl, fetch: f
   const identity = useMemo(() => crypto.randomUUID(), [options]);
   return <TaskBoardContent key={`${identity}:${props.patientId ?? ""}:${props.claimId ?? ""}:${props.renderingProviderId ?? ""}`} {...props} options={options} />;
 }
-function TaskBoardContent({ options, patientId, claimId, renderingProviderId, permissions = [], onSelect, embedded = false, presentation = "dashboard", query, getTaskHref, onNavigate, renderTaskIdentity, ...appearance }: Omit<RfaTaskBoardProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
+function TaskBoardContent({ options, patientId, claimId, renderingProviderId, permissions = [], onSelect, embedded = false, presentation = "dashboard", query, getTaskHref, onNavigate, renderTaskIdentity, cacheKey, ...appearance }: Omit<RfaTaskBoardProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
   const requests = useMemo(() => createRfaClient(options), [options]);
   const [requestIdentities, setRequestIdentities] = useState<Record<string, RfaRecord>>({});
-  const [tasks, setTasks] = useState<RfaFollowUp[]>([]); const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
+  const cacheId = cacheKey ? JSON.stringify([cacheKey, patientId ?? null, claimId ?? null, renderingProviderId ?? null]) : "";
+  const cached = cacheId ? taskCache.get(cacheId) : undefined;
+  const [tasks, setTasks] = useState<RfaFollowUp[]>(cached ?? []); const [error, setError] = useState(""); const [loading, setLoading] = useState(!cached);
+  const [completedLoaded, setCompletedLoaded] = useState(Boolean(cached));
   const [now, setNow] = useState(Date.now);
-  const [inboxCount, setInboxCount] = useState<string | null>(null);
+  const [inboxCount, setInboxCount] = useState<string | null>(null); const [inboxOpen, setInboxOpen] = useState(false);
+  const orgWide = !patientId && !claimId && !renderingProviderId;
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(timer); }, []);
   const [view, setView] = useState<RfaTaskState>(query?.state ?? "Due");
   const [selection, setSelection] = useState<RfaTaskQuery | null>(null);
@@ -99,27 +110,40 @@ function TaskBoardContent({ options, patientId, claimId, renderingProviderId, pe
   useEffect(() => { if (selection) { drilldown.current?.scrollIntoView?.({ block: "nearest" }); drilldown.current?.focus({ preventScroll: true }); } }, [selection]);
   useEffect(() => {
     let active = true; let pending = false;
+    const all = async (includeResolved: boolean) => {
+      const found: RfaFollowUp[] = []; const seen = new Set<string>(); let cursor: string | undefined;
+      do {
+        const result = await client.listFollowUps({ ...(patientId ? { patientId } : {}), ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), includeResolved, limit: 200, ...(cursor ? { cursor } : {}) });
+        found.push(...result.data.map(rfaTaskByResponseOutcome)); cursor = result.nextCursor ?? undefined;
+        if (cursor && seen.has(cursor)) throw new Error("Task pagination could not be completed. Retrying automatically.");
+        if (cursor) seen.add(cursor);
+      } while (cursor && active);
+      return found.filter(isStaffRfaTask);
+    };
     const load = async (background = false) => {
       if (pending) return; pending = true;
-      if (!background) { setLoading(true); setTasks([]); }
+      if (!background) setLoading(true);
       try {
-        const found: RfaFollowUp[] = []; const seen = new Set<string>(); let cursor: string | undefined;
-        do {
-          const result = await client.listFollowUps({ ...(patientId ? { patientId } : {}), ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), includeResolved: true, limit: 200, ...(cursor ? { cursor } : {}) });
-          found.push(...result.data.map(rfaTaskByResponseOutcome)); cursor = result.nextCursor ?? undefined;
-          if (cursor && seen.has(cursor)) throw new Error("Task pagination could not be completed. Retrying automatically.");
-          if (cursor) seen.add(cursor);
-        } while (cursor && active);
-        if (active) { setTasks(found.filter(isStaffRfaTask)); setError(""); setNow(Date.now()); }
+        // Open tasks are what the page leads with; finished ones only feed the Done tab, so they follow.
+        const resolved = all(true);
+        // Its failure is reported when it is awaited below, even if the open tasks fail first.
+        resolved.catch(() => undefined);
+        if (!background) {
+          const open = await all(false);
+          if (active) { setTasks(current => [...open, ...current.filter(task => rfaTaskState(task) === "Completed")]); setLoading(false); setError(""); setNow(Date.now()); }
+        }
+        const found = await resolved;
+        if (active) { setTasks(found); setCompletedLoaded(true); setError(""); setNow(Date.now()); if (cacheId) taskCache.set(cacheId, found); }
       } catch { if (active) setError("Tasks could not be updated. Retrying automatically."); }
       finally { pending = false; if (active) setLoading(false); }
     };
-    void load();
+    void load(Boolean(cached));
     const refresh = () => { if (document.visibilityState !== "hidden") void load(true); };
     const timer = setInterval(refresh, 30_000); window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { active = false; clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [client, patientId, claimId, renderingProviderId]);
+    // The cache is only read when the board mounts.
+  }, [client, patientId, claimId, renderingProviderId, cacheId]);
   const stateTasks = tasks.filter(task => rfaTaskState(task, now) === view);
   const filtered = stateTasks.filter(task => (!activeSelection?.kind || task.kind === activeSelection.kind) && (!activeSelection?.kinds || activeSelection.kinds.includes(task.kind)) && (!activeSelection?.bucket || rfaTaskAgeBucket(task.createdAt, now) === activeSelection.bucket));
   // Only read requests visible in this opt-in list, using the existing scoped session.
@@ -163,20 +187,21 @@ function TaskBoardContent({ options, patientId, claimId, renderingProviderId, pe
   };
   const countCell = (items: RfaFollowUp[], kind?: string, bucket?: RfaTaskAge) => items.length ? selectionControl({ ...(kind ? { kind } : {}), ...(bucket ? { bucket } : {}) }, items.length, `${rfaTaskLabel(kind ?? "all_tasks")}, ${bucket ? columns.find(column => column.key === bucket)?.label : "total"}: ${items.length} ${view.toLowerCase()} tasks`) : <span className="mbrfa-task-zero">0</span>;
   return <TreatmentDraftShell {...appearance} hideHeading={embedded} title={list ? "RFA task list" : "RFA tasks"} description={list ? "Follow-up tasks matching the selected status, action and age." : "Open follow-up work, grouped by next action and age."}>
-    <style>{`.mbrfa-task-tabs{display:flex;gap:8px;margin:12px 0 18px;flex-wrap:wrap}.mbtd .mbrfa-task-tabs button[aria-pressed=true]{border-color:var(--mb-accent);background:var(--mb-soft);color:var(--mb-accent);font-weight:650}.mbrfa-task-group{border:1px solid var(--mb-border);border-radius:var(--mb-radius);overflow:auto;margin:14px 0;background:var(--mb-surface)}.mbrfa-task-group table{width:100%;border-collapse:collapse;min-width:620px;table-layout:fixed}.mbrfa-task-group th,.mbrfa-task-group td{padding:8px 14px;border-bottom:1px solid var(--mb-border);text-align:center}.mbrfa-task-group th:first-child,.mbrfa-task-group td:first-child{text-align:left;width:31%}.mbrfa-task-group thead th{font-size:12px;background:var(--mb-soft)}.mbrfa-task-group thead th:first-child{font-size:14px}.mbrfa-task-group th small{display:block;font-weight:400;color:var(--mb-muted)}.mbrfa-task-group tfoot{font-weight:650;background:var(--mb-soft)}.mbrfa-task-group tfoot td,.mbrfa-task-group tfoot th{border:0}.mbtd .mbrfa-task-count{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border:0;background:transparent;color:var(--mb-accent);font-weight:650;min-height:28px;padding:2px 10px}.mbrfa-task-zero{color:var(--mb-muted)}.mbrfa-task-drilldown{margin:20px 0}.mbrfa-task-drilldown table{width:100%;border-collapse:collapse}.mbrfa-task-drilldown th,.mbrfa-task-drilldown td{text-align:left;border-bottom:1px solid var(--mb-border);padding:10px;vertical-align:top}.mbrfa-task-drilldown td small{display:block;color:var(--mb-muted);overflow-wrap:anywhere}.mbrfa-task-scroll{overflow:auto}.mbrfa-task-drilldown h3{margin:0}.mbrfa-inbox{border-top:1px solid var(--mb-border);padding-top:18px;margin-top:20px}.mbrfa-inbox h3{margin-top:0}.mbrfa-list{display:grid;gap:8px;margin:12px 0}.mbrfa-card{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px;border:1px solid var(--mb-border);border-radius:8px}.mbrfa-card span{display:block;margin-top:4px}.mbrfa-card p{margin:6px 0}.mbrfa-match-disclosure{margin-top:20px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);padding:14px;background:var(--mb-surface)}.mbrfa-match-disclosure>summary{cursor:pointer;font-weight:650;color:var(--mb-accent)}@media(max-width:600px){.mbrfa-card{align-items:stretch;flex-direction:column}}`}</style>
-    <strong>Task status</strong>
-    <div className="mbrfa-task-tabs" role="group" aria-label="Task status">{(["Due", "Scheduled", "Completed"] as const).map(state => <button key={state} type="button" aria-pressed={view === state} onClick={() => { if (list && getTaskHref) { const href = getTaskHref({ ...query, state }); if (onNavigate) onNavigate(href); else window.location.assign(href); } else { setView(state); setSelection(null); } }}>{state} ({tasks.filter(task => rfaTaskState(task, now) === state).length})</button>)}</div>
-    <p className="mbtd-note">{taskViewDescriptions[view]}</p>
-    {error ? <p role="alert">{error}</p> : null}{loading ? <p role="status">Loading tasks…</p> : !error && !stateTasks.length ? <p>No {view.toLowerCase()} tasks.</p> : null}
-    {!list && !loading && stateTasks.length ? <p>Calendar days since task opened. Select a count to see the tasks. Counts represent tasks, so one RFA may appear more than once.</p> : null}
+    <style>{`.mbrfa-task-tabs{display:flex;gap:8px;margin:4px 0 8px;flex-wrap:wrap}.mbtd .mbrfa-task-note{color:var(--mb-muted);font-size:13px;margin:0 0 6px}.mbrfa-ur-inbox{border:1px solid var(--mb-accent);border-left-width:4px;border-radius:var(--mb-radius);background:var(--mb-soft);padding:14px 16px;margin:0 0 18px}.mbrfa-ur-inbox[hidden]{display:none}.mbrfa-ur-inbox-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.mbrfa-ur-inbox-head strong{display:block;color:var(--mb-text);font-size:15px}.mbrfa-ur-inbox-head span{display:block;color:var(--mb-muted);font-size:13px;margin-top:2px}.mbtd .mbrfa-ur-inbox-head button{flex-shrink:0;background:var(--mb-accent);color:var(--mb-accent-contrast);border-color:var(--mb-accent)}.mbrfa-ur-inbox .mbrfa-inbox{margin-top:12px}@media(max-width:640px){.mbrfa-ur-inbox-head{align-items:flex-start;flex-direction:column}}.mbtd .mbrfa-task-tabs button[aria-pressed=true]{border-color:var(--mb-accent);background:var(--mb-soft);color:var(--mb-accent);font-weight:650}.mbrfa-task-group{border:1px solid var(--mb-border);border-radius:var(--mb-radius);overflow:auto;margin:14px 0;background:var(--mb-surface)}.mbrfa-task-group table{width:100%;border-collapse:collapse;min-width:620px;table-layout:fixed}.mbrfa-task-group th,.mbrfa-task-group td{padding:8px 14px;border-bottom:1px solid var(--mb-border);text-align:center}.mbrfa-task-group th:first-child,.mbrfa-task-group td:first-child{text-align:left;width:31%}.mbrfa-task-group thead th{font-size:12px;background:var(--mb-soft)}.mbrfa-task-group thead th:first-child{font-size:14px}.mbrfa-task-group th small{display:block;font-weight:400;color:var(--mb-muted)}.mbrfa-task-group tfoot{font-weight:650;background:var(--mb-soft)}.mbrfa-task-group tfoot td,.mbrfa-task-group tfoot th{border:0}.mbtd .mbrfa-task-count{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border:0;background:transparent;color:var(--mb-accent);font-weight:650;min-height:28px;padding:2px 10px}.mbrfa-task-zero{color:var(--mb-muted)}.mbrfa-task-drilldown{margin:20px 0}.mbrfa-task-drilldown table{width:100%;border-collapse:collapse}.mbrfa-task-drilldown th,.mbrfa-task-drilldown td{text-align:left;border-bottom:1px solid var(--mb-border);padding:10px;vertical-align:top}.mbrfa-task-drilldown td small{display:block;color:var(--mb-muted);overflow-wrap:anywhere}.mbrfa-task-scroll{overflow:auto}.mbrfa-task-drilldown h3{margin:0}.mbrfa-inbox{border-top:1px solid var(--mb-border);padding-top:18px;margin-top:20px}.mbrfa-inbox h3{margin-top:0}.mbrfa-list{display:grid;gap:8px;margin:12px 0}.mbrfa-card{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px;border:1px solid var(--mb-border);border-radius:8px}.mbrfa-card span{display:block;margin-top:4px}.mbrfa-card p{margin:6px 0}.mbrfa-match-disclosure{margin-top:20px;border:1px solid var(--mb-border);border-radius:var(--mb-radius);padding:14px;background:var(--mb-surface)}.mbrfa-match-disclosure>summary{cursor:pointer;font-weight:650;color:var(--mb-accent)}@media(max-width:600px){.mbrfa-card{align-items:stretch;flex-direction:column}}`}</style>
+    {!list && orgWide ? <section className="mbrfa-ur-inbox" aria-label="Incoming UR responses" hidden={!inboxOpen && (inboxCount === null || inboxCount === "0")}>
+      <div className="mbrfa-ur-inbox-head"><div><strong>{inboxCount === null || inboxCount === "0" ? "Incoming UR responses" : `${inboxCount} incoming UR response${inboxCount === "1" ? "" : "s"} to match`}</strong><span>Faxes we received that are not attached to an RFA yet. Match each one so its decision can be recorded.</span></div><button type="button" aria-expanded={inboxOpen} onClick={() => setInboxOpen(value => !value)}>{inboxOpen ? "Hide" : "Review"}</button></div>
+      <div hidden={!inboxOpen}><InboundFaxInbox bare onCount={setInboxCount} options={options} editable={permissions.includes("act")} disabled={Boolean(appearance.disabled)} onSelect={onSelect} /></div>
+    </section> : null}
+    <div className="mbrfa-task-tabs" role="group" aria-label="Tasks">{(["Due", "Scheduled", "Completed"] as const).map(state => <button key={state} type="button" aria-pressed={view === state} onClick={() => { if (list && getTaskHref) { const href = getTaskHref({ ...query, state }); if (onNavigate) onNavigate(href); else window.location.assign(href); } else { setView(state); setSelection(null); } }}>{taskViewLabels[state]}{state !== "Completed" || completedLoaded ? ` (${tasks.filter(task => rfaTaskState(task, now) === state).length})` : ""}</button>)}</div>
+    {list ? null : <p className="mbrfa-task-note">{taskViewDescriptions[view]}</p>}
+    {error ? <p role="alert">{error}</p> : null}{loading ? <p role="status">Loading tasks…</p> : !error && !stateTasks.length && (view !== "Completed" || completedLoaded) ? <p>{({ Due: "Nothing to do right now.", Scheduled: "No tasks set for later.", Completed: "No finished tasks yet." } as const)[view]}</p> : null}
     {!list ? groups.map(group => { const groupTasks = stateTasks.filter(task => group.kinds.includes(task.kind)); return <section className="mbrfa-task-group" key={group.title} aria-label={group.title}><table><thead><tr><th scope="col">{group.title}<small>By date task opened</small></th>{columns.map(column => <th scope="col" key={column.key}><span className="mbrfa-task-age">{column.label}</span></th>)}<th scope="col">Task total</th></tr></thead><tbody>{group.kinds.filter(kind => groupTasks.some(task => task.kind === kind)).map(kind => { const items = groupTasks.filter(task => task.kind === kind); return <tr key={kind}><th scope="row">{rfaTaskLabel(kind)}{descriptions[kind] && <small>{descriptions[kind]}</small>}</th>{columns.map(column => <td key={column.key}>{countCell(items.filter(task => rfaTaskAgeBucket(task.createdAt, now) === column.key), kind, column.key)}</td>)}<td>{countCell(items, kind)}</td></tr>; })}</tbody><tfoot><tr><th scope="row">Total</th>{[...columns, { key: "total", label: "Total" }].map(column => { const items = column.key === "total" ? groupTasks : groupTasks.filter(task => rfaTaskAgeBucket(task.createdAt, now) === column.key); return <td key={column.key}>{items.length ? selectionControl({ kinds: group.kinds, title: group.title, ...(column.key !== "total" ? { bucket: column.key as RfaTaskAge } : {}) }, items.length, `${group.title}, ${column.label}: ${items.length} ${view.toLowerCase()} tasks`) : <span className="mbrfa-task-zero">0</span>}</td>; })}</tr></tfoot></table></section>; }) : null}
-    {!list && stateTasks.length ? <div className="mbtd-actions">{selectionControl({}, `View all ${view.toLowerCase()} tasks (${stateTasks.length})`)}</div> : null}
     {list || selection ? <section ref={drilldown} tabIndex={-1} className="mbrfa-task-drilldown" aria-label="Selected tasks"><div className="mbtd-actions"><h3>{selectedTitle}{activeSelection?.bucket ? ` · ${[...taskAgeColumns, { key: "unknown", label: "Unknown age" }].find(column => column.key === activeSelection.bucket)?.label}` : ""} ({filtered.length})</h3>{!list ? <button type="button" onClick={() => setSelection(null)}>Close task list</button> : null}</div><div className="mbrfa-task-scroll"><table><thead><tr><th>Task / request</th><th>{view === "Completed" ? "Completed" : "Follow up"}</th><th>Assigned to</th><th>Action</th></tr></thead><tbody>{filtered.map(task => <tr key={task.id}><td><strong>{rfaTaskLabel(task.kind)}</strong>{taskIdentity(task)}{task.responseFilename ? <small>{task.responseFilename}</small> : null}{task.lastOutcome ? <small>Last outcome: {task.lastOutcome.replaceAll("_", " ")}</small> : null}{task.lastNote ? <small>{task.lastNote}</small> : null}</td><td>{date(view === "Completed" ? task.resolvedAt ?? task.updatedAt : task.snoozedUntil ?? task.dueAt)}</td><td>{task.assigneeReference || "Unassigned"}</td><td><button type="button" onClick={() => onSelect(task.rfaId, task.responseDocumentId ?? undefined)}>{task.kind === "post_ur_decision" ? "Review response" : "Open request"}</button></td></tr>)}</tbody></table></div>{!filtered.length ? <p>No tasks match this selection.</p> : null}</section> : null}
-    {!list ? !patientId && !claimId && !renderingProviderId ? <details className="mbrfa-match-disclosure"><summary>Match UR · Incoming responses{inboxCount !== null ? ` (${inboxCount})` : ""}</summary><InboundFaxInbox onCount={setInboxCount} options={options} editable={permissions.includes("act")} disabled={Boolean(appearance.disabled)} onSelect={onSelect} /></details> : <p className="mbtd-note">Open the organization-wide RFA dashboard to match incoming faxes that do not yet belong to a patient or claim.</p> : null}
+    {!list && !orgWide ? <p className="mbtd-note">Open the organization-wide RFA dashboard to match incoming faxes that do not yet belong to a patient or claim.</p> : null}
   </TreatmentDraftShell>;
 }
 
-function InboundFaxInbox({ options, editable, disabled, onSelect, onCount }: { onCount: (count: string) => void; options: OrganizationClientOptions; editable: boolean; disabled: boolean; onSelect: RfaTaskBoardProps["onSelect"] }): ReactElement {
+function InboundFaxInbox({ options, editable, disabled, onSelect, onCount, bare = false }: { bare?: boolean; onCount: (count: string) => void; options: OrganizationClientOptions; editable: boolean; disabled: boolean; onSelect: RfaTaskBoardProps["onSelect"] }): ReactElement {
   const client = useMemo(() => createRfaLifecycleClient(options), [options]); const records = useMemo(() => createRfaClient(options), [options]);
   const [faxes, setFaxes] = useState<RfaInboundFax[]>([]); const [fax, setFax] = useState<RfaInboundFax | null>(null); const [pdf, setPdf] = useState<Blob | null>(null);
   const [choices, setChoices] = useState<RfaRecord[]>([]); const [selected, setSelected] = useState(""); const [search, setSearch] = useState("");
@@ -206,7 +231,7 @@ function InboundFaxInbox({ options, editable, disabled, onSelect, onCount }: { o
     return () => { active = false; clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [client, reload, pages, onCount]);
   const run = async (action: () => Promise<void>) => { if (pending.current || disabled) return; pending.current = true; setBusy(true); setError(""); try { await action(); } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : "The fax action failed."); } finally { pending.current = false; if (alive.current) setBusy(false); } };
-  return <section className="mbrfa-inbox" aria-label="Match UR"><h3>Response inbox · Match UR</h3><p>Review incoming response faxes, then choose the matching request. Matching adds the response document and creates a Post UR task; it does not record a treatment decision.</p>
+  return <section className="mbrfa-inbox" aria-label="Match UR">{bare ? null : <><h3>Response inbox · Match UR</h3><p>Review incoming response faxes, then choose the matching request. Matching adds the response document and creates a Post UR task; it does not record a treatment decision.</p></>}
     {error ? <p role="alert">{error}</p> : null}{loading ? <p role="status">Loading response faxes…</p> : !error && !faxes.length ? <p>No unmatched response faxes.</p> : null}
     {pages.length > 1 || nextCursor ? <div className="mbtd-actions"><button type="button" disabled={loading || busy || pages.length < 2} onClick={() => setPages(value => value.slice(0, -1))}>Previous fax page</button><span>Page {pages.length}</span><button type="button" disabled={loading || busy || !nextCursor} onClick={() => { if (nextCursor) setPages(value => [...value, nextCursor]); }}>Next fax page</button></div> : null}
     <div className="mbrfa-list">{faxes.map(item => <article className="mbrfa-card" key={item.id}><div><strong>Response fax · {date(item.receivedAt)}</strong><span>{item.fromName || item.fromFax || "Sender not identified"} · {item.pages ?? "Unknown"} pages</span></div><button type="button" disabled={busy || disabled} onClick={() => { const current = ++generation.current; setFax(item); setPdf(null); setSelected(""); setConfirmed(false); setChoices([]); setSearch(""); void run(async () => { const [blob, suggestions] = await Promise.all([client.getInboundFaxContent(item.id), Promise.all(item.suggestedRfaIds.map(id => records.get(id).catch(() => null)))]); if (alive.current && current === generation.current) { setPdf(blob); setChoices(suggestions.filter((value): value is RfaRecord => value !== null)); } }); }}>Review fax</button></article>)}</div>
