@@ -4,7 +4,10 @@ import type { BillClaimsAdministratorDirectory, BillReviewPayer, RfaContact } fr
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { RfaIdentitySelect } from "./rfa-identity-select";
 import { RfaContactFields } from "./rfa-draft-fields";
+
 import { RfaManualToggle, RfaOfficialContactFields, RfaPicker } from "./rfa-official-fields";
+/** Anchor of the claims administrator section of the request form, for jumping straight to it. */
+export const RFA_CLAIMS_ADMINISTRATOR_SECTION = "rfa-claims-administrator";
 export type RfaContactDirectoryProps = {
   searchClaimsAdministrators?: (query: string, claimNumber?: string) => Promise<BillReviewPayer[]>;
   getClaimsAdministratorDirectory?: (id: string, injuryState?: string) => Promise<BillClaimsAdministratorDirectory>;
@@ -42,7 +45,7 @@ export function RfaContactPicker({ administratorId, claimNumber, contextKey, val
     const mailing = directory?.mailingAddresses?.[0]?.address?.trim(), parts = mailing ? /^(.+?),\s*([^,]+),\s*([A-Za-z]{2})\.?\s+(\d{5}(?:-\d{4})?)$/.exec(mailing) : null;
     const named = (text: string | undefined) => text && /[a-z]/i.test(text) ? text : undefined;
     const shown: RfaContact = value ?? { ...(directory?.name ? { name: directory.name } : {}), ...(parts ? { address: parts[1]!, city: parts[2]!, state: parts[3]!.toUpperCase(), zip: parts[4]! } : mailing ? { address: mailing } : {}), ...(directory?.telephoneNumbers?.[0] ? { phone: directory.telephoneNumbers[0] } : {}) };
-    return <fieldset><legend>Claims Administrator Information</legend>
+    return <fieldset id={RFA_CLAIMS_ADMINISTRATOR_SECTION} tabIndex={-1}><legend>Claims Administrator Information</legend>
       <div className="mbrfa-pickers" data-columns="2">
         {searchClaimsAdministrators ? <RfaPicker label="Claims administrator"><RfaIdentitySelect label="Claims Administrator" placeholder="Choose a claims administrator" searchPlaceholder="Search claims administrators" query={query} onSearch={setQuery} searchable disabled={disabled} value={administratorId ?? ""} loading={searching} error={searchError} options={[...(administratorId && directory ? [{ id: administratorId, label: directory.name || "Saved claims administrator" }] : []), ...options.filter(item => item.id !== administratorId || !directory).map(item => ({ id: item.id, label: item.name || "Unnamed claims administrator" }))]} onSelect={id => { const option = options.find(item => item.id === id); if (option) choose(option); }} /></RfaPicker> : null}
         <RfaPicker label={directory?.authorizationStatus === "claim_handling_location_routes" ? "Claim-handling office" : "Authorization contact"}><RfaAuthorizationDestination compact autoSelectSingle={!value} onManualEntry={() => setManual(true)} contextKey={`${contextKey}:${administratorId ?? ""}`} directory={directory} loading={loading} error={error} disabled={disabled} onChange={destination => {
@@ -57,7 +60,7 @@ export function RfaContactPicker({ administratorId, claimNumber, contextKey, val
       <RfaManualToggle manual={manual} onChange={setManual} disabled={disabled} />
     </fieldset>;
   }
-  return <fieldset disabled={disabled}><legend>Claims administrator authorization contact</legend>
+  return <fieldset id={RFA_CLAIMS_ADMINISTRATOR_SECTION} tabIndex={-1} disabled={disabled}><legend>Claims administrator authorization contact</legend>
     {searchClaimsAdministrators ? <label>Claims administrator<input role="combobox" aria-autocomplete="list" aria-expanded={Boolean(query && options.length)} aria-controls={listId} aria-activedescendant={activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined} autoComplete="off" placeholder={directory?.name || "Search claims administrators"} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => {
       if (event.key === "Escape") { setQuery(""); setActiveIndex(-1); }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setActiveIndex(index => options.length ? (index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length : -1); }

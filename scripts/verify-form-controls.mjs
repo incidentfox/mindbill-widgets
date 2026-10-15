@@ -19,12 +19,12 @@ const result = await build({
 import React from 'react';import {createRoot} from 'react-dom/client';import {RfaDashboard} from './packages/react/src/index.tsx';
 const scene=location.hash.slice(1)||'detail';
 const doc=(id,documentType,filename)=>({id,documentType,filename,sha256:'0',sizeBytes:1000,contentRevision:1,createdAt:'2026-10-07T13:14:00Z'});
-const sent=scene==='detail';
-const row={id:'rfa_synthetic',contentRevision:1,claimId:'claim_synthetic',patientId:'patient_synthetic',renderingProviderId:'provider_synthetic',employeeName:'Sample patient',dateOfInjury:'2025-06-01',providerName:'Sample physician, D.C.',providerNpi:'1234567890',claimsAdminName:'Sample administrator',claimNumber:'SAMPLE-001',status:sent?'under_review':'ready',reviewType:'prospective',requestType:'new',writtenConfirmation:false,expedited:false,signedAt:'2026-10-02T00:20:00Z',submittedAt:sent?'2026-10-02T00:30:00Z':null,receivedAt:sent?'2026-10-02T01:00:00Z':null,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-07T13:20:00Z',decisionDueAt:sent?'2026-10-09T00:00:00Z':null,readiness:{ready:true,missing:[]},
+const sent=scene==='detail';const failed=scene==='failed';
+const row={id:'rfa_synthetic',contentRevision:1,claimId:'claim_synthetic',patientId:'patient_synthetic',renderingProviderId:'provider_synthetic',employeeName:'Sample patient',dateOfInjury:'2025-06-01',providerName:'Sample physician, D.C.',providerNpi:'1234567890',claimsAdminName:'Sample administrator',claimNumber:'SAMPLE-001',status:sent?'under_review':failed?'submitted':'ready',lifecycleStatus:failed?'failed':undefined,reviewType:'prospective',requestType:'new',writtenConfirmation:false,expedited:false,signedAt:'2026-10-02T00:20:00Z',submittedAt:sent||failed?'2026-10-02T00:30:00Z':null,receivedAt:sent?'2026-10-02T01:00:00Z':null,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-07T13:20:00Z',decisionDueAt:sent?'2026-10-09T00:00:00Z':null,readiness:{ready:true,missing:[]},
  items:[{id:'item_approved',serviceDescription:'Chiropractic manipulative treatment, spinal, 3–4 regions',diagnosisCode:'M54.2',diagnosisDescription:'Cervicalgia',procedureCode:'98941',quantity:6,units:6,frequency:'1 visit per week',duration:'6 weeks',requestedFrom:'2026-10-03',requestedTo:'2026-11-27',outcome:sent?'approved':'pending',decidedAt:sent?'2026-10-07T13:14:00Z':null,authorizationNumber:sent?'SAMPLE-UR-001':null,authorizedProcedureCode:'98941',authorizedQuantity:6,authorizedUnits:6,effectiveFrom:'2026-10-07',effectiveTo:'2026-12-06',currentResponseDocumentId:sent?'doc_ur':null,currentDecisionEventId:sent?'event_1':null},
   {id:'item_pending',serviceDescription:'Therapeutic exercise',diagnosisCode:'M54.2',diagnosisDescription:'Cervicalgia',procedureCode:'97110',quantity:8,frequency:'2 visits per week',duration:'4 weeks',outcome:'pending'}],
  documents:[doc('doc_report','clinical_report','PR-2 progress report.pdf'),doc('doc_form','rfa_form','DWC-RFA-signed.pdf'),...(sent?[doc('doc_ur','ur_response','UR determination - Sample administrator.pdf'),doc('doc_ur2','ur_response','UR determination (corrected) - Sample administrator.pdf'),doc('doc_imr','imr_form','IMR application - blank.pdf')]:[])],
- transmissions:sent?[{id:'tx_sub',direction:'outbound',channel:'fax',status:'delivered',purpose:'submission',destination:'+15555550163',occurredAt:'2026-10-02T00:40:00Z',receivedAt:'2026-10-03T00:00:00Z',proofDocumentId:null,providerMessageId:'FAX-SAMPLE-1',packetId:'pkt_1'}]:[],informationRequests:[],events:[],requestingPractice:{},authorizationContact:{}};
+ transmissions:failed?[{id:'tx_fail',direction:'outbound',channel:'fax',status:'failed',purpose:'submission',destination:'+15555550163',occurredAt:'2026-10-02T00:40:00Z',receivedAt:null,proofDocumentId:null,providerMessageId:'FAX-SAMPLE-2',metadata:{failureReason:'busy'}}]:sent?[{id:'tx_sub',direction:'outbound',channel:'fax',status:'delivered',purpose:'submission',destination:'+15555550163',occurredAt:'2026-10-02T00:40:00Z',receivedAt:'2026-10-03T00:00:00Z',proofDocumentId:null,providerMessageId:'FAX-SAMPLE-1',packetId:'pkt_1'}]:[],informationRequests:[],events:[],requestingPractice:{},authorizationContact:{}};
 const scheduling=[{itemId:'item_approved',serviceDescription:row.items[0].serviceDescription,outcome:'approved',eligible:true,authorizationToken:'token',version:0,disposition:'pending',current:true,appointmentAt:null,providerName:null,location:null,reason:null,updatedAt:null},{itemId:'item_pending',serviceDescription:'Therapeutic exercise',outcome:'pending',eligible:false,authorizationToken:'token2',version:0,disposition:'pending',current:true,appointmentAt:null,providerName:null,location:null,reason:null,updatedAt:null}];
 const physicians=['Avery Sample, D.C.','Blake Example, M.D.','Casey Synthetic, D.O.','Devon Placeholder, M.D.','Emerson Test, P.T.','Finley Demo, M.D.','Gray Mock, D.C.','Harper Fixture, M.D.','Indigo Stub, D.O.','Jordan Dummy, M.D.','Kendall Fake, D.C.','Logan Trial, M.D.','Morgan Pilot, P.A.','Noel Draft, M.D.'].map((name,index)=>({id:'phys_'+index,name,npi:String(1000000000+index*7919),specialty:index%3?'Orthopedic surgery':'Chiropractic'}));
 const locations=['Downtown clinic','Harbor office','Valley medical center','Northside therapy'].map((name,index)=>({id:'loc_'+index,billingProviderId:'bp_1',name,street:(100+index*11)+' Sample Street',city:'Example City',state:'CA',zip:'9000'+index,active:true}));
@@ -133,6 +133,18 @@ try {
     await openCalendar("sent on"); await shot("mark-sent-calendar-open"); await close();
     await dialog().getByText(/The claims administrator received it/).click(); await shot("mark-sent-received");
     await close();
+
+    // A request whose only send failed: the resend dialog offers to correct the claims administrator or request.
+    await page.goto(`${origin}/#failed`); await page.reload(); await page.getByRole("button", { name: "Send again" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Edit request" }).count(), 1, "a failed request can be edited");
+    await page.getByRole("button", { name: "Send again" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Edit claims administrator or request" }).waitFor();
+    await shot("resend-fax");
+    await page.getByRole("dialog").getByText("E-mail", { exact: true }).click(); await shot("resend-email");
+    await page.getByRole("dialog").getByRole("button", { name: "Edit claims administrator details" }).click();
+    await page.locator("#rfa-claims-administrator").waitFor(); await page.waitForTimeout(800);
+    assert.ok(await page.evaluate(() => { const box = document.getElementById("rfa-claims-administrator").getBoundingClientRect(); return box.top >= -2 && box.top < innerHeight / 2; }), "edit form opens at the claims administrator section");
+    await shot("resend-edit-claims-administrator");
 
     // Creating an RFA.
     await page.goto(`${origin}/#create`); await page.reload();

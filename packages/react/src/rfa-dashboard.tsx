@@ -22,7 +22,8 @@ import { rfaSendFix } from "./rfa-send-fix";
 import { RfaSendDialog } from "./rfa-send-dialog";
 import { RfaDuplicateDialog, type RfaForwardContact } from "./rfa-duplicate-dialog";
 import { RfaCard, RfaFacts, RfaPill, RfaStatusCard, rfaAddress, rfaCalendarDate, rfaCardsCss, rfaLifecycleTone, rfaStatusLabel, rfaRequestTypeLabel, rfaShortDate } from "./rfa-detail-cards";
-import { canEditRfaDraft, rfaRecordToDraft, rfaDraftReplacement } from "./rfa-draft-edit";
+import { canEditRfaDraft, rfaCanResend, rfaRecordToDraft, rfaDraftReplacement } from "./rfa-draft-edit";
+import { RFA_CLAIMS_ADMINISTRATOR_SECTION } from "./rfa-contact-picker";
 import { rfaDecisionDueText } from "./rfa-decision-due";
 import { RfaLifecycleControls } from "./rfa-lifecycle-controls";
 import { RfaDeliveryPanel, RfaPdfReview as PdfReview } from "./rfa-delivery-panel";
@@ -130,11 +131,7 @@ const documentSourceLabel = (source: string | undefined) => source ? ({ upload: 
 const documentTypeLabel = (type: string) => ({ rfa_form: "DWC Form RFA", clinical_report: "Clinical report", supporting_record: "Supporting record", ur_response: "Utilization review response", imr_form: "Independent medical review form", fax_cover: "Fax cover sheet" } as Record<string, string>)[type] ?? sentence(type);
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not recorded";
 const key = () => `rfa-widget-${globalThis.crypto.randomUUID()}`;
-/** True when every attempt to send the request failed and no receipt was ever recorded. */
-export function rfaCanResend(rfa: Pick<RfaRecord, "status" | "receivedAt" | "transmissions">): boolean {
-  const attempts = rfa.transmissions.filter(sent => sent.direction === "outbound" && (sent.purpose ?? "submission") === "submission");
-  return rfa.status === "submitted" && !rfa.receivedAt && attempts.length > 0 && attempts.every(sent => sent.status === "failed");
-}
+export { rfaCanResend } from "./rfa-draft-edit";
 export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: fetchOverride, patientId, claimId, renderingProviderId, signatureSession, ...props }: RfaDashboardProps): ReactElement {
   const options = useMemo<OrganizationClientOptions>(() => ({ ...(sessionEndpoint ? { sessionEndpoint } : {}), ...(getSession ? { getSession } : {}), ...(apiBaseUrl ? { apiBaseUrl } : {}), ...(fetchOverride ? { fetch: fetchOverride } : {}) }), [sessionEndpoint, getSession, apiBaseUrl, fetchOverride]);
   const client = useMemo(() => createRfaClient(options), [options]);
@@ -434,6 +431,13 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
   const reviewable = !!rfa && (!!rfa.submittedAt || ["submitted", "received", "under_review", "information_requested", "approved", "modified", "denied", "mixed", "incomplete", "deferred"].includes(rfa.status));
   const sendFix = rfa ? rfaSendFix(rfa, documentIds, descriptions) : null;
   const editRequest = () => { setSending(false); setDetailTab("details"); setEditFiles([]); setEditing(true); };
+  // From a failed send: open the request at its claims administrator, the usual thing to correct.
+  const editClaimsAdministrator = () => {
+    editRequest();
+    let tries = 0;
+    const jump = () => { const section = document.getElementById(RFA_CLAIMS_ADMINISTRATOR_SECTION); if (section) { section.scrollIntoView?.({ block: "start", behavior: "smooth" }); section.focus({ preventScroll: true }); } else if (++tries < 20) setTimeout(jump, 100); };
+    setTimeout(jump, 0);
+  };
   // The card layout reads documents in a full-screen viewer; the classic layout keeps them inline.
   const openDocument = (documentId: string, title: string) => { if (simple) setOpenedDocument({ id: documentId, blob: null, title }); void run(async () => { const blob = await client.getDocument(id, documentId); if (alive.current) setOpenedDocument(current => current && current.id !== documentId && simple ? current : { id: documentId, blob, title }); }); };
   return <div className={`mbrfa-detail mbrfa-stack${simple ? " mbrfa-simple" : ""}`} style={{ marginTop: 16 }}>
@@ -566,7 +570,7 @@ function RfaDetail({ initial, layout, forwardContacts, id, selectedItem, selecte
       {simple && markingSent && (unsent || resendable) ? <RfaMarkSentDialog rfa={rfa} options={options} records={client} allowProof={!!unsent} onSaved={value => { adopt(value); setMarkingSent(false); }} onClose={() => setMarkingSent(false)} /> : null}
       {simple && duplicating && !unsent ? <RfaDuplicateDialog rfa={rfa} {...(forwardContacts ? { forwardContacts } : {})} options={options} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canAct={permissions.includes("act")}
         onSent={() => { void run(async () => adopt(await client.get(id))); }} onClose={() => setDuplicating(false)} /> : null}
-      {simple && sending && (unsent || resendable) ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog {...(permissions.includes("edit") && canEditRfaDraft(rfa) ? { onFix: editRequest } : {})} resend={resendable} rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
+      {simple && sending && (unsent || resendable) ? (() => { const hostSignature = renderSendSignatureSetup?.({ renderingProviderId: rfa.renderingProviderId, providerName: rfa.providerName }); return <RfaSendDialog {...(permissions.includes("edit") && canEditRfaDraft(rfa) ? { onFix: resendable ? editClaimsAdministrator : editRequest } : {})} resend={resendable} rfa={rfa} client={client} documentIds={documentIds} diagnosisDescriptions={descriptions} directory={directory} directoryLoading={directoryLoading} directoryError={directoryError} environment={environment} canSend={permissions.includes("send")} canSign={canSign} actorReference={actorReference} previewUrl={formPreviewUrl}
         signatureMissing={hostSignature?.missing}
         signatureSetup={hostSignature ? hostSignature.setup : canManageProviderSignatures && canSign ? settingSignature ? <RfaProviderSignatureSetup client={signatureClient} renderingProviderId={rfa.renderingProviderId} providerName={rfa.providerName} disabled={!!locked} onSaved={() => setSettingSignature(false)} onCancel={() => setSettingSignature(false)} /> : <p><button type="button" className="mbrfa-text-link" onClick={() => setSettingSignature(true)}>Set up or replace the physician's saved signature</button></p> : null}
         onUpdated={adopt} onSent={value => { adopt(value); setSending(false); }} onClose={() => setSending(false)} />; })() : null}
