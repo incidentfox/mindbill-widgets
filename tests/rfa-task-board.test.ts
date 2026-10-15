@@ -194,7 +194,9 @@ it("enriches only visible requests once with scoped patient, claim and treatment
     expect(fetcher.mock.calls.filter(call => !String(call[0]).includes("rfa-follow-ups"))).toHaveLength(1);
     expect(fetcher.mock.calls.some(call => String(call[0]).includes("rfa_hidden"))).toBe(false);
     expect(fetcher.mock.calls.every(call => !call[1]?.method || call[1].method === "GET")).toBe(true);
-    await act(async () => h.button("Review response").click());
+    // Rows read like the injury page's RFA table, and the whole row opens the request.
+    expect([...h.container.querySelectorAll(".mbrfa-task-list th")].map(th => th.textContent)).toEqual(["RFA ID", "Patient", "Requesting physician", "Requested treatment", "RFA sent", "Decision due", "Status", "Follow up"]);
+    await act(async () => h.container.querySelector<HTMLElement>(".mbrfa-task-row .mbrfa-task-treatment")!.click());
     expect(onSelect).toHaveBeenCalledWith("rfa_synthetic", "response_synthetic");
   } finally { await h.close(); }
 });
@@ -205,8 +207,7 @@ it("keeps task actions available without showing mismatched scoped request ident
   try {
     await act(async () => h.root.render(createElement(RfaTaskBoard, { getSession, fetch: fetcher, patientId: "patient_synthetic", presentation: "list", onSelect: vi.fn() })));
     expect(h.container.textContent).not.toContain("Synthetic Patient");
-    expect(h.container.textContent).toContain("Request rfa_synthetic · Claim claim_synthetic");
-    expect(h.button("Open request")).toBeDefined();
+    expect(h.button("SYNTHETI")).toBeDefined();
   } finally { await h.close(); }
 });
 
