@@ -11,6 +11,7 @@ import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-direc
 import { RfaPacketsPanel } from "./rfa-packets";
 import { RfaDraftActions } from "./rfa-draft-actions";
 import { RfaMarkSentDialog } from "./rfa-sent-outside";
+import { RfaFilterBar } from "./rfa-filter-bar";
 import { RfaListView } from "./rfa-list-view";
 import { RfaOverview, rfaDashboardCss } from "./rfa-overview";
 import { RfaCreateForm, type RfaClaimSelectorProps, type RfaProviderSelectorProps } from "./rfa-create-form";
@@ -80,6 +81,10 @@ export type RfaDashboardProps = OrganizationClientOptions & TreatmentDraftAppear
   cacheKey?: string;
   initialStatus?: string;
   initialAgingBucket?: RfaListQuery["agingBucket"] | "";
+  /** All RFAs filters to start from, e.g. from a dashboard link or the page URL. */
+  initialPhysicianId?: string; initialDecisionDue?: RfaListQuery["decisionDue"] | ""; initialSearch?: string;
+  /** Called whenever the All RFAs filters change, so the host can keep them in its URL. */
+  onFiltersChange?: (filters: { status: string; agingBucket: string; physicianId: string; decisionDue: string; search: string }) => void;
   /** Host routes for task, list, creation and return navigation; omitted routes keep embedded behavior. */
   navigation?: RfaDashboardNavigation;
   canCreateClaim?: boolean;
@@ -132,7 +137,7 @@ export function RfaDashboard({ sessionEndpoint, getSession, apiBaseUrl, fetch: f
   const identity = useMemo(() => ({ client, signatureClient, key: key() }), [client, signatureClient]);
   return <RfaDashboardContent key={`${identity.key}:${patientId ?? ""}:${claimId ?? ""}:${renderingProviderId ?? ""}`} {...props} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} client={client} signatureClient={signatureClient} options={options} />;
 }
-function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", initialDetailAction, initialOverviewView, initialStatus = "", initialAgingBucket = "", taskPresentation, taskQuery, renderTaskIdentity, cacheKey, navigation, permissions = [], canCreateClaim = false, renderClaimSelector, renderProviderSelector, forwardContacts, officialForm = false, managePracticeHref, onEditPractice, onAddPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, savedProfileChanges, manageLocationsHref, onPreviewRequest, onPreviewDraft, canManageProviderSignatures = false, renderSendSignatureSetup, readRfaResponse, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
+function RfaDashboardContent({ client, signatureClient, options, patientId, claimId, renderingProviderId, initialDraft, initialView = "overview", initialDetailAction, initialOverviewView, initialStatus = "", initialAgingBucket = "", initialPhysicianId = "", initialDecisionDue = "", initialSearch = "", onFiltersChange, taskPresentation, taskQuery, renderTaskIdentity, cacheKey, navigation, permissions = [], canCreateClaim = false, renderClaimSelector, renderProviderSelector, forwardContacts, officialForm = false, managePracticeHref, onEditPractice, onAddPractice, onEditLocation, treatmentTemplates, onSaveTreatmentTemplate, onManageTreatmentTemplates, savedProfileChanges, manageLocationsHref, onPreviewRequest, onPreviewDraft, canManageProviderSignatures = false, renderSendSignatureSetup, readRfaResponse, environment = "sandbox", actorReference, onCreated, onContinue, selectedRfaId, selectedTreatmentId, selectedResponseDocumentId: controlledResponseDocumentId, onSelectRfa, getRfaHref, getPatientHref, getClaimHref, getProviderHref, formPreviewUrl, hideBackButton = false, hideHeading = false, layout = "classic", ...appearance }: Omit<RfaDashboardProps, keyof OrganizationClientOptions> & { client: RfaClient; signatureClient: RfaClient; options: OrganizationClientOptions }): ReactElement {
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const references = useMemo(() => createBillReferenceClient(options), [options]);
@@ -151,12 +156,20 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
   const [status, setStatus] = useState(initialStatus);
   const lifecycleAvailable = result?.summary.byLifecycleStatus !== undefined;
   const [cursor, setCursor] = useState<string | undefined>();
-  const [searchInput, setSearchInput] = useState(""); const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(initialSearch); const [search, setSearch] = useState(initialSearch.trim());
   const [sortBy, setSortBy] = useState<NonNullable<RfaListQuery["sortBy"]>>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [creationWarning, setCreationWarning] = useState("");
   const [view, setView] = useState<"overview" | "rfas" | "treatments">(initialOverviewView ? initialOverviewView === "tasks" ? "overview" : "rfas" : layout === "simple" ? "rfas" : "overview");
   const [agingBucket, setAgingBucket] = useState<NonNullable<RfaListQuery["agingBucket"]> | "">(initialAgingBucket);
+  const [physician, setPhysician] = useState(initialPhysicianId);
+  const [decisionDue, setDecisionDue] = useState<NonNullable<RfaListQuery["decisionDue"]> | "">(initialDecisionDue);
+  const [physicians, setPhysicians] = useState<{ id: string; name: string }[]>([]); const [physiciansLoading, setPhysiciansLoading] = useState(false);
+  const loadPhysicians = () => {
+    if (physicians.length || physiciansLoading) return;
+    setPhysiciansLoading(true);
+    client.getCreationContext({ limit: 100 }).then(context => { if (active.current) setPhysicians(context.renderingProviders.map(provider => ({ id: provider.id, name: provider.name })).sort((a, b) => a.name.localeCompare(b.name))); }).catch(() => undefined).finally(() => { if (active.current) setPhysiciansLoading(false); });
+  };
   const [resultVisible, setResultVisible] = useState(Boolean(cachedOverview));
   const resultView = useRef<"overview" | "list" | "">(cachedOverview ? "overview" : "");
   const [localResponseDocumentId, setSelectedResponseDocumentId] = useState<string | undefined>();
@@ -197,7 +210,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
       if (!background) { setLoading(true); if (overview || resultView.current === "overview") setResultVisible(false); }
       try {
         // The overview shows only the counts, so it asks for a single row rather than a page of full requests.
-        const value = await client.list({ ...(patientId ? { patientId } : {}), ...(search && view !== "overview" ? { search } : {}), sortBy, sortDirection, ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), ...(view !== "overview" && status ? lifecycleAvailable ? { lifecycleStatus: status as import("@mindbill/browser").RfaLifecycleStatus } : { status } : {}), ...(view !== "overview" && agingBucket ? { agingBucket } : {}), ...(cursor && view !== "overview" ? { cursor } : {}), limit: overview ? 1 : 50 });
+        const value = await client.list({ ...(patientId ? { patientId } : {}), ...(search && view !== "overview" ? { search } : {}), sortBy, sortDirection, ...(claimId ? { claimId } : {}), ...(renderingProviderId ? { renderingProviderId } : {}), ...(view !== "overview" && status ? lifecycleAvailable ? { lifecycleStatus: status as import("@mindbill/browser").RfaLifecycleStatus } : { status } : {}), ...(view !== "overview" && agingBucket ? { agingBucket } : {}), ...(view !== "overview" && physician && !renderingProviderId ? { renderingProviderId: physician } : {}), ...(view !== "overview" && decisionDue ? { decisionDue } : {}), ...(cursor && view !== "overview" ? { cursor } : {}), limit: overview ? 1 : 50 });
         if (alive) { setResult(value); resultView.current = overview ? "overview" : "list"; setResultVisible(true); setError(""); if (overview && overviewCacheId) overviewCache.set(overviewCacheId, value); }
       } catch { if (alive) { setError(background ? "Updates are temporarily unavailable. Showing the last loaded requests; retrying automatically." : "Requests could not be loaded. Retrying automatically."); if (!background) setResultVisible(false); } }
       finally { pending = false; if (alive) setLoading(false); }
@@ -209,7 +222,14 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
     document.addEventListener("visibilitychange", refresh);
     return () => { alive = false; clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   // Whether lifecycle filtering exists only matters once a status is filtered; otherwise learning it must not reload.
-  }, [client, patientId, claimId, renderingProviderId, search, sortBy, sortDirection, status, cursor, reload, view !== "overview" && status ? lifecycleAvailable : null, view, agingBucket, selected, creating, overviewCacheId]);
+  }, [client, patientId, claimId, renderingProviderId, search, sortBy, sortDirection, status, cursor, reload, view !== "overview" && status ? lifecycleAvailable : null, view, agingBucket, physician, decisionDue, selected, creating, overviewCacheId]);
+  // The host keeps the list's filters in its URL, so back, refresh and shared links restore them.
+  const filtersReported = useRef(false);
+  useEffect(() => {
+    if (view === "overview" || selected || creating) return;
+    if (!filtersReported.current) { filtersReported.current = true; return; }
+    onFiltersChange?.({ status, agingBucket, physicianId: physician, decisionDue, search });
+  }, [status, agingBucket, physician, decisionDue, search, view, selected, creating]);
   const back = () => { setCreationWarning(""); setSelected(null); setSelectedItem(null); setSelectedResponseDocumentId(undefined); setCreating(false); setReload(value => value + 1); };
   const routeLink = (href: string, text: string, primary = false) => <a href={href} className={`mbrfa-route-link${primary ? " mbtd-primary" : ""}`} onClick={event => {
     if (!navigation?.onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -242,11 +262,18 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
       setCreating(false); selectRfa(saved.id); onCreated?.(saved);
       if (intent === "preview" && attached === files.length && onPreviewRequest) { try { await onPreviewRequest(saved.id); } catch { if (active.current) setCreationWarning("Draft saved. Preview could not be opened; open the request to try again."); } }
     }} /> : selected ? <RfaDetail layout={layout} key={selected} {...(forwardContacts ? { forwardContacts } : {})} {...(initialDetailAction ? { initialAction: initialDetailAction } : {})} {...relatedLinks} {...(formPreviewUrl ? { formPreviewUrl } : {})} id={selected} selectedItem={selectedItem} {...(selectedResponseDocumentId ? { selectedResponseDocumentId } : {})} client={client} signatureClient={signatureClient} options={options} onCopied={draft => { selectRfa(draft.id); onCreated?.(draft); }} draftFormProps={draftFormProps} canManageProviderSignatures={canManageProviderSignatures} {...(renderSendSignatureSetup ? { renderSendSignatureSetup } : {})} {...(readRfaResponse ? { readRfaResponse } : {})} permissions={permissions} environment={environment} {...(actorReference ? { actorReference } : {})} {...(onContinue ? { onContinue } : {})} {...(appearance.disabled !== undefined ? { disabled: appearance.disabled } : {})} /> : <>
-      {view === "overview" ? <RfaTaskBoard {...relatedLinks} {...(getRfaHref ? { getRfaHref } : {})} {...(cacheKey ? { cacheKey } : {})} {...(taskPresentation ? { presentation: taskPresentation } : {})} {...(taskQuery ? { query: taskQuery } : {})} {...(renderTaskIdentity ? { renderTaskIdentity } : {})} {...(navigation?.getTaskHref ? { getTaskHref: navigation.getTaskHref } : {})} {...(navigation?.onNavigate ? { onNavigate: navigation.onNavigate } : {})} embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : <div className="mbrfa-filters">
+      {view === "overview" ? <RfaTaskBoard {...relatedLinks} {...(getRfaHref ? { getRfaHref } : {})} {...(cacheKey ? { cacheKey } : {})} {...(taskPresentation ? { presentation: taskPresentation } : {})} {...(taskQuery ? { query: taskQuery } : {})} {...(renderTaskIdentity ? { renderTaskIdentity } : {})} {...(navigation?.getTaskHref ? { getTaskHref: navigation.getTaskHref } : {})} {...(navigation?.onNavigate ? { onNavigate: navigation.onNavigate } : {})} embedded {...appearance} {...options} {...(patientId ? { patientId } : {})} {...(claimId ? { claimId } : {})} {...(renderingProviderId ? { renderingProviderId } : {})} permissions={permissions.filter((value): value is "act" => value === "act")} onSelect={(id, documentId) => selectRfa(id, documentId ? { responseDocumentId: documentId } : undefined)} /> : lifecycleAvailable ? <RfaFilterBar search={searchInput} onSearch={setSearchInput} searchPlaceholder="Search patient, physician, claim, RFA or treatment"
+        onClearAll={() => { setSearchInput(""); setSearch(""); setStatus(""); setAgingBucket(""); setPhysician(""); setDecisionDue(""); resetPage(); }}
+        filters={[
+          { key: "status", label: "Status", value: status, options: [{ value: "", label: "Any status" }, ...Object.keys(RFA_LIFECYCLE_LABELS).map(value => ({ value, label: rfaStatusLabel(value as keyof typeof RFA_LIFECYCLE_LABELS) }))], onChange: value => { setStatus(value); resetPage(); } },
+          ...(renderingProviderId ? [] : [{ key: "physician", label: "Physician", value: physician, loading: physiciansLoading, onOpen: loadPhysicians, options: [{ value: "", label: "Any physician" }, ...(physician && !physicians.some(item => item.id === physician) ? [{ value: physician, label: result?.data.find(rfa => rfa.renderingProviderId === physician)?.providerName ?? "Selected physician" }] : []), ...[...physicians, ...(result?.data ?? []).filter(rfa => rfa.renderingProviderId && rfa.renderingProviderId !== physician && !physicians.some(item => item.id === rfa.renderingProviderId)).map(rfa => ({ id: rfa.renderingProviderId, name: rfa.providerName }))].filter((item, index, all) => all.findIndex(other => other.id === item.id) === index).map(item => ({ value: item.id, label: item.name }))], onChange: (value: string) => { setPhysician(value); resetPage(); } }]),
+          { key: "sent", label: "Sent", value: agingBucket, options: [{ value: "", label: "Any time" }, { value: "0_5", label: "0–5 days ago" }, { value: "6_14", label: "6–14 days ago" }, { value: "15_30", label: "15–30 days ago" }, { value: "31_plus", label: "31+ days ago" }], onChange: value => { setAgingBucket(value as typeof agingBucket); resetPage(); } },
+          { key: "due", label: "Decision due", value: decisionDue, options: [{ value: "", label: "Any" }, { value: "overdue", label: "Overdue" }, { value: "next_7_days", label: "Within 7 days" }], onChange: value => { setDecisionDue(value as typeof decisionDue); resetPage(); } },
+        ]} />
+      : <div className="mbrfa-filters">
         <label className="mbrfa-search">Search requests<input type="search" maxLength={200} value={searchInput} placeholder="Patient, physician, claim, RFA, service or code" onChange={event => setSearchInput(event.target.value)} /></label>
-        {lifecycleAvailable ? <div className="mbrfa-status-chips" role="group" aria-label="RFA status">{["", ...Object.keys(RFA_LIFECYCLE_LABELS)].map(value => <button key={value || "all"} type="button" aria-pressed={status === value} data-status={value || "all"} onClick={() => { setStatus(value); resetPage(); }}>{value ? rfaStatusLabel(value as keyof typeof RFA_LIFECYCLE_LABELS) : "All"}</button>)}</div>
-          : <label>Clinical status<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{CLINICAL_STATUSES.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>}
-        {searchInput || status || agingBucket ? <button type="button" className="mbrfa-clear" onClick={() => { setSearchInput(""); setSearch(""); setStatus(""); setAgingBucket(""); resetPage(); }}>Clear filters</button> : null}
+        <label>Clinical status<select value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="">All statuses</option>{CLINICAL_STATUSES.map(value => <option key={value} value={value}>{label(value)}</option>)}</select></label>
+        {searchInput || status ? <button type="button" className="mbrfa-clear" onClick={() => { setSearchInput(""); setSearch(""); setStatus(""); resetPage(); }}>Clear filters</button> : null}
       </div>}
       {error ? <p role="alert">{error}</p> : null}{loading && !(resultVisible && result) ? <p className="mbrfa-loading" role="status">Loading authorization requests…</p> : null}
       {resultVisible && result ? view === "overview" ? taskPresentation === "list" ? null : <RfaOverview combined summary={result.summary} onSelect={async (nextStatus, bucket) => {
@@ -269,7 +296,7 @@ function RfaDashboardContent({ client, signatureClient, options, patientId, clai
             return;
           }
           setSearchInput(""); setSearch(""); setStatus(nextStatus); setAgingBucket(bucket ?? ""); resetPage(); setView("rfas"); }} /> : <>
-        <div className="mbrfa-results-heading"><strong>{result.summary.total} {result.summary.total === 1 ? "request" : "requests"}{search ? " matching your search" : ""}</strong>{agingBucket ? <span>{{"0_5":"0–5", "6_14":"6–14", "15_30":"15–30", "31_plus":"31+"}[agingBucket]} days since submission</span> : null}</div>
+        <div className="mbrfa-results-heading"><strong>{result.summary.total} {result.summary.total === 1 ? "request" : "requests"}{search ? " matching your search" : ""}</strong></div>
         <RfaListView {...relatedLinks} {...(getRfaHref ? { getRfaHref } : {})} complete={!result.nextCursor && !pageHistory.length} updating={loading} lifecycleAvailable={lifecycleAvailable} view={view === "treatments" ? "treatments" : "rfas"} onViewChange={setView} records={result.data} sortBy={sortBy} sortDirection={sortDirection} onSort={field => { setSortBy(field); setSortDirection(field === sortBy && sortDirection === "asc" ? "desc" : "asc"); resetPage(); }} onSelect={(id, itemId) => selectRfa(id, itemId ? { treatmentId: itemId } : undefined)} />
         {pageHistory.length || result.nextCursor ? <div className="mbrfa-pagination"><span>Request page {pageHistory.length + 1}</span><div>{pageHistory.length ? <button type="button" onClick={() => { setCursor(pageHistory.at(-1)); setPageHistory(value => value.slice(0, -1)); }}>Previous page</button> : null}{result.nextCursor ? <button type="button" onClick={() => { setPageHistory(value => [...value, cursor]); setCursor(result.nextCursor!); }}>Next page</button> : null}</div></div> : null}
       </> : null}
