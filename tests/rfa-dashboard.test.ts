@@ -401,3 +401,15 @@ it("reads a document full-screen and switches to the request's other documents i
   expect(dialog()?.getAttribute("aria-label")).toBe(names[1]);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+it("renders a request the host loaded with the page at once, then refreshes it quietly",async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ let release:(value:Response)=>void=()=>{};
+ const fetcher=vi.fn<typeof fetch>(async(input)=>{const url=String(input);if(url.endsWith(`/rfas/${record.id}`))return new Promise<Response>(resolve=>{release=resolve;});return taskResponse(input) ?? Response.json({data:[]});});
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:record.id,initialRecord:record as never,permissions:["edit","send"]})));
+  expect(container.textContent).not.toContain("Loading request");
+  expect(container.querySelector(".mbrfa-detail-toolbar")).not.toBeNull();
+  await act(async()=>release(Response.json({data:{...record,employeeName:"Refreshed Patient"}})));
+  expect(container.textContent).toContain("Refreshed Patient");
+ }finally{await act(async()=>root.unmount());container.remove();}
+});
