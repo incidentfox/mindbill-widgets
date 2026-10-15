@@ -139,7 +139,7 @@ it("offers an opt-in focused layout while retaining deliberate sandbox delivery 
   expect(button("Request for authorization")).toBeDefined();
   await act(async()=>button("Request for authorization").click());
   expect([...container.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)).toEqual(["RFA Details","History & Activity"]);
-  expect([...container.querySelectorAll('[aria-label="Authorization progress"] li')].map(step=>[step.textContent!.replace(/^[\d✓]+/,""),step.getAttribute("data-state")])).toEqual([["Draft","current"],["Sent","todo"],["Received","todo"],["Closed","todo"]]);
+  expect([...container.querySelectorAll('[aria-label="Authorization progress"] li')].map(step=>[step.textContent!.replace(/^[\d✓]+/,""),step.getAttribute("data-state")])).toEqual([["Incomplete","current"],["Sent","todo"],["Received","todo"],["Closed","todo"]]);
   expect(panel("RFA Details").hidden).toBe(false);
   expect([...panel("RFA Details").querySelectorAll(".mbrfa-sheet > header h3")].map(title=>title.firstChild!.textContent)).toEqual(["Request Information","Employee Information","Requesting Physician Information","Claims Administrator Information","Requested Treatment","Documents"]);
   expect(container.querySelector("details")?.querySelector("summary")?.textContent).not.toBe("Patient, physician & claim details");
@@ -326,4 +326,20 @@ it("lists documents daisyBill-style: Type, Source, File name, View, Delete; hide
   expect(table.textContent).not.toContain("signing-preview");
   expect(table.querySelectorAll('button[title="Delete"]')).toHaveLength(1);
  }finally{await act(async()=>root.unmount());container.remove();}
+});
+it("loads the dashboard counts once, as a single row, and shows them at once on return",async()=>{
+ const summary={total:3,byStatus:{submitted:3},byLifecycleStatus:{sent:2,received:1},aging:{byBucket:{"0_5":3,"6_14":0,"15_30":0,"31_plus":0},byLifecycleStatus:{sent:{"0_5":2,"6_14":0,"15_30":0,"31_plus":0},received:{"0_5":1,"6_14":0,"15_30":0,"31_plus":0}}}};
+ const fetcher=vi.fn<typeof fetch>(async(input)=>taskResponse(input) ?? Response.json({data:[record],summary,nextCursor:null}));
+ const getSession=async()=>({token:"synthetic_token"});
+ const mount=async(fetch:typeof globalThis.fetch)=>{const container=document.createElement("div");document.body.append(container);const root=createRoot(container);await act(async()=>root.render(createElement(RfaDashboard,{getSession,fetch,cacheKey:"org_synthetic",initialOverviewView:"tasks"})));return{container,close:async()=>{await act(async()=>root.unmount());container.remove();}};};
+ const first=await mount(fetcher);
+ try{
+  const lists=fetcher.mock.calls.map(x=>String(x[0])).filter(url=>url.includes("/rfas?"));
+  expect(lists).toHaveLength(1);expect(lists[0]).toContain("limit=1");
+  expect(first.container.textContent).toContain("Requests awaiting a decision");expect(first.container.textContent).not.toContain("All requests");
+ }finally{await first.close();}
+ // Coming back, the last counts render before any request answers.
+ const pending=vi.fn<typeof fetch>(()=>new Promise<Response>(()=>{}));
+ const second=await mount(pending);
+ try{expect(second.container.textContent).toContain("Requests awaiting a decision");expect(second.container.textContent).not.toContain("Loading authorization requests");}finally{await second.close();}
 });
