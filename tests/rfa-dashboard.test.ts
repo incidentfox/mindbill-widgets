@@ -376,3 +376,14 @@ it("marks an unsent request as sent outside MindBill, and undoes it from History
   expect(fetcher.mock.calls.some(([url,init])=>String(url).endsWith("/sent-outside/tx_outside")&&init?.method==="DELETE")).toBe(true);
  }finally{confirm.mockRestore();await act(async()=>root.unmount());container.remove();}
 });
+it("opens the decision dialog on an unsent request, which has no review section",async()=>{
+ const withItem={...record,items:[{id:"item_synthetic",ordinal:1,procedureCode:"97110",serviceDescription:"Synthetic therapy",outcome:"pending",diagnosisCode:"M54.5",quantity:1,units:1,authorizationNumber:null,decisionReason:null}]};
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const fetcher=vi.fn<typeof fetch>(async(input)=>{const url=String(input);if(url.includes("/events")||url.endsWith("/scheduling"))return Response.json({data:[]});return taskResponse(input) ?? Response.json({data:withItem});});
+ try{
+  await act(async()=>root.render(createElement(RfaDashboard,{getSession:async()=>({token:"synthetic_token"}),fetch:fetcher,layout:"simple",selectedRfaId:record.id,permissions:["edit","send","act"]})));
+  expect(container.querySelector('[id$="-review"]')).toBeNull();
+  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="Record decision")!.click());
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("This RFA is not marked as sent");
+ }finally{await act(async()=>root.unmount());container.remove();}
+});

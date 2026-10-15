@@ -22,6 +22,8 @@ export type RfaLifecycleControlsProps = OrganizationClientOptions & TreatmentDra
   readResponse?: (rfaId: string, documentId: string) => Promise<RfaResponseReading>;
   /** Card layout: open the decision dialog for this treatment (for example from its treatment card). A new nonce reopens it. */
   decisionRequest?: { itemId: string; nonce: number };
+  /** With rows: render only the dialogs it opens, not the response and follow-up lists. */
+  dialogOnly?: boolean;
 };
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
 const timestamp = (form: FormData, name: string) => {
@@ -47,7 +49,7 @@ export function RfaLifecycleControls({ sessionEndpoint, getSession, apiBaseUrl, 
   const identity = useMemo(() => crypto.randomUUID(), [options]);
   return <LifecycleContent key={`${identity}:${props.rfa.id}`} {...props} options={options} />;
 }
-function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdated, selectedResponseDocumentId, rows = false, readResponse, decisionRequest, ...appearance }: Omit<RfaLifecycleControlsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
+function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdated, selectedResponseDocumentId, rows = false, readResponse, decisionRequest, dialogOnly = false, ...appearance }: Omit<RfaLifecycleControlsProps, keyof OrganizationClientOptions> & { options: OrganizationClientOptions }): ReactElement {
   const [rfa, setRfa] = useState(providedRfa);
   useEffect(() => { setRfa(providedRfa); }, [providedRfa]);
   const client = useMemo(() => createRfaLifecycleClient(options), [options]);
@@ -166,7 +168,7 @@ function LifecycleContent({ rfa: providedRfa, options, permissions = [], onUpdat
     finally { pending.current = false; if (alive.current) setBusy(false); }
   };
   const orderedPending = focusItem ? [...pendingItems].sort((a, b) => Number(b.id === focusItem) - Number(a.id === focusItem)) : pendingItems;
-  const cardRows = rows ? <>
+  const cardRows = rows && !dialogOnly ? <>
     {error && !panel ? <p role="alert">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
     <div className="mbrfa-ur-section"><h4>Responses</h4>{responses.length ? <ul className="mbrfa-ur-list">{responses.map(document => <li key={document.id}>
       <span><strong>{document.filename}</strong><small>Received {rfaShortDate(document.createdAt)}</small></span>
