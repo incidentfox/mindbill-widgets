@@ -1114,7 +1114,7 @@ export type BillProcedureCodeSearchInput = {
 
 /** Catalog membership does not imply that a fee is available for a service date. */
 export type BillProcedureCodePage = {
-  results: Array<{ code: string }>;
+  results: Array<{ code: string; description?: string }>;
   total: number;
   limit: number;
   jurisdiction: "CA" | "NY" | "OWCP";
@@ -1339,8 +1339,14 @@ export type BillFeeQuote =
     feeBreakdown?: { method: string; inputs: Array<{ label: string; value: string }>; steps: Array<{ label: string; value: string }> };
     provenance: BillFeeSource[];
     notes: string[];
+    /** Conditions that do not change the amount, such as modifier documentation or visit caps. */
+    findings?: BillFeeQuoteFinding[];
   }
-  | { status: "requires_review" | "not_separately_payable"; reason: string; provenance: BillFeeSource[] };
+  | { status: "requires_review" | "not_separately_payable"; reason: string; provenance: BillFeeSource[];
+    /** Plain-language explanation for the biller, when available. */
+    message?: string; findings?: BillFeeQuoteFinding[] };
+
+export type BillFeeQuoteFinding = { code: string; message: string; citationUrl?: string };
 
 /** Public DWC directory record. Only Approved records are selectable. */
 export type MedicalProviderNetwork = {
@@ -1845,7 +1851,8 @@ export function createBillLifecycleClient({
       throw new Error("Procedure-code search returned an invalid response.");
     }
     return {
-      results: body.results.flatMap((entry) => entry && typeof entry.code === "string" && entry.code.trim() ? [{ code: entry.code }] : []),
+      results: body.results.flatMap((entry) => entry && typeof entry.code === "string" && entry.code.trim()
+        ? [{ code: entry.code, ...(typeof entry.description === "string" && entry.description.trim() ? { description: entry.description.trim().slice(0, 200) } : {}) }] : []),
       total: body.total,
       limit: body.limit,
       jurisdiction: body.jurisdiction!,
