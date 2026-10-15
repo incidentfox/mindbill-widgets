@@ -206,6 +206,13 @@ it("enriches only visible requests once with scoped patient, claim and treatment
     expect(fetcher.mock.calls.filter(call => !String(call[0]).includes("rfa-follow-ups"))).toHaveLength(1);
     expect(fetcher.mock.calls.some(call => String(call[0]).includes("rfa_hidden"))).toBe(false);
     expect(fetcher.mock.calls.every(call => !call[1]?.method || call[1].method === "GET")).toBe(true);
+    // The filters show what the link selected and can be changed in place.
+    const taskFilter = [...h.container.querySelectorAll("select")].find(node => node.parentElement?.textContent?.startsWith("Task"))!;
+    expect(taskFilter.value).toBe("kind:post_ur_decision");
+    expect(h.container.textContent).toContain("2 tasks");
+    await act(async () => { taskFilter.value = ""; taskFilter.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(h.container.textContent).toContain("3 tasks");
+    await act(async () => { taskFilter.value = "kind:post_ur_decision"; taskFilter.dispatchEvent(new Event("change", { bubbles: true })); });
     // Rows read like the injury page's RFA table, and the whole row opens the request.
     expect([...h.container.querySelectorAll(".mbrfa-task-list th")].map(th => th.textContent)).toEqual(["RFA ID", "Patient", "Requesting physician", "Requested treatment", "RFA sent", "Decision due", "Status", "Follow up"]);
     await act(async () => h.container.querySelector<HTMLElement>(".mbrfa-task-row .mbrfa-task-treatment")!.click());
