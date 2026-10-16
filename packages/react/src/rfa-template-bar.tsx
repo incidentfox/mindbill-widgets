@@ -3,6 +3,7 @@ import { useState, type ReactElement } from "react";
 import { RfaIdentitySelect } from "./rfa-identity-select";
 import { RfaPicker } from "./rfa-official-fields";
 import type { RfaDraftItemInput } from "./rfa-draft-form";
+import { Checkbox } from "./form-controls";
 
 /** A saved set of requested treatments. Diagnoses stay with the claim, so templates do not carry them. */
 export type RfaTreatmentTemplate = {
@@ -60,7 +61,7 @@ export function RfaTemplateBar({ templates, items, renderingProviderId, physicia
         onSelect={id => { const template = offered.find(item => item.id === id); if (!template) return; setQuery(""); setApplied(id); onApply(applyRfaTemplate(template, items)); }} />
       {saving ? <div className="mbrfa-template-save">
         <label><span>Template name</span><input autoFocus maxLength={120} value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void save(); } }} /></label>
-        {renderingProviderId ? <label className="mbrfa-check"><input type="checkbox" checked={mine} onChange={event => setMine(event.target.checked)} /><span>Only for {physicianName || "this physician"}</span></label> : null}
+        {renderingProviderId ? <label className="mbrfa-check"><Checkbox checked={mine} onChange={event => setMine(event.target.checked)} /><span>Only for {physicianName || "this physician"}</span></label> : null}
         <div className="mbrfa-section-actions"><button type="button" className="mbtd-primary" disabled={busy || !name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save template"}</button><button type="button" disabled={busy} onClick={() => { setSaving(false); setError(""); }}>Cancel</button>{error ? <span role="alert">{error}</span> : <span>Saves the {reusable.length} requested treatment{reusable.length === 1 ? "" : "s"} below, without the diagnosis.</span>}</div>
       </div> : <span className="mbrfa-picker-links">
         {onSave ? <button type="button" className="mbrfa-link" disabled={disabled || !reusable.length} title={reusable.length ? undefined : "Enter a requested treatment first"} onClick={() => setSaving(true)}>Save as template</button> : null}

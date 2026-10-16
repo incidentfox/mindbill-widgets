@@ -1,7 +1,7 @@
 "use client";
 import {
-  Children, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
-  type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode, type RefObject,
+  Children, forwardRef, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
+  type CSSProperties, type InputHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode, type RefObject,
 } from "react";
 
 /**
@@ -15,6 +15,9 @@ import {
  * - `DateField`: value "YYYY-MM-DD". Type MM/DD/YYYY or pick from the calendar.
  * - `TimeField`: value "HH:mm". Typed as text, e.g. "3:00 PM".
  * - `DateTimeField`: value "YYYY-MM-DDTHH:mm" (local time), a date and a typed time.
+ * - `Checkbox` / `Radio`: a styled box or circle. The real input sits invisibly on top of it, so clicks, keyboard,
+ *   labels, `name`/`value`/`required` and `checked` behave exactly like the native control.
+ * - `FileInput`: a styled "Choose file" button with the chosen file names; the invisible native input covers it.
  */
 
 export type SelectOption = {
@@ -97,6 +100,24 @@ const css = `.mbctl{position:relative;display:block;min-width:0;width:100%;font-
 .mbctl-pop.mbctl-pop[data-sheet] .mbctl-pop-search{flex:none;min-height:52px;padding:12px 16px;font-size:16px}
 .mbctl-pop[data-sheet] .mbctl-cal{width:100%;max-width:400px;margin:0 auto;padding:12px 12px 16px}.mbctl-pop[data-sheet] .mbctl-cal-grid button{min-height:44px;height:44px;font-size:16px}@media(max-height:520px){.mbctl-pop[data-sheet] .mbctl-cal-grid button{min-height:36px;height:36px}.mbctl-pop[data-sheet] .mbctl-cal{padding-top:4px}}.mbctl-pop[data-sheet] .mbctl-cal-head button{min-height:44px;height:44px;font-size:16px}.mbctl-pop[data-sheet] .mbctl-cal-head button.mbctl-cal-step{width:44px}.mbctl-pop[data-sheet] .mbctl-cal-months button{min-height:48px;font-size:16px}.mbctl-pop[data-sheet] .mbctl-cal-foot button{min-height:44px;padding:4px 12px;font-size:16px}
 @media(max-width:640px){.mbctl.mbctl .mbctl-trigger,.mbctl.mbctl .mbctl-box{min-height:44px;font-size:16px}.mbctl.mbctl .mbctl-box input.mbctl-text{font-size:16px;min-height:42px}.mbctl-detail{font-size:13px}}
+.mbctl-check{margin:0}.mbctl-check.mbctl-check{position:relative;display:inline-grid;place-items:center;flex:none;box-sizing:border-box;width:18px;height:18px;min-width:18px;padding:0;vertical-align:-4px;line-height:0}
+.mbctl-check.mbctl-check>input.mbctl-native,.mbctl-file.mbctl-file>input.mbctl-native{position:absolute!important;inset:0;z-index:1;box-sizing:border-box;width:100%!important;height:100%!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;opacity:0!important;cursor:pointer;-webkit-appearance:none;appearance:none}
+.mbctl-check.mbctl-check>input.mbctl-native:disabled,.mbctl-file.mbctl-file>input.mbctl-native:disabled{cursor:not-allowed}
+.mbctl-check.mbctl-check>.mbctl-tick{box-sizing:border-box;display:grid;place-items:center;width:18px;height:18px;margin:0;padding:0;border:1.5px solid var(--mb-control-border,#9aa9b1);border-radius:5px;background:var(--mb-input,var(--mb-surface,#fff));color:transparent;transition:background-color .12s,border-color .12s,box-shadow .12s}
+.mbctl-check.mbctl-check[data-kind=radio]>.mbctl-tick{border-radius:50%}
+.mbctl-check.mbctl-check>input:hover:not(:disabled)+.mbctl-tick{border-color:var(--mb-accent,#1f6feb)}
+.mbctl-check.mbctl-check>input:checked+.mbctl-tick{border-color:var(--mb-accent,#1f6feb);background:var(--mb-accent,#1f6feb);color:var(--mb-accent-contrast,#fff)}
+.mbctl-check.mbctl-check[data-kind=radio]>input:checked+.mbctl-tick{background:var(--mb-input,var(--mb-surface,#fff));color:var(--mb-accent,#1f6feb)}
+.mbctl-check.mbctl-check>input:focus-visible+.mbctl-tick,.mbctl-file.mbctl-file>input:focus-visible~.mbctl-file-btn{outline:0;border-color:var(--mb-accent,#1f6feb);box-shadow:0 0 0 3px color-mix(in srgb,var(--mb-accent,#1f6feb) 22%,transparent)}
+.mbctl-check.mbctl-check>input:disabled+.mbctl-tick{opacity:.5;background:var(--mb-soft,#f4f6f8)}.mbctl-check.mbctl-check>input:checked:disabled+.mbctl-tick{background:var(--mb-accent,#1f6feb)}
+.mbctl-check.mbctl-check>input[aria-invalid=true]+.mbctl-tick{border-color:var(--mb-danger,#b91c1c)}
+.mbctl-tick svg{display:block}
+.mbctl-file.mbctl-file{position:relative;display:flex;align-items:center;gap:10px;box-sizing:border-box;min-width:0;max-width:100%;margin:0;font-size:14px;line-height:1.3}
+.mbctl-file.mbctl-file>.mbctl-file-btn{display:inline-flex;align-items:center;gap:6px;flex:none;box-sizing:border-box;min-height:36px;padding:6px 12px;border:1px solid var(--mb-border,#cfd8dc);border-radius:var(--mb-control-radius,8px);background:var(--mb-surface,#fff);color:var(--mb-text,#1f2a30);font-weight:600;white-space:nowrap}
+.mbctl-file.mbctl-file:hover:not([data-disabled])>.mbctl-file-btn{border-color:var(--mb-accent,#1f6feb);color:var(--mb-accent,#1f6feb)}
+.mbctl-file.mbctl-file[data-disabled]{opacity:.6}
+input.mbctl-native.mbctl-file-overlay{position:absolute!important;inset:0;z-index:1;box-sizing:border-box;width:100%!important;height:100%!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;opacity:0!important;cursor:pointer}
+.mbctl-file.mbctl-file>.mbctl-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mb-muted,#6b7a82)}.mbctl-file.mbctl-file[data-chosen]>.mbctl-file-name{color:var(--mb-text,#1f2a30)}
 .mbctl-datetime-field{container-type:inline-size}.mbctl-datetime{display:grid;grid-template-columns:minmax(0,1fr) minmax(104px,38%);gap:8px}@container (max-width:300px){.mbctl-datetime{grid-template-columns:minmax(0,1fr)}}`;
 
 export function FormControlStyles(): ReactElement { return <style href="mindbill-form-controls" precedence="default">{css}</style>; }
@@ -585,3 +606,77 @@ export function MultiSelect(props: MultiSelectProps): ReactElement {
     </div> : null}
   </div>;
 }
+
+// ---------- checkboxes, radios and file pickers ----------
+
+const tickIcon = <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2 5 8.6 9.6 3.6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+const dotIcon = <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="currentColor" /></svg>;
+const uploadIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></svg>;
+
+/** Props of a native checkbox or radio input. `className` and `style` apply to the input itself, so existing selectors keep matching. */
+export type CheckboxProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type">;
+export type RadioProps = CheckboxProps;
+
+function choiceControl(kind: "checkbox" | "radio") {
+  const Control = forwardRef<HTMLInputElement, CheckboxProps>(function Control({ className, ...input }, ref) {
+    return <span className="mbctl-check" data-kind={kind}>
+      <style href="mindbill-form-controls" precedence="default">{css}</style>
+      <input ref={ref} type={kind} className={`mbctl-native${className ? ` ${className}` : ""}`} {...input} />
+      <span className="mbctl-tick" aria-hidden="true">{kind === "radio" ? dotIcon : tickIcon}</span>
+    </span>;
+  });
+  Control.displayName = kind === "radio" ? "Radio" : "Checkbox";
+  return Control;
+}
+
+/** A styled checkbox. Put it inside a `<label>` with its text, or give it an `aria-label`. */
+export const Checkbox = choiceControl("checkbox");
+/** A styled radio button. Group radios with the same `name`, as with native radios. */
+export const Radio = choiceControl("radio");
+
+export type FileInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "children"> & {
+  /** Button text. Defaults to "Choose file" ("Choose files" with `multiple`). */
+  buttonLabel?: ReactNode;
+  /** Shown before a file is chosen. */
+  emptyLabel?: ReactNode;
+  /**
+   * "overlay" renders only the invisible input stretched over its nearest positioned ancestor, for a host link or
+   * drop zone that already shows its own text. Defaults to "button".
+   */
+  appearance?: "button" | "overlay";
+};
+
+/**
+ * A styled file picker: a button and the chosen file names. The real file input covers the control invisibly,
+ * so clicking, dropping a file on it, `name`/`required` and FormData behave like the native input.
+ */
+export const FileInput = forwardRef<HTMLInputElement, FileInputProps>(function FileInput({ buttonLabel, emptyLabel = "No file chosen", appearance = "button", className, style, onChange, ...input }, ref) {
+  const own = useRef<HTMLInputElement | null>(null);
+  const [names, setNames] = useState<string[]>([]);
+  useEffect(() => {
+    const form = own.current?.form;
+    if (!form) return;
+    const reset = () => setNames([]);
+    form.addEventListener("reset", reset);
+    return () => form.removeEventListener("reset", reset);
+  }, []);
+  const setRef = (node: HTMLInputElement | null) => {
+    own.current = node;
+    if (typeof ref === "function") ref(node); else if (ref) ref.current = node;
+  };
+  if (appearance === "overlay") return <>
+    <style href="mindbill-form-controls" precedence="default">{css}</style>
+    <input ref={setRef} type="file" className={`mbctl-native mbctl-file-overlay${className ? ` ${className}` : ""}`} {...input} onChange={onChange} />
+  </>;
+  return <span className={`mbctl-file${className ? ` ${className}` : ""}`} {...(style ? { style } : {})} data-disabled={input.disabled || undefined} data-chosen={names.length ? true : undefined}>
+    <style href="mindbill-form-controls" precedence="default">{css}</style>
+    <input ref={setRef} type="file" className="mbctl-native" {...input} onChange={event => {
+      const chosen = Array.from(event.target.files ?? []).map(file => file.name);
+      onChange?.(event);
+      // A host that consumes the file and clears the input should not keep showing its name.
+      setNames(event.target.files?.length ? chosen : []);
+    }} />
+    <span className="mbctl-file-btn" aria-hidden="true">{uploadIcon}{buttonLabel ?? (input.multiple ? "Choose files" : "Choose file")}</span>
+    <span className="mbctl-file-name" aria-hidden="true">{names.length ? names.join(", ") : emptyLabel}</span>
+  </span>;
+});

@@ -15,6 +15,7 @@ import {
   type RfaEvidenceState,
 } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { Checkbox } from "./form-controls";
 
 type Appearance = { appearance?: MindBillReactAppearance; className?: string; style?: CSSProperties };
 
@@ -465,7 +466,7 @@ export function BillUrDecisions({ billId, canEdit = false, load, attach, openDoc
     {result.decisions.length > 0 ? <div className="mbrr-scroll" style={{ marginTop: 8 }}><table className="mbrr-table" data-min="decisions">
       <thead><tr><th style={{ width: 32 }} /><th>Requested treatment</th><th>Decision</th><th>Authorization</th><th>Decided</th><th>Request</th></tr></thead>
       <tbody>{result.decisions.map(decision => <tr key={decision.documentId}>
-        <td>{decision.attached ? null : <input type="checkbox" className="mbrr-check" aria-label={`Select the decision in ${decision.filename}`} disabled={!selectable || busy !== null}
+        <td>{decision.attached ? null : <Checkbox className="mbrr-check" aria-label={`Select the decision in ${decision.filename}`} disabled={!selectable || busy !== null}
           checked={selected.has(decision.documentId)} onChange={event => { const checked = event.target.checked; setSelected(current => { const next = new Set(current); if (checked) next.add(decision.documentId); else next.delete(decision.documentId); return next; }); }} />}</td>
         <td>{decision.treatments.map((treatment, index) => <div key={index}>{treatment.service}{treatment.code ? <span className="mbrr-muted" style={{ marginLeft: 4 }}>{treatment.code}</span> : null}</div>)}</td>
         <td>{decision.treatments.map((treatment, index) => <div key={index}><span className="mbrr-pill" data-tone={outcomeTone(treatment.outcome)} style={{ textTransform: "capitalize" }}>{treatment.outcome}</span></div>)}</td>

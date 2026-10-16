@@ -15,7 +15,7 @@ import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appeara
 import { OrganizationAdministration } from "./organization-administration";
 import { TaxIdInput, taxIdWrite } from "./tax-id-input";
 import { W9Upload } from "./w9-upload";
-import { Select } from "./form-controls";
+import { Select, Checkbox, Radio } from "./form-controls";
 
 // Embeddable organization onboarding (INC-1470): capture the practice name,
 // tax ID, group NPI, billing provider, locations, and W-9 ONCE, saved straight
@@ -294,7 +294,7 @@ export function OrganizationOnboarding({
       {field("Specialty", rendering.specialty ?? "", (specialty) => setRendering((c) => ({ ...c, specialty })))}
       {field("License number", rendering.licenseNumber ?? "", (licenseNumber) => setRendering((c) => ({ ...c, licenseNumber })))}
       {field("License state", rendering.licenseState ?? "", (licenseState) => setRendering((c) => ({ ...c, licenseState: licenseState.toUpperCase().slice(0, 2) })))}
-      <label><input disabled={saving} type="checkbox" checked={rendering.active !== false} onChange={(event) => setRendering((c) => ({ ...c, active: event.target.checked }))} /> Available for new bills</label>
+      <label><Checkbox disabled={saving} checked={rendering.active !== false} onChange={(event) => setRendering((c) => ({ ...c, active: event.target.checked }))} /> Available for new bills</label>
     </div>
     <div className="mbob-actions"><span className="mbob-status">{savedStep["rendering"] ? "Saved to MindBill." : "Saved profiles do not change previously submitted bills."}</span><button className="mbob-save" type="button" disabled={saving || !rendering.name.trim()} onClick={() => run(() => client.saveBillingProfile({ renderingProviders: [rendering] }), "rendering")}>{saving ? "Saving…" : "Save rendering provider"}</button></div>
   </div>;
@@ -309,7 +309,7 @@ export function OrganizationOnboarding({
           {field("State", location.state, (state) => setLocation(index, { state: state.toUpperCase().slice(0, 2) }))}
           {field("ZIP", location.zip, (zip) => setLocation(index, { zip }))}
           {field("Place of service code", location.posCode ?? "", (posCode) => setLocation(index, { posCode }), false, "11")}
-          <label className="mbob-primary"><input disabled={saving || location.active === false} type="radio" name={primaryGroup} checked={location.isPrimary === true} onChange={() => setLocation(index, { isPrimary: true })} /> Primary</label>
+          <label className="mbob-primary"><Radio disabled={saving || location.active === false} name={primaryGroup} checked={location.isPrimary === true} onChange={() => setLocation(index, { isPrimary: true })} /> Primary</label>
           {location.id ? <button className="mbob-secondary" disabled={saving} type="button" onClick={() => setLocation(index, { active: location.active === false, ...(location.active !== false ? { isPrimary: false } : {}) })}>{location.active === false ? "Restore" : "Archive"}</button> : <button className="mbob-remove" disabled={saving} type="button" aria-label="Remove location" onClick={() => setLocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>}
         </div>
       ))}

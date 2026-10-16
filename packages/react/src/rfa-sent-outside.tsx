@@ -2,7 +2,7 @@
 import { useMemo, useState, type ReactElement } from "react";
 import { createRfaLifecycleClient, type OrganizationClientOptions, type RfaClient, type RfaRecord, type RfaSentOutsideInput } from "@mindbill/browser";
 import { RfaModal } from "./rfa-modal";
-import { DateTimeField, Select } from "./form-controls";
+import { DateTimeField, Select, Checkbox, FileInput } from "./form-controls";
 
 type Transmission = RfaRecord["transmissions"][number];
 const key = () => `rfa-sent-outside-${globalThis.crypto.randomUUID()}`;
@@ -35,7 +35,7 @@ export function RfaSentOutsideFields({ defaultDestination, receivedRequired = fa
     <div className="mbrfa-field"><span className="mbrfa-field-label">Sent on<span className="mbrfa-required" aria-hidden="true"> *</span></span><DateTimeField required name="sentAt" label="Sent on" max={now} defaultValue={now} /></div>
     <div className="mbrfa-field"><span className="mbrfa-field-label">How it was sent<span className="mbrfa-required" aria-hidden="true"> *</span></span><Select name="channel" label="How it was sent" defaultValue="fax" options={RFA_SENT_OUTSIDE_CHANNELS} /></div>
     <label><span className="mbrfa-field-label">Sent to<span className="mbrfa-optional"> (optional)</span></span><input name="destination" maxLength={500} defaultValue={defaultDestination ?? ""} placeholder="Fax number, address or e-mail" /></label>
-    {receivedRequired ? null : <label className="mbrfa-check"><input type="checkbox" checked={received} onChange={event => setReceived(event.target.checked)} />The claims administrator received it (for example, the fax confirmation shows it went through)</label>}
+    {receivedRequired ? null : <label className="mbrfa-check"><Checkbox checked={received} onChange={event => setReceived(event.target.checked)} />The claims administrator received it (for example, the fax confirmation shows it went through)</label>}
     {received ? <div className="mbrfa-field"><span className="mbrfa-field-label">{receivedLabel ?? "Received on"}<span className="mbrfa-required" aria-hidden="true"> *</span></span><DateTimeField required name="receivedAt" label={receivedLabel ?? "Received on"} max={now} defaultValue={now} /></div> : null}
   </div>;
 }
@@ -85,7 +85,7 @@ export function RfaMarkSentDialog({ rfa, options, records, defaultDestination, a
       })();
     }}>
       <RfaSentOutsideFields {...(defaultDestination ? { defaultDestination } : {})} />
-      {allowProof ? <label>Fax confirmation or copy sent (PDF, optional)<input type="file" name="proof" accept="application/pdf,.pdf" /></label> : null}
+      {allowProof ? <label>Fax confirmation or copy sent (PDF, optional)<FileInput name="proof" accept="application/pdf,.pdf" /></label> : null}
       <div className="mbtd-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button type="submit" className="mbtd-primary" disabled={busy}>{busy ? "Saving…" : "Mark as sent"}</button></div>
     </form>
   </RfaModal>;

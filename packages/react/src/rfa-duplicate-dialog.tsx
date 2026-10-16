@@ -4,7 +4,7 @@ import { createRfaPacketsClient, normalizeRfaFax, type BillClaimsAdministratorDi
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { formatRfaPhone } from "./rfa-official-fields";
 import { rfaSendDialogCss } from "./rfa-send-dialog";
-import { Select, useVisualViewportVars } from "./form-controls";
+import { Select, useVisualViewportVars, Checkbox, Radio } from "./form-controls";
 
 type Method = "fax" | "email";
 type Document = RfaRecord["documents"][number] & { sizeBytes?: number };
@@ -141,7 +141,7 @@ export function RfaDuplicateDialog({ rfa, forwardContacts, options, records, can
   };
 
   const row = (id: string, name: string, kind: string, detail: string, open: (() => Promise<Blob>) | null) => <li key={id} className="mbrfa-fwd-doc">
-    <label><input type="checkbox" checked={selected.includes(id)} disabled={working} onChange={() => toggle(id)} /><span><strong>{name}</strong><small>{[kind, detail].filter(Boolean).join(" · ")}</small></span></label>
+    <label><Checkbox checked={selected.includes(id)} disabled={working} onChange={() => toggle(id)} /><span><strong>{name}</strong><small>{[kind, detail].filter(Boolean).join(" · ")}</small></span></label>
     {open ? <button type="button" className="mbrfa-fwd-view" onClick={() => void view(open)}>View</button> : null}
   </li>;
   return <div className="mbrfa-send-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !working) onClose(); }}>
@@ -158,7 +158,7 @@ export function RfaDuplicateDialog({ rfa, forwardContacts, options, records, can
             <ul className="mbrfa-fwd-docs">
               {packet ? row(PACKET, "Packet as sent", "Exactly what was sent, including its cover sheet", size(packet.sizeBytes), () => client.get(record.id, packet.id)) : null}
               {documents.map(document => row(document.id, document.filename, TYPE_LABEL[document.documentType] ?? "Document", size(document.sizeBytes), records ? () => records.getDocument(record.id, document.id) : null))}
-              {uploading.map((name, index) => <li key={`uploading:${index}:${name}`} className="mbrfa-fwd-doc" data-uploading="true"><label><input type="checkbox" disabled checked readOnly /><span><strong>{name}</strong><small role="status">Uploading…</small></span></label></li>)}
+              {uploading.map((name, index) => <li key={`uploading:${index}:${name}`} className="mbrfa-fwd-doc" data-uploading="true"><label><Checkbox disabled checked readOnly /><span><strong>{name}</strong><small role="status">Uploading…</small></span></label></li>)}
             </ul>
             {!documents.length && !packet && !uploading.length ? <p className="mbrfa-fwd-hint">{history || historyFailed ? "This request has no documents saved here yet. Add the documents to forward below." : "Loading documents…"}</p> : null}
           </fieldset>
@@ -175,12 +175,12 @@ export function RfaDuplicateDialog({ rfa, forwardContacts, options, records, can
             <input ref={picker} hidden type="file" aria-label="Attachments (PDF)" accept="application/pdf,.pdf" multiple onChange={event => { void upload(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
           </fieldset> : null}
           <div className="mbrfa-send-methods" role="radiogroup" aria-label="Forward by"><span>Forward by<span className="mbrfa-required" aria-hidden="true"> *</span></span>
-            <label><input type="radio" name="rfa-duplicate-method" checked={method === "fax"} disabled={working} onChange={() => { setMethod("fax"); setConfirmed(false); }} />Fax</label>
-            <label><input type="radio" name="rfa-duplicate-method" checked={method === "email"} disabled={working} onChange={() => { setMethod("email"); setConfirmed(false); }} />E-mail</label>
+            <label><Radio name="rfa-duplicate-method" checked={method === "fax"} disabled={working} onChange={() => { setMethod("fax"); setConfirmed(false); }} />Fax</label>
+            <label><Radio name="rfa-duplicate-method" checked={method === "email"} disabled={working} onChange={() => { setMethod("email"); setConfirmed(false); }} />E-mail</label>
           </div>
           <div className="mbrfa-send-to" data-method={method}><span>Forward to<span className="mbrfa-required" aria-hidden="true"> *</span></span><RfaAuthorizationDestination compact {...(contactOptions.length ? { extraOptions: contactOptions } : {})} preselectSaved autoSelectSingle method={method} contextKey={`dup:${record.id}:${record.claimsAdminId ?? "manual"}:${method}`} directory={directory} savedContact={record.authorizationContact} loading={directoryLoading} error={directoryError} disabled={working} onChange={value => { setDestination(value); setConfirmed(false); }} /></div>
           <label><span className="mbrfa-fwd-label">{method === "email" ? "Message" : "Cover sheet message"}<span className="mbrfa-optional"> (optional)</span></span><textarea disabled={working} maxLength={1000} rows={2} value={message} onChange={event => setMessage(event.target.value)} /></label>
-          {blocked ? <p role="alert">{blocked}</p> : <label className="mbrfa-send-confirm"><input type="checkbox" checked={confirmed} disabled={working || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>I reviewed the documents{where ? <> and verified that <strong>{where}</strong> may receive this patient’s request</> : null}.</span></label>}
+          {blocked ? <p role="alert">{blocked}</p> : <label className="mbrfa-send-confirm"><Checkbox checked={confirmed} disabled={working || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>I reviewed the documents{where ? <> and verified that <strong>{where}</strong> may receive this patient’s request</> : null}.</span></label>}
         </>}
         {error ? <p role="alert">{error}</p> : null}
       </div>

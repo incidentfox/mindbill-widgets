@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties, type ReactElement } from "react";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { FileInput } from "./form-controls";
 
 export type W9ExtractionStatus = "idle" | "queued" | "processing" | "complete" | "not_found" | "failed";
 export type W9UploadProps = {
@@ -64,7 +65,7 @@ export function W9Upload({ document, extractionStatus = "idle", onUpload, onView
     <label className="mbw9-drop" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); choose(event.dataTransfer.files[0] ?? null); }}>
       <strong>{document ? "Replace practice W-9" : "Upload practice W-9"}</strong>
       <p>Choose or drop a PDF, up to {Math.round(maxSizeBytes / 1024 / 1024)} MB. Your server securely stores the document for billing.</p>
-      <input aria-label="W-9 PDF" type="file" accept="application/pdf,.pdf" disabled={busy || disabled} onChange={(event) => { choose(event.target.files?.[0] ?? null); event.target.value = ""; }} />
+      <FileInput aria-label="W-9 PDF" accept="application/pdf,.pdf" disabled={busy || disabled} onChange={(event) => { choose(event.target.files?.[0] ?? null); event.target.value = ""; }} />
       {file ? <p>{file.name}</p> : null}
     </label>
     <div className="mbw9-actions"><p role="status">{busy ? "Working…" : extractionLabels[extractionStatus] || (saved ? "W-9 saved." : "")}</p><div>{onRetryExtraction && (extractionStatus === "failed" || extractionStatus === "not_found") ? <button type="button" disabled={busy || disabled} onClick={() => void retry()}>Retry extraction</button> : null} <button className="mbw9-primary" type="button" disabled={!file || busy || disabled} onClick={() => void upload()}>{busy ? "Please wait…" : "Upload W-9"}</button></div></div>

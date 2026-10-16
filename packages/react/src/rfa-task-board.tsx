@@ -8,6 +8,7 @@ import { RfaPill, rfaPillCss, rfaStatusLabel } from "./rfa-detail-cards";
 import { rfaDecisionDueText, rfaPacificDateTime } from "./rfa-decision-due";
 import { RfaLink, rfaTitle, type RfaRelatedLinks, type RfaSelectionContext } from "./rfa-display";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
+import { Checkbox, Radio } from "./form-controls";
 
 export type RfaTaskState = "Due" | "Scheduled" | "Completed";
 export type RfaTaskAge = "0-5" | "6-14" | "15-30" | "31+" | "unknown";
@@ -337,7 +338,7 @@ function InboundFaxInbox({ options, editable, disabled, onSelect, onCount, bare 
               const suggestion = !search.trim() && index < choices.length;
               const status = getRfaLifecycleStatus(record);
               return <label key={record.id} className="mbrfa-fax-choice" data-selected={selected === record.id || undefined} data-disabled={!eligible || undefined} title={eligible ? undefined : "This RFA was never sent, so it cannot have a response."}>
-                <input type="radio" name="matching-request" value={record.id} checked={selected === record.id} disabled={!eligible || busy || disabled} onChange={() => { setSelected(record.id); setConfirmed(false); }} />
+                <Radio name="matching-request" value={record.id} checked={selected === record.id} disabled={!eligible || busy || disabled} onChange={() => { setSelected(record.id); setConfirmed(false); }} />
                 <span className="mbrfa-fax-choice-body">
                   <span className="mbrfa-fax-choice-top"><strong>{record.employeeName}</strong><span>{suggestion ? <em className="mbrfa-fax-suggested">Suggested</em> : null}<RfaPill tone={status === "failed" ? "bad" : status === "closed" ? "ok" : status === "incomplete" ? "warn" : "muted"}>{rfaStatusLabel(status)}</RfaPill></span></span>
                   <span className="mbrfa-fax-choice-tx">{record.items?.map(item => item.serviceDescription).filter(Boolean).join("; ") || "Request for authorization"}</span>
@@ -349,7 +350,7 @@ function InboundFaxInbox({ options, editable, disabled, onSelect, onCount, bare 
             {resultsCursor && !resultsLoading ? <button type="button" className="mbrfa-fax-more" disabled={busy || disabled} onClick={moreResults}>Show more requests</button> : null}
           </div>
           {editable ? <form className="mbrfa-fax-confirm" onSubmit={event => { event.preventDefault(); if (!selected || !pdf || !confirmed || !editable || !listed.some(record => record.id === selected && canMatchResponse(record))) return; void run(async () => { const fingerprint = `${fax.id}:${selected}`; let key = keys.current.get(fingerprint); if (!key) { key = `rfa-match-${crypto.randomUUID()}`; keys.current.set(fingerprint, key); } const result = await client.matchInboundFax(fax.id, selected, key); if (alive.current) { setFax(null); setPdf(null); setReload(value => value + 1); onSelect(result.rfaId, result.documentId); } }); }}>
-            <label className="mbrfa-check"><input type="checkbox" required checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={busy || disabled || !selected} /><span>{selected ? "The patient, claim and treatment in this fax match the selected RFA." : "Select the RFA this fax answers."}</span></label>
+            <label className="mbrfa-check"><Checkbox required checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={busy || disabled || !selected} /><span>{selected ? "The patient, claim and treatment in this fax match the selected RFA." : "Select the RFA this fax answers."}</span></label>
             <button type="submit" className="mbtd-primary" disabled={busy || disabled || !selected || !pdf || !confirmed}>{busy ? "Matching…" : "Match response and open Post UR"}</button>
             <p className="mbrfa-fax-foot">Attaches the fax to the RFA; you record each treatment's decision next.{selected ? <> <button type="button" className="mbrfa-text-link" disabled={busy || disabled} onClick={() => onSelect(selected)}>Open RFA</button></> : null}</p>
           </form> : <p className="mbrfa-fax-confirm">Matching responses requires authorization from your administrator.</p>}

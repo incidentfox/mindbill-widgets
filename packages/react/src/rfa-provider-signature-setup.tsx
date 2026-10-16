@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState, type ReactElement } from "react";
 import type { RfaClient } from "@mindbill/browser";
+import { Checkbox, FileInput } from "./form-controls";
 
 export type RfaProviderSignatureSetupProps = {
   client: RfaClient;
@@ -43,7 +44,7 @@ function SignatureForm({ client, renderingProviderId, providerName, disabled, on
   }}>
     <fieldset disabled={disabled || busy}><legend>Set up physician signature{providerName ? ` for ${providerName}` : ""}</legend>
       <p>Upload the physician’s signature with their authorization. This signature will be available for future requests; saving it does not sign or send this request.</p>
-      <label>Physician signature (PNG, up to 512 KB)<input type="file" accept="image/png,.png" required onChange={event => {
+      <label>Physician signature (PNG, up to 512 KB)<FileInput accept="image/png,.png" required onChange={event => {
         const selected = event.target.files?.[0] ?? null;
         setError(""); setAuthorized(false);
         if (selected && (selected.size === 0 || selected.size > 512 * 1024 || (selected.type !== "image/png" && !/\.png$/i.test(selected.name)))) {
@@ -52,7 +53,7 @@ function SignatureForm({ client, renderingProviderId, providerName, disabled, on
         setFile(selected);
       }} /></label>
       <label>Your name or staff reference<input required maxLength={200} value={actor} onChange={event => setActor(event.target.value)} /></label>
-      <label><input type="checkbox" checked={authorized} onChange={event => setAuthorized(event.target.checked)} />I have the physician’s authorization to save and use this signature for authorization requests.</label>
+      <label><Checkbox checked={authorized} onChange={event => setAuthorized(event.target.checked)} />I have the physician’s authorization to save and use this signature for authorization requests.</label>
       {error ? <p role="alert">{error}</p> : null}
       <div className="mbtd-actions">{onCancel ? <button type="button" onClick={onCancel}>Cancel signature setup</button> : null}<button type="submit" disabled={!file || !authorized || !actor.trim() || !client.saveProviderSignature}>{busy ? "Saving signature…" : "Save physician signature"}</button></div>
     </fieldset>

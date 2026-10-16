@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { BillCourtesyCopyInput, BillCourtesyCopyPreview, BillCourtesyCopyResult } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
-import { Select } from "./form-controls";
+import { Select, Checkbox } from "./form-controls";
 
 /** Host-provided suggestions only: never selected, saved, or emailed automatically. */
 export type CourtesyCopyRecipientOption = { email: string; name?: string };
@@ -90,14 +90,14 @@ export function BillCourtesyCopyForm({ documents, recipientOptions = [], subject
           {recipientPicker("CC", cc, setCc)}
           <small>Separate multiple email addresses with commas. Replies return to the workspace inbox.</small>
         </div><div className="mb-courtesy-documents"><h3>Combined PDF packet</h3>
-          <label><input type="checkbox" checked disabled />Proof of submission cover sheet — first page</label>
-          <label><input type="checkbox" checked={includeCms1500} onChange={(event) => setIncludeCms1500(event.target.checked)} />CMS-1500 bill</label>
-          {documents.map((document) => <label key={document.id}><input type="checkbox" checked={documentIds.includes(document.id)} onChange={(event) => setDocumentIds((ids) => event.target.checked ? [...ids, document.id] : ids.filter((id) => id !== document.id))} />{document.filename}</label>)}
+          <label><Checkbox checked disabled />Proof of submission cover sheet — first page</label>
+          <label><Checkbox checked={includeCms1500} onChange={(event) => setIncludeCms1500(event.target.checked)} />CMS-1500 bill</label>
+          {documents.map((document) => <label key={document.id}><Checkbox checked={documentIds.includes(document.id)} onChange={(event) => setDocumentIds((ids) => event.target.checked ? [...ids, document.id] : ids.filter((id) => id !== document.id))} />{document.filename}</label>)}
         </div></div>
         <label>Subject<input required maxLength={200} value={subject} onChange={(event) => setSubject(event.target.value)} /></label>
         <label>Message<textarea required maxLength={10000} rows={4} value={bodyText} onChange={(event) => setBodyText(event.target.value)} /></label>
       </fieldset>
-      {preview && pdfUrl ? <div className="mb-courtesy-preview"><a href={pdfUrl} target="_blank" rel="noreferrer">Review combined PDF ({preview.documentCount} documents)</a><iframe title="Courtesy copy PDF preview" src={pdfUrl} /><label><input type="checkbox" checked={confirmed} disabled={busy || Boolean(result)} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the packet and verified all recipients may receive these records.</label></div> : null}
+      {preview && pdfUrl ? <div className="mb-courtesy-preview"><a href={pdfUrl} target="_blank" rel="noreferrer">Review combined PDF ({preview.documentCount} documents)</a><iframe title="Courtesy copy PDF preview" src={pdfUrl} /><label><Checkbox checked={confirmed} disabled={busy || Boolean(result)} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the packet and verified all recipients may receive these records.</label></div> : null}
       {error ? <p role="alert">{error} {retryKey.current ? "Delivery may have completed. Retry here uses the same request; do not start a new copy or reopen this form until the delivery is confirmed." : "No email was requested. Check the details and try the preview again."}</p> : null}
       {result ? <p role="status">{result.sent ? "Courtesy copy sent." : result.simulated ? "Sandbox simulation complete. No email was sent." : "Email delivery is disabled. No email was sent."}</p> : <button type="submit" disabled={busy || Boolean(preview && !confirmed)}>{busy ? "Preparing…" : !preview ? "Preview packet" : environment === "sandbox" ? "Simulate courtesy copy" : "Send courtesy copy"}</button>}
     </form>

@@ -44,7 +44,7 @@ it("selects only the newest signed form for the current content revision",async(
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="All RFAs")!.click());
  await act(async()=>[...container.querySelectorAll("button")].find(x=>x.textContent==="SYNTHETI")!.click());
  const boxes=[...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
- const named=(name:string)=>boxes.find(box=>box.parentElement?.textContent?.includes(name))!;
+ const named=(name:string)=>boxes.find(box=>box.closest("label")?.textContent?.includes(name))!;
  expect(named("Synthetic form.pdf").disabled).toBe(true);expect(named("Synthetic form.pdf").checked).toBe(false);
  expect(named("Earlier current form.pdf").checked).toBe(false);expect(named("Current form.pdf").checked).toBe(true);expect(named("Synthetic report.pdf").checked).toBe(true);
  await act(async()=>named("Earlier current form.pdf").click());expect(named("Current form.pdf").checked).toBe(false);
@@ -73,7 +73,7 @@ it("edits retained service rows without losing metadata, invalidates the signed 
  const mutations=fetcher.mock.calls.filter(([,init])=>init?.method==="PATCH");expect(mutations).toHaveLength(2);
  expect(mutations[0]?.[1]?.body).toBe(mutations[1]?.[1]?.body);expect(new Headers(mutations[0]?.[1]?.headers).get("idempotency-key")).toBe(new Headers(mutations[1]?.[1]?.headers).get("idempotency-key"));
  const body=JSON.parse(String(mutations[0]?.[1]?.body));expect(body.expectedRevision).toBe(1);expect(body.items[0]).toMatchObject({id:"service_existing",frequency:"Twice weekly",duration:"Two weeks",metadata:{host:"service_context"}});expect(body.metadata).toEqual({host:"request_context"});
- expect(button("Save draft changes")).toBeUndefined();const oldForm=[...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(x=>x.parentElement?.textContent?.includes("Synthetic form.pdf"))!;expect(oldForm.disabled).toBe(true);expect(oldForm.checked).toBe(false);expect(button("Prepare packet with cover sheet").disabled).toBe(true);
+ expect(button("Save draft changes")).toBeUndefined();const oldForm=[...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(x=>x.closest("label")?.textContent?.includes("Synthetic form.pdf"))!;expect(oldForm.disabled).toBe(true);expect(oldForm.checked).toBe(false);expect(button("Prepare packet with cover sheet").disabled).toBe(true);
  }finally{await act(async()=>root.unmount());container.remove();}
 });
 it("does not expose content editing without permission or after submission",async()=>{

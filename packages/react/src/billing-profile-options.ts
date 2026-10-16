@@ -41,3 +41,59 @@ export function organizationProfileOptions(profile: Pick<OrganizationProfileData
     })),
   };
 }
+
+export type BillSubmissionProfileSection = "billingProvider" | "renderingProvider" | "serviceLocation";
+
+/** Drops empty values ("", null, false, empty objects) and sorts keys, so equivalent snapshots compare equal. */
+function meaningful(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(meaningful);
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value).map(([key, entry]) => [key, meaningful(entry)] as const)
+      .filter(([, entry]) => entry !== undefined).sort(([left], [right]) => left.localeCompare(right));
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
+  if (typeof value === "string") return value.trim() || undefined;
+  return value === null || value === false ? undefined : value;
+}
+
+/**
+ * The saved choice a bill's provider or location came from: the option with the same saved id
+ * (`savedProviderId`, then `id`) or, without an id, the option whose value equals it. Undefined when the bill's
+ * values were entered by hand or edited after choosing.
+ */
+export function matchingBillSubmissionProfileOption<K extends BillSubmissionProfileSection>(
+  options: readonly BillSubmissionProfileOption<K>[] | undefined,
+  value: BillSubmissionInput[K] | undefined,
+): BillSubmissionProfileOption<K> | undefined {
+  if (!options?.length || !value) return undefined;
+  const ids = value as { savedProviderId?: string; id?: string };
+  const id = ids.savedProviderId?.trim() || ids.id?.trim();
+  if (id) {
+    const byId = options.find((option) => {
+      const saved = option.value as { savedProviderId?: string; id?: string };
+      return option.id === id || saved.savedProviderId === id || saved.id === id;
+    });
+    if (byId) return byId;
+  }
+  const key = JSON.stringify(meaningful(value) ?? null);
+  return options.find((option) => JSON.stringify(meaningful(option.value) ?? null) === key);
+}
+
+const lastFour = (value: string | undefined) => (value ?? "").replace(/\D/g, "").slice(-4);
+
+/** One line describing a bill's billing provider, rendering provider or service location, for a collapsed saved choice. */
+export function billSubmissionProfileSummary(section: BillSubmissionProfileSection, bill: Pick<BillSubmissionInput, BillSubmissionProfileSection>): string[] {
+  if (section === "billingProvider") {
+    const provider = bill.billingProvider ?? {};
+    const last4 = provider.taxIdLast4 || lastFour(provider.taxId);
+    const place = [provider.address?.city, provider.address?.state].filter(Boolean).join(", ");
+    return [provider.name ?? "", last4 ? `${provider.taxIdType === "SSN" ? "SSN" : "EIN"} ••${last4}` : "", provider.npi ? `NPI ${provider.npi}` : "", place].filter(Boolean);
+  }
+  if (section === "renderingProvider") {
+    const provider = bill.renderingProvider ?? {};
+    return [provider.name ?? "", provider.npi ? `NPI ${provider.npi}` : "", provider.taxonomy ?? ""].filter(Boolean);
+  }
+  const location = bill.serviceLocation ?? {};
+  const address = [location.address?.line1, location.address?.city].filter(Boolean).join(", ");
+  return [location.name ?? "", location.placeOfServiceCode ? `POS ${location.placeOfServiceCode}` : "", address].filter(Boolean);
+}
