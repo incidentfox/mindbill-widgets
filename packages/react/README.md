@@ -138,7 +138,8 @@ The tab includes saved patient/injury and physician selection, unsigned draft cr
 contact details, per-service diagnoses, clinical PDF uploads, reviewed signing, and
 confirmed fax/email delivery or packet download. An RFA belongs to an injury and does not
 require a bill. Creation requires `create` permission; an optional `initialDraft` skips
-selection for hosts with a prepared case.
+selection for hosts with a prepared case. `initialSupportingDocuments` optionally pre-lists PDFs
+(such as a clinical report) that upload only after the draft is saved.
 
 `canCreateClaim` offers new patient and injury setup. `canManageProviderSignatures`
 offers authorized signature PNG setup directly before signing. Both default to `false`;

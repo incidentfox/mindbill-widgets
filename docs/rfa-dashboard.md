@@ -26,7 +26,9 @@ With `canCreateClaim`, **New patient and injury** opens inline setup when there 
 saved claim. No identifiers need to be entered manually and no existing bill is required.
 
 `initialDraft` remains optional and bypasses saved selection when your host already has
-a prepared case. It uses the same input as `RfaDraftForm`. `claimId` and
+a prepared case. It uses the same input as `RfaDraftForm`. `initialSupportingDocuments` optionally lists PDFs
+the host already has (for example a clinical report) in the creation form's supporting documents; they upload as
+clinical reports only after the user saves the draft, and the user can remove them first. `claimId` and
 `renderingProviderId` optionally restrict both the request list and saved creation choices. Server authorization must enforce the
 actual permitted records; filters and `permissions` only control the interface.
 `patientId` optionally limits the request list across that patient’s injuries; it does

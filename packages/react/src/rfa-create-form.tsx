@@ -35,6 +35,7 @@ export type RfaProviderSelectorProps = {
 type Props = TreatmentDraftAppearance & {
   client: RfaClient;
   initialDraft?: RfaDraftInput;
+  initialSupportingDocuments?: readonly File[];
   canCreateClaim?: boolean;
   searchableSelectors?: boolean;
   renderClaimSelector?: (props: RfaClaimSelectorProps) => ReactNode;
@@ -46,15 +47,18 @@ type Props = TreatmentDraftAppearance & {
   onSave: (draft: RfaDraftInput, files: File[], intent?: "save" | "review" | "preview") => Promise<void>;
 };
 /** Dashboard creation uses saved identities. Hosts may still supply a prepared draft. */
-export function RfaCreateForm({ initialDraft, draftFormProps, onSave, previewAvailable, ...props }: Props): ReactElement {
-  const [files, setFiles] = useState<File[]>([]);
+export function RfaCreateForm({ initialDraft, initialSupportingDocuments, draftFormProps, onSave, previewAvailable, ...props }: Props): ReactElement {
+  // Host-provided files start the list; the user can remove them, and they upload only after the draft is saved.
+  const [files, setFiles] = useState<File[]>(() => [...(initialSupportingDocuments ?? [])]);
   const save = async (draft: RfaDraftInput, intent: "save" | "review" | "preview" = "save") => {
     if (files.some(file => !file.name.toLowerCase().endsWith(".pdf") || !file.size || file.size > 25 * 1024 * 1024)) throw new Error("Choose nonempty PDF documents up to 25 MB each.");
     await onSave(draft, files, intent);
   };
   const supportingDocuments = { files, onChange: setFiles };
+  // A prepared draft skips identity selection; still show the saved employee and physician values the official form prints.
+  const preparedDetails = useRfaFormDetails(props.client, initialDraft?.claimId ?? "", initialDraft?.renderingProviderId ?? "", Boolean(initialDraft && draftFormProps?.officialForm));
   const contactProps = { ...(props.client.searchClaimsAdministrators ? { searchClaimsAdministrators: props.client.searchClaimsAdministrators } : {}), ...(props.client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: props.client.getClaimsAdministratorDirectory } : {}), ...draftFormProps, ...(draftFormProps?.officialForm ? { onReview: (draft: RfaDraftInput) => save(draft, "review"), ...(previewAvailable ? { onPreview: (draft: RfaDraftInput) => save(draft, "preview") } : {}) } : {}) };
-  return initialDraft ? <RfaDraftForm {...props} {...contactProps} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} draftFormProps={contactProps} />;
+  return initialDraft ? <RfaDraftForm {...props} {...contactProps} {...(preparedDetails ? { formDetails: preparedDetails } : {})} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} draftFormProps={contactProps} />;
 }
 function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, searchableSelectors = false, renderClaimSelector, renderProviderSelector, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
   const [addingClaim, setAddingClaim] = useState(false);

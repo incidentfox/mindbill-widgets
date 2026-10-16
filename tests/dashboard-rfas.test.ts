@@ -71,6 +71,21 @@ describe.each(["BillingDashboard", "ConnectedBillingWorkspace"] as const)("%s RF
       expect(button(container, "Send authorization fax")).toBeUndefined();
     });
   });
+  it("lists host-provided supporting documents and uploads them only after saving the draft", async () => {
+    const options = connection();
+    const report = new File(["%PDF-1.4 synthetic"], "synthetic-report.pdf", { type: "application/pdf" });
+    await mounted(surface({ showRfas: true, rfaDashboard: { ...options, initialDraft, initialSupportingDocuments: [report], permissions: ["create"] } }), async container => {
+      await act(async () => tab(container, "Requests for authorization")!.click());
+      await act(async () => button(container, "+ Add RFA")!.click());
+      expect(container.textContent).toContain("synthetic-report.pdf");
+      expect(options.fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+      await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+      const mutations = options.fetch.mock.calls.filter(([, init]) => init?.method === "POST").map(([input]) => new URL(String(input)).pathname);
+      expect(mutations).toHaveLength(2);
+      expect(mutations[0]).toMatch(/\/rfas$/);
+      expect(mutations[1]).toMatch(/\/rfas\/rfa_synthetic\/documents$/);
+    });
+  });
   it("requires create permission even with a prefilled draft", async () => {
     await mounted(surface({ showRfas: true, rfaDashboard: { ...connection(), initialDraft } }), async container => {
       await act(async () => tab(container, "Requests for authorization")!.click());
