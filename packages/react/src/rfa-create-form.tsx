@@ -35,6 +35,7 @@ export type RfaProviderSelectorProps = {
 type Props = TreatmentDraftAppearance & {
   client: RfaClient;
   initialDraft?: RfaDraftInput;
+  initialSupportingDocuments?: readonly File[];
   canCreateClaim?: boolean;
   searchableSelectors?: boolean;
   renderClaimSelector?: (props: RfaClaimSelectorProps) => ReactNode;
@@ -46,8 +47,9 @@ type Props = TreatmentDraftAppearance & {
   onSave: (draft: RfaDraftInput, files: File[], intent?: "save" | "review" | "preview") => Promise<void>;
 };
 /** Dashboard creation uses saved identities. Hosts may still supply a prepared draft. */
-export function RfaCreateForm({ initialDraft, draftFormProps, onSave, previewAvailable, ...props }: Props): ReactElement {
-  const [files, setFiles] = useState<File[]>([]);
+export function RfaCreateForm({ initialDraft, initialSupportingDocuments, draftFormProps, onSave, previewAvailable, ...props }: Props): ReactElement {
+  // Host-provided files start the list; the user can remove them, and they upload only after the draft is saved.
+  const [files, setFiles] = useState<File[]>(() => [...(initialSupportingDocuments ?? [])]);
   const save = async (draft: RfaDraftInput, intent: "save" | "review" | "preview" = "save") => {
     if (files.some(file => !file.name.toLowerCase().endsWith(".pdf") || !file.size || file.size > 25 * 1024 * 1024)) throw new Error("Choose nonempty PDF documents up to 25 MB each.");
     await onSave(draft, files, intent);
