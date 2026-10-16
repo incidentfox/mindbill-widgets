@@ -16,6 +16,9 @@
 ### Added
 - `@mindbill/browser`: `BillFeeQuote.practiceChargeCents`, set by `encounterBillFeeQuotes`.
 
+### Fixed
+- RFA decision dialog: the decision date default never precedes the request's send/receipt.
+
 ## 0.79.4 — @mindbill/react 0.79.4
 
 ### Fixed
