@@ -46,3 +46,28 @@ const estimate = await client.quoteEncounter(encounterQuoteRequest(lines, { rend
 
 Amounts are cents. A line whose `assessment` is not `priced` has no expected amount; never substitute the
 charge. A quote saves and sends nothing.
+
+## Saving and resuming unsent drafts
+
+With `drafts`, the form shows **Save draft**. It saves the bill exactly as entered (it may be incomplete)
+and the pricing ids to `POST /partner/v2/bill-drafts` (later saves `PATCH` the same draft at its current
+revision). Nothing is validated for submission or sent. Pass `draftId` to resume it: the saved bill replaces
+`initialBill` and missing `encounter` ids come from the draft. Submitting a resumed or saved draft sends it
+through `POST /partner/v2/bills` with `draft: { id, revision }`; the server reserves the draft, creates the
+bill and marks the draft `submitted` (or releases it when no bill is created). A submitted draft cannot be
+edited again. The session needs `bills:create`.
+
+```tsx
+<ConnectedTreatmentBillForm
+  sessionEndpoint="/api/mindbill/session"
+  initialBill={bill}
+  encounter={{ renderingProviderId, placeOfServiceId, claimId }}
+  drafts
+  draftId={savedDraftId}                 // omit for a new bill
+  onDraftSaved={(draft) => rememberDraft(visitId, draft.id)}
+  onSubmitted={(result) => openBill(result.billId)}
+/>
+```
+
+`createBillDraftsClient(options)` lists (`list({ claimId })`), reads, saves and deletes drafts directly
+(`remove(id, revision)` deletes only unsent drafts).

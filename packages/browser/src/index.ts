@@ -987,6 +987,8 @@ export type BrowserBillSubmissionInput = BillActorInput & {
    * If supplied, it must match the session customer restriction. */
   customerExternalId?: string;
   bill: BrowserBillCreateInput;
+  /** Submit a saved draft (createBillDraftsClient). The draft must still be at this revision and unsent. */
+  draft?: { id: string; revision: number };
   submission?: {
     route?: BillSubmissionRoute;
     destination?: SubmitBillInput["destination"];
@@ -2622,6 +2624,7 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
 
 export * from "./rfa-lifecycle";
 export * from "./encounter-fees";
+export * from "./bill-drafts";
 export { createReportAutofillClient } from "./report-autofill";
 export type { ReportAutofillClient, ReportAutofillField, ReportAutofillMatch, ReportAutofillResult } from "./report-autofill";
 

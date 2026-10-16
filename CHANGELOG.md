@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.79.0 — @mindbill/react 0.79.0, @mindbill/browser 0.52.0
+
+### Added
+- `ConnectedTreatmentBillForm`: `drafts` adds **Save draft** (saves the bill as entered to
+  `/partner/v2/bill-drafts`, never sent); `draftId` resumes a saved draft (its bill and pricing ids), and
+  submitting it marks the draft submitted. Also `draftExternalId`, `onDraftSaved`, `onDraftError`.
+  `encounter` ids may be partial when resuming (missing ids come from the draft).
+- `BillSubmissionForm`: optional `onSaveDraft` / `saveDraftLabel` (secondary "Save draft" action, no
+  validation) and `draft: { id, revision }` (forwarded on submission).
+- `@mindbill/browser`: `createBillDraftsClient` (`list`, `get`, `create`, `update`, `remove`) and types
+  `BillDraft`, `BillDraftReference`, `BillDraftSaveInput`; `BrowserBillSubmissionInput.draft`.
+
+## 0.78.0 — @mindbill/react 0.78.0, @mindbill/browser 0.51.0, @mindbill/angular 0.20.0 (sdk-v2026.10.16.1)
 
 ### Added
 - `@mindbill/react`: `RfaClaimIndex`, `RelatedAuthorizationRecords` and `BillUrDecisions`, the claim RFA

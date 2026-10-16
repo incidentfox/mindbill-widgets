@@ -438,6 +438,11 @@ export type BillSubmissionFormProps = {
   style?: CSSProperties;
   disabled?: boolean;
   submitLabel?: string;
+  /** Submits this saved draft (createBillDraftsClient); the server marks it submitted with the new bill. */
+  draft?: { id: string; revision: number };
+  /** Adds a "Save draft" action that hands the bill as entered (unvalidated, possibly incomplete) to the host. */
+  onSaveDraft?: (bill: BillSubmissionInput) => void | Promise<void>;
+  saveDraftLabel?: string;
   heading?: ReactNode;
   description?: ReactNode;
   /** Rejected-field paths to visually call out while the user corrects the next submission. */
@@ -1071,7 +1076,7 @@ export function BillSubmissionForm({
   profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, treatmentBilling = false, companionLines, evaluationTypes, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, draft, onSaveDraft, saveDraftLabel = "Save draft", treatmentBilling = false, companionLines, evaluationTypes, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -1174,7 +1179,8 @@ export function BillSubmissionForm({
     return () => { alive = false; };
   }, [profileClient, profileRetry]);
   const availableProfiles = loadedProfiles?.client === profileClient && loadedProfiles.options ? loadedProfiles.options : profileOptions;
-  const locked = disabled || submitting;
+  const [savingDraft, setSavingDraft] = useState(false);
+  const locked = disabled || submitting || savingDraft;
   const showAttachmentReportTypes = attachmentReportTypeMode === "visible" || (attachmentReportTypeMode === "auto" && bill.billingMode !== "med_legal");
   const forcedAttachmentReportType = showAttachmentReportTypes ? undefined : (defaultAttachmentReportType ?? MED_LEGAL_REPORT_TYPE_CODE);
   const reportTypeOptions = useMemo(() => attachmentReportTypes.map((item) => ({ id: item.code, label: item.code.replace(/^OZ:/, ""), detail: item.label })), [attachmentReportTypes]);
@@ -1651,6 +1657,7 @@ export function BillSubmissionForm({
       });
       const result = await submissionClient.submitBill({
         bill: value.bill,
+        ...(draft ? { draft } : {}),
         ...(value.submission ? { submission: value.submission } : {}),
         documents,
       }, idempotencyKey ? { idempotencyKey } : undefined);
@@ -1860,7 +1867,11 @@ export function BillSubmissionForm({
       {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div><label className="mbsf-attach-type">Document purpose<Select aria-label={`Document purpose for ${upload.file.name}`} value={upload.description ?? ""} onChange={(choice) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: choice } : item))}><option value="">Supporting document</option><option value="Authorization / UR response">Authorization / UR response</option><option value="MPN / network documentation">MPN / network documentation</option></Select></label>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
     </div>{errors.attachments ? <p className="mbsf-error" role="alert">{errors.attachments}</p> : null}<input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
 
-  const actionsSection = <>{cmsPreview ? <section className="mbsf-cms-preview" aria-label="CMS-1500 preview"><header><div><h3>CMS-1500 preview</h3><p className="mbsf-help">{previewCurrent ? "Generated from the current bill edits. Nothing has been sent." : "Bill details changed. Refresh the preview to review your latest edits."}</p></div><button type="button" className="mbsf-secondary" onClick={() => setCmsPreview(null)}>Close preview</button></header>{previewCurrent ? <><div className="mbsf-preview-details"><span>Service dates: <strong>{[...new Set(clean.serviceLines.map((line) => `${line.serviceDate || clean.service.date}${line.serviceDateEnd && line.serviceDateEnd !== (line.serviceDate || clean.service.date) ? ` – ${line.serviceDateEnd}` : ""}`))].join(", ") || "Not entered"}</strong></span><span>Claims administrator: <strong>{clean.claim.claimsAdministrator?.name || "Not selected"}</strong></span><a className="mbsf-secondary" href={cmsPreview.url} target="_blank" rel="noopener noreferrer">Open PDF in new tab</a><a className="mbsf-secondary" href={cmsPreview.url} download="cms-1500-preview.pdf">Download PDF</a></div><iframe title="CMS-1500 PDF preview" src={cmsPreview.url} /></> : <div role="status" className="mbsf-preview-stale">Preview out of date — select Refresh CMS-1500 preview below.</div>}</section> : null}{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions">{(!clean.claimForm || clean.claimForm === "cms1500") ? <button className="mbsf-secondary" type="button" disabled={locked || previewing || !previewClient} onClick={() => void previewCms1500()}>{previewing ? "Generating preview…" : cmsPreview ? "Refresh CMS-1500 preview" : "Preview CMS-1500"}</button> : null}<button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
+  const actionsSection = <>{cmsPreview ? <section className="mbsf-cms-preview" aria-label="CMS-1500 preview"><header><div><h3>CMS-1500 preview</h3><p className="mbsf-help">{previewCurrent ? "Generated from the current bill edits. Nothing has been sent." : "Bill details changed. Refresh the preview to review your latest edits."}</p></div><button type="button" className="mbsf-secondary" onClick={() => setCmsPreview(null)}>Close preview</button></header>{previewCurrent ? <><div className="mbsf-preview-details"><span>Service dates: <strong>{[...new Set(clean.serviceLines.map((line) => `${line.serviceDate || clean.service.date}${line.serviceDateEnd && line.serviceDateEnd !== (line.serviceDate || clean.service.date) ? ` – ${line.serviceDateEnd}` : ""}`))].join(", ") || "Not entered"}</strong></span><span>Claims administrator: <strong>{clean.claim.claimsAdministrator?.name || "Not selected"}</strong></span><a className="mbsf-secondary" href={cmsPreview.url} target="_blank" rel="noopener noreferrer">Open PDF in new tab</a><a className="mbsf-secondary" href={cmsPreview.url} download="cms-1500-preview.pdf">Download PDF</a></div><iframe title="CMS-1500 PDF preview" src={cmsPreview.url} /></> : <div role="status" className="mbsf-preview-stale">Preview out of date — select Refresh CMS-1500 preview below.</div>}</section> : null}{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions">{(!clean.claimForm || clean.claimForm === "cms1500") ? <button className="mbsf-secondary" type="button" disabled={locked || previewing || !previewClient} onClick={() => void previewCms1500()}>{previewing ? "Generating preview…" : cmsPreview ? "Refresh CMS-1500 preview" : "Preview CMS-1500"}</button> : null}{onSaveDraft ? <button className="mbsf-secondary" type="button" disabled={locked} onClick={() => {
+    setSavingDraft(true); setFormError(null);
+    void Promise.resolve(onSaveDraft(bill)).catch((caught: unknown) => setFormError(caught instanceof Error ? caught.message : "The draft could not be saved."))
+      .finally(() => setSavingDraft(false));
+  }}>{savingDraft ? "Saving draft…" : saveDraftLabel}</button> : null}<button className="mbsf-submit" type="submit" disabled={locked}>{submitting ? "Submitting…" : submitLabel}</button></div></>;
   const sections: BillSubmissionSections = {
     header: headerSection,
     patient: patientSection,
