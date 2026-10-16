@@ -26,7 +26,7 @@ const pharmacyLine = {
 
 ## Review and document previews
 
-`BillReadOnlyForm` displays the form family and available revenue, tooth/surface, NDC/quantity, and prescription identifiers. `BillReviewForm` retains bill and line metadata on saves, including revenue-only and NDC-only service lines. It does not merge compound ingredient lines. Readonly billing snapshots remain excluded from editable save requests.
+`BillReadOnlyForm` displays the form family and available revenue, tooth/surface, NDC/quantity, and prescription identifiers.
 
 Hosts can open the matching paper form from `ConnectedBillLifecycle` or `ConnectedBillingWorkspace`:
 
