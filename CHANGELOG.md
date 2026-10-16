@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.79.1 — @mindbill/react 0.79.1
+
+### Added
+- `RfaDashboard` `initialSupportingDocuments`: PDFs (such as a clinical report the host already has) listed as
+  supporting documents when the creation form opens; they upload only after the user saves the draft.
+
+### Fixed
+- A prepared `initialDraft` on the official form now loads the saved employee date of birth, employer,
+  physician specialty and return fax/e-mail, as the selection flow does.
+
 ## 0.79.0 — @mindbill/react 0.79.0, @mindbill/browser 0.52.0
 
 ### Added
@@ -15,8 +25,6 @@
 ## 0.78.0 — @mindbill/react 0.78.0, @mindbill/browser 0.51.0, @mindbill/angular 0.20.0 (sdk-v2026.10.16.1)
 
 ### Added
-- `@mindbill/react`: `RfaDashboard` `initialSupportingDocuments` pre-lists host-provided PDFs (for example the
-  clinical report behind a prefilled `initialDraft`) in the creation form; they upload only after the draft is saved.
 - `@mindbill/react`: `RfaClaimIndex`, `RelatedAuthorizationRecords` and `BillUrDecisions`, the claim RFA
   index, related bills/authorizations and bill UR decision surfaces used by MindBill
   ([docs/rfa-records.md](docs/rfa-records.md)). Helpers `rfaReference`, `claimRfaLifecycle`, `claimRfaCounts`.

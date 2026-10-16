@@ -55,8 +55,10 @@ export function RfaCreateForm({ initialDraft, initialSupportingDocuments, draftF
     await onSave(draft, files, intent);
   };
   const supportingDocuments = { files, onChange: setFiles };
+  // A prepared draft skips identity selection; still show the saved employee and physician values the official form prints.
+  const preparedDetails = useRfaFormDetails(props.client, initialDraft?.claimId ?? "", initialDraft?.renderingProviderId ?? "", Boolean(initialDraft && draftFormProps?.officialForm));
   const contactProps = { ...(props.client.searchClaimsAdministrators ? { searchClaimsAdministrators: props.client.searchClaimsAdministrators } : {}), ...(props.client.getClaimsAdministratorDirectory ? { getClaimsAdministratorDirectory: props.client.getClaimsAdministratorDirectory } : {}), ...draftFormProps, ...(draftFormProps?.officialForm ? { onReview: (draft: RfaDraftInput) => save(draft, "review"), ...(previewAvailable ? { onPreview: (draft: RfaDraftInput) => save(draft, "preview") } : {}) } : {}) };
-  return initialDraft ? <RfaDraftForm {...props} {...contactProps} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} draftFormProps={contactProps} />;
+  return initialDraft ? <RfaDraftForm {...props} {...contactProps} {...(preparedDetails ? { formDetails: preparedDetails } : {})} supportingDocuments={supportingDocuments} onSave={save} initialDraft={initialDraft} /> : <SavedIdentityForm {...props} onSave={save} supportingDocuments={supportingDocuments} draftFormProps={contactProps} />;
 }
 function SavedIdentityForm({ client, claimId, renderingProviderId, onSave, canCreateClaim = false, searchableSelectors = false, renderClaimSelector, renderProviderSelector, draftFormProps, supportingDocuments, disabled = false, ...appearance }: Omit<Props, "initialDraft" | "onSave"> & { onSave: RfaDraftFormProps["onSave"]; supportingDocuments: NonNullable<RfaDraftFormProps["supportingDocuments"]> }): ReactElement {
   const [addingClaim, setAddingClaim] = useState(false);
