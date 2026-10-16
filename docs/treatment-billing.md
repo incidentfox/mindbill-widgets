@@ -1,6 +1,6 @@
 # Treatment billing with expected OMFS payment
 
-`ConnectedTreatmentBillForm` (`@mindbill/react` 0.78.0) renders `BillSubmissionForm` for California treatment
+`ConnectedTreatmentBillForm` (`@mindbill/react` 0.78.0+) renders `BillSubmissionForm` for California treatment
 (CMS-1500 professional) bills and prices every line of the visit together through
 `POST /partner/v2/fee-quotes/encounter` (`@mindbill/browser` 0.51.0 `quoteEncounter`).
 
@@ -71,3 +71,11 @@ edited again. The session needs `bills:create`.
 
 `createBillDraftsClient(options)` lists (`list({ claimId })`), reads, saves and deletes drafts directly
 (`remove(id, revision)` deletes only unsent drafts).
+
+## Submission pricing matches the encounter quote
+
+Lines priced by the encounter quote are submitted without the form's standard estimate assumptions (no fee
+agreement, ordinary physician service), so MindBill prices the saved bill with the same professional context the
+quote used. Specialty facts you enter (therapy minutes, anesthesia, drugs, equipment, catalog confirmations) are
+always sent. Before 0.79.1 such lines could be refused at submission with
+`code_specific_coding_requirements_not_confirmed` even though the quote showed an expected payment.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.79.2 — @mindbill/react 0.79.2
+
+### Fixed
+- `ConnectedTreatmentBillForm` (and `BillSubmissionForm` with `onQuoteEncounter`): standard lines are submitted
+  without the form's estimate-only fee context, so the saved bill is priced exactly as the encounter quote showed.
+- When MindBill refuses a line at submission because a coding fact must be confirmed
+  (`code_specific_coding_requirements_not_confirmed`, `complete_surgical_package_required`, e.g. 64483), the form
+  shows a confirmation on that line instead of a dead-end error; confirming sends the fact with the line.
+
+### Added
+- `RfaDashboard` (simple layout, sandbox, `act` permission): **Send** signs the request (with `sign`) and records a
+  simulated send in History, so sandbox integrations can test receipt, UR decisions and billing. Nothing is
+  faxed or e-mailed; live behavior is unchanged.
+
 ## 0.79.1 — @mindbill/react 0.79.1
 
 ### Added

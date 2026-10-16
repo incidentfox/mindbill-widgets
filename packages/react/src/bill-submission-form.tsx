@@ -278,6 +278,16 @@ export function billSubmissionEstimateContext(code: string, placeOfService: stri
   if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details, {}, code);
   return {};
 }
+/**
+ * True when a line's fee context only restates the standard estimate (no fee agreement, physician
+ * assumptions) and carries no specialty or catalog facts entered by the biller.
+ */
+export function isEstimateOnlyFeeContext(context: BillFeeContext | undefined): boolean {
+  if (!context) return true;
+  return Object.entries(context).every(([key, value]) => value === undefined
+    || (key === "hasFeeAgreement" && value === false)
+    || key === "physicianContext");
+}
 /** Rebuild edited fields so clearing an input cannot retain a previously priced context. */
 export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}, modifiers: readonly string[] = []): BillFeeContext {
   if (details.basis === "adjustment") return {};
@@ -1530,7 +1540,15 @@ export function BillSubmissionForm({
       if (next.drug?.administered || drugFieldsEnabled(line.code, detailsForLine(index)) || detailsForLine(index).drugEnabled !== undefined) delete next.drug;
       if (quoteInputs[index]?.drug) next.drug = quoteInputs[index]!.drug!;
       if (charge == null) delete next.charge;
-      else { next.charge = charge; if (quoteInputs[index]) next.feeContext = billSubmissionQuoteContext(quoteInputs[index]!); }
+      else {
+        next.charge = charge;
+        if (quoteInputs[index]) {
+          const context = billSubmissionQuoteContext(quoteInputs[index]!);
+          // An encounter quote prices standard lines with MindBill's own professional context. Sending the
+          // form's estimate assumptions instead would price the saved bill differently from what was shown.
+          if (!(encounterQuoting && isEstimateOnlyFeeContext(context))) next.feeContext = context;
+        }
+      }
     } else if (charge != null) next.charge = charge;
     return next;
   }).filter(lineHasContent);
