@@ -182,7 +182,7 @@ it("opens decisions for a requested treatment and attaches the UR decision PDF i
     const dialog = container.querySelector('[role="dialog"]')!;
     expect(dialog.getAttribute("aria-label")).toContain("Record UR decision");
     expect(dialog.querySelector("fieldset fieldset legend")!.textContent).toContain(record.items.at(-1)!.serviceDescription);
-    const input = [...dialog.querySelectorAll<HTMLInputElement>('input[type="file"]')].find(node => /UR decision|different PDF/i.test(node.closest("label, .mbrfa-review-attach-link")?.textContent ?? ""))!;
+    const input = [...dialog.querySelectorAll<HTMLInputElement>('input[type="file"]')].find(node => /UR decision|different PDF/i.test(node.closest("label, .mbrfa-review-attach-link")?.textContent ?? node.previousElementSibling?.textContent ?? ""))!;
     const file = new File(["%PDF-1.4"], "UR decision.pdf", { type: "application/pdf" });
     Object.defineProperty(input, "files", { value: [file] });
     await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
