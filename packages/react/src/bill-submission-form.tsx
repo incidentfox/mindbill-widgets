@@ -11,7 +11,7 @@ import { AnesthesiaCalculationDetails } from "./anesthesia-calculation-details";
 import { FeeCalculationDetails } from "./fee-calculation-details";
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   createOrganizationClient,
   type OrganizationClientOptions,
@@ -49,7 +49,7 @@ import { applyReportAutofill } from "./report-autofill-values";
 import { BillingSettings } from "./organization-onboarding";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
-import { organizationProfileOptions, type BillSubmissionProfileOptions } from "./billing-profile-options";
+import { billSubmissionProfileSummary, matchingBillSubmissionProfileOption, organizationProfileOptions, type BillSubmissionProfileOptions, type BillSubmissionProfileSection } from "./billing-profile-options";
 import {
   BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS,
   calculateBillSubmissionAllowedAmount,
@@ -58,7 +58,7 @@ import {
   DEFAULT_BILL_SUBMISSION_PROCEDURES,
   DEFAULT_BILL_SUBMISSION_TAXONOMIES,
 } from "./billing-catalog";
-import { DateField, Select } from "./form-controls";
+import { DateField, Select, Checkbox } from "./form-controls";
 
 export const BILL_SUBMISSION_DOCUMENT_TYPES = [
   "final_report", "proof_of_service", "letter_of_attestation", "form_122",
@@ -411,8 +411,13 @@ export type BillSubmissionFormProps = {
   billingSettings?: OrganizationClientOptions;
   /** Optional written-agreement feature; use a dedicated organization-wide autofill:run session. */
   reportAutofill?: OrganizationClientOptions;
-  /** Compact keeps provider fields available behind an edit disclosure; validation errors expand it. */
-  profileDisplay?: "expanded" | "compact";
+  /**
+   * How provider and location details show. "auto" (default) collapses each billing provider, rendering provider
+   * and service location that matches a saved choice in `profileOptions` to a one-line summary with an Edit button;
+   * a section without a matching saved choice, with missing or invalid values, or named in `attentionFields` shows
+   * its fields. "expanded" always shows every field. "compact" also puts all details behind one disclosure.
+   */
+  profileDisplay?: "auto" | "expanded" | "compact";
   attachments?: BillSubmissionSourceAttachment[];
   /**
    * Legacy custom submission escape hatch. Connected forms should omit this so
@@ -940,7 +945,12 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   return { valid: Object.keys(errors).length === 0, fieldErrors: errors };
 }
 
-const css = `
+const css = `.mbsf-profile-fields{display:contents}
+.mbsf-saved-choice{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;min-width:0;margin-top:-6px;padding:11px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface))}
+.mbsf-saved-text{flex:1 1 260px;min-width:0;margin:0;line-height:1.5;color:var(--mb-muted);overflow-wrap:anywhere}.mbsf-saved-text strong{color:var(--mb-text);font-weight:680}
+.mbsf-edit-btn{flex:none;min-height:30px;padding:2px 4px}
+.mbsf-diagnosis-toggle .mbctl-check,.mbsf-fee-confirm .mbctl-check{margin-top:2px}
+
 .mbsf{display:grid;gap:20px;color:var(--mb-text);font-family:var(--mb-font);font-size:15px}.mbsf *{box-sizing:border-box}
 .mbsf-attention{padding:14px 16px;border-left:4px solid var(--mb-danger);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 8%,var(--mb-surface));color:var(--mb-text)}.mbsf [data-attention=true] .mbsf-input,.mbsf [data-attention=true] .mbsf-select,.mbsf [data-attention=true].mbsf-lines{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf [data-attention=true]>.mbsf-label{color:var(--mb-danger)}
 .mbsf-head,.mbsf-section-head,.mbsf-attach-row,.mbsf-actions{display:flex;align-items:center;justify-content:space-between;gap:16px}.mbsf-title{margin:0;font-size:24px}.mbsf-copy,.mbsf-help{color:var(--mb-muted);margin:5px 0 0}.mbsf-help{overflow-wrap:anywhere}.mbsf-required{font-size:13px;color:var(--mb-muted);white-space:nowrap}.mbsf-star,.mbsf-error{color:var(--mb-danger)}
@@ -1033,7 +1043,8 @@ function EncounterLineNotes({ quote, reviewMessage }: { quote: BillFeeQuote | { 
 /** Currency entry without the browser number spinner; keeps a partial entry such as "12." while typing. */
 function DecimalInput({ ariaLabel, value, onChange, disabled, placeholder }: { ariaLabel: string; value: number | undefined; onChange: (value: number | undefined) => void; disabled?: boolean | undefined; placeholder?: string | undefined }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const shown = value == null || !Number.isFinite(value) ? "" : String(value);
+  // Shown as dollars and cents ("650.00") except while the biller is typing.
+  const shown = value == null || !Number.isFinite(value) ? "" : value.toFixed(2);
   return <input className="mbsf-input" aria-label={ariaLabel} disabled={disabled} type="text" inputMode="decimal" autoComplete="off" placeholder={placeholder}
     value={draft ?? shown} onFocus={() => setDraft(shown)} onBlur={() => setDraft(null)}
     onChange={(event) => {
@@ -1150,7 +1161,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 
 export function BillSubmissionForm({
   initialBill, idempotencyKey, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
-  profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
+  profileOptions, billingSettings, reportAutofill, profileDisplay = "auto",
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, draft, onSaveDraft, saveDraftLabel = "Save draft", treatmentBilling = false, companionLines, linkedAuthorizations, evaluationTypes, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
@@ -1165,6 +1176,9 @@ export function BillSubmissionForm({
   const [sharedDiagnoses, setSharedDiagnoses] = useState(() => billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling)));
   const individualDiagnoses = useRef<string[][] | null>(null);
   const [providerEditing, setProviderEditing] = useState(false);
+  /** Saved provider and location choices the user opened with Edit. */
+  const [openSections, setOpenSections] = useState<BillSubmissionProfileSection[]>([]);
+  const formId = useId();
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
   const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
   const [uploads, setUploads] = useState<BillSubmissionUpload[]>([]); const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1205,6 +1219,9 @@ export function BillSubmissionForm({
   const [separateLineDates, setSeparateLineDates] = useState<number[]>([]);
   const [feeQuotes, setFeeQuotes] = useState<Record<string, BillFeeQuote | { status: "error"; reason: string }>>({});
   // One result per line for the exact batch it was calculated from; another line's change re-prices every line.
+  // Lines whose billed charge the biller or host entered. Only the other lines are prefilled from the practice charge.
+  const enteredCharges = useRef<Set<number> | null>(null);
+  if (!enteredCharges.current) enteredCharges.current = new Set(initialBill.serviceLines.flatMap((line, index) => Number.isFinite(line.charge) ? [index] : []));
   const [encounterQuotes, setEncounterQuotes] = useState<{ batch: string; quotes: Array<BillFeeQuote | { status: "error"; reason: string } | null> } | null>(null);
   const [postalStatus, setPostalStatus] = useState<string | null>(null); const [dragActive, setDragActive] = useState(false);
   const serviceLinesRef = useRef<HTMLDivElement>(null);
@@ -1274,6 +1291,8 @@ export function BillSubmissionForm({
     setFeeDetails({}); setFeeQuotes({}); setProfessionalComponentCodes([]);
     setSharedDiagnoses(billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling))); individualDiagnoses.current = null;
     setBill(cloneInitialBill(initialBill, treatmentBilling)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
+    setOpenSections([]);
+    enteredCharges.current = new Set(initialBill.serviceLines.flatMap((line, index) => Number.isFinite(line.charge) ? [index] : []));
     setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
     setPayerResults([]); setPayerSuggestions([]); setSelectedPayerMetadata(null); setPayerQuery(null); setPayerHasMore(true); payerRequest.current += 1; payerAppendPending.current = false;
@@ -1314,6 +1333,7 @@ export function BillSubmissionForm({
 
   const setAddress = (patch: Partial<BillSubmissionAddress>) => setBill((current) => ({ ...current, patient: { ...current.patient, address: { ...current.patient.address, ...patch } } }));
   const setLine = (index: number, patch: Partial<BillSubmissionInput["serviceLines"][number]>) => {
+    if (patch.code != null && patch.code !== bill.serviceLines[index]?.code) enteredCharges.current?.delete(index);
     if (Object.hasOwn(patch, "code") || Object.hasOwn(patch, "modifiers")) setProfessionalComponentCodes([]);
     if (Object.hasOwn(patch, "modifiers")) setFeeDetails((current) => ({ ...current, [index]: { ...detailsForLine(index), interpretationLocation: "", professionalComponentBasis: "" } }));
     if (Object.hasOwn(patch, "code")) setFeeDetails((current) => ({ ...current, [index]: {} }));
@@ -1343,7 +1363,7 @@ export function BillSubmissionForm({
       return { ...(sharedDiagnoses ? setBillSubmissionSharedDiagnoses(replaced, current.diagnoses ?? []) : replaced), ...(treatmentBilling && populated.length ? { billingMode: billingModeForLines(populated) } : {}) };
     });
   };
-  const setLineCharge = (index: number, charge: number | undefined) => setBill((current) => ({
+  const setLineCharge = (index: number, charge: number | undefined) => { enteredCharges.current?.add(index); setBill((current) => ({
     ...current,
     serviceLines: current.serviceLines.map((line, lineIndex) => {
       if (lineIndex !== index) return line;
@@ -1352,7 +1372,7 @@ export function BillSubmissionForm({
       else next.charge = charge;
       return next;
     }),
-  }));
+  })); };
   const text = (value: string | null | undefined, onChange: (value: string) => void, options: Pick<React.InputHTMLAttributes<HTMLInputElement>, "placeholder" | "maxLength" | "type" | "inputMode"> = {}) => <input className="mbsf-input" disabled={locked} value={value ?? ""} onChange={(event) => onChange(event.target.value)} {...options} />;
   const loadPayers = useCallback((query: string, append = false): void => {
     const trimmed = query.trim();
@@ -1526,6 +1546,32 @@ export function BillSubmissionForm({
     }
     return calculateBillSubmissionAllowedAmount(line, procedures) ?? (Number.isFinite(line.charge) ? Number(line.charge) : undefined);
   };
+  // In the encounter editor, an empty treatment charge starts at the practice's saved charge for the code, else the expected OMFS amount,
+  // so totals and Difference are meaningful. A charge the biller typed is never replaced. The charge is not part
+  // of the quote request, so filling it does not re-price the visit.
+  const suggestedCharges = bill.serviceLines.map((line, index) => {
+    if (!encounterColumns || !line.code.trim() || isMedicalLegalCode(line.code) || enteredCharges.current?.has(index)) return null;
+    if (!supportedFeeJurisdiction || detailsForLine(index).basis === "adjustment") return null;
+    const quote = quoteAt(index);
+    if (quote?.status !== "priced") return null;
+    const cents = quote.practiceChargeCents ?? quote.chargeAmountCents ?? quote.amountCents;
+    return cents > 0 ? { code: line.code, charge: cents / 100 } : null;
+  });
+  const suggestedChargeKey = JSON.stringify(suggestedCharges);
+  useEffect(() => {
+    const suggested = JSON.parse(suggestedChargeKey) as Array<{ code: string; charge: number } | null>;
+    if (!suggested.some(Boolean)) return;
+    setBill((current) => {
+      let changed = false;
+      const serviceLines = current.serviceLines.map((line, index) => {
+        const suggestion = suggested[index];
+        if (!suggestion || suggestion.code !== line.code || enteredCharges.current?.has(index) || line.charge === suggestion.charge) return line;
+        changed = true;
+        return { ...line, charge: suggestion.charge };
+      });
+      return changed ? { ...current, serviceLines } : current;
+    });
+  }, [suggestedChargeKey]);
   const feeDetailsFor = (line: BillSubmissionInput["serviceLines"][number], index: number): ReactNode => {
     const key = quoteKeys[index];
     if (!key && !(editableTreatmentCharges && treatmentBilling && line.code && !isMedicalLegalCode(line.code))) return null;
@@ -1852,27 +1898,17 @@ export function BillSubmissionForm({
 
   const compactProviders = profileDisplay === "compact";
   const providerErrors = Object.keys(errors).some((path) => /^(billingProvider|renderingProvider|serviceLocation)\./.test(path));
-  const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend>
-    {profileClient && !loadedProfiles ? <p role="status" className="mbsf-help">Loading saved practice settings…</p> : null}
-    {loadedProfiles?.client === profileClient && loadedProfiles.error ? <p role="status">{loadedProfiles.error} <button type="button" onClick={() => setProfileRetry((value) => value + 1)}>Retry</button></p> : null}
-    {billingSettings ? <button type="button" className="mbsf-secondary" onClick={() => setSettingsOpen((value) => !value)}>Add or manage providers, locations &amp; W-9</button> : null}
-    <div className="mbsf-grid">
-      {([ ["billingProviders", "billingProvider", "Billing provider"], ["renderingProviders", "renderingProvider", "Rendering provider"], ["serviceLocations", "serviceLocation", "Service location"] ] as const).map(([collection, key, label]) => {
-        const options = availableProfiles?.[collection];
-        return options?.length ? <Field key={key} label={`Saved ${label.toLowerCase()}`}>
-          <ComboBox ariaLabel={`Saved ${label.toLowerCase()}`} disabled={locked} value="" placeholder={bill[key]?.name || `Choose ${label.toLowerCase()}…`} options={options.map(({ id, label: optionLabel }) => ({ id, label: optionLabel }))} onSelect={({ id }) => {
-            const option = options.find((candidate) => candidate.id === id);
-            if (option) setBill((current) => ({ ...current, [key]: structuredClone(option.value) }));
-          }} />
-          <small className="mbsf-help">{bill[key]?.name ? `Current: ${bill[key]?.name}` : "Select a profile or enter details below."}</small>
-        </Field> : null;
-      })}
-    </div>
-    {compactProviders ? <p className="mbsf-help">{[bill.billingProvider?.name, bill.renderingProvider?.name, bill.serviceLocation?.name].filter(Boolean).join(" · ") || "Enter provider details or choose saved profiles."}</p> : null}
-    <details open={!compactProviders || providerEditing || providerErrors}>
-      <summary hidden={!compactProviders} onClick={(event) => { event.preventDefault(); setProviderEditing((current) => !current); }} style={{ cursor: "pointer", marginBottom: 12 }}>Review or edit provider details</summary>
-      <div className="mbsf-grid">
-      <h4 className="mbsf-subhead">Billing provider</h4>
+  const incompleteFields = Object.keys(JSON.parse(liveErrors) as Record<string, string>);
+  const profileSections = [["billingProviders", "billingProvider", "Billing provider"], ["renderingProviders", "renderingProvider", "Rendering provider"], ["serviceLocations", "serviceLocation", "Service facility"]] as const;
+  /** A section must show its fields when it is not a saved choice, or is incomplete, invalid or flagged by the host. */
+  const sectionNeedsFields = (key: BillSubmissionProfileSection, collection: (typeof profileSections)[number][0]): boolean => {
+    if (!matchingBillSubmissionProfileOption(availableProfiles?.[collection] as never, bill[key] as never)) return true;
+    const inSection = (path: string) => { const normalized = path.replace(/\[\]/g, ""); return normalized === key || normalized.startsWith(`${key}.`); };
+    return Object.keys(errors).some(inSection) || incompleteFields.some(inSection) || attentionFields.some(inSection);
+  };
+  const openSection = (key: BillSubmissionProfileSection) => setOpenSections((current) => current.includes(key) ? current : [...current, key]);
+  const sectionFields: Record<BillSubmissionProfileSection, ReactNode> = {
+    billingProvider: <>
       {bill.billingProvider?.savedProviderId || bill.billingProvider?.sourceBillId ? <div className="mbsf-span"><p>Using {bill.billingProvider.sourceBillId ? "this bill’s original" : "saved"} billing provider: {bill.billingProvider.name}. SSN ending in {bill.billingProvider.taxIdLast4 || "••••"} stays on MindBill’s server.</p><button type="button" className="mbsf-secondary" disabled={locked} onClick={() => setBill((c) => {
         const billingProvider = { ...c.billingProvider, taxIdType: "EIN" as const, taxId: "" };
         delete billingProvider.savedProviderId;
@@ -1892,17 +1928,53 @@ export function BillSubmissionForm({
       <Field path="billingProvider.address.state" label="Billing state" required error={errors["billingProvider.address.state"]}>{text(bill.billingProvider?.address?.state, (state) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.billingProvider?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
       <Field path="billingProvider.address.postalCode" label="Billing ZIP" required error={errors["billingProvider.address.postalCode"]}>{text(bill.billingProvider?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, billingProvider: { ...c.billingProvider, address: { line1: c.billingProvider?.address?.line1 ?? "", line2: c.billingProvider?.address?.line2 ?? "", city: c.billingProvider?.address?.city ?? "", state: c.billingProvider?.address?.state ?? "", postalCode } } })))}</Field>
       </fieldset>
-      <h4 className="mbsf-subhead">Rendering provider</h4>
+    </>,
+    renderingProvider: <>
       <Field path="renderingProvider.name" label="Rendering provider name" required error={errors["renderingProvider.name"]}>{text(bill.renderingProvider?.name, (name) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, name } })))}</Field>
       <Field path="renderingProvider.npi" label="Rendering provider NPI" required error={errors["renderingProvider.npi"]}>{text(bill.renderingProvider?.npi, (npi) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, npi } })), { inputMode: "numeric", maxLength: 10 })}</Field>
       <Field path="renderingProvider.taxonomy" label="Rendering taxonomy" required error={errors["renderingProvider.taxonomy"]}><ComboBox ariaLabel="Rendering taxonomy" invalid={Boolean(errors["renderingProvider.taxonomy"])} disabled={locked} preserveValueOnOpen value={bill.renderingProvider?.taxonomy ?? ""} placeholder="Search specialty name or taxonomy code…" options={taxonomies.map((item) => ({ id: item.code, label: item.description, detail: item.code }))} createOption={(query) => { const code = query.trim().toUpperCase(); return /^[A-Z0-9]{10}$/.test(code) ? { id: code, label: code, detail: "Use this taxonomy code" } : null; }} onSelect={(option) => setBill((c) => ({ ...c, renderingProvider: { ...c.renderingProvider, taxonomy: option.id } }))} /><small className="mbsf-help">Search by specialty name or 10-character taxonomy code.</small></Field>
-      <h4 className="mbsf-subhead">Service facility</h4>
+    </>,
+    serviceLocation: <>
       <Field path="serviceLocation.placeOfServiceCode" label="Place of service code" required error={errors["serviceLocation.placeOfServiceCode"]}>{text(bill.serviceLocation?.placeOfServiceCode, (placeOfServiceCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, placeOfServiceCode } })), { inputMode: "numeric", maxLength: 2, placeholder: "11" })}</Field>
       <Field path="serviceLocation.address.line1" label="Service address line 1" required span error={errors["serviceLocation.address.line1"]}>{text(bill.serviceLocation?.address?.line1, (line1) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1, line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
       <Field label="Service address line 2 (optional)" span>{text(bill.serviceLocation?.address?.line2, (line2) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2, city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
       <Field path="serviceLocation.address.city" label="Service city" required error={errors["serviceLocation.address.city"]}>{text(bill.serviceLocation?.address?.city, (city) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city, state: c.serviceLocation?.address?.state ?? "", postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })))}</Field>
       <Field path="serviceLocation.address.state" label="Service state" required error={errors["serviceLocation.address.state"]}>{text(bill.serviceLocation?.address?.state, (state) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: state.toUpperCase(), postalCode: c.serviceLocation?.address?.postalCode ?? "" } } })), { maxLength: 2 })}</Field>
       <Field path="serviceLocation.address.postalCode" label="Service ZIP" required error={errors["serviceLocation.address.postalCode"]}>{text(bill.serviceLocation?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode } } })))}</Field>
+    </>,
+  };
+  const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend>
+    {profileClient && !loadedProfiles ? <p role="status" className="mbsf-help">Loading saved practice settings…</p> : null}
+    {loadedProfiles?.client === profileClient && loadedProfiles.error ? <p role="status">{loadedProfiles.error} <button type="button" onClick={() => setProfileRetry((value) => value + 1)}>Retry</button></p> : null}
+    {billingSettings ? <button type="button" className="mbsf-secondary" onClick={() => setSettingsOpen((value) => !value)}>Add or manage providers, locations &amp; W-9</button> : null}
+    {compactProviders ? <p className="mbsf-help">{[bill.billingProvider?.name, bill.renderingProvider?.name, bill.serviceLocation?.name].filter(Boolean).join(" · ") || "Enter provider details or choose saved profiles."}</p> : null}
+    <details open={!compactProviders || providerEditing || providerErrors}>
+      <summary hidden={!compactProviders} onClick={(event) => { event.preventDefault(); setProviderEditing((current) => !current); }} style={{ cursor: "pointer", marginBottom: 12 }}>Review or edit provider details</summary>
+      <div className="mbsf-grid" onInput={(event) => { const section = (event.target as HTMLElement).closest<HTMLElement>("[data-profile-section]")?.dataset.profileSection as BillSubmissionProfileSection | undefined; if (section) openSection(section); }}>
+      {profileSections.map(([collection, key, label]) => {
+        const options = availableProfiles?.[collection];
+        const needsFields = sectionNeedsFields(key, collection);
+        const expanded = profileDisplay === "expanded" || needsFields || openSections.includes(key);
+        const summary = billSubmissionProfileSummary(key, bill);
+        const fieldsId = `${formId}-${key}`;
+        return <Fragment key={key}>
+          <h4 className="mbsf-subhead">{label}</h4>
+          {expanded ? <>
+            {options?.length ? <Field label={`Saved ${label === "Service facility" ? "service location" : label.toLowerCase()}`} span>
+              <ComboBox ariaLabel={`Saved ${label === "Service facility" ? "service location" : label.toLowerCase()}`} disabled={locked} value="" placeholder={bill[key]?.name || `Choose ${label.toLowerCase()}…`} options={options.map(({ id, label: optionLabel }) => ({ id, label: optionLabel }))} onSelect={({ id }) => {
+                const option = options.find((candidate) => candidate.id === id);
+                if (option) setBill((current) => ({ ...current, [key]: structuredClone(option.value) }));
+              }} />
+              <small className="mbsf-help">{bill[key]?.name ? `Current: ${bill[key]?.name}` : "Select a profile or enter details below."}</small>
+            </Field> : null}
+            <div className="mbsf-profile-fields" id={fieldsId} data-profile-section={key}>{sectionFields[key]}</div>
+            {profileDisplay !== "expanded" && !needsFields ? <div className="mbsf-span"><button type="button" className="mbsf-text-btn" aria-controls={fieldsId} onClick={() => setOpenSections((current) => current.filter((item) => item !== key))}>Done editing {label.toLowerCase()}</button></div> : null}
+          </> : <div className="mbsf-saved-choice mbsf-span" data-profile-summary={key}>
+            <p className="mbsf-saved-text">{summary.length ? <><strong>{summary[0]}</strong>{summary.slice(1).map((part, index) => <Fragment key={index}><span aria-hidden="true"> · </span><span>{part}</span></Fragment>)}</> : "Saved choice"}</p>
+            <button type="button" className="mbsf-text-btn mbsf-edit-btn" aria-expanded="false" aria-controls={fieldsId} aria-label={`Edit ${label.toLowerCase()}`} disabled={locked} onClick={() => openSection(key)}>Edit</button>
+          </div>}
+        </Fragment>;
+      })}
     </div></details></fieldset>;
 
   const diagnosisSelector = (codes: string[], onChange: (codes: string[]) => void, lineIndex?: number) => {
@@ -1932,7 +2004,7 @@ export function BillSubmissionForm({
       {showEvaluation ? <><p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
       <div className="mbsf-segments" role="group" aria-label="Evaluation type">{offeredEvaluationTypes.map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
       <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p></> : null}
-      <label className="mbsf-diagnosis-toggle"><input type="checkbox" checked={sharedDiagnoses} onChange={(event) => toggleSharedDiagnoses(event.target.checked)} /><span>Apply the same diagnosis codes to all service lines</span></label>
+      <label className="mbsf-diagnosis-toggle"><Checkbox checked={sharedDiagnoses} onChange={(event) => toggleSharedDiagnoses(event.target.checked)} /><span>Apply the same diagnosis codes to all service lines</span></label>
       {sharedDiagnoses ? <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required error={errors.diagnoses}>{diagnosisSelector(bill.diagnoses ?? [], (codes) => { individualDiagnoses.current = null; setBill((current) => setBillSubmissionSharedDiagnoses(current, codes)); })}</Field> : null}
       <p className="mbsf-help">Choose up to 4 diagnosis codes per service line and 12 across the bill.</p>
       {!sharedDiagnoses && errors.diagnoses ? <p className="mbsf-error" role="alert">{errors.diagnoses}</p> : null}
@@ -1953,12 +2025,12 @@ export function BillSubmissionForm({
             <div className="mbsf-money mbsf-expected" data-label="Expected (OMFS)">{expectedCell(line, index)}</div>
             <div className="mbsf-money mbsf-difference" data-label="Difference">{(() => { const charge = lineCharge(line, index); const expected = expectedAt(index); return charge != null && expected != null ? formatUsd(charge - expected) : "—"; })()}</div>
           </div> : <div className="mbsf-money" data-label={editableTreatmentCharges && treatmentBilling ? "Billed charge" : "Allowed"} data-field-path={`serviceLines.${index}.charge`} data-invalid={Boolean(errors[`serviceLines.${index}.charge`])}>{lineCharge(line, index) == null ? (quoteKeys[index] ? (!supportedFeeJurisdiction || !quoteFee || !quoteInputs[index]?.dateOfService || (isTherapyEditorCode(line.code) && !quoteInputs[index]?.therapyContext) ? "Needs review" : feeQuotes[quoteKeys[index]!]?.status === "error" ? "Fee unavailable" : feeQuotes[quoteKeys[index]!] ? "Needs review" : "Checking…") : "—") : lineCharge(line, index)!.toLocaleString(undefined, { style: "currency", currency: "USD" })}</div>}
-          <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); setSeparateLineDates([]); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
+          <button className="mbsf-icon-btn" type="button" aria-label={`Remove service line ${index + 1}`} disabled={locked || (!lineHasContent(line) && index === bill.serviceLines.length - 1)} onClick={() => { setFeeDetails({}); setSeparateLineDates([]); if (individualDiagnoses.current) individualDiagnoses.current.splice(index, 1); enteredCharges.current = new Set([...(enteredCharges.current ?? [])].filter((item) => item !== index).map((item) => item > index ? item - 1 : item)); setBill((c) => { const lines = c.serviceLines.filter((_, itemIndex) => itemIndex !== index); const populated = lines.filter((item) => item.code.trim()); return { ...replaceBillSubmissionServiceLines(c, ensureTrailingBillSubmissionLine(lines)), ...(treatmentBilling && populated.length ? { billingMode: populated.every((item) => isMedicalLegalCode(item.code)) ? "med_legal" as const : "professional" as const } : {}) }; }); }}>×</button>
           {lineHasContent(line) && !(separateLineDates.includes(index) || line.serviceDateEnd || (line.serviceDate && parseBillSubmissionDate(line.serviceDate) !== parseBillSubmissionDate(bill.service.date)) || errors[`serviceLines.${index}.serviceDate`] || errors[`serviceLines.${index}.serviceDateEnd`]) ? <div className="mbsf-fee-details"><button className="mbsf-text-btn" type="button" disabled={locked} onClick={() => setSeparateLineDates((current) => [...current, index])}>Use a different service date for this line</button></div> : null}
           {lineHasContent(line) && (separateLineDates.includes(index) || line.serviceDateEnd || (line.serviceDate && parseBillSubmissionDate(line.serviceDate) !== parseBillSubmissionDate(bill.service.date)) || errors[`serviceLines.${index}.serviceDate`] || errors[`serviceLines.${index}.serviceDateEnd`]) ? <div className="mbsf-fee-details"><div className="mbsf-grid"><Field path={`serviceLines.${index}.serviceDate`} label="Service date" error={errors[`serviceLines.${index}.serviceDate`]}><TextDateInput ariaLabel={`Service date for line ${index + 1}`} value={line.serviceDate || bill.service.date} disabled={locked} onChange={(serviceDate) => setLine(index, { serviceDate })} /></Field><Field path={`serviceLines.${index}.serviceDateEnd`} label="Through date (optional)" error={errors[`serviceLines.${index}.serviceDateEnd`]}><TextDateInput ariaLabel={`Through date for line ${index + 1}`} value={line.serviceDateEnd || ""} disabled={locked} onChange={(serviceDateEnd) => setLine(index, { serviceDateEnd: serviceDateEnd || null })} /></Field></div></div> : null}
           {feeDetailsFor(line, index)}
           {lineAttestations[index] && lineAttestations[index]!.code === line.code.trim().toUpperCase() ? <label className="mbsf-fee-confirm mbsf-attestation" data-field-path={`serviceLines.${index}.attestation`}>
-            <input type="checkbox" disabled={locked} checked={lineAttestations[index]!.confirmed}
+            <Checkbox disabled={locked} checked={lineAttestations[index]!.confirmed}
               onChange={(event) => { const confirmed = event.target.checked; setLineAttestations((current) => ({ ...current, [index]: { ...current[index]!, confirmed } })); }} />
             <span>{lineAttestationText(lineAttestations[index]!)}</span>
           </label> : null}

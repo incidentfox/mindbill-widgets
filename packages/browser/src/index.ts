@@ -1269,6 +1269,11 @@ export type BillFeeQuote =
     scheduleMaximumCents: number;
     /** Practice or entered billed charge, distinct from estimated reimbursement. */
     chargeAmountCents?: number;
+    /**
+     * The practice's saved charge for this code (its charge schedule × units), when the organization has one.
+     * Independent of any charge entered on the bill; editors prefill an empty billed charge with it.
+     */
+    practiceChargeCents?: number;
     /** California statutory maximum when the quoted basis is a payer contract. */
     statutoryMaximumCents?: number;
     basis: BillFeeQuoteBasis;

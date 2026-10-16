@@ -111,7 +111,8 @@ export function encounterBillFeeQuotes(result: EncounterQuoteResult, count: numb
         status: "priced",
         amountCents: line.paymentAdjustment?.amountCents ?? line.quote.amountCents,
         scheduleMaximumCents: line.paymentAdjustment?.scheduleMaximumCents ?? line.quote.scheduleMaximumCents,
-        ...(line.quote.chargeAmountCents !== undefined ? { chargeAmountCents: line.quote.chargeAmountCents } : {}),
+        // MindBill reports the practice's saved charge × units here; an entered charge only caps the expected amount.
+        ...(line.quote.chargeAmountCents !== undefined ? { chargeAmountCents: line.quote.chargeAmountCents, practiceChargeCents: line.quote.chargeAmountCents } : {}),
         basis: line.quote.basis as BillFeeQuoteBasis,
         ...(line.quote.calculation ? { calculation: line.quote.calculation as CaFeeCalculation } : {}),
         ...(line.quote.feeBreakdown ? { feeBreakdown: line.quote.feeBreakdown } : {}),

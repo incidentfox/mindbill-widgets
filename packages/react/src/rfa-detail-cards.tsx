@@ -142,7 +142,7 @@ export const rfaCardsCss = `${rfaPillCss}
 .mbrfa-grid-table td{padding:12px 14px;border-top:1px solid var(--mb-border);vertical-align:top}
 .mbrfa-grid-table tbody tr:first-child td{border-top:0}
 .mbrfa-grid-table td>input[type=checkbox]{width:16px;height:16px;min-height:16px;padding:0;margin:2px 0 0;accent-color:var(--mb-accent)}
-.mbrfa-grid-table td:has(>.mbrfa-text-link),.mbrfa-grid-table td:has(>input[type=checkbox]){vertical-align:middle}
+.mbrfa-grid-table td:has(>.mbrfa-text-link),.mbrfa-grid-table td:has(>.mbctl-check){vertical-align:middle}
 .mbrfa-sheet-body>.mbrfa-stack>fieldset{border:0;padding:0;background:none}
 .mbrfa-sheet-body>.mbrfa-stack>fieldset>legend{padding:0;margin-bottom:8px;font-weight:600}
 .mbrfa-sheet-body>.mbrfa-stack>fieldset+fieldset{padding-top:16px;border-top:1px solid var(--mb-border);border-radius:0}

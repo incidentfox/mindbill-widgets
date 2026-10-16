@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOption, RfaClient, RfaDeliveryPreview, RfaRecord } from "@mindbill/browser";
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
-import { Select } from "./form-controls";
+import { Select, Checkbox } from "./form-controls";
 
 const PDF_VIEW = "toolbar=0&view=FitH&navpanes=0";
 
@@ -43,9 +43,9 @@ export function RfaDeliveryPanel({ rfa, client, documentIds, directory, director
       const blob = await client.getPacket(rfa.id, preview.packetId);
       if (current.current === requestFingerprint) { setPrepared({ preview, blob, fingerprint: requestFingerprint }); setReviewed(false); setConfirmed(false); }
     })}>Prepare packet with cover sheet</button>
-    {packet ? <><RfaPdfReview blob={packet.blob} title="RFA submission packet" /><label className="mbrfa-check"><input type="checkbox" disabled={locked} checked={reviewed} onChange={event => { setReviewed(event.target.checked); setConfirmed(false); }} />I reviewed the assembled packet, including the cover sheet and clinical documents.</label></> : null}
+    {packet ? <><RfaPdfReview blob={packet.blob} title="RFA submission packet" /><label className="mbrfa-check"><Checkbox disabled={locked} checked={reviewed} onChange={event => { setReviewed(event.target.checked); setConfirmed(false); }} />I reviewed the assembled packet, including the cover sheet and clinical documents.</label></> : null}
     {mode === "send" ? environment !== "live" ? <p className="mbtd-note">Sandbox: review and prepare the packet here. External fax delivery is disabled. Email sending is also disabled.</p> : !canSend ? <p>Sending requires permission from your organization.</p> : <>
-      <label className="mbrfa-check"><input type="checkbox" disabled={locked || !packet || !reviewed || !destination} checked={confirmed && !!packet} onChange={event => setConfirmed(event.target.checked)} />Send this reviewed packet to {destination?.recipientName ? `${destination.recipientName} at ` : ""}{destination?.destination || "the selected authorization recipient"}. I verified the recipient for this claim.</label>
+      <label className="mbrfa-check"><Checkbox disabled={locked || !packet || !reviewed || !destination} checked={confirmed && !!packet} onChange={event => setConfirmed(event.target.checked)} />Send this reviewed packet to {destination?.recipientName ? `${destination.recipientName} at ` : ""}{destination?.destination || "the selected authorization recipient"}. I verified the recipient for this claim.</label>
       <button type="button" className="mbtd-primary" disabled={locked || !confirmed || !reviewed || !packet || !destination || !rfa.readiness.ready || !!rfa.submittedAt} onClick={() => void run(async () => {
         if (!packet || !destination || !confirmed || !reviewed) return;
         const body = { packetId: packet.preview.packetId, sha256: packet.preview.sha256, channel: destination.method, to: destination.destination, ...(destination.recipientName ? { recipientName: destination.recipientName } : {}), ...(message.trim() ? { message: message.trim() } : {}) };

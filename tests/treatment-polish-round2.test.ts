@@ -21,6 +21,10 @@ it("defaults a date-only UR letter to the start of that day, never later than no
   expect(rfaReadDecisionDefault({ decidedAt: new Date(2026, 9, 15, 9, 15).toISOString() }, now)).toBe(local(new Date(2026, 9, 15, 9, 15)));
   expect(rfaReadDecisionDefault({ decidedAt: new Date(2026, 9, 16, 9, 15).toISOString() }, now)).toBe(local(now));
   expect(rfaReadDecisionDefault(null, now)).toBe("");
+  // Never before the request was sent or received that same day.
+  const sent = new Date(2026, 9, 16, 5, 2, 30);
+  expect(rfaReadDecisionDefault({ decidedOn: "2026-10-16" }, now, sent.toISOString())).toBe(local(new Date(2026, 9, 16, 5, 3)));
+  expect(rfaReadDecisionDefault({ decidedOn: "2026-10-16" }, new Date(2026, 9, 16, 5, 2, 40), sent.toISOString())).toBe(local(new Date(2026, 9, 16, 5, 2, 40)));
 });
 
 it("shows charge, expected, paid and balance so the balance is never mistaken for the charge", async () => {

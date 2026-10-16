@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createRfaPacketsClient, type OrganizationClientOptions, type RfaForwardResult, type RfaPacketHistory, type RfaRecord } from "@mindbill/browser";
 import { RfaPdfReview } from "./rfa-delivery-panel";
-import { Select } from "./form-controls";
+import { Select, Checkbox } from "./form-controls";
 
 export type RfaPacketsPanelProps = OrganizationClientOptions & {
   rfa: RfaRecord;
@@ -86,8 +86,8 @@ function PacketsContent({ rfa, options, permissions = [], environment = "sandbox
         <label>Forward by<Select value={channel} onChange={(choice) => { setChannel(choice as "fax" | "email"); resetReview(); }}><option value="fax">Fax</option><option value="email">Email</option></Select></label>
         {channel === "email" ? <p>Email forwarding requires email delivery to be enabled for your organization. The server will reject requests when it is unavailable.</p> : null}
         <label>{channel === "fax" ? "Recipient fax (with country code)" : "Recipient email"}<input type={channel === "fax" ? "tel" : "email"} value={recipient} onChange={event => { setRecipient(event.target.value); resetReview(); }} /></label>
-        <label className="mbrfa-check"><input type="checkbox" disabled={!blob || !eligible} checked={reviewed} onChange={event => { setReviewed(event.target.checked); setConfirmed(false); }} />I reviewed this saved packet and its attachments.</label>
-        <label className="mbrfa-check"><input type="checkbox" disabled={!reviewed || !validRecipient || !eligible} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I verified that {destination || "this recipient"} is authorized to receive this patient’s packet.</label>
+        <label className="mbrfa-check"><Checkbox disabled={!blob || !eligible} checked={reviewed} onChange={event => { setReviewed(event.target.checked); setConfirmed(false); }} />I reviewed this saved packet and its attachments.</label>
+        <label className="mbrfa-check"><Checkbox disabled={!reviewed || !validRecipient || !eligible} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I verified that {destination || "this recipient"} is authorized to receive this patient’s packet.</label>
         {alreadyForwarded ? <p>A forward to this recipient is already recorded or pending. Check delivery history.</p> : null}
         <button type="button" disabled={!canForward || !eligible || !blob || !reviewed || !confirmed || !validRecipient || alreadyForwarded} onClick={() => void forward()}>{busy ? "Working…" : `Forward packet by ${channel}`}</button>
       </fieldset>}

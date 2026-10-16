@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactElement } from "react";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { defaultNotificationPreferences, notificationSettingsUpdate, type NotificationAgingDay, type NotificationReportDigest } from "./notification-settings";
-import { Select } from "./form-controls";
+import { Select, Checkbox } from "./form-controls";
 
 export type NotificationRecipientInvitation = {
   requestId: string;
@@ -141,9 +141,9 @@ function RecipientSettingsSession({ adapter, appearance, className, style }: Not
           <label><span>Billing access scope</span><Select value={audience} disabled={busy || !snapshot?.available} onChange={(choice) => setAudience(choice as typeof audience)}><option value="assigned_bills">Assigned bills only</option><option value="practice">All bills in this practice</option></Select></label></div>
         <p className="mbnr-muted">{audience === "assigned_bills" ? "Your application must assign bills on the server. Without assignments, this recipient receives no alerts." : "The invitation asks for alerts about all bills in this practice, including future bills."} This does not grant access to the app.</p>
         <fieldset disabled={busy || !snapshot?.available}><legend>Alerts to request</legend>
-          <label className="mbnr-check"><input type="checkbox" checked={preferences.statusUpdates} onChange={event => setPreferences(value => ({ ...value, statusUpdates: event.target.checked }))} />Bill status and payment updates</label>
-          <p className="mbnr-muted">Reminders while a bill waits for a payer:</p><div className="mbnr-days">{([30,60,90] as const).map(day => <label className="mbnr-check" key={day}><input type="checkbox" checked={preferences.agingDays.includes(day)} onChange={event => setPreferences(value => ({ ...value, agingDays: event.target.checked ? [...value.agingDays, day] : value.agingDays.filter(item => item !== day) }))} />{day} days</label>)}</div>
-          <label className="mbnr-check"><input type="checkbox" checked={preferences.quietHours} onChange={event => setPreferences(value => ({ ...value, quietHours: event.target.checked }))} />Quiet hours · 7 pm–7 am Pacific</label>
+          <label className="mbnr-check"><Checkbox checked={preferences.statusUpdates} onChange={event => setPreferences(value => ({ ...value, statusUpdates: event.target.checked }))} />Bill status and payment updates</label>
+          <p className="mbnr-muted">Reminders while a bill waits for a payer:</p><div className="mbnr-days">{([30,60,90] as const).map(day => <label className="mbnr-check" key={day}><Checkbox checked={preferences.agingDays.includes(day)} onChange={event => setPreferences(value => ({ ...value, agingDays: event.target.checked ? [...value.agingDays, day] : value.agingDays.filter(item => item !== day) }))} />{day} days</label>)}</div>
+          <label className="mbnr-check"><Checkbox checked={preferences.quietHours} onChange={event => setPreferences(value => ({ ...value, quietHours: event.target.checked }))} />Quiet hours · 7 pm–7 am Pacific</label>
           <label className="mbnr-digest"><span>Scheduled activity digest</span><Select value={preferences.reportDigest ?? "off"} onChange={(choice) => setPreferences(value => ({ ...value, reportDigest: choice as NotificationReportDigest }))}><option value="off">Off</option><option value="daily">Daily</option><option value="weekly">Weekly</option></Select><small className="mbnr-muted">Activity counts at 9 am Pacific, every day or every Monday. No financial reports or attachments.</small></label>
         </fieldset>
         <p className="mbnr-muted">Emails contain general alerts and activity counts, not patient details, reports or attachments. The recipient reviews these choices and can unsubscribe at any time.</p>

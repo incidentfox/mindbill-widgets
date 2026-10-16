@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 // Bundles the React source directly, so no build is needed:
 //   BROWSER_DEPENDENCY_ROOT=<dir with react, react-dom, playwright-core> node scripts/verify-form-controls.mjs
 // Opens the RFA dialogs at desktop and phone widths with each variant, a dropdown open and a calendar open; asserts that
-// no native select or date/time input is on the page and that every open popover is fully visible (not clipped by a dialog).
+// no native select, date/time input, checkbox, radio or visible file input is on the page and that every open popover is fully visible (not clipped by a dialog).
 const require = createRequire(import.meta.url);
 const host = createRequire(resolve(process.env.BROWSER_DEPENDENCY_ROOT ?? "/home/factory/development/repos/mindbill", "package.json"));
 const { build } = createRequire(require.resolve("tsup/package.json"))("esbuild");
@@ -61,7 +61,9 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox"] });
 const output = process.env.SCREENSHOT_DIR || "/tmp/mindbill-form-controls-verification";
 await mkdir(output, { recursive: true });
-const NATIVE = "select, input[type=date], input[type=datetime-local], input[type=time], input[type=month], input[type=week]";
+const NATIVE = "select, input[type=date], input[type=datetime-local], input[type=time], input[type=month], input[type=week], "
+  // Checkboxes, radios and file inputs are styled; the real input sits invisibly under the styled control (or is a hidden picker).
+  + "input[type=checkbox]:not(.mbctl-native), input[type=radio]:not(.mbctl-native), input[type=file]:not(.mbctl-native):not([hidden])";
 const shots = [];
 try {
   for (const [width, height] of [[1440, 1000], [390, 844], [390, 430]]) {

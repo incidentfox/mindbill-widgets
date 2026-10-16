@@ -387,7 +387,7 @@ ignore drops originating inside `.mbw9` to avoid uploading the same file twice.
 
 `BillingSettings` provides reusable billing/rendering provider, service-location, and W-9
 setup. `BillSubmissionForm` accepts host-owned or MindBill-backed `profileOptions` and
-`profileDisplay="expanded" | "compact"`; selections become editable bill snapshots, not
+`profileDisplay="auto" | "expanded" | "compact"` (auto, the default, collapses saved choices to one-line summaries with Edit); selections become editable bill snapshots, not
 mutable references. See [saved profiles and authorization](./docs/saved-profiles.md).
 Billing tax IDs support EIN or SSN (`taxIdType`, default `EIN`). Saved SSNs are
 encrypted by MindBill and read back as an empty `taxId` with `taxIdLast4` and

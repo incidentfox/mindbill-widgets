@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.80.0 — @mindbill/react 0.80.0 / @mindbill/browser 0.53.0
+
+### Changed
+- `BillSubmissionForm` / `ConnectedTreatmentBillForm`: a billing provider, rendering provider or service location
+  that matches a saved choice in `profileOptions` shows as a one-line summary with **Edit** instead of every field
+  (new default `profileDisplay="auto"`). Missing or invalid values, submit errors and `attentionFields` open the
+  section and focus the field. `profileDisplay="expanded"` restores the previous layout.
+- Encounter treatment editor: an empty line charge (for example from an approved RFA) is prefilled from the
+  practice's saved charge for the code, else the expected OMFS amount. Typed charges are never replaced; charges
+  display with cents.
+- Every checkbox, radio and file picker in the widgets is a styled control (`Checkbox`, `Radio`, `FileInput`);
+  no native checkbox, radio, select or visible file input remains. Behavior, names and form values are unchanged.
+
+### Added
+- `@mindbill/browser`: `BillFeeQuote.practiceChargeCents`, set by `encounterBillFeeQuotes`.
+
+### Fixed
+- RFA decision dialog: the decision date default never precedes the request's send/receipt.
+
 ## 0.79.4 — @mindbill/react 0.79.4
 
 ### Fixed

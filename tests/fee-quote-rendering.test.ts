@@ -72,7 +72,7 @@ it("preserves an imported treatment charge separately from the fee estimate and 
     })));
     await act(async () => { await vi.advanceTimersByTimeAsync(300); });
     const charge = container.querySelector<HTMLInputElement>('[aria-label="Billed charge for line 1"]')!;
-    expect(charge.value).toBe("75");
+    expect(charge.value).toBe("75.00");
     expect(container.querySelector(".mbsf-money")?.textContent).toBe("$75.00");
     expect(container.textContent).toContain("OMFS maximum: $300.00. Estimated reimbursement: $282.46.");
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(charge, "90"); charge.dispatchEvent(new Event("input", { bubbles: true })); });

@@ -5,7 +5,7 @@ import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { formatRfaPhone } from "./rfa-official-fields";
 import { rfaSendFix } from "./rfa-send-fix";
 import { rfaFailureReason } from "./rfa-detail-cards";
-import { useVisualViewportVars } from "./form-controls";
+import { useVisualViewportVars, Checkbox, Radio } from "./form-controls";
 
 export const rfaSendDialogCss = `.mbrfa-send-sandbox{margin:0;padding:10px 12px;border-radius:var(--mb-control-radius,8px);background:color-mix(in srgb,var(--mb-accent,#2563eb) 8%,var(--mb-surface,#fff));color:var(--mb-text,#1d3440);font-size:13px;line-height:1.45}
 .mbrfa-send-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:16px;background:rgba(17,28,38,.44)}
@@ -130,14 +130,14 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
           {onFix ? <><button type="button" className="mbrfa-text-link" disabled={!!busy} onClick={onFix}>Edit claims administrator or request</button><small>Changing the claims administrator or request reopens it for a new signature; earlier attempts stay in History.</small></> : null}</div> : null}
         <div className="mbrfa-send-methods" role="radiogroup" aria-label="Send by">
           <span>Send by</span>
-          <label><input type="radio" name="rfa-send-method" checked={method === "fax"} disabled={!!busy} onChange={() => { setMethod("fax"); setConfirmed(false); }} />Fax</label>
-          <label><input type="radio" name="rfa-send-method" checked={method === "email"} disabled={!!busy} onChange={() => { setMethod("email"); setConfirmed(false); }} />E-mail</label>
+          <label><Radio name="rfa-send-method" checked={method === "fax"} disabled={!!busy} onChange={() => { setMethod("fax"); setConfirmed(false); }} />Fax</label>
+          <label><Radio name="rfa-send-method" checked={method === "email"} disabled={!!busy} onChange={() => { setMethod("email"); setConfirmed(false); }} />E-mail</label>
         </div>
 <div className="mbrfa-send-to" data-method={method}><span>Send to{resend && onFix ? <button type="button" className="mbrfa-send-edit" aria-label="Edit claims administrator details" title="Edit claims administrator details" disabled={!!busy} onClick={onFix}>{pencil}</button> : null}</span><RfaAuthorizationDestination compact preselectSaved autoSelectSingle method={method} contextKey={`${rfa.id}:${rfa.claimsAdminId ?? "manual"}:${method}`} directory={directory} savedContact={rfa.authorizationContact} loading={directoryLoading} error={directoryError} disabled={!!busy} onChange={value => { setDestination(value); setConfirmed(false); }} /></div>
         <label>{method === "email" ? "E-mail message" : "Cover sheet message"} (optional)<textarea disabled={!!busy} maxLength={1000} rows={2} value={message} onChange={event => setMessage(event.target.value)} /></label>
         {needsSignature ? <div className="mbrfa-send-signature"><p role="alert">{rfa.providerName} has no saved signature yet. Sending puts the physician’s signature on the form, so add it first.{signatureSetup ? "" : " Add it on the physician’s page, then send again."}{signatureRefused ? " Nothing was sent." : ""}</p>{signatureSetup}</div> : signatureSetup}
         {simulate ? <p className="mbrfa-send-sandbox" role="note">Sandbox: nothing is faxed or e-mailed. {rfa.signedAt ? "" : "The physician\u2019s saved signature is applied to the form, and "}{rfa.signedAt ? "The" : "the"} send is recorded in History as a simulation, so you can record receipt and the UR decision.</p> : null}
-        {blocked ? <div><p role="alert">{blocked}</p>{fix && onFix ? <button type="button" disabled={!!busy} onClick={onFix}>{fix.label}</button> : null}</div> : <label className="mbrfa-send-confirm"><input type="checkbox" checked={confirmed} disabled={!!busy || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>
+        {blocked ? <div><p role="alert">{blocked}</p>{fix && onFix ? <button type="button" disabled={!!busy} onClick={onFix}>{fix.label}</button> : null}</div> : <label className="mbrfa-send-confirm"><Checkbox checked={confirmed} disabled={!!busy || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>
           {rfa.signedAt ? "I reviewed this request" : <>I reviewed this request and am authorized by <strong>{rfa.providerName}</strong> to send it with their saved signature</>}{where ? <>, and verified it goes to <strong>{where}</strong></> : null}.</span></label>}
         {error ? <p role="alert">{error}</p> : null}
       </div>

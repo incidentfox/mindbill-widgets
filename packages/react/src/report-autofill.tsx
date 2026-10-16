@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createReportAutofillClient, type OrganizationClientOptions, type ReportAutofillResult } from "@mindbill/browser";
+import { FileInput } from "./form-controls";
 
 const fieldLabels: Record<string, string> = {
   patientFirstName: "Patient first name", patientLastName: "Patient last name", dob: "Date of birth",
@@ -46,7 +47,7 @@ export function ReportAutofill({ onApply, analyzeReport, attachmentHelpText = "A
   return <section aria-label="Fill from report" style={{ color: "#253346", lineHeight: 1.5, padding: 16, border: "1px solid #dbe2ea", borderRadius: 12, marginBottom: 16 }}>
     <h3 style={{ marginTop: 0 }}>Fill from report</h3>
     <p>Upload a PDF to suggest bill details. Review every suggestion before applying it. Existing entries stay unchanged. {attachmentHelpText}</p>
-    <label style={{ display: "block", marginBottom: 12 }}>Medical report (PDF, up to 25 MB) <input type="file" style={{ display: "block", maxWidth: "100%", marginTop: 6 }} accept="application/pdf,.pdf" disabled={disabled || busy} onChange={event => { generation.current += 1; setFile(event.target.files?.[0] ?? null); setResult(null); setError(null); setApplied(false); }} /></label>
+    <label style={{ display: "block", marginBottom: 12 }}>Medical report (PDF, up to 25 MB) <FileInput style={{ display: "block", maxWidth: "100%", marginTop: 6 }} accept="application/pdf,.pdf" disabled={disabled || busy} onChange={event => { generation.current += 1; setFile(event.target.files?.[0] ?? null); setResult(null); setError(null); setApplied(false); }} /></label>
     <button className="mbsf-secondary" type="button" disabled={disabled || busy || !file} onClick={() => { void analyze(); }}>{busy ? "Reading report…" : "Review report suggestions"}</button>
     {error ? <p role="alert">{error}</p> : null}
     {result ? <div>

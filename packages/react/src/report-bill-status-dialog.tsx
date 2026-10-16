@@ -17,6 +17,7 @@ import {
 } from "@mindbill/browser";
 
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
+import { Radio } from "./form-controls";
 
 // The five status options and their input shape are framework-neutral and live
 // in @mindbill/browser; re-exported here so existing imports keep working.
@@ -263,8 +264,8 @@ export function ReportBillStatusDialog({
             <div className="mbbs-options" role="radiogroup" aria-label="Reported bill payment status">
               {REPORT_BILL_STATUS_OPTIONS.map((option) => (
                 <label key={option.id} className="mbbs-option" data-selected={status === option.id}>
-                  <input
-                    type="radio"
+                  <Radio
+                   
                     name="mbbs-status"
                     value={option.id}
                     checked={status === option.id}
