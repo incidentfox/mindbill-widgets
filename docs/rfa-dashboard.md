@@ -306,9 +306,8 @@ History shows actor-attributed notes and recorded events. `edit` enables adding 
 Delivery history keeps submission and forwarding evidence distinct and offers available
 proof PDFs. Expand an event to see its recorded delivery, appointment, or treatment-decision details, including original and corrected decisions. Treatment links jump to the affected service. Available supporting evidence and retained submission PDFs download through the authenticated client. History does not invent receipt page counts or provider timestamps that were not recorded. Attempted sending is not treated as receipt.
 
-`RfaTrackingPanel` is exported for custom pages. Pass `rfa`, `options` containing the
-connection options, optional `permissions={["act", "edit"]}`, and `onUpdated`.
-The standalone panel defaults to read-only. Supporting PDFs can be excluded from a new
+The tracking cards above are part of `RfaDashboard`'s RFA detail page; the standalone
+`RfaTrackingPanel` export was removed in 0.78.0. Supporting PDFs can be excluded from a new
 packet with the document checkboxes; retained documents and historical packet bytes
 are preserved rather than deleted.
 

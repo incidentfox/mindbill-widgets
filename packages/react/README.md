@@ -295,7 +295,7 @@ The complete immutable snapshot requires patient identity and address; employer,
 
 `BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; `onSubmitted` fires only after MindBill accepts a locally valid immutable snapshot. The legacy `onSubmit` escape hatch remains optional for unusual deployments, but connected integrations should omit it so the library owns the complete contract.
 
-`BillReviewForm` remains available for legacy integrations that already own a custom review model. New integrations should use `BillSubmissionForm`.
+`BillReviewForm` was removed in 0.78.0; use `BillSubmissionForm` (see CHANGELOG.md).
 
 ### Compose individual submission sections
 
@@ -325,6 +325,29 @@ import {
 ```
 
 Omit a section when another step in your product already supplies that information, or reorder sections to match your workflow. `BillSubmissionActions` remains the only submit control and always validates the complete immutable snapshot.
+
+### Treatment bills with expected OMFS payment
+
+`ConnectedTreatmentBillForm` is `BillSubmissionForm` for California treatment (CMS-1500 professional) bills.
+Each service line shows **Charge**, **Expected (OMFS)** and **Difference**, priced together as one visit
+through `POST /partner/v2/fee-quotes/encounter` — the same calculation MindBill uses when it saves a treatment
+bill (multiple-procedure, bundling, NCCI and add-on rules, practice charges, the claim's payer and LC 4604.5
+visit counts). Visit-wide notes appear under the heading. The session needs `bills:read` (and `bills:create`
+to submit) and the organization needs treatment billing.
+
+```tsx
+import { ConnectedTreatmentBillForm } from "@mindbill/react";
+
+<ConnectedTreatmentBillForm
+  sessionEndpoint="/api/mindbill/session"
+  initialBill={bill}                       // billingMode: "professional"
+  encounter={{ renderingProviderId, placeOfServiceId, claimId }}   // saved ids from the RFA creation context
+  onSubmitted={(result) => openBill(result.billId)}
+/>;
+```
+
+Use `createEncounterQuoter(client, identity)` from `@mindbill/browser` to wire the same pricing into your own
+`BillSubmissionForm` (`onQuoteEncounter`), or `client.quoteEncounter(input)` to price outside a form.
 
 ## Billing dashboard, aging, bill list, and reports
 
@@ -492,3 +515,22 @@ that wraps on mobile. See [modifier guidance](../../docs/evaluation-modifiers.md
 RFA response workflows include a task board, reviewed incoming-fax matching, per-treatment Post UR decisions, and supporting PDFs during request creation. See the [RFA dashboard guide](../../docs/rfa-dashboard.md) for permissions and integration details.
 
 Use `initialOverviewView`, `initialStatus`, `initialAgingBucket`, and `navigation` to integrate separate task, list, and creation routes. `renderProviderSelector` supplies saved physician choices and resolves providers created by the host before saving. See [host navigation](../../docs/rfa-dashboard.md#host-navigation) and [host physician selection](../../docs/rfa-dashboard.md#host-physician-selection).
+
+## Claim RFA index, related records and UR decisions
+
+`RfaClaimIndex`, `RelatedAuthorizationRecords` and `BillUrDecisions` are the claim, RFA and bill
+surfaces MindBill uses around the RFA workflow. Each loads through a short-lived browser session by
+default, or accepts a host loader so you can serve the data from your own backend.
+
+```tsx
+import { BillUrDecisions, RelatedAuthorizationRecords, RfaClaimIndex } from "@mindbill/react";
+
+<RfaClaimIndex claimId={claimId} canCreate sessionEndpoint="/api/mindbill/session"
+  getRfaHref={id => `/rfas/${id}`} createHref={`/rfas/new?claimId=${claimId}`} />;
+<RelatedAuthorizationRecords rfaId={rfaId} sessionEndpoint="/api/mindbill/session" getBillHref={id => `/bills/${id}`} />;
+<BillUrDecisions billId={billId} canEdit sessionEndpoint="/api/mindbill/session" getRfaHref={id => `/rfas/${id}`} />;
+```
+
+They call `GET /partner/v2/rfas?claimId=`, `GET /partner/v2/rfas/related` and
+`GET|POST /partner/v2/bills/{billId}/ur-decisions`. The workspace needs treatment billing. See
+[docs/rfa-records.md](../../docs/rfa-records.md).

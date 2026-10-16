@@ -4,11 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  buildBillReviewSaveInput,
-  ensureTrailingProcedureLine,
-  type BillReviewDraft,
-} from "../packages/react/src/native-bill-review";
+import { ensureTrailingProcedureLine } from "../packages/react/src/native-bill-review";
 import { createBillStatusClient } from "../packages/react/src/connected-bill-status";
 import {
   correctionRejectionSummary,
@@ -25,7 +21,6 @@ import {
   createBillSubmissionClient,
   defaultBillReviewPayerOption,
   reportBillStatusContacts,
-  sanitizeBillReviewSaveInput,
   SECOND_REVIEW_REASON_TEMPLATE,
   secondReviewDeadline,
   type BillHistoryEntry,
@@ -1304,85 +1299,6 @@ describe("bill lifecycle surfaces", () => {
   });
 });
 
-describe("bill review mutation snapshots", () => {
-  it("keeps the explicit SSN preservation sentinel, never ciphertext or display-only last four", () => {
-    const input = {
-      claimsAdminId: "payer-1", dos: "2026-09-04", lineItems: [],
-      billingProvider: { name: "Synthetic", taxId: "", taxIdType: "SSN", taxIdConfigured: true, taxIdLast4: "0000", taxIdEncrypted: "never-send", npi: "1234567890", billType: "Professional" },
-    } as Parameters<typeof sanitizeBillReviewSaveInput>[0];
-    expect(sanitizeBillReviewSaveInput(input).billingProvider).toEqual({ name: "Synthetic", taxId: "", taxIdType: "SSN", taxIdConfigured: true, npi: "1234567890", billType: "Professional" });
-  });
-
-  it("removes display-only lifecycle fields before a v2 save", () => {
-    const input = {
-      claimsAdminId: "payer-1",
-      payerId: "payer-1/sub-2",
-      dos: "2026-08-24",
-      billingProvider: {
-        id: "provider-1",
-        name: "Example Evaluators",
-        taxId: "123456789",
-        npi: "1234567890",
-        billType: "Professional",
-      },
-      renderingProvider: {
-        id: "clinician-1",
-        qmeSpecialty: "Psychiatry",
-        name: "Ada Example, MD",
-        specialty: "Psychiatry",
-        npi: "1098765432",
-      },
-      placeOfService: {
-        id: "location-1",
-        billingProviderId: "provider-1",
-        name: "Downtown",
-        street: "100 Main Street",
-        city: "Sacramento",
-        state: "CA",
-        zip: "95814",
-      },
-      lineItems: [{
-        id: "line-1",
-        feeSchedule: 2015,
-        code: "ML201",
-        modifiers: ["95"],
-        units: 1,
-      }],
-    } as unknown as Parameters<typeof sanitizeBillReviewSaveInput>[0];
-
-    expect(sanitizeBillReviewSaveInput(input)).toEqual({
-      claimsAdminId: "payer-1",
-      payerId: "payer-1/sub-2",
-      dos: "2026-08-24",
-      billingProvider: {
-        name: "Example Evaluators",
-        taxId: "123456789",
-        npi: "1234567890",
-        billType: "Professional",
-      },
-      renderingProvider: {
-        name: "Ada Example, MD",
-        specialty: "Psychiatry",
-        npi: "1098765432",
-      },
-      placeOfService: {
-        billingProviderId: "provider-1",
-        name: "Downtown",
-        street: "100 Main Street",
-        city: "Sacramento",
-        state: "CA",
-        zip: "95814",
-      },
-      lineItems: [{
-        id: "line-1",
-        code: "ML201",
-        modifiers: ["95"],
-        units: 1,
-      }],
-    });
-  });
-});
-
 describe("native bill review", () => {
   it("keeps exactly one keyboard-ready procedure row", () => {
     expect(ensureTrailingProcedureLine([])).toEqual([
@@ -1416,95 +1332,6 @@ describe("native bill review", () => {
     }
   });
 
-  it("freezes editable values into the MindBill review contract", () => {
-    const draft: BillReviewDraft = {
-      patientFirstName: "Ada",
-      patientMiddleName: "",
-      patientLastName: "Example",
-      patientDob: "1980-01-01",
-      claimNumber: "CLAIM-7",
-      employer: "Example Employer",
-      doi: "2026-08-01",
-      injuryEndDate: "",
-      cumulativeTrauma: false,
-      adjNumber: "ADJ1234567",
-      dos: "2026-08-24",
-      dosEnd: "",
-      authorizationNumber: "  AUTH-7  ",
-      claimsAdminId: "payer-1",
-      claimsAdminName: "Example Claims Administrator",
-      billingProvider: {
-        name: "Example Evaluators",
-        taxId: "123456789",
-        npi: "1234567890",
-        billType: "Professional",
-      },
-      clinician: {
-        name: "Ada Example, MD",
-        specialty: "Occupational medicine",
-        npi: "1098765432",
-      },
-      location: {
-        name: "Downtown",
-        street: "100 Main Street",
-        city: "Sacramento",
-        state: "CA",
-        zip: "95814",
-        posCode: "11",
-      },
-      lineItems: [
-        {
-          id: "line-1",
-          code: " ml201 ",
-          modifiers: ["95"],
-          units: 1,
-          charge: 2015,
-        },
-        { code: "", modifiers: [], units: 1, charge: 0 },
-      ],
-    };
-
-    expect(buildBillReviewSaveInput(draft)).toEqual({
-      patientOverrides: {
-        firstName: "Ada",
-        lastName: "Example",
-        dob: "1980-01-01",
-      },
-      injuryOverrides: {
-        claimNumber: "CLAIM-7",
-        employer: "Example Employer",
-        doi: "2026-08-01",
-        cumulativeTrauma: false,
-        adjNumber: "ADJ1234567",
-      },
-      dos: "2026-08-24",
-      dosEnd: null,
-      authorizationNumber: "AUTH-7",
-      claimsAdminId: "payer-1",
-      billingProvider: {
-        name: "Example Evaluators",
-        taxId: "123456789",
-        npi: "1234567890",
-        billType: "Professional",
-      },
-      renderingProvider: {
-        name: "Ada Example, MD",
-        specialty: "Occupational medicine",
-        npi: "1098765432",
-      },
-      placeOfService: {
-        name: "Downtown",
-        street: "100 Main Street",
-        city: "Sacramento",
-        state: "CA",
-        zip: "95814",
-        posCode: "11",
-      },
-      lineItems: [
-        { id: "line-1", code: "ML201", modifiers: ["95"], units: 1, charge: 2015 },
-      ],
-    });
-  });
 });
 
 describe("connected bill status", () => {

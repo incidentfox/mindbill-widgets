@@ -1,4 +1,5 @@
 import { parseCaClaimFeeQuote, type CaClaimFeeQuoteInput, type CaClaimFeeQuoteResult, type CaFeeCalculation } from "./claim-fees";
+import { parseEncounterQuote, type EncounterQuoteInput, type EncounterQuoteResult } from "./encounter-fees";
 /** Paper claim family; clearinghouse transport is selected by the server. */
 export type ClaimForm = "cms1500" | "ub04" | "ada" | "ncpdp";
 /** JSON fields validated by the server's form-specific contract. */
@@ -298,70 +299,6 @@ export type BillReviewSaveInput = {
     diagnosisPointers?: number[];
   }>;
 };
-
-function pickDefined(
-  source: object,
-  keys: readonly string[],
-): Record<string, unknown> {
-  const record = source as Record<string, unknown>;
-  return Object.fromEntries(
-    keys.flatMap((key) => record[key] === undefined ? [] : [[key, record[key]]]),
-  );
-}
-
-/**
- * Removes read-only snapshot metadata before a review mutation is sent.
- * Lifecycle reads can include display-only fields such as entity IDs; the v2
- * write contract accepts only the values that should be frozen onto the bill.
- */
-export function sanitizeBillReviewSaveInput(
-  input: BillReviewSaveInput,
-): BillReviewSaveInput {
-  return {
-    claimsAdminId: input.claimsAdminId,
-    ...(input.formData !== undefined ? { formData: input.formData } : {}),
-    ...(input.payerId !== undefined ? { payerId: input.payerId } : {}),
-    ...(input.patientOverrides ? {
-      patientOverrides: pickDefined(input.patientOverrides, [
-        "firstName", "middleName", "lastName", "dob",
-      ]) as NonNullable<BillReviewSaveInput["patientOverrides"]>,
-    } : {}),
-    ...(input.injuryOverrides ? {
-      injuryOverrides: pickDefined(input.injuryOverrides, [
-        "claimNumber", "employer", "doi", "injuryEndDate",
-        "cumulativeTrauma", "adjNumber", "medicalProviderNetworkId",
-      ]) as NonNullable<BillReviewSaveInput["injuryOverrides"]>,
-    } : {}),
-    dos: input.dos,
-    ...(input.dosEnd !== undefined ? { dosEnd: input.dosEnd } : {}),
-    ...(input.authorizationNumber !== undefined
-      ? { authorizationNumber: input.authorizationNumber }
-      : {}),
-    ...(input.billingProvider ? {
-      billingProvider: pickDefined(input.billingProvider, [
-        "name", "taxId", "taxIdType", "taxIdConfigured", "npi", "billType", "phone", "billingStreet",
-        "billingCity", "billingState", "billingZip",
-      ]) as BillReviewBillingProvider,
-    } : {}),
-    ...(input.renderingProvider ? {
-      renderingProvider: pickDefined(input.renderingProvider, [
-        "name", "specialty", "npi", "taxonomy", "licenseNumber",
-        "licenseState", "signaturePng", "signatureKey", "isQME", "isAME",
-        "email", "active",
-      ]) as BillReviewClinician,
-    } : {}),
-    ...(input.placeOfService ? {
-      placeOfService: pickDefined(input.placeOfService, [
-        "billingProviderId", "name", "nickname", "street", "city", "state",
-        "zip", "county", "posCode", "isPrimary", "active",
-      ]) as BillReviewLocation,
-    } : {}),
-    lineItems: input.lineItems.map((line) => pickDefined(line, [
-      "id", "code", "modifiers", "units", "charge", "serviceDate",
-      "serviceDateEnd", "diagnosisPointers", "formData", "drug",
-    ]) as BillReviewSaveInput["lineItems"][number]),
-  };
-}
 
 export type BillSubmissionRoute = "ebill" | "fax" | "mail" | "email";
 export type BillDeliveryOption = {
@@ -1368,6 +1305,8 @@ export type BillReferenceClient = {
   searchProcedureCodes: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
   quoteFee: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
   quoteClaimFees: (input: CaClaimFeeQuoteInput) => Promise<CaClaimFeeQuoteResult>;
+  /** Expected payment for one treatment visit, priced with the organization's saved provider, location and claim. */
+  quoteEncounter: (input: EncounterQuoteInput) => Promise<EncounterQuoteResult>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   /**
    * Delivery-route preview (recommended route + selectable options + payer
@@ -1389,6 +1328,7 @@ export type BillLifecycleClient = {
   searchProcedureCodes: (input?: BillProcedureCodeSearchInput) => Promise<BillProcedureCodePage>;
   quoteFee: (input: BillFeeQuoteInput) => Promise<BillFeeQuote>;
   quoteClaimFees: (input: CaClaimFeeQuoteInput) => Promise<CaClaimFeeQuoteResult>;
+  quoteEncounter: (input: EncounterQuoteInput) => Promise<EncounterQuoteResult>;
   lookupPostalCode: (postalCode: string) => Promise<BillPostalPlace | null>;
   getDeliveryOptions: () => Promise<BillDeliveryOptions>;
   getDeliveryPreview: (input: BillDeliveryPreviewInput) => Promise<BillDeliveryOptions>;
@@ -1860,6 +1800,15 @@ export function createBillLifecycleClient({
     };
   };
 
+  const quoteEncounter = async (input: EncounterQuoteInput): Promise<EncounterQuoteResult> => {
+    const response = await request("/partner/v2/fee-quotes/encounter", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input),
+    });
+    if (!response.ok) throw await responseError(response, "Encounter fee pricing is unavailable.");
+    const body = await response.json() as { data?: unknown };
+    return parseEncounterQuote(body.data, input);
+  };
+
   const quoteClaimFees = async (input: CaClaimFeeQuoteInput): Promise<CaClaimFeeQuoteResult> => {
     const response = await request("/partner/v2/fee-quotes/ca/claim", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input),
@@ -1935,6 +1884,7 @@ export function createBillLifecycleClient({
     searchProcedureCodes,
     quoteFee,
     quoteClaimFees,
+    quoteEncounter,
     lookupPostalCode,
     async getDeliveryOptions() {
       const response = await request(billPath("/delivery-options"));
@@ -2040,6 +1990,7 @@ export function createBillReferenceClient(
     searchProcedureCodes: lifecycle.searchProcedureCodes,
     quoteFee: lifecycle.quoteFee,
     quoteClaimFees: lifecycle.quoteClaimFees,
+    quoteEncounter: lifecycle.quoteEncounter,
     lookupPostalCode: lifecycle.lookupPostalCode,
     getDeliveryPreview: lifecycle.getDeliveryPreview,
     clearSession: lifecycle.clearSession,
@@ -2489,7 +2440,42 @@ export type RfaClient = {
   previewPacket: (rfaId: string, documentIds: string[]) => Promise<Blob>;
   sendFax: (rfaId: string, input: RfaFaxInput, idempotencyKey: string) => Promise<RfaRecord>;
   refreshFaxes: (rfaId: string, idempotencyKey: string) => Promise<RfaRecord>;
+  /** The DWC Form RFA as it stands (signed form or unsigned preview), or with `packet` the whole fax packet. Read-only. */
+  previewForm?: (rfaId: string, options?: { packet?: boolean }) => Promise<Blob>;
+  /** The unsigned DWC Form RFA filled from an unsaved draft. Saves nothing. */
+  previewDraft?: (draft: RfaDraftPreviewInput) => Promise<Blob>;
+  /** Proposed decisions read from an attached utilization review response, for a person to check. Saves nothing. */
+  readResponse?: (rfaId: string, documentId: string) => Promise<RfaResponseReadingResult>;
+  /** The organization's saved treatment templates, optionally for one practice. */
+  listTemplates?: (billingProviderId?: string) => Promise<RfaTemplateRecord[]>;
+  /** Creates a template, or updates one by id (`active: false` retires it). */
+  saveTemplate?: (input: RfaTemplateSaveInput, idempotencyKey?: string) => Promise<RfaTemplateRecord>;
+  /** CSV of the filtered requests, one row per treatment. */
+  exportCsv?: (query?: Omit<RfaListQuery, "limit" | "cursor">) => Promise<Blob>;
 };
+/** An unsaved request as typed so far; nothing is required for a preview. */
+export type RfaDraftPreviewInput = {
+  claimId?: string | null; patientId?: string | null; renderingProviderId?: string | null; claimsAdminId?: string | null;
+  employeeName?: string | null; providerName?: string | null; providerNpi?: string | null; providerPhone?: string | null; providerFax?: string | null;
+  claimNumber?: string | null; dateOfInjury?: string | null; rationale?: string | null; materialChange?: string | null;
+  requestType?: string | null; expedited?: boolean; writtenConfirmation?: boolean;
+  requestingPractice?: Partial<Record<"name" | "contactName" | "address" | "city" | "state" | "zip" | "phone" | "fax" | "email", string | null>> | null;
+  authorizationContact?: Partial<Record<"name" | "contactName" | "address" | "city" | "state" | "zip" | "phone" | "fax" | "email", string | null>> | null;
+  items?: Array<{ diagnosisCode?: string | null; diagnosisDescription?: string | null; serviceDescription?: string | null; procedureCode?: string | null;
+    frequency?: string | null; duration?: string | null; requestedFrom?: string | null; requestedTo?: string | null; quantity?: number | null; units?: number | null;
+    metadata?: Record<string, unknown> | null }>;
+};
+export type RfaResponseReadingResult = {
+  status: "read" | "unreadable";
+  reason?: "no_text" | "model_unavailable" | "model_answer_invalid";
+  decidedAt?: string;
+  items: Array<{ itemId: string; outcome: "approved" | "modified" | "denied" | "not_addressed"; confident: boolean;
+    authorizationNumber?: string; authorizedProcedureCode?: string; authorizedQuantity?: number; authorizedUnits?: number;
+    effectiveFrom?: string; effectiveTo?: string; decisionReason?: string; reviewerName?: string; reviewerPhone?: string }>;
+};
+export type RfaTemplateItemRecord = { externalId: string; serviceDescription: string; procedureCode?: string; quantity?: number; units?: number; frequency?: string; duration?: string; otherInformation?: string };
+export type RfaTemplateRecord = { id: string; name: string; billingProviderId: string; renderingProviderId: string | null; active: boolean; items: RfaTemplateItemRecord[] };
+export type RfaTemplateSaveInput = { id?: string; name: string; billingProviderId: string; renderingProviderId?: string | null; active?: boolean; items: RfaTemplateItemRecord[] };
 /** Uses short-lived browser credentials. Never pass a partner API key. */
 export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, getSession, apiBaseUrl = DEFAULT_API_BASE_URL, fetch: fetchOverride }: OrganizationClientOptions = {}): RfaClient {
   const fetcher = fetchOverride ?? globalThis.fetch;
@@ -2539,7 +2525,7 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     searchClaimsAdministrators: (query, claimNumber) => createBillReferenceClient({ sessionEndpoint, ...(getSession ? { getSession } : {}), apiBaseUrl, ...(fetchOverride ? { fetch: fetchOverride } : {}) }).searchClaimsAdministrators(query, claimNumber),
     getClaimsAdministratorDirectory: (id, injuryState) => createBillReferenceClient({ sessionEndpoint, ...(getSession ? { getSession } : {}), apiBaseUrl, ...(fetchOverride ? { fetch: fetchOverride } : {}) }).getClaimsAdministratorDirectory(id, injuryState),
     saveProviderSignature: async (providerId, input, options) => {
-      const response = await request(`/providers/${encodeURIComponent(providerId)}/signature`, mutation(input, options?.idempotencyKey ?? globalThis.crypto.randomUUID()), true);
+      const response = await request(`/providers/${encodeURIComponent(providerId)}/signature`, mutation(input, options?.idempotencyKey ?? globalThis.crypto.randomUUID()));
       const body = await response.json() as { data: { providerId: string; signatureConfigured: true } };
       if (body.data?.signatureConfigured !== true) throw new Error("The physician signature could not be confirmed.");
       return body.data;
@@ -2547,7 +2533,7 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
     getCreationContext: async (query = {}) => {
       const params = new URLSearchParams();
       for (const [name, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(name, String(value));
-      const body = await (await request(`/creation-context${params.size ? `?${params}` : ""}`, {}, true)).json() as { data?: RfaCreationContext };
+      const body = await (await request(`/creation-context${params.size ? `?${params}` : ""}`)).json() as { data?: RfaCreationContext };
       if (!Array.isArray(body.data?.claims) || !Array.isArray(body.data?.renderingProviders)) throw new Error("The RFA creation context was invalid.");
       return body.data;
     },
@@ -2606,10 +2592,36 @@ export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, ge
       if (!key.trim()) return Promise.reject(new Error("An idempotency key is required."));
       return record(path(id, `documents/${encodeURIComponent(documentId)}`), { method: "DELETE", headers: { "idempotency-key": key } });
     },
+    previewForm: async (id, options) => (await request(path(id, `form-preview${options?.packet ? "?packet=1" : ""}`))).blob(),
+    previewDraft: async (draft) => (await request("/draft-preview", { method: "POST", body: JSON.stringify(draft) })).blob(),
+    readResponse: async (id, documentId) => {
+      const body = await (await request(path(id, "response-reading"), { method: "POST", body: JSON.stringify({ documentId }) })).json() as { data?: RfaResponseReadingResult };
+      if (!body.data || !Array.isArray(body.data.items) || !["read", "unreadable"].includes(body.data.status)) throw new Error("The response reading was invalid.");
+      return body.data;
+    },
+    listTemplates: async (billingProviderId) => {
+      const query = billingProviderId ? `?${new URLSearchParams({ billingProviderId })}` : "";
+      const body = await (await request(query, {}, false, "rfa-templates")).json() as { data?: RfaTemplateRecord[] };
+      if (!Array.isArray(body.data)) throw new Error("The RFA templates response was invalid.");
+      return body.data;
+    },
+    saveTemplate: async (input, key) => {
+      const { id, ...template } = input;
+      const init = mutation(template, key ?? idempotencyKey());
+      const body = await (await request(id ? `/${encodeURIComponent(id)}` : "", id ? { ...init, method: "PATCH" } : init, false, "rfa-templates")).json() as { data?: RfaTemplateRecord };
+      if (!body.data?.id) throw new Error("The RFA template response was invalid.");
+      return body.data;
+    },
+    exportCsv: async (query = {}) => {
+      const params = new URLSearchParams();
+      for (const [name, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(name, String(value));
+      return (await request(`/export${params.size ? `?${params}` : ""}`)).blob();
+    },
   };
 }
 
 export * from "./rfa-lifecycle";
+export * from "./encounter-fees";
 export { createReportAutofillClient } from "./report-autofill";
 export type { ReportAutofillClient, ReportAutofillField, ReportAutofillMatch, ReportAutofillResult } from "./report-autofill";
 
@@ -2618,3 +2630,5 @@ export * from "./rfa-draft-actions";
 export * from "./rfa-packets";
 
 export * from "./rfa-status";
+
+export * from "./rfa-records";
