@@ -46,10 +46,10 @@ it("prefills an empty charge from the practice charge, else the OMFS expected am
   const onQuoteEncounter = vi.fn(async (inputs: BillFeeQuoteInput[]) => inputs.map((input) => input.code === "64483" ? priced(45834, 65000) : input.code === "99213" ? priced(9322) : priced(8113, 9000)));
   const view = await render(onQuoteEncounter);
   try {
-    expect(view.charge(1).value).toBe("650");
+    expect(view.charge(1).value).toBe("650.00");
     expect(view.charge(2).value).toBe("93.22");
     // A charge already on the line is never replaced by the practice charge.
-    expect(view.charge(3).value).toBe("180");
+    expect(view.charge(3).value).toBe("180.00");
     const differences = [...view.container.querySelectorAll(".mbsf-difference")].map((cell) => cell.textContent);
     expect(differences.slice(0, 3)).toEqual(["$191.66", "$0.00", "$98.87"]);
     const totals = view.container.querySelector(".mbsf-encounter-total")!.textContent!;
@@ -64,12 +64,12 @@ it("keeps a typed or cleared charge, follows units while untouched, and submits 
   const onQuoteEncounter = vi.fn(async (inputs: BillFeeQuoteInput[]) => inputs.map((input) => priced(10000 * (input.units ?? 1), 20000 * (input.units ?? 1))));
   const view = await render(onQuoteEncounter);
   try {
-    expect(view.charge(1).value).toBe("200");
+    expect(view.charge(1).value).toBe("200.00");
     // The biller edits line 2; re-pricing must not overwrite it.
     await view.type(view.charge(2), "155.5");
     const units = view.container.querySelector<HTMLInputElement>('[aria-label="Units 1"]')!;
     await view.type(units, "2"); await view.settle();
-    expect(view.charge(1).value).toBe("400");
+    expect(view.charge(1).value).toBe("400.00");
     expect(view.charge(2).value).toBe("155.5");
     await view.type(view.charge(1), ""); await view.settle();
     expect(view.charge(1).value).toBe("");

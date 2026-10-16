@@ -46,8 +46,14 @@ import { BillSubmissionForm, organizationProfileOptions } from "@mindbill/react"
 />
 ```
 
-`profileDisplay="expanded"` is the default and keeps provider/location fields visible.
-`compact` puts the searchable choices first and lets the user expand the editable details.
+`profileDisplay="auto"` (the default since React 0.80.0) shows each billing provider, rendering provider and
+service location that matches a saved choice as a one-line summary, for example
+"Synthetic Spine Clinic · EIN ••6789 · NPI 1234567893 · Sacramento, CA", with an **Edit** button that opens that
+section's fields only. A value matches a choice by its saved id (`savedProviderId`, then `id`) or, without one, by
+equal values (empty fields ignored), so an `initialBill` that copies the option values collapses automatically. A
+section shows its fields when nothing matches, when a required value is missing or invalid (including errors on
+submit, which also focus the field), when it is named in `attentionFields`, or after the user edits it.
+`profileDisplay="expanded"` always shows every field. `compact` also puts all details behind one disclosure.
 No profile is silently selected. Selecting a choice copies its values into this bill's
 editable snapshot, except saved SSN providers: those use a server-resolved `savedProviderId`
 and lock the referenced fields until the user chooses different details. The backend

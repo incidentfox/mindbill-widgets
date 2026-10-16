@@ -103,7 +103,7 @@ const css = `.mbctl{position:relative;display:block;min-width:0;width:100%;font-
 .mbctl-check{margin:0}.mbctl-check.mbctl-check{position:relative;display:inline-grid;place-items:center;flex:none;box-sizing:border-box;width:18px;height:18px;min-width:18px;padding:0;vertical-align:-4px;line-height:0}
 .mbctl-check.mbctl-check>input.mbctl-native,.mbctl-file.mbctl-file>input.mbctl-native{position:absolute!important;inset:0;z-index:1;box-sizing:border-box;width:100%!important;height:100%!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;opacity:0!important;cursor:pointer;-webkit-appearance:none;appearance:none}
 .mbctl-check.mbctl-check>input.mbctl-native:disabled,.mbctl-file.mbctl-file>input.mbctl-native:disabled{cursor:not-allowed}
-.mbctl-check.mbctl-check>.mbctl-tick{box-sizing:border-box;display:grid;place-items:center;width:18px;height:18px;margin:0;padding:0;border:1.5px solid var(--mb-control-border,#9aa9b1);border-radius:5px;background:var(--mb-input,var(--mb-surface,#fff));color:transparent;transition:background-color .12s,border-color .12s,box-shadow .12s}
+.mbctl-check.mbctl-check>.mbctl-tick{box-sizing:border-box;display:grid;place-items:center;width:18px;height:18px;margin:0;padding:0;border:1.5px solid var(--mb-control-border,#9aa9b1);border-radius:5px;background:var(--mb-input,var(--mb-surface,#fff));color:transparent}
 .mbctl-check.mbctl-check[data-kind=radio]>.mbctl-tick{border-radius:50%}
 .mbctl-check.mbctl-check>input:hover:not(:disabled)+.mbctl-tick{border-color:var(--mb-accent,#1f6feb)}
 .mbctl-check.mbctl-check>input:checked+.mbctl-tick{border-color:var(--mb-accent,#1f6feb);background:var(--mb-accent,#1f6feb);color:var(--mb-accent-contrast,#fff)}

@@ -1043,7 +1043,8 @@ function EncounterLineNotes({ quote, reviewMessage }: { quote: BillFeeQuote | { 
 /** Currency entry without the browser number spinner; keeps a partial entry such as "12." while typing. */
 function DecimalInput({ ariaLabel, value, onChange, disabled, placeholder }: { ariaLabel: string; value: number | undefined; onChange: (value: number | undefined) => void; disabled?: boolean | undefined; placeholder?: string | undefined }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const shown = value == null || !Number.isFinite(value) ? "" : String(value);
+  // Shown as dollars and cents ("650.00") except while the biller is typing.
+  const shown = value == null || !Number.isFinite(value) ? "" : value.toFixed(2);
   return <input className="mbsf-input" aria-label={ariaLabel} disabled={disabled} type="text" inputMode="decimal" autoComplete="off" placeholder={placeholder}
     value={draft ?? shown} onFocus={() => setDraft(shown)} onBlur={() => setDraft(null)}
     onChange={(event) => {

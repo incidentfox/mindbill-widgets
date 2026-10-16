@@ -11,6 +11,15 @@ instead show *Bundled*, *Not payable* or *Needs review*, with a short note expla
 modifier 25 or an NCCI pair). Totals sit under the table; a total is never shown as final while a line needs
 review. Visit-wide notes, such as a per-visit cap or the LC 4604.5 visit count, appear once under the heading.
 
+A line without a charge (for example one created from an approved RFA item) starts at the practice's saved charge
+for that code × units (`BillFeeQuote.practiceChargeCents`, `@mindbill/browser` 0.53.0), or at the expected OMFS
+amount when the practice has no saved charge, so totals and Difference are meaningful. The prefilled charge is an
+ordinary editable value and is what gets submitted. A charge the biller typed (or one supplied in `initialBill`)
+is never replaced; an untouched prefilled charge follows unit changes.
+
+Saved billing provider, rendering provider and service location choices show as one-line summaries with **Edit**
+(see [saved profiles](./saved-profiles.md)).
+
 ## Requirements
 
 - The organization has treatment billing enabled (partner organization capability `treatmentBilling`).
