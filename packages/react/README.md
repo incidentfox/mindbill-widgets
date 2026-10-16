@@ -326,6 +326,29 @@ import {
 
 Omit a section when another step in your product already supplies that information, or reorder sections to match your workflow. `BillSubmissionActions` remains the only submit control and always validates the complete immutable snapshot.
 
+### Treatment bills with expected OMFS payment
+
+`ConnectedTreatmentBillForm` is `BillSubmissionForm` for California treatment (CMS-1500 professional) bills.
+Each service line shows **Charge**, **Expected (OMFS)** and **Difference**, priced together as one visit
+through `POST /partner/v2/fee-quotes/encounter` — the same calculation MindBill uses when it saves a treatment
+bill (multiple-procedure, bundling, NCCI and add-on rules, practice charges, the claim's payer and LC 4604.5
+visit counts). Visit-wide notes appear under the heading. The session needs `bills:read` (and `bills:create`
+to submit) and the organization needs treatment billing.
+
+```tsx
+import { ConnectedTreatmentBillForm } from "@mindbill/react";
+
+<ConnectedTreatmentBillForm
+  sessionEndpoint="/api/mindbill/session"
+  initialBill={bill}                       // billingMode: "professional"
+  encounter={{ renderingProviderId, placeOfServiceId, claimId }}   // saved ids from the RFA creation context
+  onSubmitted={(result) => openBill(result.billId)}
+/>;
+```
+
+Use `createEncounterQuoter(client, identity)` from `@mindbill/browser` to wire the same pricing into your own
+`BillSubmissionForm` (`onQuoteEncounter`), or `client.quoteEncounter(input)` to price outside a form.
+
 ## Billing dashboard, aging, bill list, and reports
 
 The dashboard components accept plain bill summaries, so they work with `@mindbill/node`'s `listBills()` response, a server-rendered loader, or a partner-owned cache. They never require an API key in the browser.
