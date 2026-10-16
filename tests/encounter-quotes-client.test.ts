@@ -45,7 +45,7 @@ it("builds one encounter request from form lines and maps each line back, with t
 });
 
 it("quoteEncounter posts to the partner encounter endpoint with the browser session and validates the response", async () => {
-  const fetch = vi.fn<typeof globalThis.fetch>(async (_input, _init) => Response.json({ data: result }));
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ data: result }));
   const client = createBillReferenceClient({ getSession: async () => ({ token: "mbes_synthetic", apiBaseUrl: "https://api.example.test" }), fetch });
   const input = encounterQuoteRequest([{ code: "99213", dateOfService: "2026-10-08" }, { code: "29881", dateOfService: "2026-10-08" }, { code: "97140", dateOfService: "2026-10-08" }], identity);
   await expect(client.quoteEncounter(input)).resolves.toMatchObject({ visitNotes: ["Visit 3 of 24 (LC 4604.5)"] });

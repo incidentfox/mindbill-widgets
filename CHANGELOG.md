@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Added
+- `@mindbill/react`: `RfaClaimIndex`, `RelatedAuthorizationRecords` and `BillUrDecisions`, the claim RFA
+  index, related bills/authorizations and bill UR decision surfaces used by MindBill
+  ([docs/rfa-records.md](docs/rfa-records.md)). Helpers `rfaReference`, `claimRfaLifecycle`, `claimRfaCounts`.
+- `@mindbill/browser`: `createRfaRecordsClient` (`listClaimRfas`, `listRelated`, `listBillUrDecisions`,
+  `attachBillUrDecisions`, `getRfaDocument`) and `claimRfaSummary`. Requires the MindBill
+  `/partner/v2/rfas/related` and `/partner/v2/bills/{id}/ur-decisions` endpoints.
+- `@mindbill/react`: `ConnectedTreatmentBillForm`: the treatment bill form with Charge, Expected (OMFS) and
+  Difference per line, priced together as one visit through `POST /partner/v2/fee-quotes/encounter`
+  ([docs/treatment-billing.md](docs/treatment-billing.md)).
+- `@mindbill/browser`: `quoteEncounter` on the bill reference/lifecycle clients, plus `encounterQuoteRequest`,
+  `encounterBillFeeQuotes`, `createEncounterQuoter` and `parseEncounterQuote`.
+- `@mindbill/browser`: RFA client `previewForm`, `previewDraft`, `readResponse`, `listTemplates`, `saveTemplate`
+  and `exportCsv`.
+- `RfaDashboard` (official form): when the host does not supply them, form and draft previews open in the
+  built-in viewer, UR responses are read with `readResponse`, and saved treatment templates load and save
+  through the partner API. Host props still take precedence.
+
+### Changed
+- `@mindbill/browser`: `getCreationContext` and `saveProviderSignature` call the canonical
+  `/partner/v2/rfas/creation-context` and `/partner/v2/rfas/providers/{id}/signature` routes instead of the
+  legacy `/browser/` aliases.
+
 ### Breaking (next minor: @mindbill/react 0.78.0, @mindbill/browser 0.51.0, @mindbill/angular 0.20.0)
 
 Older versions remain on npm. Under 0.x semver, `^0.77` ranges do not pick up 0.78.0, so

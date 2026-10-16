@@ -492,3 +492,22 @@ that wraps on mobile. See [modifier guidance](../../docs/evaluation-modifiers.md
 RFA response workflows include a task board, reviewed incoming-fax matching, per-treatment Post UR decisions, and supporting PDFs during request creation. See the [RFA dashboard guide](../../docs/rfa-dashboard.md) for permissions and integration details.
 
 Use `initialOverviewView`, `initialStatus`, `initialAgingBucket`, and `navigation` to integrate separate task, list, and creation routes. `renderProviderSelector` supplies saved physician choices and resolves providers created by the host before saving. See [host navigation](../../docs/rfa-dashboard.md#host-navigation) and [host physician selection](../../docs/rfa-dashboard.md#host-physician-selection).
+
+## Claim RFA index, related records and UR decisions
+
+`RfaClaimIndex`, `RelatedAuthorizationRecords` and `BillUrDecisions` are the claim, RFA and bill
+surfaces MindBill uses around the RFA workflow. Each loads through a short-lived browser session by
+default, or accepts a host loader so you can serve the data from your own backend.
+
+```tsx
+import { BillUrDecisions, RelatedAuthorizationRecords, RfaClaimIndex } from "@mindbill/react";
+
+<RfaClaimIndex claimId={claimId} canCreate sessionEndpoint="/api/mindbill/session"
+  getRfaHref={id => `/rfas/${id}`} createHref={`/rfas/new?claimId=${claimId}`} />;
+<RelatedAuthorizationRecords rfaId={rfaId} sessionEndpoint="/api/mindbill/session" getBillHref={id => `/bills/${id}`} />;
+<BillUrDecisions billId={billId} canEdit sessionEndpoint="/api/mindbill/session" getRfaHref={id => `/rfas/${id}`} />;
+```
+
+They call `GET /partner/v2/rfas?claimId=`, `GET /partner/v2/rfas/related` and
+`GET|POST /partner/v2/bills/{billId}/ur-decisions`. The workspace needs treatment billing. See
+[docs/rfa-records.md](../../docs/rfa-records.md).

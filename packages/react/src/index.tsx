@@ -391,3 +391,7 @@ export { RfaTaskBoard } from "./rfa-task-board";
 export type { RfaTaskBoardProps, RfaTaskQuery, RfaTaskState, RfaTaskAge } from "./rfa-task-board";
 
 export type { RfaClaimSelectorProps, RfaProviderSelectorProps } from "./rfa-create-form";
+
+export { BillUrDecisions, claimRfaCounts, claimRfaLifecycle, RelatedAuthorizationRecords, RfaClaimIndex, rfaReference } from "./rfa-records";
+export type { BillUrDecisionsProps, RelatedAuthorizationRecordsProps, RfaClaimIndexProps } from "./rfa-records";
+export type { BillUrDecision, BillUrDecisionsAttachInput, BillUrDecisionsAttachResult, BillUrDecisionsResult, ClaimRfaSummary, LinkedRfaEvidence, RelatedAuthorizationRecord, RelatedAuthorizationResult, RfaEvidenceState } from "@mindbill/browser";

@@ -2630,3 +2630,5 @@ export * from "./rfa-draft-actions";
 export * from "./rfa-packets";
 
 export * from "./rfa-status";
+
+export * from "./rfa-records";
