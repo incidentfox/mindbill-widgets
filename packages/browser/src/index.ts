@@ -299,16 +299,6 @@ export type BillReviewSaveInput = {
   }>;
 };
 
-function pickDefined(
-  source: object,
-  keys: readonly string[],
-): Record<string, unknown> {
-  const record = source as Record<string, unknown>;
-  return Object.fromEntries(
-    keys.flatMap((key) => record[key] === undefined ? [] : [[key, record[key]]]),
-  );
-}
-
 export type BillSubmissionRoute = "ebill" | "fax" | "mail" | "email";
 export type BillDeliveryOption = {
   route: BillSubmissionRoute;
