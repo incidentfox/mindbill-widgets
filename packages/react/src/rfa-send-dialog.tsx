@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
-import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOption, RfaClient, RfaRecord } from "@mindbill/browser";
+import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOption, RfaClient, RfaRecord, RfaSentOutsideInput } from "@mindbill/browser";
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { formatRfaPhone } from "./rfa-official-fields";
 import { rfaSendFix } from "./rfa-send-fix";
 import { rfaFailureReason } from "./rfa-detail-cards";
 import { useVisualViewportVars } from "./form-controls";
 
-export const rfaSendDialogCss = `.mbrfa-send-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:16px;background:rgba(17,28,38,.44)}
+export const rfaSendDialogCss = `.mbrfa-send-sandbox{margin:0;padding:10px 12px;border-radius:var(--mb-control-radius,8px);background:color-mix(in srgb,var(--mb-accent,#2563eb) 8%,var(--mb-surface,#fff));color:var(--mb-text,#1d3440);font-size:13px;line-height:1.45}
+.mbrfa-send-backdrop{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;padding:16px;background:rgba(17,28,38,.44)}
 .mbrfa-send{display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:min(560px,100%);max-height:min(88vh,760px);border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);color:var(--mb-text);box-shadow:0 18px 48px #0003}
 .mbrfa-send>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--mb-border)}.mbrfa-send>header h3{margin:0;font-size:16px}
 .mbrfa-send>header button{width:36px;height:36px;min-height:36px;padding:0;border:0;background:none;font-size:22px;line-height:1;cursor:pointer;color:var(--mb-muted)}
@@ -34,7 +35,7 @@ const treatmentDetail = (item: RfaRecord["items"][number]): string => [item.proc
 /** One step to send a request: choose where it goes, confirm once, send. Applying the requesting
  * physician's saved signature and assembling the packet happen as part of sending. */
 const pencil = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
-export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, signatureMissing, resend, onUpdated, onSent, onClose, onFix }: {
+export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions, directory, directoryLoading, directoryError, environment, canSend, canSign, actorReference, previewUrl, signatureSetup, signatureMissing, resend, recordSimulatedSend, onUpdated, onSent, onClose, onFix }: {
   rfa: RfaRecord; client: RfaClient; documentIds: string[]; diagnosisDescriptions: Record<string, string>;
   directory: BillClaimsAdministratorDirectory | null; directoryLoading: boolean; directoryError: string | null;
   environment: string; canSend: boolean; canSign: boolean; actorReference?: string | undefined; previewUrl?: string | undefined;
@@ -43,6 +44,11 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
   /** The host knows the requesting physician has no saved signature: say so up front and hold the send until one is added. */ signatureMissing?: boolean | undefined;
   /** Return to the draft editor to fix missing content or attach reports. */
   onFix?: (() => void) | undefined;
+  /**
+   * Sandbox only: records a simulated send (as sent outside MindBill) after signing, so the receipt, UR decision
+   * and billing steps can be exercised. Nothing is faxed or e-mailed. Without it, sandbox sending stays blocked.
+   */
+  recordSimulatedSend?: ((rfaId: string, input: RfaSentOutsideInput, idempotencyKey: string) => Promise<RfaRecord>) | undefined;
   onUpdated: (rfa: RfaRecord) => void; onSent: (rfa: RfaRecord) => void; onClose: () => void;
 }): ReactElement {
   useVisualViewportVars();
@@ -63,7 +69,8 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
   // Known from the host, or learned when the server refused to sign. A host that reports the signature as saved clears it.
   const needsSignature = !rfa.signedAt && (signatureMissing ?? signatureRefused);
   useEffect(() => { if (signatureMissing === false) setSignatureRefused(false); }, [signatureMissing]);
-  const blocked = !live ? "This is a sandbox: nothing is faxed or e-mailed."
+  const simulate = !live && Boolean(recordSimulatedSend);
+  const blocked = !live && !simulate ? "This is a sandbox: nothing is faxed or e-mailed."
     : fix ? fix.message
     : !rfa.signedAt && !canSign ? "Sending applies the physician's saved signature, and your account is not set up to do that."
     : !canSend ? "Sending requires permission from your organization." : "";
@@ -82,6 +89,14 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
         onUpdated(current);
         const form = current.documents.filter(document => document.documentType === "rfa_form" && document.contentRevision === current.contentRevision).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
         ids = current.documents.filter(document => document.id === form?.id || supporting.some(kept => kept.id === document.id)).map(document => document.id);
+      }
+      // Sandbox: nothing leaves MindBill. Record the send the way an office records one it made itself.
+      if (simulate && recordSimulatedSend) {
+        setBusy("Recording…");
+        // Minute precision, like the receipt and decision times entered afterwards.
+        const input: RfaSentOutsideInput = { sentAt: new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString(), channel: destination.method, destination: destination.destination };
+        onSent(await recordSimulatedSend(current.id, input, stable("simulate", { channel: input.channel, destination: input.destination })));
+        return;
       }
       // 2. Cover sheet + signed form + supporting documents, then out the door.
       setBusy("Sending…");
@@ -121,12 +136,13 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
 <div className="mbrfa-send-to" data-method={method}><span>Send to{resend && onFix ? <button type="button" className="mbrfa-send-edit" aria-label="Edit claims administrator details" title="Edit claims administrator details" disabled={!!busy} onClick={onFix}>{pencil}</button> : null}</span><RfaAuthorizationDestination compact preselectSaved autoSelectSingle method={method} contextKey={`${rfa.id}:${rfa.claimsAdminId ?? "manual"}:${method}`} directory={directory} savedContact={rfa.authorizationContact} loading={directoryLoading} error={directoryError} disabled={!!busy} onChange={value => { setDestination(value); setConfirmed(false); }} /></div>
         <label>{method === "email" ? "E-mail message" : "Cover sheet message"} (optional)<textarea disabled={!!busy} maxLength={1000} rows={2} value={message} onChange={event => setMessage(event.target.value)} /></label>
         {needsSignature ? <div className="mbrfa-send-signature"><p role="alert">{rfa.providerName} has no saved signature yet. Sending puts the physician’s signature on the form, so add it first.{signatureSetup ? "" : " Add it on the physician’s page, then send again."}{signatureRefused ? " Nothing was sent." : ""}</p>{signatureSetup}</div> : signatureSetup}
+        {simulate ? <p className="mbrfa-send-sandbox" role="note">Sandbox: nothing is faxed or e-mailed. {rfa.signedAt ? "" : "The physician\u2019s saved signature is applied to the form, and "}{rfa.signedAt ? "The" : "the"} send is recorded in History as a simulation, so you can record receipt and the UR decision.</p> : null}
         {blocked ? <div><p role="alert">{blocked}</p>{fix && onFix ? <button type="button" disabled={!!busy} onClick={onFix}>{fix.label}</button> : null}</div> : <label className="mbrfa-send-confirm"><input type="checkbox" checked={confirmed} disabled={!!busy || !destination} onChange={event => setConfirmed(event.target.checked)} /><span>
           {rfa.signedAt ? "I reviewed this request" : <>I reviewed this request and am authorized by <strong>{rfa.providerName}</strong> to send it with their saved signature</>}{where ? <>, and verified it goes to <strong>{where}</strong></> : null}.</span></label>}
         {error ? <p role="alert">{error}</p> : null}
       </div>
       <footer>
-        <button type="button" className="mbtd-primary" disabled={!!busy || !!blocked || needsSignature || !confirmed || !destination} onClick={() => void go()}>{busy || (method === "email" ? "Send e-mail" : "Send fax")}</button>
+        <button type="button" className="mbtd-primary" disabled={!!busy || !!blocked || needsSignature || !confirmed || !destination} onClick={() => void go()}>{busy || (simulate ? (rfa.signedAt ? "Record simulated send" : "Sign and record simulated send") : method === "email" ? "Send e-mail" : "Send fax")}</button>
         <button type="button" disabled={!!busy} onClick={onClose}>Cancel</button>
         {previewUrl ? <a href={previewUrl} target="_blank" rel="noopener noreferrer">Preview packet</a> : null}
       </footer>

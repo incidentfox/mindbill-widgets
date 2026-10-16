@@ -255,7 +255,10 @@ recipient before submitting. Changing the channel, destination, recipient name, 
 request revision requires a new packet preview and confirmations. The send operation
 uses the retained packet ID and hash to deliver the bytes that were reviewed.
 
-`environment` defaults to `sandbox`, which disables external fax and email sending.
+`environment` defaults to `sandbox`, which disables external fax and email sending. In the simple layout, a
+sandbox session with the `act` permission can still exercise the whole workflow: **Send** applies the
+physician's saved signature (with `sign`) and then records a simulated send in History (as a send made outside
+MindBill), so receipt, UR decisions and billing can be tested. Nothing is faxed or e-mailed.
 `live` enables submission only for users with `send`, subject to packet readiness and
 explicit confirmations. Backend session environment and permissions remain authoritative.
 Downloading the packet does not send it or mark it submitted. If it is delivered outside

@@ -278,6 +278,49 @@ export function billSubmissionEstimateContext(code: string, placeOfService: stri
   if (isTherapyEditorCode(code)) return therapyCalculationContext(placeOfService, details, {}, code);
   return {};
 }
+type LineAttestation = { code: string; reasons: string[]; confirmed: boolean };
+const ATTESTABLE_REASONS = new Set(["code_specific_coding_requirements_not_confirmed", "complete_surgical_package_required"]);
+
+/** Reads "Service line N: reason" from a refused submission when the biller can confirm the missing fact. */
+export function attestationRequest(message: string, lines: BillSubmissionInput["serviceLines"]): { index: number; position: number; code: string; reason: string } | null {
+  const match = /Service line (\d+): ([a-z_]+)/.exec(message);
+  if (!match || !ATTESTABLE_REASONS.has(match[2]!)) return null;
+  const position = Number(match[1]);
+  const index = lines.map((line, itemIndex) => lineHasContent(line) ? itemIndex : -1).filter((itemIndex) => itemIndex >= 0)[position - 1];
+  if (index == null) return null;
+  return { index, position, code: lines[index]!.code.trim().toUpperCase(), reason: match[2]! };
+}
+
+export function lineAttestationText(attestation: { code: string; reasons: readonly string[] }): string {
+  const surgical = attestation.reasons.includes("complete_surgical_package_required");
+  return `I confirm the documentation meets the coding requirements for ${attestation.code}${surgical ? ", and the complete procedure, including its global surgical package, was performed" : ""}.`;
+}
+
+/** The standard professional context plus the confirmed catalog facts for one line. */
+export function attestedFeeContext(estimate: BillFeeContext, attestation: { reasons: readonly string[] }, standaloneService: boolean): BillFeeContext {
+  const physician = (estimate as { physicianContext?: Record<string, unknown> }).physicianContext;
+  return {
+    ...estimate,
+    hasFeeAgreement: false,
+    ...(physician ? { physicianContext: { ...physician, standaloneService } } : {}),
+    catalogContext: {
+      ...((estimate as { catalogContext?: Record<string, unknown> }).catalogContext ?? {}),
+      codingRequirementsSatisfied: true,
+      ...(attestation.reasons.includes("complete_surgical_package_required") ? { completeSurgicalPackage: true } : {}),
+    },
+  } as BillFeeContext;
+}
+
+/**
+ * True when a line's fee context only restates the standard estimate (no fee agreement, physician
+ * assumptions) and carries no specialty or catalog facts entered by the biller.
+ */
+export function isEstimateOnlyFeeContext(context: BillFeeContext | undefined): boolean {
+  if (!context) return true;
+  return Object.entries(context).every(([key, value]) => value === undefined
+    || (key === "hasFeeAgreement" && value === false)
+    || key === "physicianContext");
+}
 /** Rebuild edited fields so clearing an input cannot retain a previously priced context. */
 export function billSubmissionCalculationContext(code: string, placeOfService: string, details: FeeDetails, saved: BillFeeContext = {}, modifiers: readonly string[] = []): BillFeeContext {
   if (details.basis === "adjustment") return {};
@@ -873,7 +916,7 @@ const css = `
 .mbsf-source-evidence{display:grid;gap:4px;color:var(--mb-muted);font-size:13px}.mbsf-source-evidence a{color:var(--mb-accent);font-weight:700}.mbsf-source-evidence q{color:var(--mb-text)}.mbsf-suggestions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--mb-muted);font-size:13px}.mbsf-suggestion{padding:5px 10px;border:1px solid color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));color:var(--mb-accent);font:inherit;font-weight:700;cursor:pointer}.mbsf-suggestion:hover,.mbsf-suggestion:focus{outline:2px solid color-mix(in srgb,var(--mb-accent) 25%,transparent)}.mbsf-claim-patterns{display:grid;gap:4px;margin-top:2px;font-size:13px}.mbsf-claim-patterns[data-state=match]{color:#087f5b}.mbsf-claim-patterns[data-state=warning]{color:#9a5200}.mbsf-claim-pattern-list{color:var(--mb-muted)}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
-.mbsf-lines{min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{min-width:0;position:relative}.mbsf-diagnosis-select{min-width:0}.mbsf-diagnosis-select .mbsf-chip{max-width:100%;align-items:flex-start}.mbsf-diagnosis-select .mbsf-chip>span{min-width:0;overflow-wrap:anywhere}.mbsf-diagnosis-toggle{display:flex;align-items:flex-start;gap:10px;margin:18px 0;line-height:1.5}.mbsf-diagnosis-toggle input{margin-top:4px}.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) 100px 120px 42px}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{min-width:0;grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-text-btn{padding:0;border:0;background:none;color:var(--mb-accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.mbsf-text-btn:hover{text-decoration:underline}.mbsf-calc{min-width:0;font-size:13px}.mbsf-fee-details details.mbsf-calc[open]{grid-template-columns:minmax(0,1fr);gap:8px}.mbsf-calc>*{min-width:0}.mbsf-calc p{margin:0;overflow-wrap:anywhere}.mbsf-calc-facts{display:flex;flex-wrap:wrap;gap:4px 24px;margin:0}.mbsf-calc-facts div{display:flex;gap:6px}.mbsf-calc-facts dt{font-weight:600}.mbsf-calc-facts dd{margin:0}.mbsf-calc-table{overflow-x:auto}.mbsf-calc-table table{border-collapse:collapse;width:100%;max-width:560px;font-variant-numeric:tabular-nums}.mbsf-calc-table th,.mbsf-calc-table td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--mb-border)}.mbsf-calc-table tr:last-child td{font-weight:650;border-bottom:0}.mbsf-fee-details details[open]{display:grid;gap:12px}.mbsf-fee-details>.mbsf-field{max-width:320px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}.mbsf-lines[data-encounter=true]>.mbsf-line,.mbsf-lines[data-encounter=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.2fr) minmax(160px,1fr) 72px 104px 124px 104px 42px}.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.3fr) 72px 104px 124px 104px 42px}.mbsf-num{text-align:right}.mbsf-money-group{display:contents}.mbsf-money small{display:block;margin-top:2px;color:var(--mb-muted);font-size:12px;font-weight:500}.mbsf-expected{font-weight:650}.mbsf-charge{padding-top:0}.mbsf-charge .mbsf-input{text-align:right;font-variant-numeric:tabular-nums}.mbsf-difference{color:var(--mb-muted)}.mbsf-review{color:#9a5b00;font-weight:600}.mbsf-line-notes{grid-column:1/-1;margin:0;padding:8px 12px 8px 28px;border-radius:8px;background:color-mix(in srgb,var(--mb-muted) 8%,var(--mb-surface));color:var(--mb-muted);font-size:13px;line-height:1.45}.mbsf-line-notes[data-review=true]{background:color-mix(in srgb,#d97706 10%,var(--mb-surface));color:#7a4a00}.mbsf-line-notes li+li{margin-top:4px}.mbsf-encounter-total{display:grid;grid-template-columns:1fr 104px 124px 104px 42px;gap:12px;align-items:start;padding:16px 12px;font-size:16px;font-weight:760;font-variant-numeric:tabular-nums;border-top:1px solid var(--mb-border)}.mbsf-encounter-total>span{text-align:right}.mbsf-encounter-total>span:first-child{text-align:left}.mbsf-encounter-total>span:after{content:""}.mbsf-encounter-total small{display:block;color:#9a5b00;font-size:12px;font-weight:600}
+.mbsf-lines{min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{min-width:0;position:relative}.mbsf-diagnosis-select{min-width:0}.mbsf-diagnosis-select .mbsf-chip{max-width:100%;align-items:flex-start}.mbsf-diagnosis-select .mbsf-chip>span{min-width:0;overflow-wrap:anywhere}.mbsf-diagnosis-toggle{display:flex;align-items:flex-start;gap:10px;margin:18px 0;line-height:1.5}.mbsf-diagnosis-toggle input{margin-top:4px}.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) 100px 120px 42px}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{min-width:0;grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-text-btn{padding:0;border:0;background:none;color:var(--mb-accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.mbsf-text-btn:hover{text-decoration:underline}.mbsf-calc{min-width:0;font-size:13px}.mbsf-fee-details details.mbsf-calc[open]{grid-template-columns:minmax(0,1fr);gap:8px}.mbsf-calc>*{min-width:0}.mbsf-calc p{margin:0;overflow-wrap:anywhere}.mbsf-calc-facts{display:flex;flex-wrap:wrap;gap:4px 24px;margin:0}.mbsf-calc-facts div{display:flex;gap:6px}.mbsf-calc-facts dt{font-weight:600}.mbsf-calc-facts dd{margin:0}.mbsf-calc-table{overflow-x:auto}.mbsf-calc-table table{border-collapse:collapse;width:100%;max-width:560px;font-variant-numeric:tabular-nums}.mbsf-calc-table th,.mbsf-calc-table td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--mb-border)}.mbsf-calc-table tr:last-child td{font-weight:650;border-bottom:0}.mbsf-fee-details details[open]{display:grid;gap:12px}.mbsf-fee-details>.mbsf-field{max-width:320px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-attestation{grid-column:1/-1;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,#d97706 10%,var(--mb-surface));color:#7a4a00;font-size:14px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}.mbsf-lines[data-encounter=true]>.mbsf-line,.mbsf-lines[data-encounter=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.2fr) minmax(160px,1fr) 72px 104px 124px 104px 42px}.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.3fr) 72px 104px 124px 104px 42px}.mbsf-num{text-align:right}.mbsf-money-group{display:contents}.mbsf-money small{display:block;margin-top:2px;color:var(--mb-muted);font-size:12px;font-weight:500}.mbsf-expected{font-weight:650}.mbsf-charge{padding-top:0}.mbsf-charge .mbsf-input{text-align:right;font-variant-numeric:tabular-nums}.mbsf-difference{color:var(--mb-muted)}.mbsf-review{color:#9a5b00;font-weight:600}.mbsf-line-notes{grid-column:1/-1;margin:0;padding:8px 12px 8px 28px;border-radius:8px;background:color-mix(in srgb,var(--mb-muted) 8%,var(--mb-surface));color:var(--mb-muted);font-size:13px;line-height:1.45}.mbsf-line-notes[data-review=true]{background:color-mix(in srgb,#d97706 10%,var(--mb-surface));color:#7a4a00}.mbsf-line-notes li+li{margin-top:4px}.mbsf-encounter-total{display:grid;grid-template-columns:1fr 104px 124px 104px 42px;gap:12px;align-items:start;padding:16px 12px;font-size:16px;font-weight:760;font-variant-numeric:tabular-nums;border-top:1px solid var(--mb-border)}.mbsf-encounter-total>span{text-align:right}.mbsf-encounter-total>span:first-child{text-align:left}.mbsf-encounter-total>span:after{content:""}.mbsf-encounter-total small{display:block;color:#9a5b00;font-size:12px;font-weight:600}
 .mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-type{width:min(360px,32vw);flex:0 1 360px}.mbsf-attach-type .mbsf-label{display:block;margin-bottom:6px;font-size:12px}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
 .mbsf-cms-preview{padding:16px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);min-width:0}.mbsf-cms-preview header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mbsf-cms-preview h3{margin:0}.mbsf-preview-details{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0}.mbsf-cms-preview iframe{width:100%;height:600px;max-height:75vh;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-preview-stale{padding:20px 0;color:var(--mb-muted)}
 .mbsf-actions{flex-direction:column;align-items:flex-end}.mbsf-actions>.mbsf-secondary{min-width:180px}
@@ -1103,6 +1146,8 @@ export function BillSubmissionForm({
   }, [cmsPreview]);
   // The delivery-method dialog staged with the validated bill.
   const [routeDialog, setRouteDialog] = useState<{ delivery: BillDeliveryOptions; value: BillSubmissionFormValue } | null>(null);
+  /** Facts MindBill asked the biller to confirm for a line at submission, keyed by line index (cleared when its code changes). */
+  const [lineAttestations, setLineAttestations] = useState<Record<number, LineAttestation>>({});
   const [routeError, setRouteError] = useState<string | null>(null);
   const [payerResults, setPayerResults] = useState<BillReviewPayer[]>([]); const [payerLoading, setPayerLoading] = useState(false);
   const [payerSuggestions, setPayerSuggestions] = useState<BillReviewPayerSuggestion[]>([]);
@@ -1530,7 +1575,20 @@ export function BillSubmissionForm({
       if (next.drug?.administered || drugFieldsEnabled(line.code, detailsForLine(index)) || detailsForLine(index).drugEnabled !== undefined) delete next.drug;
       if (quoteInputs[index]?.drug) next.drug = quoteInputs[index]!.drug!;
       if (charge == null) delete next.charge;
-      else { next.charge = charge; if (quoteInputs[index]) next.feeContext = billSubmissionQuoteContext(quoteInputs[index]!); }
+      else {
+        next.charge = charge;
+        if (quoteInputs[index]) {
+          const context = billSubmissionQuoteContext(quoteInputs[index]!);
+          // An encounter quote prices standard lines with MindBill's own professional context. Sending the
+          // form's estimate assumptions instead would price the saved bill differently from what was shown.
+          if (!(encounterQuoting && isEstimateOnlyFeeContext(context))) next.feeContext = context;
+          const attestation = lineAttestations[index];
+          if (attestation?.confirmed && attestation.code === line.code.trim().toUpperCase()) {
+            const sameDate = bill.serviceLines.filter((other) => lineHasContent(other) && (other.serviceDate || bill.service.date) === (line.serviceDate || bill.service.date)).length;
+            next.feeContext = attestedFeeContext(context, attestation, sameDate === 1);
+          }
+        }
+      }
     } else if (charge != null) next.charge = charge;
     return next;
   }).filter(lineHasContent);
@@ -1666,6 +1724,17 @@ export function BillSubmissionForm({
       await onSubmitted?.(result);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Unable to submit the bill.";
+      const requested = attestationRequest(message, bill.serviceLines);
+      if (requested) {
+        // Nothing was sent. Ask for the confirmation on the line itself, then let the biller submit again.
+        setLineAttestations((current) => ({ ...current, [requested.index]: {
+          code: requested.code, confirmed: false,
+          reasons: [...new Set([...(current[requested.index]?.code === requested.code ? current[requested.index]!.reasons : []), requested.reason])],
+        } }));
+        setRouteDialog(null); setRouteError(null);
+        setFormError(`Line ${requested.position} (${requested.code}) needs your confirmation below before it can be billed. Nothing was sent.`);
+        return;
+      }
       if (value.submission) setRouteError(message); else setFormError(message);
     }
     finally { setSubmitting(false); }
@@ -1853,6 +1922,11 @@ export function BillSubmissionForm({
           {lineHasContent(line) && !(separateLineDates.includes(index) || line.serviceDateEnd || (line.serviceDate && parseBillSubmissionDate(line.serviceDate) !== parseBillSubmissionDate(bill.service.date)) || errors[`serviceLines.${index}.serviceDate`] || errors[`serviceLines.${index}.serviceDateEnd`]) ? <div className="mbsf-fee-details"><button className="mbsf-text-btn" type="button" disabled={locked} onClick={() => setSeparateLineDates((current) => [...current, index])}>Use a different service date for this line</button></div> : null}
           {lineHasContent(line) && (separateLineDates.includes(index) || line.serviceDateEnd || (line.serviceDate && parseBillSubmissionDate(line.serviceDate) !== parseBillSubmissionDate(bill.service.date)) || errors[`serviceLines.${index}.serviceDate`] || errors[`serviceLines.${index}.serviceDateEnd`]) ? <div className="mbsf-fee-details"><div className="mbsf-grid"><Field path={`serviceLines.${index}.serviceDate`} label="Service date" error={errors[`serviceLines.${index}.serviceDate`]}><TextDateInput ariaLabel={`Service date for line ${index + 1}`} value={line.serviceDate || bill.service.date} disabled={locked} onChange={(serviceDate) => setLine(index, { serviceDate })} /></Field><Field path={`serviceLines.${index}.serviceDateEnd`} label="Through date (optional)" error={errors[`serviceLines.${index}.serviceDateEnd`]}><TextDateInput ariaLabel={`Through date for line ${index + 1}`} value={line.serviceDateEnd || ""} disabled={locked} onChange={(serviceDateEnd) => setLine(index, { serviceDateEnd: serviceDateEnd || null })} /></Field></div></div> : null}
           {feeDetailsFor(line, index)}
+          {lineAttestations[index] && lineAttestations[index]!.code === line.code.trim().toUpperCase() ? <label className="mbsf-fee-confirm mbsf-attestation" data-field-path={`serviceLines.${index}.attestation`}>
+            <input type="checkbox" disabled={locked} checked={lineAttestations[index]!.confirmed}
+              onChange={(event) => { const confirmed = event.target.checked; setLineAttestations((current) => ({ ...current, [index]: { ...current[index]!, confirmed } })); }} />
+            <span>{lineAttestationText(lineAttestations[index]!)}</span>
+          </label> : null}
         </div>)}
         {encounterColumns ? <div className="mbsf-encounter-total" aria-label="Encounter totals"><span>Total</span>
           <span data-label="Charge">{formatUsd(total)}</span>
