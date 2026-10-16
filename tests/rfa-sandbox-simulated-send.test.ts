@@ -106,3 +106,17 @@ it("submits encounter-priced lines without the form's estimate assumptions, so t
     await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
   }
 });
+
+it("asks for a line's coding confirmation when MindBill requires it, then resubmits with the confirmed facts", async () => {
+  const { attestationRequest, attestedFeeContext, lineAttestationText } = await import("../packages/react/src/bill-submission-form");
+  const lines = [{ code: "", units: 1 }, { code: "64483", units: 1, charge: 650 }, { code: "", units: 1 }];
+  const request = attestationRequest("Service line 1: complete_surgical_package_required", lines as never);
+  expect(request).toEqual({ index: 1, position: 1, code: "64483", reason: "complete_surgical_package_required" });
+  expect(attestationRequest("Service line 1: claims_administrator_required", lines as never)).toBeNull();
+  expect(lineAttestationText({ code: "64483", reasons: ["code_specific_coding_requirements_not_confirmed", "complete_surgical_package_required"] }))
+    .toBe("I confirm the documentation meets the coding requirements for 64483, and the complete procedure, including its global surgical package, was performed.");
+  const context = attestedFeeContext({ hasFeeAgreement: false, physicianContext: { providerKind: "physician", placeOfService: "11", standaloneService: true, globalPeriodApplies: false, hpsaBonusEligible: false } } as never,
+    { reasons: ["code_specific_coding_requirements_not_confirmed", "complete_surgical_package_required"] }, false) as Record<string, Record<string, unknown>>;
+  expect(context.catalogContext).toEqual({ codingRequirementsSatisfied: true, completeSurgicalPackage: true });
+  expect(context.physicianContext!.standaloneService).toBe(false);
+});

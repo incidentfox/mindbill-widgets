@@ -93,7 +93,8 @@ export function RfaSendDialog({ rfa, client, documentIds, diagnosisDescriptions,
       // Sandbox: nothing leaves MindBill. Record the send the way an office records one it made itself.
       if (simulate && recordSimulatedSend) {
         setBusy("Recording…");
-        const input: RfaSentOutsideInput = { sentAt: new Date().toISOString(), channel: destination.method, destination: destination.destination };
+        // Minute precision, like the receipt and decision times entered afterwards.
+        const input: RfaSentOutsideInput = { sentAt: new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString(), channel: destination.method, destination: destination.destination };
         onSent(await recordSimulatedSend(current.id, input, stable("simulate", { channel: input.channel, destination: input.destination })));
         return;
       }
