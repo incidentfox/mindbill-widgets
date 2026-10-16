@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.79.4 — @mindbill/react 0.79.4
+
+### Fixed
+- RFA deadlines: every surface (detail header, treatment panel, lists, task board, follow-ups) formats the
+  decision due date on its Pacific calendar day through one helper, so a header can no longer say Oct 14 while a
+  panel says 10/15. New exports in `rfa-decision-due`: `rfaPacificDate`, `rfaPacificDateTime`.
+- Record UR decision dialog: the UR letter is chosen through a styled button or by dropping the PDF, never the
+  browser's native file control; the evidence upload uses the same picker.
+- Embedded PDF review hides the browser viewer toolbar, whose title came from the PDF metadata or blob URL
+  (often "about:blank"); an "Open in new tab" link gives the full viewer.
+- A UR response matched from an inbound fax shows Received as the fax's arrival time when the server sends
+  `receivedAt` on the document.
+
+### Added
+- `BillSubmissionForm` / `ConnectedTreatmentBillForm` prop `linkedAuthorizations`: lines whose procedure code
+  matches an approved authorization link to it as they are entered and the treatment authorization number fills
+  in (never overwriting a number the biller typed). Helper `linkBillSubmissionAuthorizations`.
+
 ## 0.79.3 — @mindbill/react 0.79.3
 
 ### Fixed

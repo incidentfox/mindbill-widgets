@@ -111,6 +111,7 @@ export {
   BillSubmissionPatientSection,
   BillSubmissionProvidersSection,
   BillSubmissionServiceLinesSection,
+  linkBillSubmissionAuthorizations,
   validateBillSubmission,
 } from "./bill-submission-form";
 export type {
@@ -123,6 +124,7 @@ export type {
   BillSubmissionFormProps,
   BillSubmissionFormValue,
   BillSubmissionInput,
+  BillSubmissionLinkedAuthorization,
   BillSubmissionModifierOption,
   BillSubmissionPostalPlace,
   BillSubmissionProcedureOption,

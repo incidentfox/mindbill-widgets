@@ -6,6 +6,7 @@ import {
   billSubmissionCalculationContext,
   billSubmissionEstimateContext,
   billSubmissionProviderKindForTaxonomy,
+  linkBillSubmissionAuthorizations,
   replaceBillSubmissionServiceLines,
   type BillSubmissionFeeContext,
   type BillSubmissionInput,
@@ -269,5 +270,35 @@ describe("documented prolonged-service context", () => {
     const saved = { ...physician, hasFeeAgreement: true, physicianContext: { ...physician.physicianContext!, globalPeriodApplies: true } };
     expect(billSubmissionCalculationContext("99213", "22", { providerKind: "nurse_practitioner" }, saved).hasFeeAgreement).toBe(true);
     expect(billSubmissionCalculationContext("99213", "22", { providerKind: "nurse_practitioner" }, saved).physicianContext).toMatchObject({ providerKind: "nurse_practitioner", placeOfService: "22", globalPeriodApplies: true });
+  });
+});
+
+describe("linking approved authorizations while the bill is entered (INC-2272)", () => {
+  const authorizations = [
+    { rfaItemId: "synthetic-item-a", procedureCode: "98941", authorizationNumber: "SYN-AUTH-1" },
+    { rfaItemId: "synthetic-item-b", procedureCode: "97110", authorizationNumber: "SYN-AUTH-1" },
+    { rfaItemId: "synthetic-item-c", procedureCode: "97140", authorizationNumber: "SYN-AUTH-2" },
+  ];
+  const blank = () => { const bill = fixture(); delete bill.service.authorizationNumber; bill.serviceLines = [{ code: "" }]; return bill; };
+  it("links a matching line and fills the authorization number at once", () => {
+    const bill = blank(); bill.serviceLines = [{ code: "98941", units: 1 }, { code: "" }];
+    const linked = linkBillSubmissionAuthorizations(bill, authorizations);
+    expect(linked.serviceLines[0]!.rfaItemId).toBe("synthetic-item-a");
+    expect(linked.serviceLines[1]!.rfaItemId).toBeUndefined();
+    expect(linked.service.authorizationNumber).toBe("SYN-AUTH-1");
+  });
+  it("leaves the number blank when linked lines carry different numbers, and unlinks a changed code", () => {
+    const bill = blank(); bill.serviceLines = [{ code: "98941" }, { code: "97140" }];
+    expect(linkBillSubmissionAuthorizations(bill, authorizations).service.authorizationNumber ?? null).toBeNull();
+    const changed = linkBillSubmissionAuthorizations({ ...bill, serviceLines: [{ code: "99213", rfaItemId: "synthetic-item-a" }] }, authorizations);
+    expect(changed.serviceLines[0]!.rfaItemId).toBeUndefined();
+  });
+  it("never overwrites a number the biller typed", () => {
+    const bill = blank(); bill.service.authorizationNumber = "TYPED-BY-BILLER"; bill.serviceLines = [{ code: "98941" }];
+    expect(linkBillSubmissionAuthorizations(bill, authorizations).service.authorizationNumber).toBe("TYPED-BY-BILLER");
+  });
+  it("is a no-op without authorizations", () => {
+    const bill = blank(); bill.serviceLines = [{ code: "98941" }];
+    expect(linkBillSubmissionAuthorizations(bill, undefined)).toBe(bill);
   });
 });

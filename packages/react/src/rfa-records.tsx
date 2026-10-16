@@ -1,4 +1,5 @@
 "use client";
+import { rfaPacificDate } from "./rfa-decision-due";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactElement, type ReactNode } from "react";
 import {
   createRfaRecordsClient,
@@ -265,7 +266,7 @@ export function RfaClaimIndex({ claimId, canCreate = false, loadRfas, initialRfa
             <td className="mbrr-nowrap">{reference(rfa.id, rfaReference(rfa.id))}{rfa.expedited ? <> <span className="mbrr-pill">Expedited</span></> : null}</td>
             <td>{physician(rfa)}</td>
             <td><span className="mbrr-clamp">{rfa.items.map(item => item.serviceDescription).join(" · ") || "—"}</span></td>
-            <td className="mbrr-nowrap">{shortDate(rfa.submittedAt)}</td><td className="mbrr-nowrap">{shortDate(rfa.decisionDueAt)}</td><td className="mbrr-nowrap">{shortDate(rfa.decidedAt)}</td>
+            <td className="mbrr-nowrap">{shortDate(rfa.submittedAt)}</td><td className="mbrr-nowrap">{rfaPacificDate(rfa.decisionDueAt) || "—"}</td><td className="mbrr-nowrap">{shortDate(rfa.decidedAt)}</td>
             <td><span className="mbrr-pill" data-tone={lifecycleTone(lifecycle.key)}>{lifecycle.label}</span></td>
           </tr>; })}</tbody>
         </table> : <table className="mbrr-table">
@@ -280,7 +281,7 @@ export function RfaClaimIndex({ claimId, canCreate = false, loadRfas, initialRfa
             <td style={{ minWidth: "12rem" }}>{item.serviceDescription}{item.diagnosisCode ? <div className="mbrr-mono mbrr-small mbrr-muted">ICD-10 {item.diagnosisCode}</div> : null}</td>
             <td className="mbrr-mono">{item.procedureCode ?? "—"}</td>
             <td>{[item.quantity, item.frequency, item.duration].filter(part => part != null && part !== "").join(" · ") || "—"}</td>
-            <td className="mbrr-nowrap">{shortDate(rfa.submittedAt)}</td><td className="mbrr-nowrap">{shortDate(rfa.decisionDueAt)}</td><td className="mbrr-nowrap">{shortDate(item.decidedAt)}</td>
+            <td className="mbrr-nowrap">{shortDate(rfa.submittedAt)}</td><td className="mbrr-nowrap">{rfaPacificDate(rfa.decisionDueAt) || "—"}</td><td className="mbrr-nowrap">{shortDate(item.decidedAt)}</td>
             <td><span className="mbrr-pill" data-tone={unsent || item.notRequired ? "muted" : outcomeTone(item.outcome)}>{decision}</span></td>
             <td className="mbrr-mono mbrr-nowrap">{item.authorizationNumber ?? "—"}</td>
           </tr>)}</tbody>
