@@ -3,6 +3,7 @@ import { type MouseEvent, type ReactElement } from "react";
 import { getRfaLifecycleStatus, type RfaListQuery, type RfaRecord } from "@mindbill/browser";
 import { RfaPill, rfaLifecycleTone, rfaPillCss, rfaStatusLabel, rfaTreatmentOutcome } from "./rfa-detail-cards";
 import { RfaLink, type RfaSelectionContext, type RfaRelatedLinks } from "./rfa-display";
+import { rfaPacificDate } from "./rfa-decision-due";
 type Sort = NonNullable<RfaListQuery["sortBy"]>;
 const date = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString() : "—";
 const reference = (rfa: RfaRecord) => rfa.displayReference || rfa.id.replace(/^rfa_/, "").slice(0, 8).toUpperCase();
@@ -61,7 +62,7 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
           <td><RfaLink href={getPatientHref?.(rfa)}>{rfa.employeeName}</RfaLink><small><RfaLink href={getClaimHref?.(rfa)}>Claim {rfa.claimNumber || "not recorded"}</RfaLink></small></td>
           <td><RfaLink href={getProviderHref?.(rfa)}>{rfa.providerName}</RfaLink></td>
           <td className="mbrfa-cell-title"><span className="mbrfa-clamp">{rfa.items.map(item => item.serviceDescription).filter(Boolean).join(" · ") || "—"}</span></td>
-          <td>{date(rfa.submittedAt)}</td><td>{rfa.submittedAt ? date(rfa.decisionDueAt) : "—"}</td><td>{date(latestDecision(rfa))}</td>
+          <td>{date(rfa.submittedAt)}</td><td>{rfa.submittedAt ? rfaPacificDate(rfa.decisionDueAt) || "—" : "—"}</td><td>{date(latestDecision(rfa))}</td>
           <td><RfaPill tone={rfaLifecycleTone(rfa)}>{rfaStatusLabel(getRfaLifecycleStatus(rfa))}</RfaPill></td>
         </tr>)}
       </tbody></table>
@@ -73,7 +74,7 @@ export function RfaListView({ records, view, onViewChange, sortBy, sortDirection
           <td className="mbrfa-cell-title">{item.serviceDescription}{item.diagnosisCode ? <small className="mbrfa-mono">ICD-10 {item.diagnosisCode}</small> : null}</td>
           <td className="mbrfa-mono">{item.procedureCode || "—"}</td>
           <td>{[item.quantity, item.frequency, item.duration].filter(part => part != null && part !== "").join(" · ") || "—"}</td>
-          <td>{date(rfa.submittedAt)}</td><td>{unsent || item.decisionClosure?.closed ? "—" : date(rfa.decisionDueAt)}</td><td>{date(item.decidedAt)}</td>
+          <td>{date(rfa.submittedAt)}</td><td>{unsent || item.decisionClosure?.closed ? "—" : rfaPacificDate(rfa.decisionDueAt) || "—"}</td><td>{date(item.decidedAt)}</td>
           <td><RfaPill tone={unsent ? "muted" : outcome.tone}>{unsent ? (rfa.status === "canceled" ? "Canceled" : "Not sent") : outcome.label}</RfaPill></td>
           <td className="mbrfa-mono">{item.authorizationNumber || "—"}</td>
         </tr>; }))}

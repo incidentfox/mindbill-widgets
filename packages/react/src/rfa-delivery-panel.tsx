@@ -4,11 +4,17 @@ import type { BillClaimsAdministratorDirectory, RfaAuthorizationDestinationOptio
 import { RfaAuthorizationDestination } from "./rfa-authorization-destination";
 import { Select } from "./form-controls";
 
-export function RfaPdfReview({ blob, title, fill = false }: { blob: Blob; title: string; /** Fill the container's height, fitted to page width without the thumbnail sidebar. */ fill?: boolean }): ReactElement {
+const PDF_VIEW = "toolbar=0&view=FitH&navpanes=0";
+
+export function RfaPdfReview({ blob, title, fill = false, newTabLink = true }: { blob: Blob; title: string; /** Fill the container's height, fitted to page width without the thumbnail sidebar. */ fill?: boolean; /** In fill mode, overlay an "Open in new tab" link (off when the host already offers one). */ newTabLink?: boolean }): ReactElement {
   const [url, setUrl] = useState("");
   useEffect(() => { const next = URL.createObjectURL(blob); setUrl(next); return () => URL.revokeObjectURL(next); }, [blob]);
-  if (fill) return url ? <iframe title={title} src={`${url}#view=FitH&navpanes=0`} style={{ width: "100%", height: "100%", border: 0, display: "block" }} /> : <></>;
-  return <div>{url ? <><div className="mbtd-actions"><a href={url} target="_blank" rel="noopener noreferrer">Open {title} PDF</a><a href={url} download="authorization-packet.pdf">Download PDF</a></div><iframe title={title} src={url} style={{ width: "100%", height: 420, border: "1px solid var(--mb-border)", marginTop: 10 }} /></> : null}</div>;
+  // The browser's built-in viewer titles its toolbar from the PDF's own metadata or the blob
+  // URL (a random id, or "about:blank" for many fax PDFs), which the page cannot set. The
+  // toolbar is hidden here; the surrounding dialog names the document, and "Open in new tab"
+  // gives the full viewer (zoom, rotate, print) when it is needed.
+  if (fill) return url ? <div style={{ position: "relative", width: "100%", height: "100%" }}><iframe title={title} src={`${url}#${PDF_VIEW}`} style={{ width: "100%", height: "100%", border: 0, display: "block" }} />{newTabLink ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ position: "absolute", top: 10, right: 18, padding: "5px 10px", borderRadius: 6, background: "rgba(32,33,36,.82)", color: "#fff", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>Open in new tab</a> : null}</div> : <></>;
+  return <div>{url ? <><div className="mbtd-actions"><a href={url} target="_blank" rel="noopener noreferrer">Open {title} PDF</a><a href={url} download="authorization-packet.pdf">Download PDF</a></div><iframe title={title} src={`${url}#${PDF_VIEW}`} style={{ width: "100%", height: 420, border: "1px solid var(--mb-border)", marginTop: 10 }} /></> : null}</div>;
 }
 
 export function RfaDeliveryPanel({ rfa, client, documentIds, directory, directoryLoading, directoryError, locked, environment, canSend, run, onUpdated }: {

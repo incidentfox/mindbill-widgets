@@ -445,6 +445,12 @@ export type BillSubmissionFormProps = {
   treatmentBilling?: boolean;
   /** Lines added when a procedure is chosen, keyed by that procedure's code. A code already on the bill is not added again. */
   companionLines?: Readonly<Record<string, readonly { code: string; units?: number }[]>>;
+  /**
+   * Approved treatment authorizations for this claim. A service line whose procedure code matches one is linked to it
+   * as the code is entered, and the treatment authorization number fills in when every linked line shares it, so the
+   * form shows what will be saved instead of filling it only after the draft is saved.
+   */
+  linkedAuthorizations?: readonly BillSubmissionLinkedAuthorization[];
   /** Evaluator types offered for medical-legal lines, in order. Defaults to all four; a psychiatric practice can offer only the psych types. */
   evaluationTypes?: readonly BillSubmissionEvaluationType[];
   /** Opt in to editable treatment billed charges; fee quotes remain separate estimates. */
@@ -639,6 +645,34 @@ export function ensureTrailingBillSubmissionLine(
   while (normalized.length > 1 && !lineHasContent(normalized.at(-1)!) && !lineHasContent(normalized.at(-2)!)) normalized.pop();
   if (!normalized.length || lineHasContent(normalized.at(-1)!)) normalized.push(blankLine());
   return normalized;
+}
+
+export type BillSubmissionLinkedAuthorization = { rfaItemId: string; procedureCode: string; authorizationNumber?: string | null };
+
+/** Link lines to approved authorizations by procedure code and fill the shared authorization number (see `linkedAuthorizations`). */
+export function linkBillSubmissionAuthorizations(
+  bill: BillSubmissionInput,
+  authorizations: readonly BillSubmissionLinkedAuthorization[] | undefined,
+): BillSubmissionInput {
+  if (!authorizations?.length) return bill;
+  const normalize = (code: string) => code.trim().toUpperCase();
+  const match = (code: string) => code.trim() ? authorizations.find((item) => normalize(item.procedureCode) === normalize(code)) : undefined;
+  const serviceLines: BillSubmissionInput["serviceLines"] = bill.serviceLines.map((line) => {
+    const found = match(line.code);
+    if (found) return line.rfaItemId === found.rfaItemId ? line : { ...line, rfaItemId: found.rfaItemId };
+    if (!line.rfaItemId || !authorizations.some((item) => item.rfaItemId === line.rfaItemId)) return line;
+    const rest = { ...line };
+    delete rest.rfaItemId;
+    return rest;
+  });
+  const linked = serviceLines.flatMap((line) => line.rfaItemId ? [authorizations.find((item) => item.rfaItemId === line.rfaItemId)] : []);
+  const numbers = new Set(linked.map((item) => item?.authorizationNumber?.trim() || null));
+  const shared = linked.length && numbers.size === 1 ? [...numbers][0] ?? null : null;
+  const current = bill.service.authorizationNumber?.trim() || null;
+  const supplied = (value: string | null) => value !== null && authorizations.some((item) => (item.authorizationNumber?.trim() || null) === value);
+  // Fill a blank or replace a number this list supplied; never overwrite one the biller typed.
+  const service = (!current || supplied(current)) && shared !== current ? { ...bill.service, authorizationNumber: shared } : bill.service;
+  return { ...bill, service, serviceLines };
 }
 
 export function replaceBillSubmissionServiceLines(
@@ -1119,7 +1153,7 @@ export function BillSubmissionForm({
   profileOptions, billingSettings, reportAutofill, profileDisplay = "expanded",
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
-  onLookupPostalCode, procedureOptions, draft, onSaveDraft, saveDraftLabel = "Save draft", treatmentBilling = false, companionLines, evaluationTypes, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
+  onLookupPostalCode, procedureOptions, draft, onSaveDraft, saveDraftLabel = "Save draft", treatmentBilling = false, companionLines, linkedAuthorizations, evaluationTypes, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
   attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
@@ -1305,7 +1339,8 @@ export function BillSubmissionForm({
         return next;
       }), added));
       const populated = serviceLines.filter((line) => line.code.trim());
-      return { ...(sharedDiagnoses ? setBillSubmissionSharedDiagnoses(replaceBillSubmissionServiceLines(current, serviceLines), current.diagnoses ?? []) : replaceBillSubmissionServiceLines(current, serviceLines)), ...(treatmentBilling && populated.length ? { billingMode: billingModeForLines(populated) } : {}) };
+      const replaced = linkBillSubmissionAuthorizations(replaceBillSubmissionServiceLines(current, serviceLines), linkedAuthorizations);
+      return { ...(sharedDiagnoses ? setBillSubmissionSharedDiagnoses(replaced, current.diagnoses ?? []) : replaced), ...(treatmentBilling && populated.length ? { billingMode: billingModeForLines(populated) } : {}) };
     });
   };
   const setLineCharge = (index: number, charge: number | undefined) => setBill((current) => ({

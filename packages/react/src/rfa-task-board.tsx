@@ -5,7 +5,7 @@ import { RfaPdfReview } from "./rfa-delivery-panel";
 import { RfaModal } from "./rfa-modal";
 import { RfaFilterBar } from "./rfa-filter-bar";
 import { RfaPill, rfaPillCss, rfaStatusLabel } from "./rfa-detail-cards";
-import { rfaDecisionDueText } from "./rfa-decision-due";
+import { rfaDecisionDueText, rfaPacificDateTime } from "./rfa-decision-due";
 import { RfaLink, rfaTitle, type RfaRelatedLinks, type RfaSelectionContext } from "./rfa-display";
 import { TreatmentDraftShell, type TreatmentDraftAppearance } from "./treatment-draft-shared";
 
@@ -90,7 +90,7 @@ export function rfaTaskAgeBucket(createdAt: string, now = Date.now()): string {
   return age <= 5 ? "0-5" : age <= 14 ? "6-14" : age <= 30 ? "15-30" : "31+";
 }
 const canMatchResponse = (record: RfaRecord): boolean => !["draft", "ready", "canceled"].includes(record.status) && (!["incomplete", "deferred"].includes(record.status) || Boolean(record.submittedAt));
-const date = (value: string) => new Date(value).toLocaleString();
+const date = (value: string) => rfaPacificDateTime(value);
 export function RfaTaskBoard({ sessionEndpoint, getSession, apiBaseUrl, fetch: fetchOverride, ...props }: RfaTaskBoardProps): ReactElement {
   const options = useMemo<OrganizationClientOptions>(() => ({ ...(sessionEndpoint ? { sessionEndpoint } : {}), ...(getSession ? { getSession } : {}), ...(apiBaseUrl ? { apiBaseUrl } : {}), ...(fetchOverride ? { fetch: fetchOverride } : {}) }), [sessionEndpoint, getSession, apiBaseUrl, fetchOverride]);
   const identity = useMemo(() => crypto.randomUUID(), [options]);

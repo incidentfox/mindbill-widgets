@@ -1,11 +1,13 @@
 import type { ReactElement, ReactNode } from "react";
 import { getRfaLifecycleStatus, RFA_LIFECYCLE_LABELS, type RfaLifecycleStatus, type RfaRecord } from "@mindbill/browser";
-import { rfaDecisionDueText } from "./rfa-decision-due";
+import { rfaDecisionDueText, rfaPacificDate } from "./rfa-decision-due";
 
 const DECIDED = ["approved", "modified", "denied", "mixed", "closed"];
 export const rfaShortDate = (value: string | null | undefined): string => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
-/** Preserve calendar dates without shifting them into the viewer's time zone. */
-export const rfaCalendarDate = (value: string | null | undefined): string => { const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? ""); return match ? `${match[2]}/${match[3]}/${match[1]}` : value ?? ""; };
+/** Preserve calendar dates without shifting them; a timestamp is shown on its Pacific calendar day (see rfaPacificDate). */
+export const rfaCalendarDate = (value: string | null | undefined): string => rfaPacificDate(value);
+/** When a document reached the practice: an inbound fax's arrival time when the server knows it, else when it was added. */
+export const rfaDocumentReceivedAt = (document: { createdAt: string | null; receivedAt?: string | null }): string | null => document.receivedAt ?? document.createdAt;
 const sentence = (value: string) => { const text = value.replaceAll("_", " "); return text.charAt(0).toUpperCase() + text.slice(1); };
 
 /** Decision wording and tone for one requested treatment. */

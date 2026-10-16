@@ -25,7 +25,7 @@ export function RfaDocumentViewer({ documents, current, loading, onSelect, onClo
   return <RfaModal full title={active?.filename ?? "Document"} onClose={onClose}>
     <style>{css}</style>
     <div className="mbrfa-viewer">
-      <div className="mbrfa-viewer-doc">{current.blob && !loading ? <RfaPdfReview fill blob={current.blob} title={active?.filename ?? "Document"} /> : <p role="status">Loading the document…</p>}</div>
+      <div className="mbrfa-viewer-doc">{current.blob && !loading ? <RfaPdfReview fill newTabLink={false} blob={current.blob} title={active?.filename ?? "Document"} /> : <p role="status">Loading the document…</p>}</div>
       <aside className="mbrfa-viewer-side" aria-label="Documents">
         <div className="mbrfa-viewer-head"><div><strong>{active?.filename}</strong><small>{active?.type}</small></div>
           {url ? <div className="mbrfa-viewer-actions"><a href={url} target="_blank" rel="noopener noreferrer">Open in new tab</a><a href={url} download={active?.filename ?? "document.pdf"}>Download</a></div> : null}</div>
