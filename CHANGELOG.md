@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.79.3 — @mindbill/react 0.79.3
+
+### Fixed
+- `ConnectedBillLifecycle` / `BillReadOnlyForm`: service line totals show Charge, Expected (OMFS), Paid and
+  Balance (expected − paid), so the balance is never mistaken for the billed charge. New optional
+  `BillReadOnlyForm` prop `expectedAmount`. The bill action bar is opaque.
+- RFA decision dialog: a decision read from a date-only UR letter defaults to the start of that day in the
+  user's time zone, and never to a time later than now (previously noon Pacific, which could be in the future).
+
 ## 0.79.2 — @mindbill/react 0.79.2
 
 ### Fixed
