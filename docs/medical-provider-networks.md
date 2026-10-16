@@ -2,7 +2,7 @@
 
 `BillSubmissionForm` includes **Medical provider network (optional)** in its claim section. Users can leave it blank, search by network name, applicant name, or MPN ID, select with the keyboard or pointer, and clear a selection. Typing alone never saves an identifier. Only directory records whose status is `Approved` appear; terminated and withdrawn records are excluded.
 
-Connected bill entry loads the directory through the existing short-lived browser session. Hosts using a custom `onSubmit` can pass `onListMedicalProviderNetworks` or configure a session for the reference client. `BillReviewForm` accepts the same loader. `ConnectedBillLifecycle` supplies it for corrections, duplicates, and new bills.
+Connected bill entry loads the directory through the existing short-lived browser session. Hosts using a custom `onSubmit` can pass `onListMedicalProviderNetworks` or configure a session for the reference client. `ConnectedBillLifecycle` supplies it for corrections, duplicates, and new bills.
 
 ```tsx
 import { useMemo, useState } from "react";

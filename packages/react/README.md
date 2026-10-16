@@ -295,7 +295,7 @@ The complete immutable snapshot requires patient identity and address; employer,
 
 `BILL_SUBMISSION_REQUIRED_FIELDS` and `validateBillSubmission` expose the same contract for tests and non-visual integrations. The component never creates a draft; `onSubmitted` fires only after MindBill accepts a locally valid immutable snapshot. The legacy `onSubmit` escape hatch remains optional for unusual deployments, but connected integrations should omit it so the library owns the complete contract.
 
-`BillReviewForm` remains available for legacy integrations that already own a custom review model. New integrations should use `BillSubmissionForm`.
+`BillReviewForm` was removed in 0.78.0; use `BillSubmissionForm` (see CHANGELOG.md).
 
 ### Compose individual submission sections
 

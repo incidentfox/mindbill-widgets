@@ -2,7 +2,7 @@
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
-import { createBillReferenceClient, sanitizeBillReviewSaveInput, type MedicalProviderNetwork } from "../packages/browser/src/index";
+import { createBillReferenceClient, type MedicalProviderNetwork } from "../packages/browser/src/index";
 import { MedicalProviderNetworkSelect } from "../packages/react/src/medical-provider-network-select";
 import { BillSubmissionForm, BillSubmissionClaimSection, validateBillSubmission, type BillSubmissionInput } from "../packages/react/src/bill-submission-form";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -91,10 +91,5 @@ describe("medical provider network directory", () => {
       expect(ui.container.querySelector('.mb-mpn label')!.textContent).toContain("optional");
       expect(validateBillSubmission({ ...bill, claim: { claimNumber: "SYNTHETIC" } }).fieldErrors).not.toHaveProperty("claim.medicalProviderNetworkId");
     } finally { await ui.cleanup(); }
-  });
-  it("preserves explicit clear and omission through the review request whitelist", () => {
-    const saved = sanitizeBillReviewSaveInput({ claimsAdminId: "payer_synthetic", dos: "2026-09-01", lineItems: [], injuryOverrides: { medicalProviderNetworkId: null } });
-    expect(saved.injuryOverrides).toEqual({ medicalProviderNetworkId: null });
-    expect(sanitizeBillReviewSaveInput({ claimsAdminId: "payer_synthetic", dos: "2026-09-01", lineItems: [], injuryOverrides: {} }).injuryOverrides).not.toHaveProperty("medicalProviderNetworkId");
   });
 });

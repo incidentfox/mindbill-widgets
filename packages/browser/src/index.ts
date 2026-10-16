@@ -309,60 +309,6 @@ function pickDefined(
   );
 }
 
-/**
- * Removes read-only snapshot metadata before a review mutation is sent.
- * Lifecycle reads can include display-only fields such as entity IDs; the v2
- * write contract accepts only the values that should be frozen onto the bill.
- */
-export function sanitizeBillReviewSaveInput(
-  input: BillReviewSaveInput,
-): BillReviewSaveInput {
-  return {
-    claimsAdminId: input.claimsAdminId,
-    ...(input.formData !== undefined ? { formData: input.formData } : {}),
-    ...(input.payerId !== undefined ? { payerId: input.payerId } : {}),
-    ...(input.patientOverrides ? {
-      patientOverrides: pickDefined(input.patientOverrides, [
-        "firstName", "middleName", "lastName", "dob",
-      ]) as NonNullable<BillReviewSaveInput["patientOverrides"]>,
-    } : {}),
-    ...(input.injuryOverrides ? {
-      injuryOverrides: pickDefined(input.injuryOverrides, [
-        "claimNumber", "employer", "doi", "injuryEndDate",
-        "cumulativeTrauma", "adjNumber", "medicalProviderNetworkId",
-      ]) as NonNullable<BillReviewSaveInput["injuryOverrides"]>,
-    } : {}),
-    dos: input.dos,
-    ...(input.dosEnd !== undefined ? { dosEnd: input.dosEnd } : {}),
-    ...(input.authorizationNumber !== undefined
-      ? { authorizationNumber: input.authorizationNumber }
-      : {}),
-    ...(input.billingProvider ? {
-      billingProvider: pickDefined(input.billingProvider, [
-        "name", "taxId", "taxIdType", "taxIdConfigured", "npi", "billType", "phone", "billingStreet",
-        "billingCity", "billingState", "billingZip",
-      ]) as BillReviewBillingProvider,
-    } : {}),
-    ...(input.renderingProvider ? {
-      renderingProvider: pickDefined(input.renderingProvider, [
-        "name", "specialty", "npi", "taxonomy", "licenseNumber",
-        "licenseState", "signaturePng", "signatureKey", "isQME", "isAME",
-        "email", "active",
-      ]) as BillReviewClinician,
-    } : {}),
-    ...(input.placeOfService ? {
-      placeOfService: pickDefined(input.placeOfService, [
-        "billingProviderId", "name", "nickname", "street", "city", "state",
-        "zip", "county", "posCode", "isPrimary", "active",
-      ]) as BillReviewLocation,
-    } : {}),
-    lineItems: input.lineItems.map((line) => pickDefined(line, [
-      "id", "code", "modifiers", "units", "charge", "serviceDate",
-      "serviceDateEnd", "diagnosisPointers", "formData", "drug",
-    ]) as BillReviewSaveInput["lineItems"][number]),
-  };
-}
-
 export type BillSubmissionRoute = "ebill" | "fax" | "mail" | "email";
 export type BillDeliveryOption = {
   route: BillSubmissionRoute;
