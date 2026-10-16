@@ -365,6 +365,8 @@ export type { RfaAuthorizationDestinationProps } from "./rfa-authorization-desti
 export type { BillClaimsAdministratorAuthorizationStatus, RfaAuthorizationDestinationOption } from "@mindbill/browser";
 
 export { RfaDashboard } from "./rfa-dashboard";
+export { ConnectedTreatmentBillForm } from "./connected-treatment-bill-form";
+export type { ConnectedTreatmentBillFormProps } from "./connected-treatment-bill-form";
 export type { RfaDashboardProps, RfaDashboardNavigation } from "./rfa-dashboard";
 
 export type { RfaForwardContact } from "./rfa-duplicate-dialog";
