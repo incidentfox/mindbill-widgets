@@ -199,7 +199,7 @@ packages:
     engines: {node: '>=20'}
 
   '@mindbill/react@0.82.0':
-    resolution: {integrity: sha512-fr5Bdg9fwXH0sPvTmTh+9TGLLohbP742qxvqE50a6cFOJIcyf+T57gL28vbnjqTsnwT98SCKVeFktTN9bqeMxg==}
+    resolution: {integrity: sha512-JA2NAyUwq5GYKlIYrdCMGtQG0UrRfLSg+3GhHdmIR9Qz+QCqwZjJmkTTPX3NY2C0YlrKzeHcRK8eDizc0XYVkA==}
     peerDependencies:
       react: '>=18'
 
