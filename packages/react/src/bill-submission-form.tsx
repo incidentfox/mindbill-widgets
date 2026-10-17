@@ -420,6 +420,12 @@ export type BillSubmissionFormProps = {
   profileDisplay?: "auto" | "expanded" | "compact";
   attachments?: BillSubmissionSourceAttachment[];
   /**
+   * Files listed as attachments when the form opens, e.g. the PR-2 or previous bill a host already read to
+   * prefill the bill. They upload only when the bill is submitted, exactly like files the user chooses, and
+   * the user can remove them. Read once on mount; remount with a new key to replace them.
+   */
+  initialUploads?: readonly BillSubmissionUpload[];
+  /**
    * Legacy custom submission escape hatch. Connected forms should omit this so
    * the component owns PDF encoding and the Partner API wire contract.
    */
@@ -1165,7 +1171,7 @@ export function BillSubmissionForm({
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, draft, onSaveDraft, saveDraftLabel = "Save draft", treatmentBilling = false, companionLines, linkedAuthorizations, evaluationTypes, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
-  attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType,
+  attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType, initialUploads,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
   description = "Review the bill details, add attachments, and submit.",
@@ -1181,7 +1187,7 @@ export function BillSubmissionForm({
   const formId = useId();
   const [selectedIds, setSelectedIds] = useState(() => attachments.map((item) => item.id));
   const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([]);
-  const [uploads, setUploads] = useState<BillSubmissionUpload[]>([]); const [errors, setErrors] = useState<Record<string, string>>({});
+  const [uploads, setUploads] = useState<BillSubmissionUpload[]>(() => [...(initialUploads ?? [])]); const [errors, setErrors] = useState<Record<string, string>>({});
   const [sourceAttachmentReportTypes, setSourceAttachmentReportTypes] = useState<Record<string, string>>(() => Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : [])));
   const [validationActive, setValidationActive] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
