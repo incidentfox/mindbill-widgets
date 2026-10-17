@@ -452,3 +452,15 @@ it("lets a request whose every send failed be corrected: Edit request, and the r
   expect(dashboard.textContent).toContain("Failed");
  }finally{await act(async()=>view.unmount());dashboard.remove();}
 });
+
+it("lets Send proceed as soon as a signature is saved, without a page reload",async()=>{
+ const unsigned={...record,signedAt:null};
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const render=(signatureMissing:boolean|undefined)=>act(async()=>root.render(createElement(RfaSendDialog,{rfa:unsigned as never,client:{} as never,documentIds:[],diagnosisDescriptions:{},directory:null,directoryLoading:false,directoryError:null,environment:"live",canSend:true,canSign:true,signatureMissing,signatureSetup:createElement("button",{type:"button"},"Set up signature"),onUpdated:vi.fn(),onSent:vi.fn(),onClose:vi.fn()})));
+ try{
+  await render(true);
+  expect(container.querySelector(".mbrfa-send-signature")?.textContent).toContain("has no saved signature yet");
+  await render(false);
+  expect(container.querySelector(".mbrfa-send-signature")).toBeNull();
+ }finally{await act(async()=>root.unmount());container.remove();}
+});

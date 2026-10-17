@@ -167,7 +167,8 @@ export function RfaDraftForm({ initialDraft, identity, officialForm = false, for
   const [administratorOverride, setAdministratorOverride] = useState<{ id: string | undefined } | null>(null);
   const identityKey = `${identity?.claimId ?? ""}:${identity?.claimsAdminId ?? ""}`;
   const previousClaim = useRef(identityKey);
-  useEffect(() => { if (previousClaim.current !== identityKey) { setAdministratorOverride(null); setDraft(current => ({ ...current, authorizationContact: null, ...(officialForm ? { items: [{ diagnosisCode: "", serviceDescription: "" }] } : {}) })); previousClaim.current = identityKey; } }, [identityKey]);
+  // A newly chosen claim starts the request with that claim's primary diagnosis on the first treatment.
+  useEffect(() => { if (previousClaim.current !== identityKey) { setAdministratorOverride(null); setDraft(current => ({ ...current, authorizationContact: null, ...(officialForm ? { items: [{ diagnosisCode: savedDiagnosisCodes[0] ?? "", serviceDescription: "" }] } : {}) })); previousClaim.current = identityKey; } }, [identityKey]);
   const draft = { ...savedDraft };
   if (identity) {
     for (const key of ["claimId", "patientId", "renderingProviderId", "employeeName", "providerName", "claimNumber", "dateOfInjury", "claimsAdminId", "providerNpi"] as const) {

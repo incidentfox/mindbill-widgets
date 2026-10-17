@@ -95,6 +95,101 @@ export const DEFAULT_BILL_SUBMISSION_MODIFIERS: BillSubmissionModifierOption[] =
   { code: "XU", description: "Unusual non-overlapping service" },
 ];
 
+/**
+ * CPT and HCPCS Level II modifiers offered on treatment (professional) lines in addition to the defaults:
+ * anatomic (LT/RT, digits, eyelids, coronary), surgical, repeat/distinct, drug waste (JW/JZ), telehealth and
+ * payer-liability modifiers. Medical-legal lines keep only the medical-legal defaults.
+ */
+export const BILL_SUBMISSION_PROFESSIONAL_MODIFIERS: BillSubmissionModifierOption[] = [
+  { code: "22", description: "Increased procedural services" },
+  { code: "23", description: "Unusual anesthesia" },
+  { code: "24", description: "Unrelated E/M service during a postoperative period" },
+  { code: "27", description: "Multiple outpatient hospital E/M encounters on the same date" },
+  { code: "32", description: "Mandated services" },
+  { code: "33", description: "Preventive services" },
+  { code: "47", description: "Anesthesia by surgeon" },
+  { code: "50", description: "Bilateral procedure" },
+  { code: "51", description: "Multiple procedures" },
+  { code: "52", description: "Reduced services" },
+  { code: "53", description: "Discontinued procedure" },
+  { code: "54", description: "Surgical care only" },
+  { code: "55", description: "Postoperative management only" },
+  { code: "56", description: "Preoperative management only" },
+  { code: "57", description: "Decision for surgery" },
+  { code: "58", description: "Staged or related procedure during the postoperative period" },
+  { code: "62", description: "Two surgeons" },
+  { code: "63", description: "Procedure performed on infants less than 4 kg" },
+  { code: "66", description: "Surgical team" },
+  { code: "76", description: "Repeat procedure by the same physician" },
+  { code: "77", description: "Repeat procedure by another physician" },
+  { code: "78", description: "Unplanned return to the operating room during the postoperative period" },
+  { code: "79", description: "Unrelated procedure during the postoperative period" },
+  { code: "80", description: "Assistant surgeon" },
+  { code: "81", description: "Minimum assistant surgeon" },
+  { code: "82", description: "Assistant surgeon (qualified resident surgeon not available)" },
+  { code: "90", description: "Reference (outside) laboratory" },
+  { code: "91", description: "Repeat clinical diagnostic laboratory test" },
+  { code: "99", description: "Multiple modifiers" },
+  { code: "AS", description: "Physician assistant, nurse practitioner or clinical nurse specialist assistant at surgery" },
+  { code: "AT", description: "Acute treatment (chiropractic manipulation)" },
+  { code: "CR", description: "Catastrophe or disaster related" },
+  { code: "CS", description: "Cost-sharing waived for specified COVID-19 testing-related services" },
+  { code: "E1", description: "Upper left eyelid" },
+  { code: "E2", description: "Lower left eyelid" },
+  { code: "E3", description: "Upper right eyelid" },
+  { code: "E4", description: "Lower right eyelid" },
+  { code: "FA", description: "Left hand, thumb" },
+  { code: "F1", description: "Left hand, second digit" },
+  { code: "F2", description: "Left hand, third digit" },
+  { code: "F3", description: "Left hand, fourth digit" },
+  { code: "F4", description: "Left hand, fifth digit" },
+  { code: "F5", description: "Right hand, thumb" },
+  { code: "F6", description: "Right hand, second digit" },
+  { code: "F7", description: "Right hand, third digit" },
+  { code: "F8", description: "Right hand, fourth digit" },
+  { code: "F9", description: "Right hand, fifth digit" },
+  { code: "GA", description: "Waiver of liability statement issued as required by payer policy" },
+  { code: "GC", description: "Performed in part by a resident under the direction of a teaching physician" },
+  { code: "GE", description: "Performed by a resident without a teaching physician present (primary care exception)" },
+  { code: "GT", description: "Interactive audio and video telecommunications" },
+  { code: "GX", description: "Notice of liability issued, voluntary under payer policy" },
+  { code: "GY", description: "Statutorily excluded or not a defined benefit" },
+  { code: "GZ", description: "Expected to be denied as not reasonable and necessary" },
+  { code: "JA", description: "Drug administered intravenously" },
+  { code: "JB", description: "Drug administered subcutaneously" },
+  { code: "JW", description: "Drug amount discarded, not administered to any patient" },
+  { code: "JZ", description: "Zero drug amount discarded" },
+  { code: "KX", description: "Requirements in the medical policy have been met" },
+  { code: "LT", description: "Left side" },
+  { code: "RT", description: "Right side" },
+  { code: "LC", description: "Left circumflex coronary artery" },
+  { code: "LD", description: "Left anterior descending coronary artery" },
+  { code: "LM", description: "Left main coronary artery" },
+  { code: "RC", description: "Right coronary artery" },
+  { code: "RI", description: "Ramus intermedius coronary artery" },
+  { code: "Q5", description: "Substitute physician, reciprocal billing arrangement" },
+  { code: "Q6", description: "Substitute physician, fee-for-time arrangement (locum tenens)" },
+  { code: "QW", description: "CLIA-waived test" },
+  { code: "SA", description: "Nurse practitioner rendering service in collaboration with a physician" },
+  { code: "SB", description: "Nurse midwife" },
+  { code: "SH", description: "Second concurrently administered infusion therapy" },
+  { code: "TA", description: "Left foot, great toe" },
+  { code: "T1", description: "Left foot, second digit" },
+  { code: "T2", description: "Left foot, third digit" },
+  { code: "T3", description: "Left foot, fourth digit" },
+  { code: "T4", description: "Left foot, fifth digit" },
+  { code: "T5", description: "Right foot, great toe" },
+  { code: "T6", description: "Right foot, second digit" },
+  { code: "T7", description: "Right foot, third digit" },
+  { code: "T8", description: "Right foot, fourth digit" },
+  { code: "T9", description: "Right foot, fifth digit" },
+  { code: "UN", description: "Two patients served" },
+  { code: "UP", description: "Three patients served" },
+  { code: "UQ", description: "Four patients served" },
+  { code: "UR", description: "Five patients served" },
+  { code: "US", description: "Six or more patients served" },
+];
+
 /** Common NUCC provider taxonomies. Consumers can extend this catalog through taxonomyOptions. */
 export const DEFAULT_BILL_SUBMISSION_TAXONOMIES: BillSubmissionTaxonomyOption[] = [
   { code: "103G00000X", description: "Clinical Neuropsychologist" },
@@ -213,11 +308,13 @@ export function billSubmissionModifierOptions(
   supplied: BillSubmissionModifierOption[] | undefined,
 ): BillSubmissionModifierOption[] {
   const historicalTelehealth = !!serviceDate && /^\d{4}-\d{2}-\d{2}$/.test(serviceDate) && serviceDate < "2025-02-01";
-  const defaults = DEFAULT_BILL_SUBMISSION_MODIFIERS
-    .filter((item) => medicalLegal || !["92", "94", "96", "97", "98"].includes(item.code))
+  const defaults = [...DEFAULT_BILL_SUBMISSION_MODIFIERS, ...(medicalLegal ? [] : BILL_SUBMISSION_PROFESSIONAL_MODIFIERS)]
+    .filter((item) => medicalLegal || !["92", "94", "98"].includes(item.code))
     .map((item) => {
       if (medicalLegal) return item;
       if (item.code === "93") return { ...item, description: "Audio-only telehealth (from February 1, 2025)" };
+      if (item.code === "96") return { ...item, description: "Habilitative services" };
+      if (item.code === "97") return { ...item, description: "Rehabilitative services" };
       if (item.code === "95") return { ...item, description: historicalTelehealth
         ? "Telehealth — audio-only or audio/video, subject to service eligibility"
         : serviceDate ? "Real-time audio/video telehealth" : "Telehealth — modality depends on the service date" };

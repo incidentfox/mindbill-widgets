@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.82.0 — @mindbill/react 0.82.0
+
+### Changed
+- Treatment bills: the bill's diagnoses are listed A–L (Box 21, up to 12). Each service line toggles up to four of
+  them as pointers (any combination, e.g. ABCD, ABCF, ABEG) instead of retyping codes; a code not on the bill can
+  still be searched and joins the list. Changing a line's pointers no longer drops the bill's other diagnoses, and
+  new lines start pointed at the first four (A–D) instead of only the first.
+- Treatment lines: the modifier directory adds the professional CPT and HCPCS modifiers (LT/RT, digits, eyelids,
+  coronary, 22/24/50/51/52/53/57/58/62/76–82/91/99, JW/JZ/JA/JB, GA/GC/GT/GX/GY/GZ, KX, Q5/Q6, QW, SA/SB/SH, T1–TA,
+  UN–US, AS/AT/CR/CS); 96/97 read as habilitative/rehabilitative. An exact code typed in a code picker is listed first.
+- A treatment line with a billed charge entered that the fee schedule cannot estimate shows "Billed at your charge"
+  with the reason as a note, and the total counts it separately instead of as needing review.
+- Treatment bills default attachments to report type 09 (PR2 Progress Report) unless `defaultAttachmentReportType`
+  is set.
+- Official DWC RFA form: the first requested treatment starts with the claim's primary diagnosis.
+
+### Fixed
+- RFA physician signature setup accepts JPEG as well as PNG; images are converted to PNG in the browser and scaled
+  to MindBill's limits. After saving a signature from the send dialog, Send works without reloading the page.
+
 ## 0.81.0 — @mindbill/react 0.81.0
 
 ### Added

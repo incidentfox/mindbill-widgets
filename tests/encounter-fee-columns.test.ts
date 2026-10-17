@@ -50,12 +50,15 @@ it("quotes the whole encounter once and shows charge, expected (OMFS) and differ
     const head = view.container.querySelector(".mbsf-line-head")!.textContent!;
     expect(head).toContain("Charge"); expect(head).toContain("Expected (OMFS)"); expect(head).toContain("Difference");
     const expected = [...view.container.querySelectorAll(".mbsf-expected")].map((cell) => cell.textContent);
-    expect(expected.slice(0, 5)).toEqual(["$181.68See note", "$55.59", "$81.13", "$0.00Bundled", "Needs review"]);
+    // 97014 cannot be estimated, but its billed charge is entered: it is billed at that charge, not flagged.
+    expect(expected.slice(0, 5)).toEqual(["$181.68See note", "$55.59", "$81.13", "$0.00Bundled", "Billed at your charge"]);
     const differences = [...view.container.querySelectorAll(".mbsf-difference")].map((cell) => cell.textContent);
     expect(differences.slice(0, 5)).toEqual(["$68.32", "$64.41", "$98.87", "$90.00", "—"]);
     const totals = view.container.querySelector(".mbsf-encounter-total")!.textContent!;
     expect(view.container.textContent).not.toContain("Billed charge ($)");
-    expect(totals).toContain("$690.00"); expect(totals).toContain("$318.40"); expect(totals).toContain("+ 1 line needs review");
+    expect(totals).toContain("$690.00"); expect(totals).toContain("$318.40"); expect(totals).toContain("1 line billed at your charge");
+    expect(totals).not.toContain("needs review");
+    expect(view.container.textContent).toContain("it is billed at the charge you entered");
     expect(view.container.textContent).toContain("Modifier 25 requires a separately identifiable visit.");
     expect(view.container.textContent).toContain("97014 is not payable in California workers' comp. Bill G0283.");
     // Known codes are described; therapy minutes are not requested for an encounter quote.
@@ -76,7 +79,7 @@ it("shows the difference total when every line is priced, and Unavailable on a f
   vi.useFakeTimers();
   const failed = await render(async () => { throw new Error("offline"); });
   try {
-    expect(failed.container.querySelector(".mbsf-expected")?.textContent).toBe("Unavailable");
+    expect(failed.container.querySelector(".mbsf-expected")?.textContent).toBe("Billed at your charge");
   } finally { await failed.unmount(); vi.useRealTimers(); }
 });
 
@@ -91,4 +94,20 @@ it("billed charge entry has no number spinner and keeps a partial decimal", asyn
     expect(charge.closest(".mbsf-charge")).not.toBeNull();
     expect(view.container.querySelector(".mbsf-difference")?.textContent).toBe("$250.00");
   } finally { await view.unmount(); vi.useRealTimers(); }
+});
+
+it("still flags a line the fee schedule cannot estimate when no billed charge is entered", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  const unpriced = { ...bill, serviceLines: [{ code: "G2211", units: 1, serviceDate: "2026-10-08", diagnosisPointers: [1] }] };
+  await act(async () => root.render(createElement(BillSubmissionForm, {
+    initialBill: unpriced, getSession: async () => ({ token: "synthetic_session" }), fetch: vi.fn<typeof fetch>(async () => Response.json({ data: [] })),
+    treatmentBilling: true, editableTreatmentCharges: true, deliveryRoutePicker: "off",
+    onQuoteEncounter: async () => [{ status: "requires_review", reason: "add_on_requires_primary", provenance: [], message: "G2211 is an add-on code." }] satisfies BillFeeQuote[],
+  })));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  try {
+    expect(container.querySelector(".mbsf-expected")?.textContent).toBe("Needs review");
+    expect(container.querySelector(".mbsf-encounter-total")?.textContent).toContain("+ 1 line needs review");
+  } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
 });
