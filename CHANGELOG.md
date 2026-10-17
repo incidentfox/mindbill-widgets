@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.81.0 — @mindbill/react 0.81.0
+
+### Added
+- `BillSubmissionForm` / `ConnectedTreatmentBillForm`: `initialUploads` lists files as attachments when the form
+  opens (for example the PR-2 a host already read to prefill the bill). They upload with the bill like files the
+  user chooses, keep their document type, report type and description, and can be removed.
+
 ## 0.80.0 — @mindbill/react 0.80.0 / @mindbill/browser 0.53.0
 
 ### Changed
