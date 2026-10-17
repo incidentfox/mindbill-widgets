@@ -52,3 +52,27 @@ it("requires explicit physician authorization and clears uploaded identity when 
   await render("provider_two");expect(h.button("Save physician signature").disabled).toBe(true);expect((h.container.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(false);
  }finally{await h.close();}
 });
+
+it("converts a JPEG signature to PNG in the browser before saving", async () => {
+  const { signaturePngBase64 } = await import("../packages/react/src/rfa-provider-signature-setup");
+  const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const drawn: unknown[] = [];
+  const restore = { createImageBitmap: globalThis.createImageBitmap, createElement: document.createElement.bind(document) };
+  Object.assign(globalThis, { createImageBitmap: async () => ({ width: 3200, height: 800, close: () => undefined }) });
+  const spy = vi.spyOn(document, "createElement").mockImplementation(((tag: string) => {
+    if (tag !== "canvas") return restore.createElement(tag);
+    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: (...args: unknown[]) => drawn.push(args) }),
+      toBlob: (done: (blob: Blob) => void, type: string) => done(new Blob([pngBytes], { type })) };
+    return canvas as unknown as HTMLCanvasElement;
+  }) as typeof document.createElement);
+  try {
+    const base64 = await signaturePngBase64(new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], "Dr. Signature.jpg", { type: "image/jpeg" }));
+    expect(atob(base64).charCodeAt(1)).toBe(0x50);
+    expect(drawn).toHaveLength(1);
+    const [, , , width, height] = drawn[0] as number[];
+    expect(width).toBe(1600); expect(height).toBe(400);
+  } finally {
+    spy.mockRestore();
+    Object.assign(globalThis, { createImageBitmap: restore.createImageBitmap });
+  }
+});

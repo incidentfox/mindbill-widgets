@@ -69,6 +69,8 @@ export type BillSubmissionDocumentType = (typeof BILL_SUBMISSION_DOCUMENT_TYPES)
 export type BillSubmissionAttachmentReportTypeMode = "auto" | "hidden" | "visible";
 export type BillSubmissionReportTypeOption = { code: string; label: string };
 export const MED_LEGAL_REPORT_TYPE_CODE = "OZ:J4";
+/** PWK report type for a PR-2 progress report: the default supporting report on treatment bills. */
+export const TREATMENT_PROGRESS_REPORT_TYPE_CODE = "09";
 export const BILL_SUBMISSION_REPORT_TYPES: readonly BillSubmissionReportTypeOption[] = [
   { code: "OZ:J1", label: "Doctor's First Report (DLSR 5021)" },
   { code: "OZ:J2", label: "Supplemental Medical Report (BRs)" },
@@ -816,12 +818,18 @@ export function billSubmissionUsesSharedDiagnoses(bill: BillSubmissionInput): bo
     .every((line) => JSON.stringify(line.diagnosisPointers?.map((pointer) => codes[pointer - 1])) === JSON.stringify(codes));
 }
 
-/** Rebuild pointers by code, rejecting selections outside claim and line limits. */
-export function setBillSubmissionDiagnosisAssignments(bill: BillSubmissionInput, assignments: string[][]): BillSubmissionInput {
+/**
+ * Rebuild pointers by code, rejecting selections outside claim and line limits. By default the claim keeps only
+ * the diagnoses a line uses (shared mode). With `retainUnused`, every claim diagnosis stays listed (Box 21 may
+ * carry codes no line points to) and newly chosen codes are appended.
+ */
+export function setBillSubmissionDiagnosisAssignments(bill: BillSubmissionInput, assignments: string[][], options: { retainUnused?: boolean } = {}): BillSubmissionInput {
   const normalized = bill.serviceLines.map((_, index) => [...new Set((assignments[index] ?? []).map((code) => code.trim().toUpperCase()).filter(Boolean))]);
   const selected = [...new Set(normalized.flat())];
   if (selected.length > 12 || normalized.some((codes) => codes.length > 4)) return bill;
-  const diagnoses = [...new Set([...(bill.diagnoses ?? []).map((code) => code.trim().toUpperCase()).filter((code) => selected.includes(code)), ...selected])];
+  const existing = (bill.diagnoses ?? []).map((code) => code.trim().toUpperCase()).filter(Boolean);
+  const diagnoses = [...new Set([...(options.retainUnused ? existing : existing.filter((code) => selected.includes(code))), ...selected])];
+  if (diagnoses.length > 12) return bill;
   return { ...bill, diagnoses, serviceLines: bill.serviceLines.map((line, index) => ({ ...line, diagnosisPointers: normalized[index]!.map((code) => diagnoses.indexOf(code) + 1) })) };
 }
 
@@ -831,14 +839,42 @@ export function setBillSubmissionSharedDiagnoses(bill: BillSubmissionInput, code
 
 export function setBillSubmissionLineDiagnoses(bill: BillSubmissionInput, index: number, codes: string[]): BillSubmissionInput {
   if (!bill.serviceLines[index]) return bill;
-  return setBillSubmissionDiagnosisAssignments(bill, bill.serviceLines.map((_, lineIndex) => lineIndex === index ? codes : billSubmissionLineDiagnosisCodes(bill, lineIndex)));
+  return setBillSubmissionDiagnosisAssignments(bill, bill.serviceLines.map((_, lineIndex) => lineIndex === index ? codes : billSubmissionLineDiagnosisCodes(bill, lineIndex)), { retainUnused: true });
+}
+
+/** Pointers a new service line starts with: the first four claim diagnoses (A–D), or fewer. */
+export function defaultBillSubmissionLinePointers(bill: Pick<BillSubmissionInput, "diagnoses">): number[] {
+  return Array.from({ length: Math.min(4, bill.diagnoses?.length ?? 0) }, (_, index) => index + 1);
+}
+
+/** Add a diagnosis to the claim's Box 21 list (max 12) without assigning it to a line. */
+export function addBillSubmissionClaimDiagnosis(bill: BillSubmissionInput, code: string): BillSubmissionInput {
+  const normalized = code.trim().toUpperCase();
+  const current = (bill.diagnoses ?? []).map((item) => item.trim().toUpperCase());
+  if (!normalized || current.includes(normalized) || current.length >= 12) return bill;
+  return remapBillSubmissionDiagnoses(bill, [...current, normalized]);
+}
+
+/** Remove a diagnosis from the claim and from every line that pointed to it; other pointers keep their meaning. */
+export function removeBillSubmissionClaimDiagnosis(bill: BillSubmissionInput, code: string): BillSubmissionInput {
+  const normalized = code.trim().toUpperCase();
+  return remapBillSubmissionDiagnoses(bill, (bill.diagnoses ?? []).filter((item) => item.trim().toUpperCase() !== normalized));
+}
+
+/** Lines without a procedure yet, or without any pointer, start with the default pointers (A–D). */
+function withDefaultLinePointers(bill: BillSubmissionInput): BillSubmissionInput {
+  const defaults = defaultBillSubmissionLinePointers(bill);
+  if (!defaults.length) return bill;
+  return { ...bill, serviceLines: bill.serviceLines.map((line) => !line.diagnosisPointers?.length || (!line.code.trim() && line.diagnosisPointers.length <= 1)
+    ? { ...line, diagnosisPointers: defaults } : line) };
 }
 
 function cloneInitialBill(bill: BillSubmissionInput, treatmentBilling = false): BillSubmissionInput {
   const cloned = cloneBill(bill);
   if (treatmentBilling && cloned.serviceLines.some((line) => line.code.trim())) cloned.billingMode = billingModeForLines(cloned.serviceLines);
   if (cloned.billingMode !== "professional") cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
-  return billSubmissionUsesSharedDiagnoses(cloned) ? setBillSubmissionSharedDiagnoses(cloned, cloned.diagnoses ?? []) : cloned;
+  if (billSubmissionUsesSharedDiagnoses(cloned)) return setBillSubmissionSharedDiagnoses(cloned, cloned.diagnoses ?? []);
+  return cloned.billingMode === "professional" ? withDefaultLinePointers(cloned) : cloned;
 }
 
 function stableInitializationValue(value: unknown): unknown {
@@ -965,8 +1001,13 @@ const css = `.mbsf-profile-fields{display:contents}
 .mbsf-payer-status{display:flex;align-items:center;gap:7px;color:#087f5b;font-size:13px;font-weight:650}.mbsf-payer-intro{margin:4px 0 0;color:var(--mb-muted)}.mbsf-payer-list{display:grid;gap:8px}.mbsf-payer-option{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface))}.mbsf-payer-option-main{display:grid;gap:5px;min-width:0}.mbsf-payer-option-main strong{overflow-wrap:anywhere}.mbsf-payer-signals{display:flex;flex-wrap:wrap;gap:6px}.mbsf-payer-signal{padding:2px 7px;border:1px solid var(--mb-border);border-radius:999px;color:var(--mb-muted);font-size:12px}.mbsf-payer-signal[data-state=match]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));color:#087f5b}.mbsf-payer-signal[data-state=warning]{border-color:color-mix(in srgb,#c56a00 55%,var(--mb-border));color:#9a5200}
 .mbsf-source-evidence{display:grid;gap:4px;color:var(--mb-muted);font-size:13px}.mbsf-source-evidence a{color:var(--mb-accent);font-weight:700}.mbsf-source-evidence q{color:var(--mb-text)}.mbsf-suggestions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--mb-muted);font-size:13px}.mbsf-suggestion{padding:5px 10px;border:1px solid color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));color:var(--mb-accent);font:inherit;font-weight:700;cursor:pointer}.mbsf-suggestion:hover,.mbsf-suggestion:focus{outline:2px solid color-mix(in srgb,var(--mb-accent) 25%,transparent)}.mbsf-claim-patterns{display:grid;gap:4px;margin-top:2px;font-size:13px}.mbsf-claim-patterns[data-state=match]{color:#087f5b}.mbsf-claim-patterns[data-state=warning]{color:#9a5200}.mbsf-claim-pattern-list{color:var(--mb-muted)}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
+.mbsf-claim-diagnoses{display:grid;gap:8px;margin:4px 0 6px}.mbsf-claim-diagnoses-label{font-weight:600;font-size:13px}
+.mbsf-claim-diagnosis-list{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:0;list-style:none}
+.mbsf-pointer-letter{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--mb-border);color:var(--mb-text);font-size:11px;font-weight:700}
+.mbsf-quick-pick[data-selected=true] .mbsf-pointer-letter{background:var(--mb-accent);color:var(--mb-accent-contrast,#fff)}
+.mbsf-pointer-picks{gap:5px;margin-bottom:6px}.mbsf-pointer-pick{padding:3px 8px;gap:5px;font-size:12px}.mbsf-pointer-pick:disabled{opacity:.45;cursor:not-allowed}
 .mbsf-segments{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:hidden}.mbsf-segment{min-height:44px;border:0;border-right:1px solid var(--mb-border);background:var(--mb-input);color:var(--mb-text);font:inherit;font-weight:700;cursor:pointer}.mbsf-segment:last-child{border-right:0}.mbsf-segment[aria-pressed=true]{background:var(--mb-accent);color:var(--mb-accent-contrast)}
-.mbsf-lines{min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{min-width:0;position:relative}.mbsf-diagnosis-select{min-width:0}.mbsf-diagnosis-select .mbsf-chip{max-width:100%;align-items:flex-start}.mbsf-diagnosis-select .mbsf-chip>span{min-width:0;overflow-wrap:anywhere}.mbsf-diagnosis-toggle{display:flex;align-items:flex-start;gap:10px;margin:18px 0;line-height:1.5}.mbsf-diagnosis-toggle input{margin-top:4px}.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) 100px 120px 42px}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{min-width:0;grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-text-btn{padding:0;border:0;background:none;color:var(--mb-accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.mbsf-text-btn:hover{text-decoration:underline}.mbsf-calc{min-width:0;font-size:13px}.mbsf-fee-details details.mbsf-calc[open]{grid-template-columns:minmax(0,1fr);gap:8px}.mbsf-calc>*{min-width:0}.mbsf-calc p{margin:0;overflow-wrap:anywhere}.mbsf-calc-facts{display:flex;flex-wrap:wrap;gap:4px 24px;margin:0}.mbsf-calc-facts div{display:flex;gap:6px}.mbsf-calc-facts dt{font-weight:600}.mbsf-calc-facts dd{margin:0}.mbsf-calc-table{overflow-x:auto}.mbsf-calc-table table{border-collapse:collapse;width:100%;max-width:560px;font-variant-numeric:tabular-nums}.mbsf-calc-table th,.mbsf-calc-table td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--mb-border)}.mbsf-calc-table tr:last-child td{font-weight:650;border-bottom:0}.mbsf-fee-details details[open]{display:grid;gap:12px}.mbsf-fee-details>.mbsf-field{max-width:320px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-attestation{grid-column:1/-1;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,#d97706 10%,var(--mb-surface));color:#7a4a00;font-size:14px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}.mbsf-lines[data-encounter=true]>.mbsf-line,.mbsf-lines[data-encounter=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.2fr) minmax(160px,1fr) 72px 104px 124px 104px 42px}.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.3fr) 72px 104px 124px 104px 42px}.mbsf-num{text-align:right}.mbsf-money-group{display:contents}.mbsf-money small{display:block;margin-top:2px;color:var(--mb-muted);font-size:12px;font-weight:500}.mbsf-expected{font-weight:650}.mbsf-charge{padding-top:0}.mbsf-charge .mbsf-input{text-align:right;font-variant-numeric:tabular-nums}.mbsf-difference{color:var(--mb-muted)}.mbsf-review{color:#9a5b00;font-weight:600}.mbsf-line-notes{grid-column:1/-1;margin:0;padding:8px 12px 8px 28px;border-radius:8px;background:color-mix(in srgb,var(--mb-muted) 8%,var(--mb-surface));color:var(--mb-muted);font-size:13px;line-height:1.45}.mbsf-line-notes[data-review=true]{background:color-mix(in srgb,#d97706 10%,var(--mb-surface));color:#7a4a00}.mbsf-line-notes li+li{margin-top:4px}.mbsf-encounter-total{display:grid;grid-template-columns:1fr 104px 124px 104px 42px;gap:12px;align-items:start;padding:16px 12px;font-size:16px;font-weight:760;font-variant-numeric:tabular-nums;border-top:1px solid var(--mb-border)}.mbsf-encounter-total>span{text-align:right}.mbsf-encounter-total>span:first-child{text-align:left}.mbsf-encounter-total>span:after{content:""}.mbsf-encounter-total small{display:block;color:#9a5b00;font-size:12px;font-weight:600}
+.mbsf-lines{min-width:0;margin-top:18px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);overflow:visible}.mbsf-lines[data-invalid=true]{border-color:var(--mb-danger)}.mbsf-line-head,.mbsf-line{display:grid;grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) minmax(180px,1fr) 100px 120px 42px;gap:12px;align-items:start;padding:12px}.mbsf-line-head{color:var(--mb-muted);font-size:13px;font-weight:700;border-bottom:1px solid var(--mb-border)}.mbsf-line{border-bottom:1px solid var(--mb-border)}.mbsf-line:last-child{border-bottom:0}.mbsf-line [data-invalid=true] .mbsf-input{border-color:var(--mb-danger);background:color-mix(in srgb,var(--mb-danger) 4%,var(--mb-input))}.mbsf-money{padding-top:12px;text-align:right;font-variant-numeric:tabular-nums}.mbsf-line-diagnoses{min-width:0;position:relative}.mbsf-diagnosis-select{min-width:0}.mbsf-diagnosis-select .mbsf-chip{max-width:100%;align-items:flex-start}.mbsf-diagnosis-select .mbsf-chip>span{min-width:0;overflow-wrap:anywhere}.mbsf-diagnosis-toggle{display:flex;align-items:flex-start;gap:10px;margin:18px 0;line-height:1.5}.mbsf-diagnosis-toggle input{margin-top:4px}.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(190px,1.05fr) minmax(190px,1.3fr) 100px 120px 42px}.mbsf-line-diagnoses .mbsf-combo{position:static;min-width:0}.mbsf-line-diagnoses .mbsf-menu{left:0;right:0;min-width:100%}.mbsf-line-diagnoses .mbsf-input{padding:10px 6px;font-size:16px}.mbsf-fee-details{min-width:0;grid-column:1/-1;font-size:14px;color:var(--mb-muted);padding:8px 0}.mbsf-fee-details summary{cursor:pointer;font-weight:600}.mbsf-text-btn{padding:0;border:0;background:none;color:var(--mb-accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.mbsf-text-btn:hover{text-decoration:underline}.mbsf-calc{min-width:0;font-size:13px}.mbsf-fee-details details.mbsf-calc[open]{grid-template-columns:minmax(0,1fr);gap:8px}.mbsf-calc>*{min-width:0}.mbsf-calc p{margin:0;overflow-wrap:anywhere}.mbsf-calc-facts{display:flex;flex-wrap:wrap;gap:4px 24px;margin:0}.mbsf-calc-facts div{display:flex;gap:6px}.mbsf-calc-facts dt{font-weight:600}.mbsf-calc-facts dd{margin:0}.mbsf-calc-table{overflow-x:auto}.mbsf-calc-table table{border-collapse:collapse;width:100%;max-width:560px;font-variant-numeric:tabular-nums}.mbsf-calc-table th,.mbsf-calc-table td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--mb-border)}.mbsf-calc-table tr:last-child td{font-weight:650;border-bottom:0}.mbsf-fee-details details[open]{display:grid;gap:12px}.mbsf-fee-details>.mbsf-field{max-width:320px}.mbsf-fee-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.mbsf-fee-confirm input{margin-top:4px}.mbsf-attestation{grid-column:1/-1;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,#d97706 10%,var(--mb-surface));color:#7a4a00;font-size:14px}.mbsf-dx{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}.mbsf-dx-chip{width:30px;height:30px;border:1px solid var(--mb-border);border-radius:8px;background:var(--mb-surface);color:var(--mb-muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer}.mbsf-dx-chip[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface));color:var(--mb-accent)}.mbsf-total{display:flex;justify-content:flex-end;gap:45px;padding:16px 56px 16px 16px;font-size:17px;font-weight:760}.mbsf-lines[data-encounter=true]>.mbsf-line,.mbsf-lines[data-encounter=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.2fr) minmax(160px,1fr) 72px 104px 124px 104px 42px}.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line,.mbsf-lines[data-encounter=true][data-shared-diagnoses=true]>.mbsf-line-head{grid-template-columns:minmax(170px,1.05fr) minmax(170px,1.3fr) 72px 104px 124px 104px 42px}.mbsf-num{text-align:right}.mbsf-money-group{display:contents}.mbsf-money small{display:block;margin-top:2px;color:var(--mb-muted);font-size:12px;font-weight:500}.mbsf-expected{font-weight:650}.mbsf-charge{padding-top:0}.mbsf-charge .mbsf-input{text-align:right;font-variant-numeric:tabular-nums}.mbsf-difference{color:var(--mb-muted)}.mbsf-review{color:#9a5b00;font-weight:600}.mbsf-at-charge{color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-line-notes{grid-column:1/-1;margin:0;padding:8px 12px 8px 28px;border-radius:8px;background:color-mix(in srgb,var(--mb-muted) 8%,var(--mb-surface));color:var(--mb-muted);font-size:13px;line-height:1.45}.mbsf-line-notes[data-review=true]{background:color-mix(in srgb,#d97706 10%,var(--mb-surface));color:#7a4a00}.mbsf-line-notes li+li{margin-top:4px}.mbsf-encounter-total{display:grid;grid-template-columns:1fr 104px 124px 104px 42px;gap:12px;align-items:start;padding:16px 12px;font-size:16px;font-weight:760;font-variant-numeric:tabular-nums;border-top:1px solid var(--mb-border)}.mbsf-encounter-total>span{text-align:right}.mbsf-encounter-total>span:first-child{text-align:left}.mbsf-encounter-total>span:after{content:""}.mbsf-encounter-total small{display:block;color:#9a5b00;font-size:12px;font-weight:600}
 .mbsf-icon-btn{width:40px;height:42px;border:0;background:transparent;color:var(--mb-text);font-size:22px;cursor:pointer}.mbsf-secondary{min-height:40px;padding:8px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}.mbsf-attach-list{display:grid;gap:10px;margin-bottom:18px}.mbsf-attach-row{padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-attach-row[data-auto=true]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));background:color-mix(in srgb,#159447 5%,var(--mb-surface))}.mbsf-attach-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1}.mbsf-attach-type{width:min(360px,32vw);flex:0 1 360px}.mbsf-attach-type .mbsf-label{display:block;margin-bottom:6px;font-size:12px}.mbsf-attach-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.mbsf-file{min-width:0}.mbsf-file strong{overflow-wrap:anywhere}.mbsf-badge{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--mb-border);border-radius:7px;color:var(--mb-muted);font-size:12px;font-weight:600}.mbsf-drop{display:grid;width:100%;place-items:center;min-height:210px;padding:30px;border:2px dashed color-mix(in srgb,var(--mb-muted) 55%,transparent);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface));color:var(--mb-text);font:inherit;text-align:center;cursor:pointer}.mbsf-drop[data-active=true]{border-color:var(--mb-accent);background:color-mix(in srgb,var(--mb-accent) 10%,var(--mb-surface))}.mbsf-alert{padding:12px 14px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger)}.mbsf-actions{justify-content:flex-end}.mbsf-submit{min-width:180px;min-height:48px;padding:11px 24px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:780;cursor:pointer}
 .mbsf-cms-preview{padding:16px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);min-width:0}.mbsf-cms-preview header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mbsf-cms-preview h3{margin:0}.mbsf-preview-details{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0}.mbsf-cms-preview iframe{width:100%;height:600px;max-height:75vh;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mbsf-preview-stale{padding:20px 0;color:var(--mb-muted)}
 .mbsf-actions{flex-direction:column;align-items:flex-end}.mbsf-actions>.mbsf-secondary{min-width:180px}
@@ -1002,6 +1043,8 @@ function ComboBox({ value, placeholder, options, disabled, loading, loadingMore,
     const matches = q && filterOptions ? options.filter((option) => `${option.id} ${option.label} ${option.detail ?? ""} ${(option.badges ?? []).join(" ")} ${(option.affiliatedEntities ?? []).join(" ")} ${option.trailing ?? ""}`.toLowerCase().includes(q)
       // "ML-203" and "ML 203" are the same code as "ML203".
       || (matchCodeIgnoringSeparators && /[\s-]/.test(q) && option.id.toLowerCase().includes(q.replace(/[\s-]+/g, "")))) : options;
+    // An exact code match ("RT", "25") is listed first, ahead of descriptions that merely contain the text.
+    if (q && filterOptions) matches.sort((a, b) => Number(b.id.toLowerCase() === q.replace(/^[-−]/, "")) - Number(a.id.toLowerCase() === q.replace(/^[-−]/, "")));
     const custom = createOption?.(query) ?? null;
     return custom && !matches.some((option) => option.id.toUpperCase() === custom.id.toUpperCase()) ? [...matches, custom] : matches;
   }, [createOption, filterOptions, matchCodeIgnoringSeparators, options, query]);
@@ -1040,10 +1083,11 @@ function formatUsd(value: number): string {
 }
 
 /** Encounter warnings stay visible below the line without hiding its expected amount. */
-function EncounterLineNotes({ quote, reviewMessage }: { quote: BillFeeQuote | { status: "error"; reason: string } | undefined; reviewMessage?: string | undefined }) {
+function EncounterLineNotes({ quote, reviewMessage, billedAtCharge = false }: { quote: BillFeeQuote | { status: "error"; reason: string } | undefined; reviewMessage?: string | undefined; billedAtCharge?: boolean }) {
   const messages = [...new Set([...(reviewMessage ? [reviewMessage] : []), ...(quote && quote.status !== "error" ? quote.findings?.map((finding) => finding.message) ?? [] : [])])];
   if (!messages.length) return null;
-  return <ul className="mbsf-line-notes" data-review={quote?.status === "requires_review"}>{messages.map((message) => <li key={message}>{message}</li>)}</ul>;
+  // With a billed charge entered, an unquotable line is billed at that charge: the reason is information, not a blocker.
+  return <ul className="mbsf-line-notes" data-review={quote?.status === "requires_review" && !billedAtCharge}>{billedAtCharge && quote?.status !== "priced" ? <li>The fee schedule could not estimate this line; it is billed at the charge you entered.</li> : null}{messages.map((message) => <li key={message}>{message}</li>)}</ul>;
 }
 
 /** Currency entry without the browser number spinner; keeps a partial entry such as "12." while typing. */
@@ -1171,7 +1215,7 @@ export function BillSubmissionForm({
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, draft, onSaveDraft, saveDraftLabel = "Save draft", treatmentBilling = false, companionLines, linkedAuthorizations, evaluationTypes, editableTreatmentCharges = false, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
-  attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType, initialUploads,
+  attachmentReportTypes = BILL_SUBMISSION_REPORT_TYPES, defaultAttachmentReportType: hostDefaultAttachmentReportType, initialUploads,
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
   description = "Review the bill details, add attachments, and submit.",
@@ -1284,6 +1328,8 @@ export function BillSubmissionForm({
   const [savingDraft, setSavingDraft] = useState(false);
   const locked = disabled || submitting || savingDraft;
   const showAttachmentReportTypes = attachmentReportTypeMode === "visible" || (attachmentReportTypeMode === "auto" && bill.billingMode !== "med_legal");
+  // A treatment (professional) bill's supporting report is normally the PR-2 progress report (PWK 09).
+  const defaultAttachmentReportType = hostDefaultAttachmentReportType ?? (treatmentBilling && bill.billingMode === "professional" ? TREATMENT_PROGRESS_REPORT_TYPE_CODE : undefined);
   const forcedAttachmentReportType = showAttachmentReportTypes ? undefined : (defaultAttachmentReportType ?? MED_LEGAL_REPORT_TYPE_CODE);
   const reportTypeOptions = useMemo(() => attachmentReportTypes.map((item) => ({ id: item.code, label: item.code.replace(/^OZ:/, ""), detail: item.label })), [attachmentReportTypes]);
   const missingAttachmentReportType = showAttachmentReportTypes && (
@@ -1350,6 +1396,10 @@ export function BillSubmissionForm({
         if (lineIndex !== index) return line;
         const next = { ...line, ...patch };
         if (patch.code != null && patch.code !== line.code) { delete next.rfaItemId; delete next.feeContext; delete next.drug; }
+        // A new professional line starts pointed at the claim's first diagnoses (A–D), like the case's.
+        if (!sharedDiagnoses && patch.code?.trim() && !line.code.trim() && !line.diagnosisPointers?.length && !isMedicalLegalCode(patch.code)) {
+          next.diagnosisPointers = defaultBillSubmissionLinePointers(current);
+        }
         if (patch.code != null && patch.code !== line.code && (patch.units === undefined || patch.units === line.units)) {
           const startingUnits = (code: string) => procedures.find((item) => item.code.toUpperCase() === code.trim().toUpperCase())?.defaultUnits ?? 1;
           // Replace only an untouched quantity; a quantity the biller entered stays.
@@ -1622,7 +1672,7 @@ export function BillSubmissionForm({
       {therapyFields && !isInitialPtEvaluationCode(line.code) ? <div className="mbsf-grid"><label className="mbsf-field"><span>Direct one-on-one minutes</span><input className="mbsf-input" aria-label={`Direct one-on-one minutes for line ${index + 1}`} type="number" min="1" value={details.minutes ?? ""} onChange={(event) => update({ minutes: event.target.value ? Number(event.target.value) : undefined })} /></label><label className="mbsf-field"><span>Total visit minutes</span><input className="mbsf-input" aria-label={`Total visit minutes for line ${index + 1}`} type="number" min="1" step="1" value={details.totalMinutes ?? ""} onChange={(event) => update({ totalMinutes: event.target.value ? Number(event.target.value) : undefined })} /></label></div> : null}
       {therapyFields ? <TherapyLineFields code={line.code} index={index} details={details} update={update} /> : null}
       </details> : null}
-      {encounterQuoting ? <EncounterLineNotes quote={quote} reviewMessage={quote && quote.status !== "priced" && quote.status !== "error" ? quote.message ?? feeReviewMessage(quote.reason) : undefined} /> : null}
+      {encounterQuoting ? <EncounterLineNotes quote={quote} billedAtCharge={Number.isFinite(line.charge)} reviewMessage={quote && quote.status !== "priced" && quote.status !== "error" ? quote.message ?? feeReviewMessage(quote.reason) : undefined} /> : null}
       {encounterQuoting ? null : (() => { const message = details.basis === "adjustment" || !supportedFeeJurisdiction ? "This service requires fee review before submission." : therapy && missingTherapyDetails(details, line.code).length ? `Enter therapy details: ${missingTherapyDetails(details, line.code).join(", ")}.` : !quoteFee ? "Connect fee lookup to estimate this service." : !quoteInputs[index]?.dateOfService ? "Enter a valid service date to estimate the fee." : quote?.status === "priced" ? editableTreatmentCharges && treatmentBilling ? `${quote.basis === "payer_contract" ? quote.statutoryMaximumCents == null ? "" : `OMFS maximum: ${(quote.statutoryMaximumCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}. ` : `OMFS maximum: ${(quote.scheduleMaximumCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}. `}Estimated reimbursement: ${(quote.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}. Billed charge can differ.` : null : feeReviewMessage(quote?.reason); return message ? <p className="mbsf-help" role="status">{message}</p> : null; })()}
       {quote?.status === "priced" && details.basis !== "adjustment" ? <><AnesthesiaCalculationDetails quote={quote} /><FeeCalculationDetails quote={quote} providerLabel={details.providerKind ? PROVIDER_KIND_LABELS[details.providerKind] : undefined} /></> : null}
       {quote?.status === "error" ? <button type="button" className="mbsf-secondary" onClick={() => setFeeRetry((value) => value + 1)}>Retry fee check</button> : null}
@@ -1643,17 +1693,19 @@ export function BillSubmissionForm({
     if (!lineHasContent(line) || !quoteInputs[index]) return isMedicalLegalCode(line.code) && lineHasContent(line) ? "Medical-legal" : "—";
     const quote = quoteAt(index);
     if (!quote) return quoteInputs[index]?.dateOfService ? "Checking…" : "Needs date";
-    if (quote.status === "error") return "Unavailable";
+    if (quote.status === "error") return Number.isFinite(line.charge) ? <span className="mbsf-at-charge">Billed at your charge</span> : "Unavailable";
     if (quote.status === "priced") return <>{formatUsd(quote.amountCents / 100)}{quote.findings?.length ? <small>See note</small> : null}</>;
     if (quote.status === "not_separately_payable") return <>{formatUsd(0)}<small>{/bundl|ptp/i.test(quote.reason) ? "Bundled" : "Not payable"}</small></>;
+    if (Number.isFinite(line.charge)) return <span className="mbsf-at-charge">Billed at your charge</span>;
     return <span className="mbsf-review">Needs review</span>;
   };
   const encounterTotals = bill.serviceLines.reduce((sum, line, index) => {
     if (!lineHasContent(line) || !quoteInputs[index]) return sum;
     const quote = quoteAt(index); const expected = expectedAt(index);
     if (!quote) return { ...sum, pending: true };
-    return expected == null ? { ...sum, review: sum.review + 1 } : { ...sum, expected: sum.expected + expected };
-  }, { expected: 0, review: 0, pending: false });
+    if (expected != null) return { ...sum, expected: sum.expected + expected };
+    return Number.isFinite(line.charge) ? { ...sum, atCharge: sum.atCharge + 1 } : { ...sum, review: sum.review + 1 };
+  }, { expected: 0, review: 0, atCharge: 0, pending: false });
 
   const pricedLines = bill.serviceLines.map((line, index) => {
     const charge = lineCharge(line, index); const next = { ...line };
@@ -1993,6 +2045,34 @@ export function BillSubmissionForm({
       <ComboBox ariaLabel={lineIndex === undefined ? "Add diagnosis code" : `Diagnosis codes for service line ${lineIndex + 1}`} invalid={invalid} disabled={locked || codes.length >= 4} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={codes.length >= 4 ? "4 selected (maximum)" : codes.length ? `${codes.length} selected — add more…` : "Search ICD-10 codes…"} options={available.filter((item) => !codes.includes(item.code) && canAdd(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => onChange([...codes, option.id])} />
     </div>;
   };
+  const diagnosisDescription = (code: string) => [...BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS, ...diagnosisChoices].find((item) => item.code === code)?.description ?? "";
+  const claimDiagnoses = (bill.diagnoses ?? []).map((code) => code.trim().toUpperCase());
+  // Box 21: the bill's diagnoses lettered A–L. Lines point to up to four of them.
+  const claimDiagnosisList = <div className="mbsf-claim-diagnoses" data-field-path="diagnoses">
+    <span className="mbsf-claim-diagnoses-label">Bill diagnoses (Box 21)</span>
+    {claimDiagnoses.length ? <ol className="mbsf-claim-diagnosis-list" aria-label="Bill diagnoses">{claimDiagnoses.map((code, index) => <li className="mbsf-chip" key={code}>
+      <span className="mbsf-pointer-letter" aria-hidden="true">{String.fromCharCode(65 + index)}</span>
+      <span><strong>{code}</strong>{diagnosisDescription(code) ? ` ${diagnosisDescription(code)}` : ""}</span>
+      <button type="button" disabled={locked} aria-label={`Remove ${code} from the bill`} onClick={() => setBill((current) => removeBillSubmissionClaimDiagnosis(current, code))}>×</button>
+    </li>)}</ol> : <p className="mbsf-help">Add the visit's diagnoses, then choose up to four for each line.</p>}
+    {claimDiagnoses.length < 12 ? <ComboBox ariaLabel="Add diagnosis to the bill" disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={`Add a diagnosis (${claimDiagnoses.length} of 12)…`} options={mergeDiagnosisOptions(diagnosisChoices).filter((item) => !claimDiagnoses.includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((current) => addBillSubmissionClaimDiagnosis(current, option.id))} /> : null}
+  </div>;
+  // One line's pointers: toggle any four of the bill's diagnoses (ABCD, ABCF, ABEG …), or search a code not on the bill yet.
+  const lineDiagnosisPicker = (index: number) => {
+    const codes = billSubmissionLineDiagnosisCodes(bill, index);
+    const invalid = Boolean(errors[`serviceLines.${index}.diagnosisPointers`]);
+    const setCodes = (next: string[]) => setBill((current) => setBillSubmissionLineDiagnoses(current, index, next));
+    return <div className="mbsf-diagnosis-select">
+      {claimDiagnoses.length ? <div className="mbsf-quick-picks mbsf-pointer-picks" role="group" aria-label={`Diagnosis pointers for service line ${index + 1}`}>{claimDiagnoses.map((code, claimIndex) => {
+        const selected = codes.includes(code);
+        const position = codes.indexOf(code);
+        return <button className="mbsf-quick-pick mbsf-pointer-pick" type="button" key={code} data-selected={selected} aria-pressed={selected} disabled={locked || (!selected && codes.length >= 4)} title={`${code}${diagnosisDescription(code) ? ` — ${diagnosisDescription(code)}` : ""}${selected ? ` (pointer ${position + 1})` : ""}`} onClick={() => setCodes(selected ? codes.filter((item) => item !== code) : [...codes, code])}>
+          <span className="mbsf-pointer-letter" aria-hidden="true">{String.fromCharCode(65 + claimIndex)}</span>{code}
+        </button>;
+      })}</div> : null}
+      <ComboBox ariaLabel={`Diagnosis codes for service line ${index + 1}`} invalid={invalid} disabled={locked || codes.length >= 4 || claimDiagnoses.length >= 12} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={codes.length >= 4 ? "4 selected (maximum)" : claimDiagnoses.length >= 12 ? "12 bill diagnoses (maximum)" : claimDiagnoses.length ? "Add a code not on the bill…" : "Search ICD-10 codes…"} options={mergeDiagnosisOptions(diagnosisChoices).filter((item) => !claimDiagnoses.includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setCodes([...codes, option.id])} />
+    </div>;
+  };
   const toggleSharedDiagnoses = (checked: boolean) => {
     if (checked) {
       individualDiagnoses.current = bill.serviceLines.map((_, index) => billSubmissionLineDiagnosisCodes(bill, index));
@@ -2012,7 +2092,8 @@ export function BillSubmissionForm({
       <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p></> : null}
       <label className="mbsf-diagnosis-toggle"><Checkbox checked={sharedDiagnoses} onChange={(event) => toggleSharedDiagnoses(event.target.checked)} /><span>Apply the same diagnosis codes to all service lines</span></label>
       {sharedDiagnoses ? <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required error={errors.diagnoses}>{diagnosisSelector(bill.diagnoses ?? [], (codes) => { individualDiagnoses.current = null; setBill((current) => setBillSubmissionSharedDiagnoses(current, codes)); })}</Field> : null}
-      <p className="mbsf-help">Choose up to 4 diagnosis codes per service line and 12 across the bill.</p>
+      {!sharedDiagnoses ? claimDiagnosisList : null}
+      <p className="mbsf-help">{sharedDiagnoses ? "Choose up to 4 diagnosis codes per service line and 12 across the bill." : "List up to 12 diagnoses for the bill, then pick up to 4 of them (by letter) for each service line."}</p>
       {!sharedDiagnoses && errors.diagnoses ? <p className="mbsf-error" role="alert">{errors.diagnoses}</p> : null}
       {procedureError ? <p className="mbsf-error" role="alert">{procedureError}</p> : null}
       <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses} data-encounter={encounterColumns} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span>{!sharedDiagnoses ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span>{encounterColumns ? <><span className="mbsf-num">Charge</span><span className="mbsf-num">Expected (OMFS)</span><span className="mbsf-num">Difference</span></> : <span>{editableTreatmentCharges && treatmentBilling ? "Billed charge" : "Allowed"}</span>}<span /> </div>
@@ -2020,7 +2101,7 @@ export function BillSubmissionForm({
           <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" matchCodeIgnoringSeparators loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id, ...(switched ? { modifiers: (line.modifiers ?? []).filter((value) => !["94", "95", "96"].includes(value.replace(/^-/, ""))) } : isMedicalLegalCode(option.id) ? { modifiers: (line.modifiers ?? []).filter((value) => medicalLegalModifierApplies(value, option.id)) } : {}) }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedureDescription(line.code)}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={billSubmissionModifierOptions(isMedicalLegalCode(line.code) || (!line.code.trim() && !treatmentBilling), line.serviceDate || bill.service?.date, modifierOptions).filter((item) => !(line.modifiers ?? []).includes(item.code) && (!isMedicalLegalCode(line.code) || medicalLegalModifierApplies(item.code, line.code))).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
           {!sharedDiagnoses ? <div className="mbsf-line-diagnoses" data-label="Diagnosis codes (ICD-10)" data-field-path={`serviceLines.${index}.diagnosisPointers`} data-invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])}>
-            {diagnosisSelector(billSubmissionLineDiagnosisCodes(bill, index), (codes) => setBill((current) => setBillSubmissionLineDiagnoses(current, index, codes)), index)}
+            {lineDiagnosisPicker(index)}
             {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
           </div> : null}
           <div data-label={treatmentBilling && isAnesthesiaCandidate(line.code) ? "Services" : "Units"} data-field-path={`serviceLines.${index}.units`} data-invalid={Boolean(errors[`serviceLines.${index}.units`])}><input className="mbsf-input" aria-label={`Units ${index + 1}`} aria-invalid={Boolean(errors[`serviceLines.${index}.units`])} type="number" min={1} max={treatmentBilling && isAnesthesiaCandidate(line.code) ? 1 : undefined} value={line.units ?? 1} onChange={(event) => setLine(index, { units: Number(event.target.value) })} />{errors[`serviceLines.${index}.units`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.units`]}</small> : null}</div>
@@ -2043,7 +2124,7 @@ export function BillSubmissionForm({
         </div>)}
         {encounterColumns ? <div className="mbsf-encounter-total" aria-label="Encounter totals"><span>Total</span>
           <span data-label="Charge">{formatUsd(total)}</span>
-          <span data-label="Expected (OMFS)">{encounterTotals.pending ? "Checking…" : formatUsd(encounterTotals.expected)}{encounterTotals.review ? <small>+ {encounterTotals.review} {encounterTotals.review === 1 ? "line needs" : "lines need"} review</small> : null}</span>
+          <span data-label="Expected (OMFS)">{encounterTotals.pending ? "Checking…" : formatUsd(encounterTotals.expected)}{encounterTotals.review ? <small>+ {encounterTotals.review} {encounterTotals.review === 1 ? "line needs" : "lines need"} review</small> : null}{encounterTotals.atCharge ? <small>{encounterTotals.atCharge} {encounterTotals.atCharge === 1 ? "line" : "lines"} billed at your charge</small> : null}</span>
           <span data-label="Difference">{encounterTotals.pending || encounterTotals.review ? "—" : formatUsd(total - encounterTotals.expected)}</span>
         </div> : <div className="mbsf-total"><span>Total</span><span>{total.toLocaleString(undefined, { style: "currency", currency: "USD" })}</span></div>}
       </div>{errors.serviceLines ? <p className="mbsf-error" role="alert">{errors.serviceLines}</p> : null}

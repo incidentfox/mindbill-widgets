@@ -162,3 +162,17 @@ it("previews an unfinished form without saving or requiring any field", async()=
   expect(onSave).not.toHaveBeenCalled();expect(onPreview).not.toHaveBeenCalled();expect(container.querySelector('[role="alert"]')).toBeNull();
  }finally{await act(async()=>root.unmount());container.remove();}
 });
+it("starts the first treatment with the claim's primary diagnosis and offers the claim's other codes", async()=>{
+ const container=document.createElement("div");document.body.append(container);const root=createRoot(container);
+ const claim={claimId:"claim_synthetic",patientId:"patient_synthetic",employeeName:"Synthetic Patient",claimNumber:"SYN-1",dateOfInjury:"2026-07-16",diagnosisCodes:["M25.561","M22.2X1","Z96.651"]};
+ const client={getCreationContext:async()=>({claims:[claim],renderingProviders:[{id:"provider_synthetic",name:"Synthetic Physician"}],nextCursor:null,renderingProvidersNextCursor:null})} as never;
+ try{
+  await act(async()=>root.render(createElement(RfaCreateForm,{client,claimId:"claim_synthetic",renderingProviderId:"provider_synthetic",onSave:vi.fn(),draftFormProps:{officialForm:true,searchDiagnosisCodes:async(query:string)=>[{code:query.toUpperCase(),description:`Synthetic ${query}`}]}} as never)));
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});
+  const selected=[...container.querySelectorAll('[aria-label="Selected ICD-10 codes"] strong')].map(el=>el.textContent);
+  expect(selected).toEqual(["M25.561"]);
+  const offered=[...container.querySelectorAll('[aria-label="Diagnoses saved on this injury"] button')].map(el=>el.textContent);
+  expect(offered).toEqual(["+ M22.2X1","+ Z96.651"]);
+ }finally{await act(async()=>root.unmount());container.remove();}
+});

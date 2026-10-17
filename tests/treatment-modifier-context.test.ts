@@ -30,3 +30,18 @@ it("explains review reasons without changing readiness or displaying unknown mac
   expect(feeReviewMessage("Fee lookup is unavailable. Retry the fee check.")).toBe("Fee lookup is unavailable. Retry the fee check.");
   expect(feeReviewMessage(undefined)).toBe("Checking the fee schedule…");
 });
+
+it("offers the professional modifier directory on treatment lines only", () => {
+  const treatment = billSubmissionModifierOptions(false, "2026-10-14", undefined);
+  const codes = treatment.map((item) => item.code);
+  for (const code of ["22", "24", "25", "26", "27", "50", "51", "52", "53", "57", "58", "59", "62", "76", "77", "78", "79", "80", "81", "82", "91", "95", "96", "97", "AS", "AT", "CR", "CS",
+    "E1", "E2", "E3", "E4", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "FA", "GA", "GC", "GN", "GO", "GP", "GT", "GX", "GY", "GZ", "JW", "JZ", "JA", "JB", "KX", "LT", "RT",
+    "LC", "LD", "LM", "RC", "RI", "NU", "RR", "UE", "KJ", "KH", "KI", "TC", "QW", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "TA", "XE", "XP", "XS", "XU", "Q5", "Q6", "93",
+    "SA", "SB", "SH", "UN", "UP", "UQ", "UR", "US", "99"]) expect(codes, code).toContain(code);
+  expect(new Set(codes).size).toBe(codes.length);
+  expect(treatment.find((item) => item.code === "96")?.description).toBe("Habilitative services");
+  expect(treatment.find((item) => item.code === "JZ")?.description).toContain("Zero drug amount");
+  const medicalLegal = billSubmissionModifierOptions(true, "2026-10-14", undefined);
+  expect(medicalLegal.some((item) => item.code === "LT")).toBe(false);
+  expect(medicalLegal.find((item) => item.code === "96")?.description).toBe("Psychiatric/psychological evaluation");
+});
