@@ -38,7 +38,7 @@ try {
     const integrity = "sha512-" + createHash("sha512").update(archive).digest("base64");
     const entry = lock.split("'" + pkg.name + "@" + pkg.version + "':\n")[1]?.split("\n\n")[0];
     assert.ok(entry?.includes("integrity: " + integrity),
-      "The committed lock integrity must match the exact " + pkg.name + " artifact");
+      "The committed lock integrity must match the exact " + pkg.name + "@" + pkg.version + " artifact: " + integrity);
     packages.set("/@mindbill/" + name + "/-/" + name + "-" + pkg.version + ".tgz", archive);
     console.log("Validated exact artifact:", pkg.name + "@" + pkg.version, integrity);
   }
