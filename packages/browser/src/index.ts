@@ -694,6 +694,45 @@ export type SecondReviewLineInput = {
   correction?: { units: number; modifiers: string[]; charge: number };
 };
 
+/** Starting Second Review language for one service line, matched from the EOR. */
+export type SecondReviewLineSuggestion = {
+  lineItemId: string;
+  /** Procedure code with modifiers. */
+  code: string;
+  reasonCodes: string[];
+  /** Language to review, or null when the EOR does not identify a clear reason. */
+  reason: string | null;
+  source: "saved" | "system_template" | "none";
+  template: { id: string; title: string; citation: string } | null;
+  explanation: string | null;
+};
+
+/** A related DWC Independent Bill Review determination. */
+export type SecondReviewIbrDecision = {
+  /** DWC IBR case number. */
+  id: string;
+  date: string;
+  code: string;
+  issue: string;
+  citation: string;
+  outcome: string;
+  awardedAmount: number | null;
+  sourceUrl: string | null;
+  matchedOn: string[];
+  /** A favorable, same-code decision MindBill would cite automatically. */
+  recommended: boolean;
+  lineItemIds: string[];
+};
+
+export type SecondReviewSuggestions = {
+  billId: string;
+  lines: SecondReviewLineSuggestion[];
+  ibr: {
+    criteria: { codes: string[]; administrator: string | null; issues: string[] };
+    decisions: SecondReviewIbrDecision[];
+  };
+};
+
 export type SubmitSecondReviewInput = BillActorInput & {
   /** @deprecated Prefer `lineItems[].reason`; retained for older hosts. */
   reason?: string;
@@ -1353,6 +1392,8 @@ export type BillLifecycleClient = {
   closeBill: (input: CloseBillInput) => Promise<BillLifecycleData>;
   reopenBill: (input: ReopenBillInput) => Promise<BillLifecycleData>;
   postPayment: (input: PostBillPaymentInput) => Promise<BillLifecycleData>;
+  /** Rule-based starting reasons and related IBR decisions for the selected lines. Read-only. */
+  getSecondReviewSuggestions: (lineItemIds?: string[], signal?: AbortSignal) => Promise<SecondReviewSuggestions>;
   submitSecondReview: (input: SubmitSecondReviewInput) => Promise<BillLifecycleData>;
   resubmitBill: (input: ResubmitBillInput) => Promise<BillLifecycleData>;
   submitNewBill: (input: SubmitNewBillInput) => Promise<BillLifecycleData>;
@@ -1361,6 +1402,64 @@ export type BillLifecycleClient = {
   simulateSandbox: (input: SimulateSandboxBillInput) => Promise<BillLifecycleData>;
   clearSession: () => void;
 };
+
+const suggestionText = (value: unknown): string => typeof value === "string" ? value : "";
+const suggestionTexts = (value: unknown): string[] => Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+
+/** Validate the Second Review suggestion payload; unknown or malformed entries are dropped. */
+export function normalizeSecondReviewSuggestions(value: unknown): SecondReviewSuggestions {
+  const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const ibr = data.ibr && typeof data.ibr === "object" ? data.ibr as Record<string, unknown> : {};
+  const criteria = ibr.criteria && typeof ibr.criteria === "object" ? ibr.criteria as Record<string, unknown> : {};
+  const sources = new Set(["saved", "system_template", "none"]);
+  const lines = (Array.isArray(data.lines) ? data.lines : []).flatMap((entry): SecondReviewLineSuggestion[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const line = entry as Record<string, unknown>;
+    if (typeof line.lineItemId !== "string" || !line.lineItemId) return [];
+    const template = line.template && typeof line.template === "object" ? line.template as Record<string, unknown> : null;
+    const reason = typeof line.reason === "string" && line.reason.trim() ? line.reason : null;
+    return [{
+      lineItemId: line.lineItemId,
+      code: suggestionText(line.code),
+      reasonCodes: suggestionTexts(line.reasonCodes),
+      reason,
+      source: reason && typeof line.source === "string" && sources.has(line.source) ? line.source as SecondReviewLineSuggestion["source"] : "none",
+      template: template && typeof template.id === "string" ? { id: template.id, title: suggestionText(template.title), citation: suggestionText(template.citation) } : null,
+      explanation: typeof line.explanation === "string" ? line.explanation : null,
+    }];
+  });
+  const decisions = (Array.isArray(ibr.decisions) ? ibr.decisions : []).flatMap((entry): SecondReviewIbrDecision[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const decision = entry as Record<string, unknown>;
+    if (typeof decision.id !== "string" || !decision.id) return [];
+    const sourceUrl = typeof decision.sourceUrl === "string" && /^https:\/\//.test(decision.sourceUrl) ? decision.sourceUrl : null;
+    return [{
+      id: decision.id,
+      date: suggestionText(decision.date),
+      code: suggestionText(decision.code),
+      issue: suggestionText(decision.issue),
+      citation: suggestionText(decision.citation),
+      outcome: suggestionText(decision.outcome),
+      awardedAmount: typeof decision.awardedAmount === "number" && Number.isFinite(decision.awardedAmount) ? decision.awardedAmount : null,
+      sourceUrl,
+      matchedOn: suggestionTexts(decision.matchedOn),
+      recommended: decision.recommended === true,
+      lineItemIds: suggestionTexts(decision.lineItemIds),
+    }];
+  });
+  return {
+    billId: suggestionText(data.billId),
+    lines,
+    ibr: {
+      criteria: {
+        codes: suggestionTexts(criteria.codes),
+        administrator: typeof criteria.administrator === "string" ? criteria.administrator : null,
+        issues: suggestionTexts(criteria.issues),
+      },
+      decisions,
+    },
+  };
+}
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
   const body: unknown = await response.json().catch(() => null);
@@ -1932,6 +2031,13 @@ export function createBillLifecycleClient({
       const response = await request(billPath(`/submissions/${encodeURIComponent(attemptId)}/artifacts/${encodeURIComponent(artifactId)}`));
       if (!response.ok) throw await responseError(response, "The retained submission file could not be downloaded.");
       return response.blob();
+    },
+    async getSecondReviewSuggestions(lineItemIds, signal) {
+      const query = lineItemIds ? `?${new URLSearchParams({ lineItemIds: lineItemIds.join(",") }).toString()}` : "";
+      const response = await request(billPath(`/second-review-suggestions${query}`), {}, signal);
+      if (!response.ok) throw await responseError(response, "Second Review suggestions could not be loaded.");
+      const body = await response.json() as { data?: unknown };
+      return normalizeSecondReviewSuggestions(body.data);
     },
     async prepareIbrPacket() {
       const prepared = await mutation(billPath("/actions"), {

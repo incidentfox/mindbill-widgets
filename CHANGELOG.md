@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.83.0 — @mindbill/react 0.83.0 / @mindbill/browser 0.54.0
+
+### Added
+- Second Review: the form pre-fills each service line's reason from the EOR the same way MindBill's own Second
+  Review screen does (a saved reason first, otherwise the matching system template with the bill's facts filled
+  in), and lists related IBR decisions with their outcome, code, date and a link to the DWC decision. Suggestions
+  never overwrite text the reviewer has typed; edited lines are marked, lines without a clear match ask for the
+  facts, and the form keeps working with the reason templates if suggestions cannot be loaded.
+- `@mindbill/browser`: `getSecondReviewSuggestions(lineItemIds?)` on the bill lifecycle client and the
+  `SecondReviewSuggestions` types. `SecondReviewForm` accepts an optional `getSuggestions`.
+
 ## 0.82.1 — @mindbill/react 0.82.1
 
 ### Fixed
