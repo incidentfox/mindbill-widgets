@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.84.0 — @mindbill/react 0.84.0 / @mindbill/browser 0.55.0
+
+### Added
+- Second Review: recommended IBR decisions (favorable determinations on the same code and denial reason, with an
+  original DWC PDF) are cited automatically in the pre-filled reason of the lines they support, worded exactly as
+  MindBill's own Second Review cites them. Each related decision has a "Cite in the reason and enclose the decision"
+  checkbox; unchecking removes the citation line. Cited decisions are sent as `ibrDecisionIds`, and MindBill
+  attaches and encloses each original decision PDF in the Second Review packet. Requires a MindBill server that
+  accepts `ibrDecisionIds` on the `second_review` action.
+- `@mindbill/browser`: `SubmitSecondReviewInput.ibrDecisionIds`, `secondReviewIbrCitationLine`,
+  `appendSecondReviewIbrCitations` and `removeSecondReviewIbrCitation`.
+
 ## 0.83.0 — @mindbill/react 0.83.0 / @mindbill/browser 0.54.0
 
 ### Added
