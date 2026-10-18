@@ -12,8 +12,8 @@ importers:
         specifier: 0.18.1
         version: 0.18.1
       '@mindbill/react':
-        specifier: 0.84.0
-        version: 0.84.0(react@19.2.8)
+        specifier: 0.84.1
+        version: 0.84.1(react@19.2.8)
       next:
         specifier: 16.3.4
         version: 16.3.4(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -198,8 +198,8 @@ packages:
     resolution: {integrity: sha512-a+fJlL8UT9vza30nJNzoqmeFtz1xW83nH2oT53h1uTJdNM9Kr+zwi+Gn9fdbNwo7c5KkkXUIpyXFwcL29H4GBQ==}
     engines: {node: '>=20'}
 
-  '@mindbill/react@0.84.0':
-    resolution: {integrity: sha512-JsNITCHaamxRS43QwkGwVxaMhZRTW8WH1r4ATSm6fjmxpva6zavplgWwMhLwNBzkyhZsX/bym592Q7JlNbpYog==}
+  '@mindbill/react@0.84.1':
+    resolution: {integrity: sha512-wMPfaatug1IkaIiIZdEqotSbN8GqM8o41oF2DN28tJtpZRH5hThXZxqJmQ9f/u5PzIlR+opvtiXfSmO5/Url0g==}
     peerDependencies:
       react: '>=18'
 
@@ -493,7 +493,7 @@ snapshots:
 
   '@mindbill/node@0.18.1': {}
 
-  '@mindbill/react@0.84.0(react@19.2.8)':
+  '@mindbill/react@0.84.1(react@19.2.8)':
     dependencies:
       '@mindbill/browser': 0.55.0
       '@mindbill/embed': 0.6.0

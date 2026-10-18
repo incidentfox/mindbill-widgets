@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.84.1 — @mindbill/react 0.84.1
+
+### Fixed
+- Post payment: the deposit date is now the shared date field, so a date typed as MM/DD/YYYY (as the field
+  suggested) is sent in the YYYY-MM-DD format the API requires. Previously a typed date was sent as written, the
+  API rejected the payment, and nothing was posted.
+- Post payment: a payment the API rejects now shows its error inside the dialog instead of behind it.
+
 ## 0.84.0 — @mindbill/react 0.84.0 / @mindbill/browser 0.55.0
 
 ### Added
