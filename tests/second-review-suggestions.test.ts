@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { normalizeSecondReviewSuggestions, type BillLifecycleData, type SecondReviewSuggestions } from "../packages/browser/src/index";
+import { appendSecondReviewIbrCitations, normalizeSecondReviewSuggestions, removeSecondReviewIbrCitation, secondReviewIbrCitationLine, type BillLifecycleData, type SecondReviewSuggestions } from "../packages/browser/src/index";
 import { SecondReviewForm } from "../packages/react/src/second-review-form";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -51,7 +51,8 @@ it("prefills matched reasons, flags lines without a match and lists related IBR 
     expect(getSuggestions).toHaveBeenCalledOnce();
     expect(getSuggestions.mock.calls[0]?.[0]).toEqual(["line_exam", "line_testing"]);
     const reasons = [...container.querySelectorAll("textarea")];
-    expect(reasons[0]?.value).toBe("Synthetic fee schedule reason for ML201-95.");
+    expect(reasons[0]?.value.startsWith("Synthetic fee schedule reason for ML201-95.")).toBe(true);
+    expect(reasons[0]?.value).toContain("• IBR CB26-0000001 (Overturned)");
     expect(reasons[1]?.value).toBe("");
     expect(container.textContent).toContain("Prefilled from the EOR: Fee schedule incorrectly applied.");
     expect(container.textContent).toContain("The EOR does not identify a clear reason for this service.");
@@ -102,4 +103,34 @@ it("normalizes suggestion payloads defensively", () => {
   expect(normalized.ibr.decisions).toHaveLength(1);
   expect(normalized.ibr.decisions[0]).toMatchObject({ id: "CB1", sourceUrl: null, recommended: false });
   expect(normalizeSecondReviewSuggestions(null).lines).toEqual([]);
+});
+
+it("cites recommended decisions in the prefilled reason and sends them for enclosure", async () => {
+  const onSubmit = vi.fn(async () => undefined);
+  const getDeliveryOptions = vi.fn(async () => ({ routes: [{ id: "fax", label: "Fax", available: true }], defaultRoute: "fax" }));
+  const element = createElement(SecondReviewForm, { ...props(async () => suggestions), onSubmit, getDeliveryOptions } as never);
+  const { container, root } = await render(element);
+  try {
+    const reason = container.querySelector("textarea")!;
+    expect(reason.value).toContain("Synthetic fee schedule reason for ML201-95.");
+    expect(reason.value).toContain("Supporting Independent Bill Review determinations:");
+    expect(reason.value).toContain("• IBR CB26-0000001 (Overturned): Medical-legal fee schedule payment calculation — 8 CCR 9795 — https://www.dir.ca.gov/dwc/IBR/IBR-decisions/synthetic.pdf");
+    expect(container.textContent).toContain("Prefilled from the EOR: Fee schedule incorrectly applied.");
+    expect(container.textContent).toContain("Cited · IBR_CB26-0000001.pdf will be enclosed");
+    const cite = [...container.querySelectorAll<HTMLInputElement>('[aria-label="Related IBR decisions"] input[type=checkbox]')][0]!;
+    expect(cite.checked).toBe(true);
+    await act(async () => { cite.click(); });
+    expect(container.querySelector("textarea")!.value).toBe("Synthetic fee schedule reason for ML201-95.");
+    expect(container.textContent).toContain("Cite in the reason and enclose the decision");
+    await act(async () => { cite.click(); });
+    expect(container.querySelector("textarea")!.value).toContain("• IBR CB26-0000001 (Overturned)");
+  } finally { await act(async () => root.unmount()); }
+});
+
+it("formats and removes citations exactly like MindBill's Second Review", () => {
+  const decision = suggestions.ibr.decisions[0]!;
+  const cited = appendSecondReviewIbrCitations("Base reason.", [decision]);
+  expect(cited).toBe(`Base reason.\n\nSupporting Independent Bill Review determinations:\n${secondReviewIbrCitationLine(decision)}`);
+  expect(appendSecondReviewIbrCitations(cited, [decision])).toBe(cited);
+  expect(removeSecondReviewIbrCitation(cited, decision.id)).toBe("Base reason.");
 });

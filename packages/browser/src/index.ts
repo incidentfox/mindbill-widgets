@@ -750,6 +750,9 @@ export type SubmitSecondReviewInput = BillActorInput & {
   cc?: string[];
   /** Line-by-line SBR-1 selections, reasons, and authorization answers. */
   lineItems?: SecondReviewLineInput[];
+  /** IBR decisions cited in the reasons. MindBill attaches each original DWC
+   *  determination PDF and encloses it in this Second Review packet. */
+  ibrDecisionIds?: string[];
   /** @deprecated Prefer `lineItems`; omitted = the whole bill. */
   lineItemIds?: string[];
   /** @deprecated Prefer `lineItems[].serviceAuthorized`. */
@@ -1402,6 +1405,28 @@ export type BillLifecycleClient = {
   simulateSandbox: (input: SimulateSandboxBillInput) => Promise<BillLifecycleData>;
   clearSession: () => void;
 };
+
+const IBR_CITATION_HEADING = "Supporting Independent Bill Review determinations:";
+
+/** One citation line, worded exactly as MindBill's own Second Review cites a decision. */
+export function secondReviewIbrCitationLine(decision: Pick<SecondReviewIbrDecision, "id" | "outcome" | "issue" | "citation" | "sourceUrl">): string {
+  return `• IBR ${decision.id} (${decision.outcome || "Unknown"}): ${decision.issue}${decision.citation ? ` — ${decision.citation}` : ""}${decision.sourceUrl ? ` — ${decision.sourceUrl}` : ""}`;
+}
+
+/** Append citations for decisions not already cited in the reason. */
+export function appendSecondReviewIbrCitations(reason: string, decisions: Array<Pick<SecondReviewIbrDecision, "id" | "outcome" | "issue" | "citation" | "sourceUrl">>): string {
+  const missing = decisions.filter((decision) => !reason.includes(`IBR ${decision.id} (`));
+  if (!missing.length) return reason;
+  const heading = reason.includes(IBR_CITATION_HEADING) ? "" : `${IBR_CITATION_HEADING}\n`;
+  return `${reason.trim()}\n\n${heading}${missing.map(secondReviewIbrCitationLine).join("\n")}`.trim();
+}
+
+/** Remove one decision's citation line, and the heading when no citation remains. */
+export function removeSecondReviewIbrCitation(reason: string, decisionId: string): string {
+  const remaining = reason.split("\n").filter((line) => !line.startsWith(`• IBR ${decisionId} (`));
+  if (!remaining.some((line) => line.startsWith("• IBR "))) return remaining.filter((line) => line !== IBR_CITATION_HEADING).join("\n").trim();
+  return remaining.join("\n").trim();
+}
 
 const suggestionText = (value: unknown): string => typeof value === "string" ? value : "";
 const suggestionTexts = (value: unknown): string[] => Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
