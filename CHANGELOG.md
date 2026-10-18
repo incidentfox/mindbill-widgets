@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.82.1 — @mindbill/react 0.82.1
+
+### Fixed
+- The procedure picker shows descriptions for G2211 (visit complexity add-on), 64454 (genicular nerve block) and
+  64624 (genicular nerve destruction).
+
 ## 0.82.0 — @mindbill/react 0.82.0
 
 ### Changed
