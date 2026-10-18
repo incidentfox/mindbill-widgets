@@ -45,7 +45,7 @@ async function render(element: ReturnType<typeof createElement>) {
 }
 
 it("prefills matched reasons, flags lines without a match and lists related IBR decisions", async () => {
-  const getSuggestions = vi.fn(async () => suggestions);
+  const getSuggestions = vi.fn(async (_ids: string[]) => suggestions);
   const { container, root } = await render(createElement(SecondReviewForm, props(getSuggestions)));
   try {
     expect(getSuggestions).toHaveBeenCalledOnce();
