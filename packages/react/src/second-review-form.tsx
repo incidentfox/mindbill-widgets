@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactElement } from "react";
 import type {
   BillDeliveryOptions,
   BillLifecycleData,
+  SecondReviewIbrDecision,
   SecondReviewLineInput,
+  SecondReviewLineSuggestion,
+  SecondReviewSuggestions,
   SubmitSecondReviewInput,
 } from "@mindbill/browser";
 import {
@@ -62,7 +65,13 @@ export type SecondReviewFormProps = {
   openAttachment: (attachment: { id: string }) => Promise<void>;
   onCancel: () => void;
   onSubmit: (input: SubmitSecondReviewInput) => Promise<void>;
+  /** Rule-based starting reasons and related IBR decisions. When omitted, reasons start blank. */
+  getSuggestions?: (lineItemIds: string[], signal?: AbortSignal) => Promise<SecondReviewSuggestions>;
 };
+
+type SuggestionState =
+  | { status: "idle" | "loading" | "error" }
+  | { status: "ready"; lines: Record<string, SecondReviewLineSuggestion>; decisions: SecondReviewIbrDecision[] };
 
 const css = `
 .mb-second-review{display:grid;gap:18px;padding:22px;color:var(--mb-text);font-family:var(--mb-font);background:var(--mb-surface);border:1px solid var(--mb-border);border-radius:var(--mb-radius);box-shadow:var(--mb-shadow)}
@@ -75,6 +84,8 @@ const css = `
 .mb-second-review-uploaded{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}
 .mb-second-review-error{padding:10px 12px;border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-danger) 10%,transparent);color:var(--mb-danger);font-size:13px}.mb-second-review-actions{display:flex;justify-content:flex-end;gap:10px}.mb-second-review-button{min-height:42px;padding:9px 16px;border-radius:var(--mb-control-radius);font:inherit;font-weight:740;cursor:pointer}.mb-second-review-button.secondary{border:1px solid var(--mb-border);background:var(--mb-surface);color:var(--mb-text)}.mb-second-review-button.primary{border:0;background:var(--mb-accent);color:var(--mb-accent-contrast)}.mb-second-review-button:disabled{opacity:.55;cursor:not-allowed}
 .mb-second-review-corrections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.mb-second-review-correction-note{font-size:13px}
+.mb-second-review-hint{margin:0;font-size:12px;color:var(--mb-muted)}.mb-second-review-hint strong{color:var(--mb-text)}.mb-second-review-hint[data-tone=edited] strong{color:var(--mb-accent)}
+.mb-second-review-ibr{display:grid;gap:10px;padding:14px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}.mb-second-review-ibr h4{margin:0;font-size:15px}.mb-second-review-ibr-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}.mb-second-review-ibr-item{display:grid;gap:4px;padding:10px 0;border-top:1px solid var(--mb-border)}.mb-second-review-ibr-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px}.mb-second-review-ibr-head a{color:var(--mb-accent);font-weight:700;text-decoration:none}.mb-second-review-badge{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border:1px solid var(--mb-border);border-radius:999px;font-size:11px;font-weight:700}.mb-second-review-badge[data-tone=good]{border-color:color-mix(in srgb,var(--mb-success,#15803d) 45%,var(--mb-border));color:var(--mb-success,#15803d)}.mb-second-review-badge[data-tone=accent]{border-color:color-mix(in srgb,var(--mb-accent) 50%,var(--mb-border));color:var(--mb-accent)}.mb-second-review-ibr-item small{color:var(--mb-muted);font-size:12px}
 @media(max-width:680px){.mb-second-review{padding:16px}.mb-second-review-line-head{align-items:flex-start;flex-direction:column}.mb-second-review-metrics{flex-wrap:wrap}.mb-second-review-corrections{grid-template-columns:1fr}}
 `;
 
@@ -104,6 +115,7 @@ export function SecondReviewForm({
   openAttachment,
   onCancel,
   onSubmit,
+  getSuggestions,
 }: SecondReviewFormProps): ReactElement {
   const [lines, setLines] = useState<Record<string, LineDraft>>(() => initialLineDrafts(data));
   const [attachmentIds, setAttachmentIds] = useState(() => data.bill.attachments.map((attachment) => attachment.id));
@@ -111,6 +123,7 @@ export function SecondReviewForm({
   const [formError, setFormError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [delivery, setDelivery] = useState<BillDeliveryOptions | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestionState>({ status: getSuggestions ? "loading" : "idle" });
 
   const selectableLines = useMemo(() => data.bill.lineItems.filter((line): line is typeof line & { id: string } => Boolean(line.id)), [data.bill.lineItems]);
   const selected = selectableLines.filter((line) => lines[line.id]?.selected);
@@ -121,6 +134,36 @@ export function SecondReviewForm({
   }));
   const invalidCorrection = Object.values(correctionErrors).some(Boolean);
   const disputedAmount = selected.reduce((sum, line) => sum + Math.max(0, !correctionErrors[line.id] && lines[line.id]?.correctBilling ? Number(lines[line.id]!.charge) : line.charge), 0);
+
+  const lineIdsKey = selectableLines.map((line) => line.id).join(",");
+  // Hosts often pass a new function each render; load once per set of lines.
+  const suggest = useRef(getSuggestions);
+  suggest.current = getSuggestions;
+  const suggestionsEnabled = Boolean(getSuggestions);
+  useEffect(() => {
+    const load = suggest.current;
+    if (!suggestionsEnabled || !load || !lineIdsKey) { setSuggestions({ status: "idle" }); return; }
+    const controller = new AbortController();
+    setSuggestions({ status: "loading" });
+    load(lineIdsKey.split(","), controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      const byLine = Object.fromEntries(result.lines.map((line) => [line.lineItemId, line]));
+      // Only fill reasons the reviewer has not started; never overwrite typed text.
+      setLines((current) => Object.fromEntries(Object.entries(current).map(([id, line]) => {
+        const suggested = byLine[id]?.reason;
+        return [id, suggested && !line.reason.trim() ? { ...line, reason: suggested } : line];
+      })));
+      setSuggestions({ status: "ready", lines: byLine, decisions: result.ibr.decisions });
+    }).catch(() => {
+      if (!controller.signal.aborted) setSuggestions({ status: "error" });
+    });
+    return () => controller.abort();
+  }, [suggestionsEnabled, lineIdsKey]);
+  const lineSuggestion = (id: string) => suggestions.status === "ready" ? suggestions.lines[id] : undefined;
+  const selectedIds = new Set(selected.map((line) => line.id));
+  const relatedDecisions = suggestions.status === "ready"
+    ? suggestions.decisions.filter((decision) => !decision.recommended || !decision.lineItemIds.length || decision.lineItemIds.some((id) => selectedIds.has(id)))
+    : [];
 
   const patchLine = (id: string, patch: Partial<LineDraft>) => setLines((current) => {
     const line = current[id];
@@ -208,7 +251,7 @@ export function SecondReviewForm({
           const draft = lines[line.id];
           return <article className="mb-second-review-line" data-selected={draft?.selected} key={line.id}>
             <div className="mb-second-review-line-head"><label className="mb-second-review-check"><Checkbox checked={Boolean(draft?.selected)} onChange={(event) => patchLine(line.id, { selected: event.target.checked })} /><span>{line.code}{line.modifiers.length ? `-${line.modifiers.join("-")}` : ""}</span></label><span className="mb-second-review-metrics"><span>{line.units} unit{line.units === 1 ? "" : "s"}</span><span>{money(line.charge)}</span></span></div>
-            {draft?.selected ? <><label className="mb-second-review-field"><span className="mb-second-review-label">Reason for requesting Second Review</span><textarea className="mb-second-review-textarea" required value={draft.reason} onChange={(event) => patchLine(line.id, { reason: event.target.value })} /></label><div className="mb-second-review-auth" role="radiogroup" aria-label={`Service or good ${line.code} authorized`}><strong>Service/Good Authorized?</strong>{([['yes','Yes'],['no','No'],['','Not specified']] as const).map(([value, label]) => <label key={label}><Radio name={`authorized-${line.id}`} checked={draft.serviceAuthorized === value} onChange={() => patchLine(line.id, { serviceAuthorized: value })} />{label}</label>)}</div></> : null}
+            {draft?.selected ? <><label className="mb-second-review-field"><span className="mb-second-review-label">Reason for requesting Second Review</span><textarea className="mb-second-review-textarea" required value={draft.reason} onChange={(event) => patchLine(line.id, { reason: event.target.value })} /></label><ReasonHint state={suggestions.status} suggestion={lineSuggestion(line.id)} reason={draft.reason} /><div className="mb-second-review-auth" role="radiogroup" aria-label={`Service or good ${line.code} authorized`}><strong>Service/Good Authorized?</strong>{([['yes','Yes'],['no','No'],['','Not specified']] as const).map(([value, label]) => <label key={label}><Radio name={`authorized-${line.id}`} checked={draft.serviceAuthorized === value} onChange={() => patchLine(line.id, { serviceAuthorized: value })} />{label}</label>)}</div></> : null}
             {draft?.selected ? <>
               <label className="mb-second-review-check"><Checkbox checked={draft.correctBilling} onChange={(event) => patchLine(line.id, { correctBilling: event.target.checked, chargeReviewed: false })} />Correct units or modifiers on this submission</label>
               {draft.correctBilling ? <>
@@ -226,10 +269,49 @@ export function SecondReviewForm({
         })}
         {!selectableLines.length ? <div className="mb-second-review-error">This bill has no stable service-line identifiers. Refresh the bill before submitting a Second Review.</div> : null}
       </section>
+      {getSuggestions ? <RelatedIbrDecisions state={suggestions.status} decisions={relatedDecisions} /> : null}
       <fieldset className="mb-second-review-packet"><legend>Supporting packet</legend>{data.bill.attachments.map((attachment) => <label className="mb-second-review-document" key={attachment.id}><Checkbox checked={attachmentIds.includes(attachment.id)} onChange={(event) => setAttachmentIds((current) => event.target.checked ? [...current, attachment.id] : current.filter((id) => id !== attachment.id))} /><span><strong>{attachment.filename}</strong><small>{attachment.description || attachment.documentType}</small></span><button className="mb-second-review-link" type="button" onClick={() => void openAttachment(attachment).catch(() => undefined)}>View</button></label>)}<label className="mb-second-review-upload"><FileInput appearance="overlay" accept="application/pdf,.pdf" multiple onChange={addUploads} /><span><strong>Choose one or more PDF files</strong> to attach</span></label>{uploads.map((upload, index) => <div className="mb-second-review-uploaded" key={`${upload.file.name}-${index}`}><span>{upload.file.name}</span><button className="mb-second-review-link" type="button" onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}</fieldset>
       {(formError || error?.message) ? <div className="mb-second-review-error" role="alert">{formError || error?.message}</div> : null}
       <div className="mb-second-review-actions"><button className="mb-second-review-button secondary" type="button" disabled={submitting || preparing} onClick={onCancel}>Cancel</button><button className="mb-second-review-button primary" type="button" disabled={submitting || preparing || !selected.length || invalidReason || invalidCorrection} onClick={() => void continueToDelivery()}>{preparing ? "Preparing…" : "Continue to delivery"}</button></div>
     </section>
     {delivery ? <SendRouteDialog title="Confirm Second Review delivery" delivery={delivery} submitting={submitting || preparing} error={formError || error?.message || null} onCancel={() => setDelivery(null)} onConfirm={(route) => void submit(route)} /> : null}
   </>;
+}
+
+function ReasonHint({ state, suggestion, reason }: { state: SuggestionState["status"]; suggestion: SecondReviewLineSuggestion | undefined; reason: string }): ReactElement | null {
+  if (state === "loading") return <p className="mb-second-review-hint" role="status">Matching a reason from the EOR…</p>;
+  if (state === "error") return <p className="mb-second-review-hint" role="status">Suggested reasons are unavailable right now. Choose a reason template or enter the facts for this service.</p>;
+  if (state !== "ready") return null;
+  if (!suggestion?.reason) return <p className="mb-second-review-hint">The EOR does not identify a clear reason for this service. Enter the facts or choose a reason template.</p>;
+  const edited = reason.trim() !== suggestion.reason.trim();
+  const origin = suggestion.source === "saved" ? "Saved reason for this service." : `Prefilled from the EOR${suggestion.template ? `: ${suggestion.template.title}` : ""}.`;
+  return <p className="mb-second-review-hint" data-tone={edited ? "edited" : undefined}>
+    <strong>{edited ? "Edited. " : origin + " "}</strong>
+    {edited ? "Your wording replaces the suggested reason." : suggestion.source === "saved" ? "Review it before sending." : suggestion.explanation ?? "Review it before sending."}
+  </p>;
+}
+
+function decisionDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return match ? `${match[2]}/${match[3]}/${match[1]}` : value;
+}
+
+function RelatedIbrDecisions({ state, decisions }: { state: SuggestionState["status"]; decisions: SecondReviewIbrDecision[] }): ReactElement {
+  return <section className="mb-second-review-ibr" aria-label="Related IBR decisions">
+    <div><h4>Related IBR decisions</h4><p>Past Independent Bill Review determinations on the same codes and denial reasons. Open a decision to check it before relying on it.</p></div>
+    {state === "loading" ? <p className="mb-second-review-hint" role="status">Finding related IBR decisions…</p> : null}
+    {state === "error" ? <p className="mb-second-review-hint" role="status">Related IBR decisions could not be loaded. You can still submit the Second Review.</p> : null}
+    {state === "ready" && !decisions.length ? <p className="mb-second-review-hint">No past IBR decisions matched these codes and denial reasons.</p> : null}
+    {state === "ready" && decisions.length ? <ul className="mb-second-review-ibr-list">{decisions.map((decision) => <li className="mb-second-review-ibr-item" key={decision.id}>
+      <div className="mb-second-review-ibr-head">
+        {decision.sourceUrl ? <a href={decision.sourceUrl} target="_blank" rel="noopener noreferrer">IBR {decision.id}</a> : <strong>IBR {decision.id}</strong>}
+        {decision.outcome ? <span className="mb-second-review-badge" data-tone={decision.outcome === "Overturned" ? "good" : undefined}>{decision.outcome}</span> : null}
+        {decision.recommended ? <span className="mb-second-review-badge" data-tone="accent">Recommended</span> : null}
+        {decision.code ? <span>{decision.code}</span> : null}
+        {decision.date ? <span>{decisionDate(decision.date)}</span> : null}
+      </div>
+      <span>{decision.issue}{decision.citation ? ` — ${decision.citation}` : ""}</span>
+      {decision.matchedOn.length ? <small>Matched on {decision.matchedOn.join(" · ")}</small> : null}
+    </li>)}</ul> : null}
+  </section>;
 }

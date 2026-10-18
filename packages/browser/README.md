@@ -30,6 +30,10 @@ The public lifecycle begins at `submitted`, then advances through `accepted`,
 `processed`, and `closed`; it never exposes draft or queued states. The same
 lifecycle client is safe to use from React, Angular, or plain JavaScript.
 
+Before a Second Bill Review, `getSecondReviewSuggestions(lineItemIds?)` returns
+rule-based starting reasons for each line and related IBR decisions (read-only; see
+[docs/second-review-suggestions.md](../../docs/second-review-suggestions.md)).
+
 Pre-submission components can query canonical routing reference data without
 inventing a draft bill:
 

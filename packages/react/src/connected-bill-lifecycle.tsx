@@ -167,6 +167,7 @@ export type UseBillLifecycleResult = {
   searchClaimsAdministrators: BillLifecycleClient["searchClaimsAdministrators"];
   getClaimsAdministratorDirectory: BillLifecycleClient["getClaimsAdministratorDirectory"];
   getDeliveryOptions: BillLifecycleClient["getDeliveryOptions"];
+  getSecondReviewSuggestions: BillLifecycleClient["getSecondReviewSuggestions"];
   getAttachment: BillLifecycleClient["getAttachment"];
   openAttachment: (attachment: Pick<BillReviewAttachment, "id">) => Promise<void>;
   openEor: (document: BillEorDocument) => Promise<void>;
@@ -383,6 +384,7 @@ export function useBillLifecycle({
     searchClaimsAdministrators: (query, claimNumber) => client.searchClaimsAdministrators(query, claimNumber),
     getClaimsAdministratorDirectory: (id, injuryState) => client.getClaimsAdministratorDirectory(id, injuryState),
     getDeliveryOptions: () => client.getDeliveryOptions(),
+    getSecondReviewSuggestions: (lineItemIds, signal) => client.getSecondReviewSuggestions(lineItemIds, signal),
     getAttachment: (attachmentId) => client.getAttachment(attachmentId),
     openAttachment,
     openEor,
@@ -1036,6 +1038,7 @@ export function ConnectedBillLifecycle({
       error={lifecycle.error}
       {...(options.fetch ? { fetch: options.fetch } : {})}
       getDeliveryOptions={lifecycle.getDeliveryOptions}
+      getSuggestions={lifecycle.getSecondReviewSuggestions}
       openAttachment={lifecycle.openAttachment}
       onCancel={() => setPanel("")}
       onSubmit={(input) => complete("Second Review submitted.", () => lifecycle.submitSecondReview({ ...input, ...actor }))}

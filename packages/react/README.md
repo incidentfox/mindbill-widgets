@@ -245,6 +245,12 @@ import { BillLifecycleActions } from "@mindbill/react";
 Disabled actions are hidden by default. Set `showUnavailable` to show them with the reason returned by the API.
 Set `maxVisible={1}` for a compact workspace that shows the recommended action and puts the remaining authorized actions in a host-provided overflow menu.
 
+### Second Review suggestions
+
+The lifecycle's **Submit Second Review** form pre-fills each line's reason from the EOR and lists
+related IBR decisions, using the same rule-based matching as MindBill's own appeal screen. Nothing
+is saved or sent until the reviewer submits. See [docs/second-review-suggestions.md](../../docs/second-review-suggestions.md).
+
 ## Activity timeline
 
 `BillActivityTimeline` renders the ordered, human-readable lifecycle events returned by MindBill. Partners do not need to store or reconstruct bill history.
