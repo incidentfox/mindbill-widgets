@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drugDetailsFromSaved, drugRequestDetails, type DrugDetails } from "../packages/react/src/bill-drug-context";
+import { drugClaimFactsProblem, drugDetailsFromSaved, drugRequestDetails, type DrugDetails } from "../packages/react/src/bill-drug-context";
 import { billSubmissionCalculationContext, billSubmissionFeeRequest, billSubmissionQuoteContext, type BillSubmissionInput } from "../packages/react/src/bill-submission-form";
 const details: DrugDetails = { ndcNumber: "00000000001", drugName: "Synthetic drug", administeredAmount: "10", doseUnit: "mg", amountPerHcpcsUnit: "1", amountPerNdcUnit: "4", metricQuantity: "2.5", drugQuantityUnit: "ML", hcpcsUnitSource: "https://example.org/hcpcs", productLabelSource: "https://example.org/label", drugDocumentation: "verified" };
 describe("administered drug line details", () => {
@@ -21,12 +21,26 @@ describe("administered drug line details", () => {
   });
   it("clears previous drug context when evidence, setting or service type changes", () => {
     const saved = { padbContext: drugRequestDetails("J1100", "11", details).padbContext! };
+    const claim = { ndcNumber: "00000000001", metricQuantity: "2.5", unitOfMeasure: "ML" };
     for (const patch of [{ ndcNumber: "" }, { productLabelSource: "" }, { hcpcsUnitSource: "javascript:alert(1)" }, { drugDocumentation: "review" as const }, { amountPerNdcUnit: "0" }, { drugEnabled: false }]) {
-      expect(drugRequestDetails("J1100", "11", { ...details, ...patch })).toEqual({});
+      // Without complete dose evidence only the NDC claim facts are sent — never stale dose evidence.
+      expect(drugRequestDetails("J1100", "11", { ...details, ...patch })).toEqual("ndcNumber" in patch || "drugEnabled" in patch ? {} : { drug: claim });
       expect(billSubmissionCalculationContext("J1100", "11", { ...details, ...patch }, saved).padbContext).toBeUndefined();
     }
     expect(billSubmissionCalculationContext("J1100", "22", details, saved).padbContext).toBeUndefined();
     expect(billSubmissionCalculationContext("99213", "11", {}, saved).padbContext).toBeUndefined();
     expect(billSubmissionCalculationContext("J1100", "11", { ...details, basis: "adjustment" }, saved)).toEqual({});
+  });
+  it("sends the NDC, unit and quantity on a J-code line without dose evidence, and flags an incomplete NDC", () => {
+    const entered: DrugDetails = { ndcNumber: "70069-0021-25", metricQuantity: "2", drugQuantityUnit: "ML" };
+    expect(drugRequestDetails("J1100", "22", entered)).toEqual({ drug: { ndcNumber: "70069002125", metricQuantity: "2", unitOfMeasure: "ML" } });
+    expect(drugClaimFactsProblem("J1100", entered)).toBeNull();
+    expect(drugDetailsFromSaved(drugRequestDetails("J1100", "22", entered).drug)).toMatchObject({ ndcNumber: "70069002125", metricQuantity: "2", drugQuantityUnit: "ML" });
+    expect(drugClaimFactsProblem("J1100", {})).toBeNull();
+    expect(drugClaimFactsProblem("99213", { ndcNumber: "1" })).toBeNull();
+    expect(drugClaimFactsProblem("J1100", { ...entered, ndcNumber: "7006900212" })?.field).toBe("ndcNumber");
+    expect(drugClaimFactsProblem("J1100", { ...entered, metricQuantity: "" })?.field).toBe("metricQuantity");
+    expect(drugClaimFactsProblem("J1100", { ...entered, drugQuantityUnit: "" })?.field).toBe("drugQuantityUnit");
+    expect(drugRequestDetails("J1100", "11", { ...entered, metricQuantity: "" })).toEqual({});
   });
 });
