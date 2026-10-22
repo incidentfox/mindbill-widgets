@@ -41,7 +41,7 @@ import {
 
 import { isProfessionalComponentCandidate, professionalComponentCalculationContext, type ProfessionalComponentDetails } from "./professional-component-context";
 import { AnesthesiaLineFields, anesthesiaDetailsFromSaved, anesthesiaCalculationContext, isAnesthesiaCandidate, type AnesthesiaDetails } from "./bill-anesthesia-context";
-import { DrugLineFields, drugDetailsFromSaved, drugFieldsEnabled, drugRequestDetails, type DrugDetails } from "./bill-drug-context";
+import { DrugLineFields, drugClaimFactsProblem, drugDetailsFromSaved, drugFieldsEnabled, drugRequestDetails, type DrugDetails } from "./bill-drug-context";
 import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } from "./bill-equipment-context";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { ReportAutofill } from "./report-autofill";
@@ -1734,7 +1734,13 @@ export function BillSubmissionForm({
   const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: billingModeForLines(pricedLines) } : {}) };
   const previewBillKey = JSON.stringify(clean);
   const previewCurrent = cmsPreview?.billKey === previewBillKey;
-  const liveErrors = JSON.stringify(validateBillSubmission(clean).fieldErrors);
+  // An NDC that was started but is incomplete would otherwise be left off the claim silently.
+  const drugFieldErrors: Record<string, string> = Object.fromEntries(bill.serviceLines.flatMap((line, index) => {
+    if (!treatmentBilling || !lineHasContent(line) || isMedicalLegalCode(line.code)) return [];
+    const problem = drugClaimFactsProblem(line.code, detailsForLine(index));
+    return problem ? [[`serviceLines.${index}.drug.${problem.field}`, `Line ${index + 1}: ${problem.message}`]] : [];
+  }));
+  const liveErrors = JSON.stringify({ ...validateBillSubmission(clean).fieldErrors, ...drugFieldErrors });
   useEffect(() => {
     if (!validationActive) return;
     const next = JSON.parse(liveErrors) as Record<string, string>;
@@ -1743,7 +1749,7 @@ export function BillSubmissionForm({
 
   async function submit(): Promise<void> {
     const validation = validateBillSubmission(clean);
-    const fieldErrors = missingAttachmentReportType ? { ...validation.fieldErrors, attachments: "Select a report type for every attachment." } : validation.fieldErrors;
+    const fieldErrors = { ...validation.fieldErrors, ...drugFieldErrors, ...(missingAttachmentReportType ? { attachments: "Select a report type for every attachment." } : {}) };
     setValidationActive(true); setErrors(fieldErrors); setFormError(null);
     if (Object.keys(fieldErrors).length) {
       const count = Object.keys(fieldErrors).length;
@@ -1798,7 +1804,7 @@ export function BillSubmissionForm({
 
   async function previewCms1500(): Promise<void> {
     const validation = validateBillSubmission(clean);
-    const fieldErrors = { ...validation.fieldErrors };
+    const fieldErrors = { ...validation.fieldErrors, ...drugFieldErrors };
     delete fieldErrors.attachments;
     setValidationActive(true); setErrors(fieldErrors); setFormError(null);
     if (Object.keys(fieldErrors).length) {

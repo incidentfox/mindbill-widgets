@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.85.0 — @mindbill/react 0.85.0
+
+### Fixed
+- Treatment bills: the NDC entered on a J-code (physician-administered drug) line now always reaches the claim.
+  Previously the NDC was sent only when every OMFS dose-evidence field was also completed (drug name, doses,
+  two reference URLs and the documented-circumstances attestation); otherwise it was dropped silently and the
+  CMS-1500 showed no NDC.
+
+### Changed
+- The injectable drug details ask for the claim facts first: 11-digit NDC (hyphens accepted), NDC quantity and
+  unit. Dose evidence for the OMFS drug fee check moves to its own optional section. A partly entered NDC is
+  highlighted and blocks preview/submission. Requires a MindBill server that bills J-code lines with NDC claim
+  facts at the entered charge.
+
 ## 0.84.1 — @mindbill/react 0.84.1
 
 ### Fixed
