@@ -6,6 +6,7 @@
 - `BillSubmissionForm` / `ConnectedTreatmentBillForm` `showFeeEstimates` (default `true`). With `false`, the treatment
   bill editor shows only the entered charges: no Expected (OMFS) or Difference columns, fee notes, calculation details
   or OMFS drug dose-evidence section. The fee schedule is informational; the entered charge is always what is billed.
+  An empty charge is suggested only from the practice's own saved charge, never from the OMFS estimate.
 
 ### Changed
 - Treatment (professional) bills show the expected OMFS amount only on the Explanation of Review, labeled

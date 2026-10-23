@@ -1621,8 +1621,9 @@ export function BillSubmissionForm({
     if (!supportedFeeJurisdiction || detailsForLine(index).basis === "adjustment") return null;
     const quote = quoteAt(index);
     if (quote?.status !== "priced") return null;
-    const cents = quote.practiceChargeCents ?? quote.chargeAmountCents ?? quote.amountCents;
-    return cents > 0 ? { code: line.code, charge: cents / 100 } : null;
+    // Without visible estimates, only the practice's own saved charge is suggested: the biller enters the rest.
+    const cents = showFeeEstimates ? quote.practiceChargeCents ?? quote.chargeAmountCents ?? quote.amountCents : quote.practiceChargeCents;
+    return cents != null && cents > 0 ? { code: line.code, charge: cents / 100 } : null;
   });
   const suggestedChargeKey = JSON.stringify(suggestedCharges);
   useEffect(() => {
