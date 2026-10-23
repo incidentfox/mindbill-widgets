@@ -30,6 +30,8 @@ export type ConnectedTreatmentBillFormProps = Omit<BillSubmissionFormProps, "onQ
  * A treatment (CMS-1500 professional) bill form whose lines show Charge, Expected (OMFS) and Difference,
  * priced together as one visit through `POST /partner/v2/fee-quotes/encounter`: the same calculation MindBill
  * uses when it saves a treatment bill. Requires a `bills:read` browser session and treatment billing.
+ * With `showFeeEstimates={false}` the lines show only the entered charges; the estimate is informational and the
+ * entered charge is always what is billed.
  * With `drafts`, the bill can be saved unsent and resumed later with `draftId`.
  */
 export function ConnectedTreatmentBillForm({ encounter, showVisitNotes = true, onEncounterQuote, editableTreatmentCharges = true, description,

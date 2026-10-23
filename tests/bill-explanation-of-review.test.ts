@@ -37,6 +37,15 @@ describe("BillExplanationOfReview", () => {
     expect(html.match(/\$644\.00/g)).toHaveLength(4);
   });
 
+  it("labels a treatment bill's expected amount as OMFS", () => {
+    const html = renderToStaticMarkup(createElement(BillExplanationOfReview, {
+      remittance: { billedAmount: 300, expectedAmount: 181.68, payerAllowedAmount: null, payerReportedPaid: null, postedPrincipal: 0,
+        postedAdditional: 0, totalPostedCash: 0, balanceDue: 300, denialReason: null },
+      expectedLabel: "Expected (OMFS)", eors: [], payments: [],
+    }));
+    expect(html).toContain("Expected (OMFS)"); expect(html).toContain("$181.68"); expect(html).not.toContain("MLFS");
+  });
+
   it("supports legacy callers that provide payments only on submissions", () => {
     const payment = { id: "payment-a", method: "check", checkNumber: "DEMO-A", status: "deposited", depositDate: "2026-08-27", checkReceived: true, receivedDate: "2026-08-27", amount: 644, principalAmount: 644, feeAmount: null, feeReason: null, source: "paper", postedAt: "2026-08-27T07:30:00Z", updatedAt: null, note: null } as const;
     const html = renderToStaticMarkup(createElement(BillExplanationOfReview, {

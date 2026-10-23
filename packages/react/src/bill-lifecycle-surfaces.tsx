@@ -482,6 +482,8 @@ export type BillRemittanceCardProps = SurfaceProps & { remittance: BillRemittanc
 
 export type BillExplanationOfReviewProps = SurfaceProps & {
   remittance: BillRemittanceSummary;
+  /** Label for the fee-schedule expected amount. Defaults to "Expected under MLFS"; use "Expected (OMFS)" for treatment bills. */
+  expectedLabel?: string;
   eors: readonly BillEorDocument[];
   payments: readonly BillPaymentRecord[];
   submittedAt?: string | null;
@@ -522,6 +524,7 @@ export type BillEorContextItem = {
  */
 export function BillExplanationOfReview({
   remittance,
+  expectedLabel = "Expected under MLFS",
   eors,
   payments,
   submittedAt,
@@ -563,7 +566,7 @@ export function BillExplanationOfReview({
         <div><dt>Posted to bill</dt><dd>{currency(remittance.postedPrincipal)}</dd></div>
         <div><dt>Penalty &amp; interest</dt><dd>{currency(remittance.postedAdditional)}</dd></div>
         <div><dt>Total received</dt><dd>{currency(remittance.totalPostedCash)}</dd></div>
-        <div><dt>Expected under MLFS</dt><dd>{currency(remittance.expectedAmount)}</dd></div>
+        <div><dt>{expectedLabel}</dt><dd>{currency(remittance.expectedAmount)}</dd></div>
       </dl>
       {remittance.denialReason ? <div className="mb-denial"><strong>Denial reason</strong><p>{remittance.denialReason}</p></div> : null}
       <div className="mb-eor-section-heading"><div><strong>Payer response history</strong><span>Amounts reported by the payer on each submission, separate from payments received.</span></div></div>

@@ -72,7 +72,7 @@ export function drugRequestDetails(code: string, placeOfService: string, details
   };
 }
 
-export function DrugLineFields({ code, index, details, update }: { code: string; index: number; details: DrugDetails; update: (patch: Partial<DrugDetails>) => void }) {
+export function DrugLineFields({ code, index, details, update, showFeeEstimates = true }: { code: string; index: number; details: DrugDetails; update: (patch: Partial<DrugDetails>) => void; showFeeEstimates?: boolean }) {
   const enabled = drugFieldsEnabled(code, details);
   const problem = drugClaimFactsProblem(code, details);
   const field = (key: keyof DrugDetails, label: string, mode: "text" | "decimal" = "text", invalid = false) => <label className="mbsf-field" data-invalid={invalid || undefined}><span>{label}</span><input className="mbsf-input" aria-label={`${label} for line ${index + 1}`} aria-invalid={invalid || undefined} inputMode={mode} value={String(details[key] ?? "")} onChange={(event) => update({ [key]: event.target.value })} /></label>;
@@ -85,7 +85,7 @@ export function DrugLineFields({ code, index, details, update }: { code: string;
         <label className="mbsf-field" data-invalid={problem?.field === "drugQuantityUnit" || undefined}><span>NDC quantity unit</span><Select aria-label={`NDC quantity unit for line ${index + 1}`} value={details.drugQuantityUnit ?? ""} onChange={(choice) => update({ drugQuantityUnit: choice as DrugDetails["drugQuantityUnit"] })}><option value="">Select unit…</option><option value="ML">mL</option><option value="UN">Units</option><option value="GR">Grams</option></Select></label>
         <p className="mbsf-help mbsf-span" role={problem ? "alert" : undefined}>{problem?.message ?? "Printed on the claim as N4 + NDC + unit + quantity (CMS-1500 Box 24 shaded row and Box 19; 837 LIN/CTP). The NDC quantity is the amount of product given, separate from the procedure units."}</p>
       </div>
-      <details><summary>Dose evidence for the OMFS drug fee check (optional)</summary>
+      {showFeeEstimates ? <details><summary>Dose evidence for the OMFS drug fee check (optional)</summary>
         <div className="mbsf-grid" aria-label={`Drug details for line ${index + 1}`}>
           {field("drugName", "Drug name")}
           {field("administeredAmount", "Administered dose", "decimal")}
@@ -96,7 +96,7 @@ export function DrugLineFields({ code, index, details, update }: { code: string;
           <label className="mbsf-field mbsf-span"><span>Documented drug circumstances</span><Select aria-label={`Documented drug circumstances for line ${index + 1}`} value={details.drugDocumentation ?? ""} onChange={(choice) => update({ drugDocumentation: choice as DrugDetails["drugDocumentation"] })}><option value="">Select from the documentation…</option><option value="verified">Verified units and separately payable office injection</option><option value="review">Other circumstances — review needed</option></Select></label>
           <p className="mbsf-help mbsf-span">Without this evidence the line is billed at your charge with its NDC. To calculate the OMFS maximum, confirm the procedure billing unit and product concentration from the references. Both dose-per-unit values use the selected dose unit. Include every same-day service. The product must be a documented physician-administered office injection, separately payable rather than bundled or packaged. Administration is a separate procedure line.</p>
         </div>
-      </details>
+      </details> : null}
     </> : null}
   </details>;
 }
