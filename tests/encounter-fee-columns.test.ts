@@ -23,13 +23,13 @@ const bill: BillSubmissionInput = {
 const priced = (amountCents: number, findings?: BillFeeQuote extends infer Q ? Q extends { status: "priced"; findings?: infer F } ? F : never : never): BillFeeQuote =>
   ({ status: "priced", amountCents, scheduleMaximumCents: amountCents, basis: "ca_physician_rbrvs", provenance: [], notes: [], ...(findings ? { findings } : {}) });
 
-async function render(onQuoteEncounter: (inputs: BillFeeQuoteInput[]) => Promise<BillFeeQuote[]>, width = 1200) {
+async function render(onQuoteEncounter: (inputs: BillFeeQuoteInput[]) => Promise<BillFeeQuote[]>, width = 1200, extra: { showFeeEstimates?: boolean } = {}) {
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => width });
   await act(async () => root.render(createElement(BillSubmissionForm, {
     initialBill: bill, getSession: async () => ({ token: "synthetic_session" }), fetch: vi.fn<typeof fetch>(async () => Response.json({ data: [] })),
-    treatmentBilling: true, editableTreatmentCharges: true, deliveryRoutePicker: "off", onQuoteEncounter,
+    treatmentBilling: true, editableTreatmentCharges: true, deliveryRoutePicker: "off", onQuoteEncounter, ...extra,
     describeProcedureCode: (code: string) => ({ "99213": "Office visit, established patient, low", "98941": "Chiropractic manipulation, 3-4 regions" } as Record<string, string>)[code],
   })));
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
@@ -110,4 +110,23 @@ it("still flags a line the fee schedule cannot estimate when no billed charge is
     expect(container.querySelector(".mbsf-expected")?.textContent).toBe("Needs review");
     expect(container.querySelector(".mbsf-encounter-total")?.textContent).toContain("+ 1 line needs review");
   } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
+});
+
+it("hides the expected amount, difference and fee notes when estimates are off, and keeps the entered charges", async () => {
+  vi.useFakeTimers();
+  const onQuoteEncounter = vi.fn(async () => [priced(18168, [{ code: "modifier_conditional_estimate", message: "Modifier 25 requires a separately identifiable visit." }]),
+    priced(5559), priced(8113), { status: "not_separately_payable", reason: "ptp_bundled", provenance: [], message: "Bundled with 97110." },
+    { status: "requires_review", reason: "code_not_payable", provenance: [], message: "97014 is not payable in California workers' comp. Bill G0283." }] satisfies BillFeeQuote[]);
+  const view = await render(onQuoteEncounter, 1200, { showFeeEstimates: false });
+  try {
+    const head = view.container.querySelector(".mbsf-line-head")!.textContent!;
+    expect(head).toContain("Charge"); expect(head).not.toContain("Expected"); expect(head).not.toContain("Difference");
+    expect(view.container.querySelectorAll(".mbsf-expected, .mbsf-difference")).toHaveLength(0);
+    expect(view.container.querySelector(".mbsf-lines")!.getAttribute("data-estimates")).toBe("false");
+    const text = view.container.textContent!;
+    expect(text).not.toContain("Modifier 25 requires"); expect(text).not.toContain("not payable"); expect(text).not.toContain("OMFS");
+    const charges = [...view.container.querySelectorAll<HTMLInputElement>(".mbsf-charge input")].map((input) => input.value);
+    expect(charges.slice(0, 5)).toEqual(["250.00", "120.00", "180.00", "90.00", "50.00"]);
+    expect(view.container.querySelector(".mbsf-encounter-total")!.textContent).toContain("$690.00");
+  } finally { await view.unmount(); vi.useRealTimers(); }
 });

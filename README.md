@@ -176,6 +176,9 @@ service unless the biller chooses a different date for a line. Pass `editableTre
 to a separate billed-charge field on treatment lines when it differs from the fee
 estimate. Imported charges are preserved when units or modifiers change and cleared
 when the procedure changes. The default treatment form behavior remains unchanged.
+Pass `showFeeEstimates={false}` to show only the entered charges (no Expected (OMFS) or Difference
+columns, fee notes or calculation details); fee estimates are informational and the entered charge is what
+is billed. Treatment bills show the expected OMFS amount on the Explanation of Review.
 Treatment modifier choices include `25`, `GP/GO/GN` and `CQ/CO`; `93/95` labels
 follow the line’s treatment or medical-legal context and service date. The evaluator
 selector appears for medical-legal lines; pass `evaluationTypes` to offer only some
