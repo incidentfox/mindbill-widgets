@@ -619,7 +619,12 @@ export function correctionBill(data: BillLifecycleData): BillSubmissionInput {
       dateOfInjury: data.injury.doi || "",
       ...(data.injury.injuryDescription ? { description: data.injury.injuryDescription } : {}),
       ...(data.injury.claimsAdminId && data.injury.claimsAdminName ? {
-        claimsAdministrator: { id: data.injury.claimsAdminId, name: data.injury.claimsAdminName },
+        // Keep the selected payer so a multi-payer administrator keeps its e-bill route.
+        claimsAdministrator: {
+          id: data.injury.claimsAdminId,
+          name: data.injury.claimsAdminName,
+          ...(data.injury.payerKey ? { payerId: data.injury.payerKey } : {}),
+        },
       } : {}),
     },
     service: {

@@ -514,6 +514,11 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
 
 const CORRECTION_DOCUMENT_TYPES = new Set(["final_report", "letter_of_attestation", "proof_of_service", "form_122", "return_to_work_voucher", "w9", "medical_records", "appeal", "other"]);
 function correctionDocumentType(value: string): BrowserBillSubmissionDocument["documentType"] { return (CORRECTION_DOCUMENT_TYPES.has(value) ? value : "other") as BrowserBillSubmissionDocument["documentType"]; }
+function selectedPayerKey(data: BillLifecycleData): string | undefined {
+  const key = (data.injury as { payerKey?: unknown }).payerKey;
+  return typeof key === "string" && key ? key : undefined;
+}
+
 function correctionBill(data: BillLifecycleData): BrowserBillCreateInput {
   const billing = data.bill.billingSnapshot?.billingProvider;
   const rendering = data.bill.billingSnapshot?.renderingProvider;
@@ -535,7 +540,12 @@ function correctionBill(data: BillLifecycleData): BrowserBillCreateInput {
       employer: data.injury.employer || "",
       dateOfInjury: data.injury.doi || "",
       ...(data.injury.injuryDescription ? { description: data.injury.injuryDescription } : {}),
-      claimsAdministrator: { id: data.injury.claimsAdminId || "", name: data.injury.claimsAdminName || "" },
+      claimsAdministrator: {
+        id: data.injury.claimsAdminId || "",
+        name: data.injury.claimsAdminName || "",
+        // Selected payer (subpayor) key; typed loosely because this package pins an older @mindbill/browser.
+        ...(selectedPayerKey(data) ? { payerId: selectedPayerKey(data)! } : {}),
+      },
     },
     service: { date: data.bill.dos, ...(data.bill.dosEnd !== undefined ? { endDate: data.bill.dosEnd } : {}), ...(data.bill.authorizationNumber !== undefined ? { authorizationNumber: data.bill.authorizationNumber } : {}) },
     billingProvider: billing?.taxIdType === 'SSN' && billing.taxIdConfigured ? { sourceBillId: data.bill.id } : {

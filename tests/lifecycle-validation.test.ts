@@ -40,6 +40,14 @@ it("omits a blank service-line end date from duplicate submissions", () => {
   expect(submission.serviceLines[1]?.serviceDateEnd).toBe("2026-09-10");
 });
 
+it("keeps the claim's selected payer so corrections preview the e-bill route", () => {
+  const administrator = { claimsAdminId: "pd:ca2:intercare-holdings-insurance-services-inc", claimsAdminName: "Intercare Holdings" };
+  const withPayer = correctionBill({ ...data, injury: { ...administrator, payerKey: "ca3:4696:6" } } as unknown as BillLifecycleData);
+  expect(withPayer.claim.claimsAdministrator).toEqual({ id: administrator.claimsAdminId, name: administrator.claimsAdminName, payerId: "ca3:4696:6" });
+  const olderApi = correctionBill({ ...data, injury: { ...administrator, payerKey: null } } as unknown as BillLifecycleData);
+  expect(olderApi.claim.claimsAdministrator).toEqual({ id: administrator.claimsAdminId, name: administrator.claimsAdminName });
+});
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 it("renders default errors without host wiring and honors an explicit empty override", async () => {
   const container = document.createElement("div"); const root = createRoot(container);
