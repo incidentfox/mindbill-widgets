@@ -535,7 +535,11 @@ function correctionBill(data: BillLifecycleData): BrowserBillCreateInput {
       employer: data.injury.employer || "",
       dateOfInjury: data.injury.doi || "",
       ...(data.injury.injuryDescription ? { description: data.injury.injuryDescription } : {}),
-      claimsAdministrator: { id: data.injury.claimsAdminId || "", name: data.injury.claimsAdminName || "" },
+      claimsAdministrator: {
+        id: data.injury.claimsAdminId || "",
+        name: data.injury.claimsAdminName || "",
+        ...(data.injury.payerKey ? { payerId: data.injury.payerKey } : {}),
+      },
     },
     service: { date: data.bill.dos, ...(data.bill.dosEnd !== undefined ? { endDate: data.bill.dosEnd } : {}), ...(data.bill.authorizationNumber !== undefined ? { authorizationNumber: data.bill.authorizationNumber } : {}) },
     billingProvider: billing?.taxIdType === 'SSN' && billing.taxIdConfigured ? { sourceBillId: data.bill.id } : {

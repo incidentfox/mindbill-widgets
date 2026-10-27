@@ -251,6 +251,10 @@ export type BillReviewData = {
     medicalProviderNetworkId?: string | null;
     claimsAdminId?: string;
     claimsAdminName?: string;
+    /** The claim's selected payer (subpayor) directory key, e.g. `ca3:4696:6`. Absent on older APIs. */
+    payerKey?: string | null;
+    /** Display label of the selected payer. Absent on older APIs. */
+    payerName?: string | null;
     injuryDescription?: string;
     /** Diagnosis codes enriched with their human-readable ICD-10 descriptions. */
     diagnoses?: BillDiagnosisCode[];

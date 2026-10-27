@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.86.1 — @mindbill/react 0.86.1 / @mindbill/angular 0.20.1 / @mindbill/browser 0.55.1
+
+### Fixed
+- Correct and resubmit, Submit New Bill and Send duplicate now keep the claim's selected payer (subpayor). For a
+  claims administrator that administers several payers (for example Intercare), the corrected bill previously
+  dropped the payer, so the delivery-route dialog offered only fax and mail and the correction was saved without
+  a payer. The route dialog now offers e-bill again whenever the original bill could be e-billed.
+- `BillLifecycleData.injury` types the selected payer (`payerKey`, `payerName`) returned by the MindBill API.
+
 ## 0.86.0 — @mindbill/react 0.86.0
 
 ### Added
