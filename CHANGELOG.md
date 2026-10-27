@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.87.0 — @mindbill/react 0.87.0 / @mindbill/browser 0.56.0 / @mindbill/angular 0.21.0
+
+Requires a MindBill server with the packet preview endpoint, cumulative trauma fields and the SDK analytics
+endpoint (deployed before this release). No host code changes are required: bump the package versions.
+
+### Added
+- **Preview packet** in the delivery-route dialog (new bills, Correct and resubmit, Submit New Bill, Send
+  duplicate). It shows the complete packet for the selected route exactly as it would be sent: the fax or mail
+  cover sheet when the route uses one, the CMS-1500, the report and other attachments in attachment order, then
+  the W-9 (the attached W-9 or the saved billing-provider W-9 MindBill adds). Rendered from the unsaved form; it
+  never creates, saves or sends a bill. `@mindbill/browser`: `BillSubmissionClient.previewPacket()`;
+  `SendRouteDialog` `onPreviewPacket`.
+- **Cumulative trauma (CT)**: a "Cumulative trauma (CT)" checkbox in the claim section with CT start and end
+  dates. The wire fields are `claim.injuryType: "cumulative"`, `claim.dateOfInjury` (start) and
+  `claim.injuryEndDate` (end); the bill uses the end date unless the claims administrator has a different date
+  of injury on file. Hosts can pass them in `initialBill`; report suggestions fill both dates from a CT period,
+  and corrections carry them over.
+- **Payer (subpayor) suggestion**: under a claims administrator that administers several payers, the form
+  preselects the administrator's only (or only e-billable) payer, the payer matching the insurance carrier named
+  by the host (`insuranceCarrierName`) or the report, or the payer MindBill bills most often for that
+  administrator. The choice is labeled as a suggestion and stays editable, and it is used for the delivery
+  preview, so e-bill is offered.
+- **Privacy-safe SDK analytics**: components report usage events (mount, view, autofill timing, validation
+  failure field paths, previews, route dialog, route chosen, submit and resubmit outcomes with error codes) to
+  MindBill. Events carry only closed enums, field paths, durations and the SDK version — never PHI, values or
+  free text. Opt out with `analytics={false}` (Angular `[analytics]="false"`); `onAnalyticsEvent` receives every
+  event. See [SDK analytics](docs/sdk-analytics.md).
+- Browser API requests to MindBill carry an `X-MindBill-SDK` header naming the SDK packages and versions.
+- `@mindbill/browser`: API errors are `MindBillApiError` (still an `Error`) with `status` and the API `code`.
+
+### Changed
+- Medical-legal bills no longer show the QME / AME / Psych QME / Psych AME selector. Each line's modifiers
+  (−94 AME, −95 QME, −96 psychiatric, …) are the single source of truth, and an evaluator modifier supplied by the
+  host or a report is never replaced. A medical-legal evaluation code chosen without an evaluator modifier still
+  starts with −95. `evaluationTypes` is accepted but ignored.
+- Medical-legal bills apply every diagnosis to every service line: the form lists the bill's diagnoses (Box 21,
+  up to 12) and points each line to the first four, with no per-line picking. Treatment bills keep per-line
+  pointers.
+- Medical-legal attachments no longer show a "Document purpose" picker: every file is sent as the med-legal
+  report supporting document (`OZ:J4`, document type `final_report`; a file named as a W-9 is sent as the W-9).
+  A bill whose `billingMode` is unset is treated as medical-legal unless it is a treatment-only bill, so it never
+  asks for a report type per attachment.
+- Report suggestions propose only the report's primary diagnoses, at most four.
+
+### Fixed
+- A host bill with more than 12 diagnoses, or a line pointing to more than 4, now keeps the first 12 diagnoses and
+  each line's first 4 pointers and shows a notice, instead of listing every code (for example 23 codes A–W).
+- Correct and resubmit, Submit New Bill and Send duplicate show the payer picker preselected with the carried-over
+  payer, so it can be changed without re-selecting the claims administrator.
+
 ## 0.86.1 — @mindbill/react 0.86.1 / @mindbill/angular 0.20.1 / @mindbill/browser 0.55.1
 
 ### Fixed

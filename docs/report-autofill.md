@@ -14,6 +14,8 @@ import { BillSubmissionForm } from "@mindbill/react";
 
 The user uploads a non-empty PDF up to 25 MB, reviews extracted values, source excerpts, confidence, warnings and saved-record matches, then clicks **Apply to empty bill fields**. Existing values and service lines are preserved. Provider identity groups already selected or partially entered are preserved together. A unique server match can select an available saved profile only when that profile group is empty. Ambiguous matches require manual selection. Dates must be valid ISO calendar dates. Patient address fields belong to the patient; the evaluation location identifies the service facility.
 
+Diagnosis suggestions are limited to the report's primary (final) diagnoses, at most four, so every proposed code can be pointed at from a CMS-1500 service line. When the report states a cumulative trauma (CT) period, the suggestions include `ctStartDate` and `ctEndDate` and fill the claim's CT start and end dates (`injuryType: "cumulative"`). An `insuranceCarrier` suggestion, when present, is used only to preselect the payer under a multi-payer claims administrator.
+
 Suggestions do not create procedures, infer charges, assign diagnosis pointers, save a document, or submit a bill. Review diagnoses and their service-line assignments. Select the claims administrator from the directory before submission. Add the PDF separately to bill attachments when required. The extraction model is `gpt-5.6-luna`; every result requires human review.
 
 For a custom UI, use `createReportAutofillClient` from `@mindbill/browser`, or `ReportAutofill` and `applyReportAutofill` from `@mindbill/react`:

@@ -37,15 +37,17 @@ import {
   type BillReviewPayerOption,
   type BillReviewPayerPage,
   type BillReviewPayerSuggestion,
+  type MindBillAnalyticsEvent,
 } from "@mindbill/browser";
+import { useMindBillAnalytics } from "./analytics";
 
 import { isProfessionalComponentCandidate, professionalComponentCalculationContext, type ProfessionalComponentDetails } from "./professional-component-context";
 import { AnesthesiaLineFields, anesthesiaDetailsFromSaved, anesthesiaCalculationContext, isAnesthesiaCandidate, type AnesthesiaDetails } from "./bill-anesthesia-context";
 import { DrugLineFields, drugClaimFactsProblem, drugDetailsFromSaved, drugFieldsEnabled, drugRequestDetails, type DrugDetails } from "./bill-drug-context";
 import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } from "./bill-equipment-context";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
-import { ReportAutofill } from "./report-autofill";
-import { applyReportAutofill } from "./report-autofill-values";
+import { analyticsErrorCode, ReportAutofill } from "./report-autofill";
+import { applyReportAutofill, reportAutofillInsuranceCarrier } from "./report-autofill-values";
 import { BillingSettings } from "./organization-onboarding";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
@@ -147,7 +149,15 @@ export type BillSubmissionInput = {
   };
   claim: {
     id?: string; externalId?: string; claimNumber: string; adjNumber?: string; medicalProviderNetworkId?: string | null; employer?: string;
+    /**
+     * The date of injury. For a cumulative trauma (CT) claim (`injuryType: "cumulative"`) this is the START of the
+     * injury period and `injuryEndDate` is its end; the bill's date of injury (CMS-1500 Box 14) uses the end date.
+     */
     dateOfInjury?: string; injuryState?: string; description?: string;
+    /** "cumulative" for a cumulative trauma (CT) claim. Omitted or "specific" for a single-date injury. */
+    injuryType?: "specific" | "cumulative";
+    /** End of a cumulative trauma (CT) injury period. Sent only for `injuryType: "cumulative"`. */
+    injuryEndDate?: string | null;
     claimsAdministrator?: {
       id?: string;
       name: string;
@@ -464,8 +474,21 @@ export type BillSubmissionFormProps = {
    * form shows what will be saved instead of filling it only after the draft is saved.
    */
   linkedAuthorizations?: readonly BillSubmissionLinkedAuthorization[];
-  /** Evaluator types offered for medical-legal lines, in order. Defaults to all four; a psychiatric practice can offer only the psych types. */
+  /**
+   * @deprecated Ignored since 0.87.0. Medical-legal bills no longer show an evaluator-type control: each line's
+   * modifiers (-94 AME, -95 QME, -96 psychiatric, …) are the single source of truth. A medical-legal evaluation code
+   * chosen without an evaluator modifier still starts with the QME default (-95).
+   */
   evaluationTypes?: readonly BillSubmissionEvaluationType[];
+  /**
+   * Insurance carrier (payer) named in the host's records, e.g. "Zenith Insurance". Used only to suggest the payer
+   * under a claims administrator that administers several payers; it is never submitted.
+   */
+  insuranceCarrierName?: string;
+  /** Send privacy-safe product analytics to MindBill (no PHI or free text). Defaults to true. */
+  analytics?: boolean;
+  /** Receives every analytics event, whether or not `analytics` is enabled. */
+  onAnalyticsEvent?: (event: MindBillAnalyticsEvent) => void;
   /** Opt in to editable treatment billed charges; fee quotes remain separate estimates. */
   editableTreatmentCharges?: boolean;
   /**
@@ -628,6 +651,14 @@ export async function prepareBillSubmissionDocuments({
   return [...sourceDocuments, ...uploadedDocuments];
 }
 
+/**
+ * Document type for a file attached to a medical-legal bill. Every file is sent as the med-legal report supporting
+ * document (PWK OZ:J4); a file named as a W-9 is the tax form, so MindBill does not attach the saved W-9 twice.
+ */
+export function medicalLegalUploadDocumentType(fileName: string): BillSubmissionDocumentType {
+  return /(?:^|[^a-z0-9])w-?9(?:[^a-z0-9]|$)/i.test(fileName) ? "w9" : "final_report";
+}
+
 function previewUploadedPdf(file: File): void {
   const url = URL.createObjectURL(file);
   window.open(url, "_blank", "noopener,noreferrer");
@@ -759,6 +790,30 @@ export function applyBillSubmissionEvaluationModifiers(
   });
 }
 
+/** Evaluator-role modifiers on a medical-legal evaluation line: -92 PTP, -94 AME, -95 QME. */
+const EVALUATOR_ROLE_MODIFIERS = ["92", "94", "95"];
+
+/**
+ * The modifiers a medical-legal line keeps when its procedure code is chosen. The line's own modifiers are the
+ * source of truth: an evaluator modifier already on the line (for example -94 from the host or a report) is never
+ * replaced. Only a line without one starts with the default for `type` (QME: -95; psychiatric adds -96).
+ */
+export function withDefaultBillSubmissionEvaluatorModifiers(
+  line: BillSubmissionInput["serviceLines"][number], type: BillSubmissionEvaluationType = "qme",
+): BillSubmissionInput["serviceLines"][number] {
+  if (!isMedicalLegalCode(line.code)) return line;
+  const kept = (line.modifiers ?? []).filter((modifier) => medicalLegalModifierApplies(modifier, line.code));
+  const normalized = kept.map((modifier) => modifier.replace(/^-/, ""));
+  if (normalized.some((modifier) => EVALUATOR_ROLE_MODIFIERS.includes(modifier))) return { ...line, modifiers: kept };
+  const added = evaluationModifiers(type, line.code).filter((modifier) => !normalized.includes(modifier));
+  return { ...line, modifiers: [...added, ...kept] };
+}
+
+/** The evaluator type implied by the rendering provider; used only for the default modifiers of a new line. */
+export function billSubmissionDefaultEvaluationType(bill: Pick<BillSubmissionInput, "renderingProvider">): BillSubmissionEvaluationType {
+  return initialEvaluationType(bill as BillSubmissionInput);
+}
+
 export const PSYCH_QME_DEFAULT_DIAGNOSIS = "Z04.6";
 
 /** Seed the psychiatric examination code only when no diagnosis was supplied. */
@@ -771,8 +826,6 @@ export function applyBillSubmissionEvaluationDiagnoses(
     ? [PSYCH_QME_DEFAULT_DIAGNOSIS]
     : current;
 }
-
-const EVALUATION_TYPE_OPTIONS = [["qme", "QME (default)"], ["ame", "AME"], ["psych_qme", "Psych QME"], ["psych_ame", "Psych AME"]] as const satisfies readonly (readonly [BillSubmissionEvaluationType, string])[];
 
 function initialEvaluationType(bill: BillSubmissionInput): BillSubmissionEvaluationType {
   const isPsych = bill.renderingProvider?.specialty?.toLowerCase().includes("psych");
@@ -875,7 +928,67 @@ function withDefaultLinePointers(bill: BillSubmissionInput): BillSubmissionInput
     ? { ...line, diagnosisPointers: defaults } : line) };
 }
 
-function cloneInitialBill(bill: BillSubmissionInput, treatmentBilling = false): BillSubmissionInput {
+/** CMS-1500 Box 21 lists at most 12 diagnoses (A–L); Box 24E points each line to at most 4 of them. */
+export const BILL_SUBMISSION_MAX_DIAGNOSES = 12;
+export const BILL_SUBMISSION_MAX_LINE_POINTERS = 4;
+
+/** What `limitBillSubmissionDiagnoses` removed from a host- or report-supplied bill. */
+export type BillSubmissionDiagnosisLimitNotice = {
+  /** Diagnoses after the 12th, in the order supplied. */
+  droppedDiagnoses: string[];
+  /** Indexes of service lines that pointed to more than 4 diagnoses and now keep their first 4. */
+  trimmedLines: number[];
+};
+
+/**
+ * Keep the first 12 diagnoses (Box 21 A–L) and each line's first 4 pointers that still resolve. Codes keep their
+ * meaning: a pointer to a dropped code is removed rather than shifted to another code.
+ */
+export function limitBillSubmissionDiagnoses(bill: BillSubmissionInput): { bill: BillSubmissionInput; notice: BillSubmissionDiagnosisLimitNotice | null } {
+  const supplied = [...new Set((bill.diagnoses ?? []).map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  const diagnoses = supplied.slice(0, BILL_SUBMISSION_MAX_DIAGNOSES);
+  const droppedDiagnoses = supplied.slice(BILL_SUBMISSION_MAX_DIAGNOSES);
+  const trimmedLines: number[] = [];
+  const serviceLines = bill.serviceLines.map((line, index) => {
+    if (!line.diagnosisPointers) return line;
+    const pointers = [...new Set(line.diagnosisPointers.flatMap((pointer) => {
+      const code = Number.isInteger(pointer) ? bill.diagnoses?.[pointer - 1]?.trim().toUpperCase() : undefined;
+      const position = code ? diagnoses.indexOf(code) : -1;
+      return position < 0 ? [] : [position + 1];
+    }))];
+    if (pointers.length > BILL_SUBMISSION_MAX_LINE_POINTERS) trimmedLines.push(index);
+    return { ...line, diagnosisPointers: pointers.slice(0, BILL_SUBMISSION_MAX_LINE_POINTERS) };
+  });
+  const changed = droppedDiagnoses.length > 0 || trimmedLines.length > 0;
+  if (!changed && !bill.diagnoses) return { bill, notice: null };
+  return { bill: { ...bill, diagnoses, serviceLines }, notice: changed ? { droppedDiagnoses, trimmedLines } : null };
+}
+
+/** Non-blocking explanation of what `limitBillSubmissionDiagnoses` removed. */
+export function diagnosisLimitNoticeText(notice: BillSubmissionDiagnosisLimitNotice): string {
+  const parts: string[] = [];
+  if (notice.droppedDiagnoses.length) parts.push(`This bill was given ${BILL_SUBMISSION_MAX_DIAGNOSES + notice.droppedDiagnoses.length} diagnoses. A CMS-1500 lists at most 12 (Box 21 A–L), so the first 12 were kept and ${notice.droppedDiagnoses.join(", ")} ${notice.droppedDiagnoses.length === 1 ? "was" : "were"} left off.`);
+  if (notice.trimmedLines.length) parts.push(`${notice.trimmedLines.length === 1 ? `Service line ${notice.trimmedLines[0]! + 1}` : `Service lines ${notice.trimmedLines.map((index) => index + 1).join(", ")}`} pointed to more than 4 diagnoses; each line keeps its first 4.`);
+  return `${parts.join(" ")} Review the diagnoses before submitting.`;
+}
+
+/** A medical-legal bill: the billing mode says so, or (unset) a non-treatment form or one with an ML evaluation line. */
+export function isMedicalLegalBillSubmission(bill: Pick<BillSubmissionInput, "billingMode" | "serviceLines">, treatmentBilling = false): boolean {
+  if (bill.billingMode) return bill.billingMode === "med_legal";
+  return !treatmentBilling || bill.serviceLines.some((line) => isMedicalLegalCode(line.code));
+}
+
+/**
+ * On a medical-legal bill every diagnosis applies to every line: each line points to the first 4 Box 21 diagnoses
+ * (the CMS-1500 24E / 837P SV107 maximum).
+ */
+export function withMedicalLegalLinePointers(bill: BillSubmissionInput): BillSubmissionInput {
+  const pointers = defaultBillSubmissionLinePointers(bill);
+  return { ...bill, serviceLines: bill.serviceLines.map((line) => ({ ...line, diagnosisPointers: [...pointers] })) };
+}
+
+function cloneInitialBill(input: BillSubmissionInput, treatmentBilling = false): BillSubmissionInput {
+  const bill = limitBillSubmissionDiagnoses(input).bill;
   const cloned = cloneBill(bill);
   if (treatmentBilling && cloned.serviceLines.some((line) => line.code.trim())) cloned.billingMode = billingModeForLines(cloned.serviceLines);
   if (cloned.billingMode !== "professional") cloned.diagnoses = applyBillSubmissionEvaluationDiagnoses(cloned.diagnoses, initialEvaluationType(bill));
@@ -936,7 +1049,7 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   required("patient.address.postalCode", bill.patient.address.postalCode, "Enter the patient's ZIP code.");
   required("claim.claimNumber", bill.claim.claimNumber, "Enter the claim number.");
   required("claim.employer", bill.claim.employer, "Enter the employer name.");
-  required("claim.dateOfInjury", bill.claim.dateOfInjury, "Enter the date of injury.");
+  required("claim.dateOfInjury", bill.claim.dateOfInjury, bill.claim.injuryType === "cumulative" ? "Enter the start date of the cumulative trauma period." : "Enter the date of injury.");
   required("claim.claimsAdministrator", bill.claim.claimsAdministrator?.name, "Select a claims administrator so MindBill can route this bill.");
   required("service.date", bill.service.date, "Enter the date of service.");
   if (!bill.billingProvider?.savedProviderId?.trim() && !bill.billingProvider?.sourceBillId?.trim()) {
@@ -969,6 +1082,13 @@ export function validateBillSubmission(bill: BillSubmissionInput): BillSubmissio
   }
   if (bill.patient.dateOfBirth && !parseBillSubmissionDate(bill.patient.dateOfBirth)) errors["patient.dateOfBirth"] = "Use MM/DD/YYYY";
   if (bill.claim.dateOfInjury && !parseBillSubmissionDate(bill.claim.dateOfInjury)) errors["claim.dateOfInjury"] = "Use MM/DD/YYYY";
+  if (bill.claim.injuryType === "cumulative") {
+    const start = bill.claim.dateOfInjury ? parseBillSubmissionDate(bill.claim.dateOfInjury) : undefined;
+    const end = bill.claim.injuryEndDate ? parseBillSubmissionDate(bill.claim.injuryEndDate) : undefined;
+    if (!bill.claim.injuryEndDate?.trim()) errors["claim.injuryEndDate"] = "Enter the end date of the cumulative trauma period.";
+    else if (!end) errors["claim.injuryEndDate"] = "Use MM/DD/YYYY";
+    else if (start && end < start) errors["claim.injuryEndDate"] = "The CT end date cannot be before the start date.";
+  }
   if (bill.patient.address.state.trim().length !== 2) errors["patient.address.state"] = "Use a 2-letter state code";
   if (!bill.billingProvider?.savedProviderId && !bill.billingProvider?.sourceBillId && bill.billingProvider?.address?.state && bill.billingProvider.address.state.trim().length !== 2) errors["billingProvider.address.state"] = "Use a 2-letter state code.";
   if (bill.serviceLocation?.address?.state && bill.serviceLocation.address.state.trim().length !== 2) errors["serviceLocation.address.state"] = "Use a 2-letter state code.";
@@ -1007,6 +1127,8 @@ const css = `.mbsf-profile-fields{display:contents}
 .mbsf-payer-status{display:flex;align-items:center;gap:7px;color:#087f5b;font-size:13px;font-weight:650}.mbsf-payer-intro{margin:4px 0 0;color:var(--mb-muted)}.mbsf-payer-list{display:grid;gap:8px}.mbsf-payer-option{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:color-mix(in srgb,var(--mb-accent) 3%,var(--mb-surface))}.mbsf-payer-option-main{display:grid;gap:5px;min-width:0}.mbsf-payer-option-main strong{overflow-wrap:anywhere}.mbsf-payer-signals{display:flex;flex-wrap:wrap;gap:6px}.mbsf-payer-signal{padding:2px 7px;border:1px solid var(--mb-border);border-radius:999px;color:var(--mb-muted);font-size:12px}.mbsf-payer-signal[data-state=match]{border-color:color-mix(in srgb,#159447 45%,var(--mb-border));color:#087f5b}.mbsf-payer-signal[data-state=warning]{border-color:color-mix(in srgb,#c56a00 55%,var(--mb-border));color:#9a5200}
 .mbsf-source-evidence{display:grid;gap:4px;color:var(--mb-muted);font-size:13px}.mbsf-source-evidence a{color:var(--mb-accent);font-weight:700}.mbsf-source-evidence q{color:var(--mb-text)}.mbsf-suggestions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--mb-muted);font-size:13px}.mbsf-suggestion{padding:5px 10px;border:1px solid color-mix(in srgb,var(--mb-accent) 55%,var(--mb-border));border-radius:999px;background:color-mix(in srgb,var(--mb-accent) 7%,var(--mb-surface));color:var(--mb-accent);font:inherit;font-weight:700;cursor:pointer}.mbsf-suggestion:hover,.mbsf-suggestion:focus{outline:2px solid color-mix(in srgb,var(--mb-accent) 25%,transparent)}.mbsf-claim-patterns{display:grid;gap:4px;margin-top:2px;font-size:13px}.mbsf-claim-patterns[data-state=match]{color:#087f5b}.mbsf-claim-patterns[data-state=warning]{color:#9a5200}.mbsf-claim-pattern-list{color:var(--mb-muted)}
 .mbsf-chips,.mbsf-quick-picks{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}.mbsf-chip,.mbsf-quick-pick{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--mb-border);border-radius:999px;background:var(--mb-input)}.mbsf-chip button{border:0;background:transparent;color:var(--mb-muted);cursor:pointer;font:inherit}.mbsf-quick-pick{color:var(--mb-text);font:inherit;cursor:pointer}.mbsf-quick-pick[data-selected=true]{border-color:var(--mb-accent);color:var(--mb-accent)}
+.mbsf-ct-toggle{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:14px;font-weight:600}.mbsf-ct-toggle .mbctl-check{margin:0}
+.mbsf-route-preview-note{color:var(--mb-muted);font-size:13px}
 .mbsf-claim-diagnoses{display:grid;gap:8px;margin:4px 0 6px}.mbsf-claim-diagnoses-label{font-weight:600;font-size:13px}
 .mbsf-claim-diagnosis-list{display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:0;list-style:none}
 .mbsf-pointer-letter{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--mb-border);color:var(--mb-text);font-size:11px;font-weight:700}
@@ -1178,6 +1300,47 @@ export function chooseClaimsAdministrator(
   };
 }
 
+/** Why a payer (subpayor) was preselected under a multi-payer claims administrator. */
+export type BillSubmissionPayerSuggestionReason = "only_payer" | "single_ebill" | "carrier_match" | "most_used";
+export type BillSubmissionPayerSuggestion = { payerId: string; reason: BillSubmissionPayerSuggestionReason };
+
+function payerOptionNames(option: BillReviewPayerOption): string[] {
+  return [option.label, ...(option.aliases ?? []), ...(option.affiliatedEntities ?? [])].map(normalizeClaimsAdministratorName).filter(Boolean);
+}
+
+/**
+ * The payer to preselect under a claims administrator that administers several payers, or null when nothing
+ * identifies one: (1) its only payer, or the only payer MindBill can e-bill; (2) the payer matching an insurance
+ * carrier named by the host or the report; (3) the payer MindBill bills most often for that administrator.
+ * The selection is a suggestion: the biller can change it.
+ */
+export function suggestBillSubmissionPayer(
+  administrator: Pick<BillReviewPayer, "payers" | "suggestedPayerId" | "suggestedPayerReason">,
+  carrierNames: readonly (string | null | undefined)[] = [],
+): BillSubmissionPayerSuggestion | null {
+  const options = (administrator.payers ?? []).filter((option) => option.active !== false);
+  if (!options.length) return null;
+  if (options.length === 1) return { payerId: options[0]!.id, reason: "only_payer" };
+  const offered = (id: string | undefined) => Boolean(id && options.some((option) => option.id === id));
+  if (administrator.suggestedPayerReason === "single_ebill" && offered(administrator.suggestedPayerId)) return { payerId: administrator.suggestedPayerId!, reason: "single_ebill" };
+  const electronic = options.filter((option) => option.electronic === true);
+  if (electronic.length === 1 && options.every((option) => option.electronic !== undefined)) return { payerId: electronic[0]!.id, reason: "single_ebill" };
+  for (const carrier of carrierNames.map((name) => normalizeClaimsAdministratorName(name ?? "")).filter((name) => name.length >= 3)) {
+    const exact = options.filter((option) => payerOptionNames(option).includes(carrier));
+    const partial = exact.length ? exact : options.filter((option) => payerOptionNames(option).some((name) => name.length >= 4 && carrier.length >= 4 && (name.includes(carrier) || carrier.includes(name))));
+    if (partial.length === 1) return { payerId: partial[0]!.id, reason: "carrier_match" };
+  }
+  if (administrator.suggestedPayerReason === "most_used" && offered(administrator.suggestedPayerId)) return { payerId: administrator.suggestedPayerId!, reason: "most_used" };
+  return null;
+}
+
+const PAYER_SUGGESTION_TEXT: Record<BillSubmissionPayerSuggestionReason, string> = {
+  only_payer: "the only payer for this claims administrator",
+  single_ebill: "the only payer MindBill can e-bill for this claims administrator",
+  carrier_match: "matches the insurance carrier named for this claim",
+  most_used: "the payer most often billed for this claims administrator",
+};
+
 /**
  * The claims administrator reference exactly as submitted to MindBill: picker
  * metadata (payerSelectionRequired, payers) stays client-side and the chosen
@@ -1191,6 +1354,42 @@ export function submittedClaimsAdministrator(
     name: administrator.name,
     ...(administrator.payerId ? { payerId: administrator.payerId } : {}),
   };
+}
+
+/**
+ * The claim exactly as submitted: directory metadata is stripped and the cumulative trauma fields ride on the wire
+ * only for a CT claim (`injuryType: "cumulative"` with the period's `injuryEndDate`).
+ */
+export function submittedBillSubmissionClaim(claim: BillSubmissionInput["claim"]): BillSubmissionInput["claim"] {
+  const next = { ...claim };
+  delete next.injuryType;
+  delete next.injuryEndDate;
+  if (claim.injuryType === "cumulative") {
+    next.injuryType = "cumulative";
+    const end = claim.injuryEndDate ? parseBillSubmissionDate(claim.injuryEndDate) ?? claim.injuryEndDate : undefined;
+    if (end) next.injuryEndDate = end;
+  }
+  if (claim.claimsAdministrator) next.claimsAdministrator = submittedClaimsAdministrator(claim.claimsAdministrator);
+  return next;
+}
+
+/** Turn a claim into (or out of) a cumulative trauma claim; the entered dates are kept. */
+export function setBillSubmissionCumulativeTrauma(claim: BillSubmissionInput["claim"], cumulative: boolean): BillSubmissionInput["claim"] {
+  if (cumulative) return { ...claim, injuryType: "cumulative", injuryEndDate: claim.injuryEndDate ?? "" };
+  const next = { ...claim };
+  delete next.injuryType;
+  delete next.injuryEndDate;
+  return next;
+}
+
+/** Turn a validated form bill into the submission contract (saved-provider references, wire claim). */
+export function completeBillSubmissionInput(bill: BillSubmissionInput): CompleteBillSubmissionInput {
+  return {
+    ...bill,
+    ...(bill.billingProvider?.savedProviderId ? { billingProvider: { savedProviderId: bill.billingProvider.savedProviderId } } : {}),
+    ...(bill.billingProvider?.sourceBillId ? { billingProvider: { sourceBillId: bill.billingProvider.sourceBillId } } : {}),
+    claim: submittedBillSubmissionClaim(bill.claim),
+  } as CompleteBillSubmissionInput;
 }
 
 export type BillSubmissionSectionId =
@@ -1229,10 +1428,12 @@ export function BillSubmissionForm({
   appearance, className = "bill-submission-form",
   style, disabled = false, submitLabel = "Submit bill", heading = "Bill information",
   description = "Review the bill details, add attachments, and submit.",
-  attentionFields = [], attentionMessage,
+  attentionFields = [], attentionMessage, insuranceCarrierName, analytics, onAnalyticsEvent,
   children,
 }: BillSubmissionFormProps): ReactElement {
+  const track = useMindBillAnalytics("BillSubmissionForm", { ...(analytics !== undefined ? { analytics } : {}), ...(onAnalyticsEvent ? { onAnalyticsEvent } : {}) });
   const [bill, setBill] = useState(() => cloneInitialBill(initialBill, treatmentBilling));
+  const [diagnosisLimitNotice, setDiagnosisLimitNotice] = useState(() => limitBillSubmissionDiagnoses(initialBill).notice);
   const [sharedDiagnoses, setSharedDiagnoses] = useState(() => billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling)));
   const individualDiagnoses = useRef<string[][] | null>(null);
   const [providerEditing, setProviderEditing] = useState(false);
@@ -1262,6 +1463,10 @@ export function BillSubmissionForm({
   const [selectedPayerMetadata, setSelectedPayerMetadata] = useState<BillReviewPayer | null>(null);
   const [payerLoadingMore, setPayerLoadingMore] = useState(false); const [payerQuery, setPayerQuery] = useState<string | null>(null); const [payerHasMore, setPayerHasMore] = useState(true);
   const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [payerAutoPick, setPayerAutoPick] = useState<BillSubmissionPayerSuggestion | null>(null);
+  const [autofillCarrier, setAutofillCarrier] = useState<string | undefined>(undefined);
+  /** Administrators whose payer list was already loaded for a host- or correction-supplied selection. */
+  const hydratedAdministrators = useRef(new Set<string>());
   const [directory, setDirectory] = useState<BillClaimsAdministratorDirectory | null>(null);
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
@@ -1299,6 +1504,16 @@ export function BillSubmissionForm({
     return () => observer.disconnect();
   }, [wideServiceLines]);
   const formRef = useRef<HTMLFormElement>(null); const fileInput = useRef<HTMLInputElement>(null);
+  // form_viewed fires once, when the form first becomes visible (or on mount without IntersectionObserver).
+  useEffect(() => {
+    const element = formRef.current;
+    if (!element || typeof IntersectionObserver === "undefined") { track("form_viewed"); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) { track("form_viewed"); observer.disconnect(); }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [track]);
   const diagnosisRequest = useRef(0); const diagnosisAppendPending = useRef(false); const payerRequest = useRef(0); const payerAppendPending = useRef(false);
   const procedures = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_PROCEDURES, [...procedureResults.filter((result) => !DEFAULT_BILL_SUBMISSION_PROCEDURES.some((item) => item.code.toUpperCase() === result.code.toUpperCase())), ...(procedureOptions ?? []), ...(treatmentBilling ? [{code: "WC002", description: "Progress report"}, {code: "WC003", description: "Permanent and stationary report (PR-3)"}, {code: "WC004", description: "Permanent and stationary report (PR-4)"}] : [])]), [procedureOptions, procedureResults, treatmentBilling]);
   const orderedClaimsAdministratorSources = useMemo(() => [...(claimsAdministratorSources ?? [])]
@@ -1312,8 +1527,7 @@ export function BillSubmissionForm({
   const previousInitializationKey = useRef(initializationKey);
 
   const taxonomies = useMemo(() => mergeOptions(DEFAULT_BILL_SUBMISSION_TAXONOMIES, taxonomyOptions), [taxonomyOptions]);
-  const offeredEvaluationTypes = EVALUATION_TYPE_OPTIONS.filter(([type]) => !evaluationTypes?.length || evaluationTypes.includes(type));
-  const [evaluationType, setEvaluationType] = useState<BillSubmissionEvaluationType>(() => initialEvaluationType(initialBill));
+  void evaluationTypes;
   const connected = !onSubmit;
   const referenceClient = useMemo(() => (getSession || sessionEndpoint || connected) ? createBillReferenceClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
   const submissionClient = useMemo(() => connected ? createBillSubmissionClient({ getSession, sessionEndpoint, apiBaseUrl, fetch: fetchOverride }) : null, [getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
@@ -1337,7 +1551,9 @@ export function BillSubmissionForm({
   const availableProfiles = loadedProfiles?.client === profileClient && loadedProfiles.options ? loadedProfiles.options : profileOptions;
   const [savingDraft, setSavingDraft] = useState(false);
   const locked = disabled || submitting || savingDraft;
-  const showAttachmentReportTypes = attachmentReportTypeMode === "visible" || (attachmentReportTypeMode === "auto" && bill.billingMode !== "med_legal");
+  const medLegal = isMedicalLegalBillSubmission(bill, treatmentBilling);
+  const analyticsBillingMode = medLegal ? "med_legal" as const : "professional" as const;
+  const showAttachmentReportTypes = attachmentReportTypeMode === "visible" || (attachmentReportTypeMode === "auto" && !medLegal);
   // A treatment (professional) bill's supporting report is normally the PR-2 progress report (PWK 09).
   const defaultAttachmentReportType = hostDefaultAttachmentReportType ?? (treatmentBilling && bill.billingMode === "professional" ? TREATMENT_PROGRESS_REPORT_TYPE_CODE : undefined);
   const forcedAttachmentReportType = showAttachmentReportTypes ? undefined : (defaultAttachmentReportType ?? MED_LEGAL_REPORT_TYPE_CODE);
@@ -1352,12 +1568,13 @@ export function BillSubmissionForm({
     previousInitializationKey.current = initializationKey;
     setFeeDetails({}); setFeeQuotes({}); setProfessionalComponentCodes([]);
     setSharedDiagnoses(billSubmissionUsesSharedDiagnoses(cloneInitialBill(initialBill, treatmentBilling))); individualDiagnoses.current = null;
-    setBill(cloneInitialBill(initialBill, treatmentBilling)); setEvaluationType(initialEvaluationType(initialBill)); setSelectedIds(attachments.map((item) => item.id));
+    setBill(cloneInitialBill(initialBill, treatmentBilling)); setDiagnosisLimitNotice(limitBillSubmissionDiagnoses(initialBill).notice); setSelectedIds(attachments.map((item) => item.id));
     setOpenSections([]);
     enteredCharges.current = new Set(initialBill.serviceLines.flatMap((line, index) => Number.isFinite(line.charge) ? [index] : []));
     setRemovedSourceIds([]); setUploads([]); setSourceAttachmentReportTypes(Object.fromEntries(attachments.flatMap((item) => item.reportTypeCode ? [[item.id, item.reportTypeCode]] : []))); setErrors({}); setValidationActive(false); setFormError(null); setDiagnosisResults([]);
     setDiagnosisQuery(null); setDiagnosisHasMore(true); diagnosisRequest.current += 1; diagnosisAppendPending.current = false;
     setPayerResults([]); setPayerSuggestions([]); setSelectedPayerMetadata(null); setPayerQuery(null); setPayerHasMore(true); payerRequest.current += 1; payerAppendPending.current = false;
+    setPayerAutoPick(null); hydratedAdministrators.current.clear();
   }, [initialBill, attachments, initializationKey, treatmentBilling]);
   useEffect(() => {
     const root = formRef.current;
@@ -1383,8 +1600,8 @@ export function BillSubmissionForm({
     const nextBytes = [...uploads.map((item) => item.file), ...files].reduce((sum, file) => sum + file.size, 0);
     if (nextBytes > MAX_UPLOAD_BYTES) return setFormError("Attachments exceed the 100 MB upload limit.");
     if (selectedIds.length + uploads.length + files.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
-    setUploads((current) => [...current, ...files.map((file) => ({ file, documentType: "other" as const, ...(defaultAttachmentReportType ? { reportTypeCode: defaultAttachmentReportType } : {}) }))]);
-  }, [defaultAttachmentReportType, selectedIds.length, uploads]);
+    setUploads((current) => [...current, ...files.map((file) => ({ file, documentType: medLegal ? medicalLegalUploadDocumentType(file.name) : "other" as const, ...(defaultAttachmentReportType ? { reportTypeCode: defaultAttachmentReportType } : {}) }))]);
+  }, [defaultAttachmentReportType, medLegal, selectedIds.length, uploads]);
   useEffect(() => {
     const over = (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) { event.preventDefault(); setDragActive(true); } };
     const leave = (event: DragEvent) => { if (!event.relatedTarget) setDragActive(false); };
@@ -1469,6 +1686,35 @@ export function BillSubmissionForm({
       payerAppendPending.current = false; setPayerLoading(false); setPayerLoadingMore(false);
     });
   }, [bill.claim.claimNumber, bill.claim.employer, onListClaimsAdministrators, onSearchClaimsAdministrators, payerHasMore, payerQuery, payerResults.length, referenceClient, sourceClaimsAdministratorName]);
+  // A claims administrator supplied by the host or carried over by a correction arrives without its payer list.
+  // Load it once so a multi-payer administrator shows the payer picker with the carried-over (or suggested) payer.
+  const latestBill = useRef(bill); latestBill.current = bill;
+  const latestCarriers = useRef<(string | undefined)[]>([]); latestCarriers.current = [insuranceCarrierName, autofillCarrier];
+  const hydrateAdministrator = bill.claim.claimsAdministrator?.id && bill.claim.claimsAdministrator.payerSelectionRequired === undefined && !bill.claim.claimsAdministrator.payers
+    ? JSON.stringify([bill.claim.claimsAdministrator.id, bill.claim.claimsAdministrator.name]) : "";
+  useEffect(() => {
+    if (!hydrateAdministrator) return;
+    const [id, name] = JSON.parse(hydrateAdministrator) as [string, string];
+    if (hydratedAdministrators.current.has(id)) return;
+    const list = onListClaimsAdministrators ?? referenceClient?.listClaimsAdministrators;
+    const legacySearch = onSearchClaimsAdministrators ?? referenceClient?.searchClaimsAdministrators;
+    if (!list && !legacySearch) return;
+    hydratedAdministrators.current.add(id);
+    const lookup = list ? list({ query: name, limit: PAYER_PAGE_SIZE }).then((page) => page.results) : legacySearch!(name);
+    void Promise.resolve(lookup).then((results) => {
+      const payer = results.find((candidate) => candidate.id === id);
+      const selected = latestBill.current.claim.claimsAdministrator;
+      if (!payer || selected?.id !== id || selected.payerSelectionRequired !== undefined) return;
+      setSelectedPayerMetadata(payer);
+      if (!payer.payerSelectionRequired) return;
+      const carried = selected.payerId && payer.payers?.some((option) => option.id === selected.payerId) ? selected.payerId : undefined;
+      const suggestion = carried ? null : suggestBillSubmissionPayer(payer, latestCarriers.current);
+      setPayerAutoPick(suggestion);
+      setBill((current) => current.claim.claimsAdministrator?.id === id && current.claim.claimsAdministrator.payerSelectionRequired === undefined
+        ? { ...current, claim: { ...current.claim, claimsAdministrator: chooseClaimsAdministrator(payer, carried ?? suggestion?.payerId) } }
+        : current);
+    }).catch(() => { hydratedAdministrators.current.delete(id); });
+  }, [hydrateAdministrator, onListClaimsAdministrators, onSearchClaimsAdministrators, referenceClient]);
   const searchPayers = (query: string) => {
     setSelectedPayerMetadata(null);
     setBill((current) => {
@@ -1517,14 +1763,6 @@ export function BillSubmissionForm({
     setAddress({ postalCode }); setPostalStatus(null); const lookup = onLookupPostalCode ?? referenceClient?.lookupPostalCode;
     if (!lookup || !/^\d{5}$/.test(postalCode)) return;
     setPostalStatus("Looking up ZIP…"); void lookup(postalCode).then((place) => { if (!place) return setPostalStatus("ZIP not found"); setAddress({ city: place.city, state: place.state.toUpperCase() }); setPostalStatus(`${place.city}, ${place.state.toUpperCase()} filled from ZIP`); }).catch(() => setPostalStatus("ZIP lookup unavailable"));
-  };
-  const changeEvaluation = (type: BillSubmissionEvaluationType) => {
-    if (sharedDiagnoses) individualDiagnoses.current = null;
-    setEvaluationType(type); setBill((current) => {
-      const nextDiagnoses = current.billingMode === "professional" ? current.diagnoses ?? [] : applyBillSubmissionEvaluationDiagnoses(current.diagnoses, type);
-      const remapped = sharedDiagnoses ? setBillSubmissionSharedDiagnoses(current, nextDiagnoses) : remapBillSubmissionDiagnoses(current, nextDiagnoses);
-      return { ...remapped, renderingProvider: { ...current.renderingProvider, isAme: type === "ame" || type === "psych_ame", isQme: type === "qme" || type === "psych_qme", ...((type === "psych_qme" || type === "psych_ame") && !current.renderingProvider?.specialty ? { specialty: "Psychiatry" } : {}) }, serviceLines: applyBillSubmissionEvaluationModifiers(remapped.serviceLines, type) };
-    });
   };
   const supportedFeeJurisdiction = (bill.claim.injuryState ?? "CA").trim().toUpperCase() === "CA";
   const prolongedLeader = (index: number) => bill.serviceLines.findIndex((candidate) => isProlongedCode(candidate.code) && parseBillSubmissionDate(candidate.serviceDate ?? bill.service.date) === parseBillSubmissionDate(bill.serviceLines[index]!.serviceDate ?? bill.service.date));
@@ -1743,7 +1981,9 @@ export function BillSubmissionForm({
     } else if (charge != null) next.charge = charge;
     return next;
   }).filter(lineHasContent);
-  const clean: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: billingModeForLines(pricedLines) } : {}) };
+  const cleanBill: BillSubmissionInput = { ...cloneBill(bill), serviceLines: pricedLines, ...(treatmentBilling && pricedLines.length ? { billingMode: billingModeForLines(pricedLines) } : {}) };
+  // Every diagnosis applies to every line of a medical-legal bill: each line points to the first four.
+  const clean: BillSubmissionInput = isMedicalLegalBillSubmission(cleanBill, treatmentBilling) ? withMedicalLegalLinePointers(cleanBill) : cleanBill;
   const previewBillKey = JSON.stringify(clean);
   const previewCurrent = cmsPreview?.billKey === previewBillKey;
   // An NDC that was started but is incomplete would otherwise be left off the claim silently.
@@ -1760,10 +2000,12 @@ export function BillSubmissionForm({
   }, [liveErrors, missingAttachmentReportType, validationActive]);
 
   async function submit(): Promise<void> {
+    track("submit_clicked", { billingMode: analyticsBillingMode });
     const validation = validateBillSubmission(clean);
     const fieldErrors = { ...validation.fieldErrors, ...drugFieldErrors, ...(missingAttachmentReportType ? { attachments: "Select a report type for every attachment." } : {}) };
     setValidationActive(true); setErrors(fieldErrors); setFormError(null);
     if (Object.keys(fieldErrors).length) {
+      track("validation_failed", { fieldPaths: Object.keys(fieldErrors), billingMode: analyticsBillingMode });
       const count = Object.keys(fieldErrors).length;
       const first = Object.values(fieldErrors)[0];
       setFormError(`Fix ${count} highlighted field${count === 1 ? "" : "s"} before submitting. ${first}`);
@@ -1771,16 +2013,7 @@ export function BillSubmissionForm({
       return;
     }
     if (selectedIds.length + uploads.length > MAX_DOCUMENTS) return setFormError(`A bill can include at most ${MAX_DOCUMENTS} attachments.`);
-    const administrator = clean.claim.claimsAdministrator;
-    const complete = {
-      ...clean,
-      ...(clean.billingProvider?.savedProviderId ? { billingProvider: { savedProviderId: clean.billingProvider.savedProviderId } } : {}),
-      ...(clean.billingProvider?.sourceBillId ? { billingProvider: { sourceBillId: clean.billingProvider.sourceBillId } } : {}),
-      claim: {
-        ...clean.claim,
-        ...(administrator ? { claimsAdministrator: submittedClaimsAdministrator(administrator) } : {}),
-      },
-    } as CompleteBillSubmissionInput;
+    const complete = completeBillSubmissionInput(clean);
     const value: BillSubmissionFormValue = { bill: complete, sourceAttachmentIds: selectedIds, sourceAttachmentReportTypes, uploads };
     // Show the delivery-method dialog (e-bill / email / fax / mail with
     // recipient overrides) before either connected or host-owned submission.
@@ -1798,6 +2031,7 @@ export function BillSubmissionForm({
         setSubmitting(false);
         setRouteError(null);
         setRouteDialog({ delivery, value });
+        track("delivery_route_dialog_opened", { billingMode: analyticsBillingMode });
         return;
       } catch (caught) {
         setSubmitting(false);
@@ -1820,6 +2054,7 @@ export function BillSubmissionForm({
     delete fieldErrors.attachments;
     setValidationActive(true); setErrors(fieldErrors); setFormError(null);
     if (Object.keys(fieldErrors).length) {
+      track("validation_failed", { fieldPaths: Object.keys(fieldErrors), billingMode: analyticsBillingMode });
       const count = Object.keys(fieldErrors).length;
       setFormError(`Fix ${count} highlighted field${count === 1 ? "" : "s"} before previewing.`);
       window.requestAnimationFrame(() => { if (formRef.current) focusFirstInvalid(formRef.current); });
@@ -1829,26 +2064,42 @@ export function BillSubmissionForm({
       setFormError("A billing session is needed to preview the CMS-1500.");
       return;
     }
-    const administrator = clean.claim.claimsAdministrator;
-    const complete = {
-      ...clean,
-      ...(clean.billingProvider?.savedProviderId ? { billingProvider: { savedProviderId: clean.billingProvider.savedProviderId } } : {}),
-      ...(clean.billingProvider?.sourceBillId ? { billingProvider: { sourceBillId: clean.billingProvider.sourceBillId } } : {}),
-      claim: {
-        ...clean.claim,
-        ...(administrator ? { claimsAdministrator: submittedClaimsAdministrator(administrator) } : {}),
-      },
-    } as CompleteBillSubmissionInput;
+    const complete = completeBillSubmissionInput(clean);
     const requestId = ++previewRequest.current;
     setPreviewing(true);
     try {
       const pdf = await previewClient.previewCms1500(complete);
+      track("cms1500_preview_opened", { billingMode: analyticsBillingMode });
       if (requestId !== previewRequest.current) return;
       setCmsPreview({ url: URL.createObjectURL(pdf), billKey: previewBillKey });
     } catch (caught) {
       if (requestId === previewRequest.current) setFormError(caught instanceof Error ? caught.message : "The CMS-1500 preview could not be generated.");
     } finally {
       if (requestId === previewRequest.current) setPreviewing(false);
+    }
+  }
+
+  /** The full packet for the confirmed route, rendered from the unsaved bill. Nothing is created or sent. */
+  async function previewPacket(value: BillSubmissionFormValue, submission: SendRouteSubmission): Promise<{ pdf: Blob; sections: string[] }> {
+    if (!previewClient) throw new Error("A billing session is needed to preview the packet.");
+    try {
+      const documents = await prepareBillSubmissionDocuments({
+        attachments,
+        selectedIds: value.sourceAttachmentIds,
+        uploads: value.uploads,
+        reportTypeCodeByAttachmentId: value.sourceAttachmentReportTypes,
+        ...(forcedAttachmentReportType ? { defaultReportTypeCode: forcedAttachmentReportType } : {}),
+        ...(fetchOverride ? { fetch: fetchOverride } : {}),
+      });
+      const preview = await previewClient.previewPacket({
+        bill: value.bill, documents, route: submission.route,
+        ...(submission.route === "fax" && submission.attention ? { attention: submission.attention } : {}),
+      });
+      track("packet_preview_opened", { route: submission.route, billingMode: analyticsBillingMode });
+      return preview;
+    } catch (caught) {
+      track("packet_preview_failed", { route: submission.route, errorCode: analyticsErrorCode(caught), billingMode: analyticsBillingMode });
+      throw caught;
     }
   }
 
@@ -1878,8 +2129,10 @@ export function BillSubmissionForm({
       }, idempotencyKey ? { idempotencyKey } : undefined);
       setRouteDialog(null);
       setRouteError(null);
+      track("submit_succeeded", { ...(value.submission ? { route: value.submission.route } : {}), billingMode: analyticsBillingMode });
       await onSubmitted?.(result);
     } catch (caught) {
+      if (!onSubmit) track("submit_failed", { ...(value.submission ? { route: value.submission.route } : {}), errorCode: analyticsErrorCode(caught), billingMode: analyticsBillingMode });
       const message = caught instanceof Error ? caught.message : "Unable to submit the bill.";
       const requested = attestationRequest(message, bill.serviceLines);
       if (requested) {
@@ -1897,10 +2150,15 @@ export function BillSubmissionForm({
     finally { setSubmitting(false); }
   }
 
+  const cumulativeTrauma = bill.claim.injuryType === "cumulative";
   const claimsAdministratorError = errors["claim.claimsAdministrator"];
+  const carrierNames = [insuranceCarrierName, autofillCarrier];
   const choosePayer = (payer: BillReviewPayer, selectedPayerId?: string) => {
     setSelectedPayerMetadata(payer);
-    setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: chooseClaimsAdministrator(payer, selectedPayerId) } }));
+    // A multi-payer administrator starts with a suggested payer when one is identified; the biller can change it.
+    const suggestion = payer.payerSelectionRequired && !selectedPayerId ? suggestBillSubmissionPayer(payer, carrierNames) : null;
+    setPayerAutoPick(suggestion);
+    setBill((current) => ({ ...current, claim: { ...current.claim, claimsAdministrator: chooseClaimsAdministrator(payer, selectedPayerId ?? suggestion?.payerId) } }));
   };
   const administrator = bill.claim.claimsAdministrator;
   const displayedPayerMetadata = selectedPayerMetadata?.id === administrator?.id ? selectedPayerMetadata : null;
@@ -1914,9 +2172,9 @@ export function BillSubmissionForm({
   const subpayorOptions = administrator?.payerSelectionRequired ? administrator.payers ?? [] : [];
   const subpayorError = errors["claim.claimsAdministrator.payerId"];
   const selectedSubpayor = subpayorOptions.find((option) => option.id === administrator?.payerId);
-  const chooseSubpayor = (payerId: string) => setBill((current) => current.claim.claimsAdministrator
+  const chooseSubpayor = (payerId: string) => { setPayerAutoPick(null); setBill((current) => current.claim.claimsAdministrator
     ? { ...current, claim: { ...current.claim, claimsAdministrator: { ...current.claim.claimsAdministrator, payerId } } }
-    : current);
+    : current); };
   const openAdministratorDirectory = async (): Promise<void> => {
     if (!administrator?.id) return;
     setDirectoryOpen(true); setDirectory(null); setDirectoryError(null); setDirectoryLoading(true);
@@ -1948,7 +2206,9 @@ export function BillSubmissionForm({
   const claimSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Injury &amp; claim</legend><div className="mbsf-grid">
       <Field path="service.date" label="Date of service" required error={errors["service.date"]}><TextDateInput ariaLabel="Date of service" value={bill.service.date} disabled={locked} required onChange={(date) => setBill((c) => setBillSubmissionServiceDate(c, date))} /></Field>
       <Field label="Treatment authorization # (optional)">{text(bill.service.authorizationNumber, (authorizationNumber) => setBill((c) => ({ ...c, service: { ...c.service, authorizationNumber } })), { placeholder: "Utilization-review authorization number" })}<small className="mbsf-help">If the approval has no authorization number, leave this blank and attach the approval.</small></Field>
-      <Field path="claim.dateOfInjury" label="Date of injury" required error={errors["claim.dateOfInjury"]}><TextDateInput ariaLabel="Date of injury" value={bill.claim.dateOfInjury} disabled={locked} required onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
+      <Field path="claim.dateOfInjury" label={cumulativeTrauma ? "CT start date" : "Date of injury"} required error={errors["claim.dateOfInjury"]}><TextDateInput ariaLabel={cumulativeTrauma ? "Cumulative trauma start date" : "Date of injury"} value={bill.claim.dateOfInjury} disabled={locked} required onChange={(dateOfInjury) => setBill((c) => ({ ...c, claim: { ...c.claim, dateOfInjury } }))} /></Field>
+      {cumulativeTrauma ? <Field path="claim.injuryEndDate" label="CT end date" required error={errors["claim.injuryEndDate"]}><TextDateInput ariaLabel="Cumulative trauma end date" value={bill.claim.injuryEndDate ?? ""} disabled={locked} required onChange={(injuryEndDate) => setBill((c) => ({ ...c, claim: { ...c.claim, injuryEndDate } }))} /></Field> : null}
+      <div className="mbsf-field mbsf-span"><label className="mbsf-ct-toggle"><Checkbox checked={cumulativeTrauma} disabled={locked} onChange={(event) => { const checked = event.target.checked; setBill((c) => ({ ...c, claim: setBillSubmissionCumulativeTrauma(c.claim, checked) })); }} /><span>Cumulative trauma (CT)</span></label>{cumulativeTrauma ? <small className="mbsf-help">For CT, enter the injury period. The bill uses the end date unless the claims administrator has a different date of injury on file.</small> : null}</div>
       <Field path="claim.employer" label="Employer name" required error={errors["claim.employer"]}>{text(bill.claim.employer, (employer) => setBill((c) => ({ ...c, claim: { ...c.claim, employer } })))}</Field>
       <Field path="claim.claimNumber" label="Claim number" required error={errors["claim.claimNumber"]}>{text(bill.claim.claimNumber, (claimNumber) => setBill((c) => ({ ...c, claim: { ...c.claim, claimNumber } })))}
         {displayedClaimPatterns.length ? <div className="mbsf-claim-patterns" data-state={claimNumberPatternState ?? undefined} role="status">
@@ -1967,7 +2227,7 @@ export function BillSubmissionForm({
       </Field>
       {administrator?.payerSelectionRequired ? <Field path="claim.claimsAdministrator.payerId" label="Payer" required span error={subpayorError}>
         {subpayorOptions.length ? <ComboBox ariaLabel="Payer" invalid={Boolean(subpayorError)} disabled={locked} value={selectedSubpayor?.label ?? ""} placeholder="Select the payer named on the claim or report…" options={subpayorOptions.map((option) => ({ id: option.id, label: option.label, ...(option.hint ? { detail: option.hint } : {}), ...(option.affiliatedEntities?.length ? { affiliatedEntities: option.affiliatedEntities } : {}) }))} onSelect={(option) => chooseSubpayor(option.id)} /> : <div className="mbsf-error" role="alert">No routing payers are available for {administrator.name}. Electronic submission remains blocked; contact support to correct the payer directory.</div>}
-        {selectedSubpayor ? <div className="mbsf-payer-status" role="status"><strong>✓ Payer set:</strong> {selectedSubpayor.label}</div> : <small className="mbsf-help">{administrator.name} administers multiple payers. Choose the payer named on the claim or report so MindBill can route the bill correctly.</small>}
+        {selectedSubpayor && payerAutoPick?.payerId === selectedSubpayor.id ? <div className="mbsf-payer-status" role="status" data-suggested="true"><strong>Suggested payer:</strong> {selectedSubpayor.label} — {PAYER_SUGGESTION_TEXT[payerAutoPick.reason]}. Change it if the claim names a different payer.</div> : selectedSubpayor ? <div className="mbsf-payer-status" role="status"><strong>✓ Payer set:</strong> {selectedSubpayor.label}</div> : <small className="mbsf-help">{administrator.name} administers multiple payers. Choose the payer named on the claim or report so MindBill can route the bill correctly.</small>}
       </Field> : null}
       <Field label="Injury description (optional)" span>{text(bill.claim.description, (description) => setBill((c) => ({ ...c, claim: { ...c.claim, description } })))}</Field>
     </div></fieldset>;
@@ -2075,6 +2335,18 @@ export function BillSubmissionForm({
     </li>)}</ol> : <p className="mbsf-help">Add the visit's diagnoses, then choose up to four for each line.</p>}
     {claimDiagnoses.length < 12 ? <ComboBox ariaLabel="Add diagnosis to the bill" disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={`Add a diagnosis (${claimDiagnoses.length} of 12)…`} options={mergeDiagnosisOptions(diagnosisChoices).filter((item) => !claimDiagnoses.includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((current) => addBillSubmissionClaimDiagnosis(current, option.id))} /> : null}
   </div>;
+  // Medical-legal Box 21: common codes, the lettered list and a search, up to 12. Lines are not picked individually.
+  const medicalLegalDiagnosisEditor = <div className="mbsf-claim-diagnoses" data-field-path="diagnoses" data-invalid={Boolean(errors.diagnoses)}>
+    <span className="mbsf-claim-diagnoses-label">Bill diagnoses (Box 21)<RequiredMark /></span>
+    <div className="mbsf-quick-picks" aria-label="Common diagnosis codes">{BILL_SUBMISSION_DIAGNOSIS_QUICK_PICKS.map((option) => { const selected = claimDiagnoses.includes(option.code); return <button className="mbsf-quick-pick" disabled={locked || (!selected && claimDiagnoses.length >= BILL_SUBMISSION_MAX_DIAGNOSES)} data-selected={selected} type="button" key={option.code} aria-pressed={selected} title={`${option.code} — ${option.description}`} onClick={() => setBill((current) => selected ? removeBillSubmissionClaimDiagnosis(current, option.code) : addBillSubmissionClaimDiagnosis(current, option.code))}>{selected ? "✓" : "+"} {option.label}</button>; })}</div>
+    {claimDiagnoses.length ? <ol className="mbsf-claim-diagnosis-list" aria-label="Bill diagnoses">{claimDiagnoses.map((code, index) => <li className="mbsf-chip" key={code} data-pointed={index < BILL_SUBMISSION_MAX_LINE_POINTERS}>
+      <span className="mbsf-pointer-letter" aria-hidden="true">{String.fromCharCode(65 + index)}</span>
+      <span><strong>{code}</strong>{diagnosisDescription(code) ? ` ${diagnosisDescription(code)}` : ""}</span>
+      <button type="button" disabled={locked} aria-label={`Remove ${code} from the bill`} onClick={() => setBill((current) => removeBillSubmissionClaimDiagnosis(current, code))}>×</button>
+    </li>)}</ol> : null}
+    {claimDiagnoses.length < BILL_SUBMISSION_MAX_DIAGNOSES ? <ComboBox ariaLabel="Add diagnosis to the bill" invalid={Boolean(errors.diagnoses)} disabled={locked} loading={diagnosisLoading} loadingMore={diagnosisLoadingMore} value="" placeholder={claimDiagnoses.length ? `Add a diagnosis (${claimDiagnoses.length} of 12)…` : "Search ICD-10 codes…"} options={mergeDiagnosisOptions(diagnosisChoices).filter((item) => !claimDiagnoses.includes(item.code)).map((item) => ({ id: item.code, label: item.code, detail: item.description }))} onOpen={() => loadDiagnoses("")} onQuery={searchDiagnoses} onEndReached={() => loadDiagnoses(diagnosisQuery ?? "", true)} onSelect={(option) => setBill((current) => addBillSubmissionClaimDiagnosis(current, option.id))} /> : <small className="mbsf-help">12 diagnoses (maximum).</small>}
+    {claimDiagnoses.length > BILL_SUBMISSION_MAX_LINE_POINTERS ? <small className="mbsf-help">Diagnoses E–{String.fromCharCode(64 + claimDiagnoses.length)} are listed in Box 21 but no service line points to them.</small> : null}
+  </div>;
   // One line's pointers: toggle any four of the bill's diagnoses (ABCD, ABCF, ABEG …), or search a code not on the bill yet.
   const lineDiagnosisPicker = (index: number) => {
     const codes = billSubmissionLineDiagnosisCodes(bill, index);
@@ -2105,20 +2377,25 @@ export function BillSubmissionForm({
 
   const showEvaluation = !treatmentBilling || bill.serviceLines.some((line) => isMedicalLegalCode(line.code));
   const serviceLinesSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">{showEvaluation ? "Evaluation & service lines" : "Service lines"}</legend>
-      {showEvaluation ? <><p className="mbsf-help">Sets the evaluator/specialty modifier on medical-legal evaluation lines.</p>
-      <div className="mbsf-segments" role="group" aria-label="Evaluation type">{offeredEvaluationTypes.map(([type, label]) => <button className="mbsf-segment" type="button" key={type} aria-pressed={evaluationType === type} onClick={() => changeEvaluation(type)}>{label}</button>)}</div>
-      <p className="mbsf-help">{evaluationType === "psych_ame" ? "Psychiatric or psychological AME — eligible ML evaluation codes default to modifiers -94 and -96." : evaluationType === "ame" ? "Agreed Medical Evaluator — eligible ML evaluation codes default to modifier -94." : evaluationType === "psych_qme" ? "Psychiatric or psychological QME — eligible ML evaluation codes default to modifiers -95 and -96 (-95 only for ML200 and MLPRR)." : "Qualified Medical Evaluator — eligible ML evaluation codes default to modifier -95."}</p></> : null}
+      {showEvaluation ? <p className="mbsf-help">Each line's modifiers identify the evaluation: −94 AME, −95 QME, −96 psychiatric/psychological, −93 interpreter. A medical-legal evaluation code without an evaluator modifier starts with −95 (QME).</p> : null}
+      {diagnosisLimitNotice ? <div className="mbsf-attention" role="status" data-diagnosis-limit="true">{diagnosisLimitNoticeText(diagnosisLimitNotice)} <button type="button" className="mbsf-text-btn" onClick={() => setDiagnosisLimitNotice(null)}>Dismiss</button></div> : null}
+      {medLegal ? <>
+        {medicalLegalDiagnosisEditor}
+        <p className="mbsf-help">List up to 12 diagnoses for the bill. Every service line points to the first four (A–D), the most a CMS-1500 line can carry.</p>
+        {errors.diagnoses ? <p className="mbsf-error" role="alert">{errors.diagnoses}</p> : null}
+      </> : <>
       <label className="mbsf-diagnosis-toggle"><Checkbox checked={sharedDiagnoses} onChange={(event) => toggleSharedDiagnoses(event.target.checked)} /><span>Apply the same diagnosis codes to all service lines</span></label>
       {sharedDiagnoses ? <Field path="diagnoses" label="Diagnosis codes (ICD-10)" required error={errors.diagnoses}>{diagnosisSelector(bill.diagnoses ?? [], (codes) => { individualDiagnoses.current = null; setBill((current) => setBillSubmissionSharedDiagnoses(current, codes)); })}</Field> : null}
       {!sharedDiagnoses ? claimDiagnosisList : null}
       <p className="mbsf-help">{sharedDiagnoses ? "Choose up to 4 diagnosis codes per service line and 12 across the bill." : "List up to 12 diagnoses for the bill, then pick up to 4 of them (by letter) for each service line."}</p>
       {!sharedDiagnoses && errors.diagnoses ? <p className="mbsf-error" role="alert">{errors.diagnoses}</p> : null}
+      </>}
       {procedureError ? <p className="mbsf-error" role="alert">{procedureError}</p> : null}
-      <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses} data-encounter={encounterColumns} data-estimates={estimateColumns} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span>{!sharedDiagnoses ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span>{encounterColumns ? <><span className="mbsf-num">Charge</span>{estimateColumns ? <><span className="mbsf-num">Expected (OMFS)</span><span className="mbsf-num">Difference</span></> : null}</> : <span>{editableTreatmentCharges && treatmentBilling ? "Billed charge" : "Allowed"}</span>}<span /> </div>
+      <div className="mbsf-lines" ref={serviceLinesRef} data-stacked={stackedServiceLines} data-shared-diagnoses={sharedDiagnoses || medLegal} data-encounter={encounterColumns} data-estimates={estimateColumns} data-field-path="serviceLines" data-invalid={Boolean(errors.serviceLines)}><div className="mbsf-line-head"><span>Procedure code<RequiredMark /></span><span>Modifiers</span>{!sharedDiagnoses && !medLegal ? <span>Diagnosis codes</span> : null}<span>Units<RequiredMark /></span>{encounterColumns ? <><span className="mbsf-num">Charge</span>{estimateColumns ? <><span className="mbsf-num">Expected (OMFS)</span><span className="mbsf-num">Difference</span></> : null}</> : <span>{editableTreatmentCharges && treatmentBilling ? "Billed charge" : "Allowed"}</span>}<span /> </div>
         {bill.serviceLines.map((line, index) => <div className="mbsf-line" key={index}>
-          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" matchCodeIgnoringSeparators loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const [updated] = applyBillSubmissionEvaluationModifiers([{ ...line, code: option.id, ...(switched ? { modifiers: (line.modifiers ?? []).filter((value) => !["94", "95", "96"].includes(value.replace(/^-/, ""))) } : isMedicalLegalCode(option.id) ? { modifiers: (line.modifiers ?? []).filter((value) => medicalLegalModifierApplies(value, option.id)) } : {}) }], evaluationType); setLine(index, updated!); }} />{line.code ? <small className="mbsf-help">{procedureDescription(line.code)}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
+          <div data-label="Procedure code" data-field-path={`serviceLines.${index}.code`} data-invalid={Boolean(errors[`serviceLines.${index}.code`])}><ComboBox ariaLabel={`Procedure code ${index + 1}`} invalid={Boolean(errors[`serviceLines.${index}.code`])} disabled={locked} value={line.code} placeholder="Search or enter code…" matchCodeIgnoringSeparators loading={procedureLoading} onOpen={() => loadProcedures("")} onQuery={loadProcedures} options={procedures.map((item) => ({ id: item.code, label: item.code, detail: item.description }))} createOption={customProcedureOption} onSelect={(option) => { const switched = isMedicalLegalCode(line.code) && !isMedicalLegalCode(option.id); const updated = switched ? { ...line, code: option.id, modifiers: (line.modifiers ?? []).filter((value) => !["92", "94", "95", "96"].includes(value.replace(/^-/, ""))) } : withDefaultBillSubmissionEvaluatorModifiers({ ...line, code: option.id }, billSubmissionDefaultEvaluationType(bill)); setLine(index, updated); }} />{line.code ? <small className="mbsf-help">{procedureDescription(line.code)}</small> : null}{errors[`serviceLines.${index}.code`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.code`]}</small> : null}</div>
           <div data-label="Modifiers"><div className="mbsf-chips">{(line.modifiers ?? []).map((modifier) => <span className="mbsf-chip" key={modifier}>−{modifier.replace(/^-/, "")}<button type="button" aria-label={`Remove modifier ${modifier}`} onClick={() => setLine(index, { modifiers: (line.modifiers ?? []).filter((item) => item !== modifier) })}>×</button></span>)}</div><ComboBox ariaLabel={`Modifiers ${index + 1}`} disabled={locked} value="" placeholder={(line.modifiers?.length ?? 0) ? `${line.modifiers!.length} modifier${line.modifiers!.length === 1 ? "" : "s"}` : "Add modifiers…"} options={billSubmissionModifierOptions(isMedicalLegalCode(line.code) || (!line.code.trim() && !treatmentBilling), line.serviceDate || bill.service?.date, modifierOptions).filter((item) => !(line.modifiers ?? []).includes(item.code) && (!isMedicalLegalCode(line.code) || medicalLegalModifierApplies(item.code, line.code))).map((item) => ({ id: item.code, label: `−${item.code}`, detail: item.description }))} onSelect={(option) => setLine(index, { modifiers: [...new Set([...(line.modifiers ?? []), option.id])] })} /></div>
-          {!sharedDiagnoses ? <div className="mbsf-line-diagnoses" data-label="Diagnosis codes (ICD-10)" data-field-path={`serviceLines.${index}.diagnosisPointers`} data-invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])}>
+          {!sharedDiagnoses && !medLegal ? <div className="mbsf-line-diagnoses" data-label="Diagnosis codes (ICD-10)" data-field-path={`serviceLines.${index}.diagnosisPointers`} data-invalid={Boolean(errors[`serviceLines.${index}.diagnosisPointers`])}>
             {lineDiagnosisPicker(index)}
             {errors[`serviceLines.${index}.diagnosisPointers`] ? <small className="mbsf-error" role="alert">{errors[`serviceLines.${index}.diagnosisPointers`]}</small> : null}
           </div> : null}
@@ -2150,8 +2427,8 @@ export function BillSubmissionForm({
 
   const attachmentsSection = <fieldset className="mbsf-card" data-field-path="attachments" data-invalid={Boolean(errors.attachments)} disabled={locked}><legend className="mbsf-legend">Attachments</legend><div className="mbsf-attach-list">
       {attachments.filter((attachment) => !removedSourceIds.includes(attachment.id)).map((attachment) => { const auto = attachment.autoAttached || attachment.documentType === "w9"; const removable = attachment.removable ?? !auto; const reportTypeCode = sourceAttachmentReportTypes[attachment.id] || attachment.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" data-auto={auto} key={attachment.id}><div className="mbsf-attach-main">{auto ? <span aria-label="Auto-attached" role="img">✓</span> : null}<span className="mbsf-file"><strong>{attachment.fileName}</strong><span className="mbsf-badge">{auto ? "Auto-attached" : documentLabels[attachment.documentType]}</span><span className="mbsf-help" style={{ display: "block" }}>{attachment.description || (auto ? "Included automatically with every bill." : documentLabels[attachment.documentType])}</span></span></div>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${attachment.fileName}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setSourceAttachmentReportTypes((current) => ({ ...current, [attachment.id]: option.id }))} /></div> : null}<div className="mbsf-attach-actions">{attachment.previewUrl ? <a className="mbsf-secondary" href={attachment.previewUrl} target="_blank" rel="noopener noreferrer">Preview</a> : null}{removable ? <button className="mbsf-icon-btn" type="button" aria-label={`Remove ${attachment.fileName}`} disabled={locked} onClick={() => { setSelectedIds((current) => current.filter((id) => id !== attachment.id)); setRemovedSourceIds((current) => [...new Set([...current, attachment.id])]); }}>×</button> : null}</div></div>; })}
-      {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div><label className="mbsf-attach-type">Document purpose<Select aria-label={`Document purpose for ${upload.file.name}`} value={upload.description ?? ""} onChange={(choice) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: choice } : item))}><option value="">Supporting document</option><option value="Authorization / UR response">Authorization / UR response</option><option value="MPN / network documentation">MPN / network documentation</option></Select></label>{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
-    </div>{errors.attachments ? <p className="mbsf-error" role="alert">{errors.attachments}</p> : null}<input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>Add supporting documents anywhere on this screen.</span></span></button></fieldset>;
+      {uploads.map((upload, index) => { const reportTypeCode = upload.reportTypeCode || defaultAttachmentReportType || ""; return <div className="mbsf-attach-row" key={`${upload.file.name}-${index}`}><div className="mbsf-attach-main"><span className="mbsf-file"><strong>{upload.file.name}</strong><span className="mbsf-help" style={{ display: "block" }}>{(upload.file.size / 1024 / 1024).toFixed(1)} MB</span></span></div>{medLegal ? null : <label className="mbsf-attach-type">Document purpose<Select aria-label={`Document purpose for ${upload.file.name}`} value={upload.description ?? ""} onChange={(choice) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: choice } : item))}><option value="">Supporting document</option><option value="Authorization / UR response">Authorization / UR response</option><option value="MPN / network documentation">MPN / network documentation</option></Select></label>}{showAttachmentReportTypes ? <div className="mbsf-attach-type"><ComboBox ariaLabel={`Report type for ${upload.file.name}`} invalid={!reportTypeCode} disabled={locked} preserveValueOnOpen value={reportTypeCode} placeholder="Select report type…" options={reportTypeOptions} onSelect={(option) => setUploads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reportTypeCode: option.id } : item))} /></div> : null}<div className="mbsf-attach-actions"><button className="mbsf-secondary" type="button" onClick={() => previewUploadedPdf(upload.file)}>Preview</button><button className="mbsf-icon-btn" type="button" aria-label={`Remove ${upload.file.name}`} onClick={() => setUploads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div></div>; })}
+    </div>{errors.attachments ? <p className="mbsf-error" role="alert">{errors.attachments}</p> : null}<input ref={fileInput} hidden type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} /><button className="mbsf-drop" data-active={dragActive} type="button" onClick={() => fileInput.current?.click()}><span><strong style={{ fontSize: 18 }}>Drop additional PDF files here, or click to choose</strong><span className="mbsf-help" style={{ display: "block", marginTop: 8 }}>{medLegal ? "Attach the signed report, proof of service, and any other supporting documents." : "Add supporting documents anywhere on this screen."}</span></span></button></fieldset>;
 
   const actionsSection = <>{cmsPreview ? <section className="mbsf-cms-preview" aria-label="CMS-1500 preview"><header><div><h3>CMS-1500 preview</h3><p className="mbsf-help">{previewCurrent ? "Generated from the current bill edits. Nothing has been sent." : "Bill details changed. Refresh the preview to review your latest edits."}</p></div><button type="button" className="mbsf-secondary" onClick={() => setCmsPreview(null)}>Close preview</button></header>{previewCurrent ? <><div className="mbsf-preview-details"><span>Service dates: <strong>{[...new Set(clean.serviceLines.map((line) => `${line.serviceDate || clean.service.date}${line.serviceDateEnd && line.serviceDateEnd !== (line.serviceDate || clean.service.date) ? ` – ${line.serviceDateEnd}` : ""}`))].join(", ") || "Not entered"}</strong></span><span>Claims administrator: <strong>{clean.claim.claimsAdministrator?.name || "Not selected"}</strong></span><a className="mbsf-secondary" href={cmsPreview.url} target="_blank" rel="noopener noreferrer">Open PDF in new tab</a><a className="mbsf-secondary" href={cmsPreview.url} download="cms-1500-preview.pdf">Download PDF</a></div><iframe title="CMS-1500 PDF preview" src={cmsPreview.url} /></> : <div role="status" className="mbsf-preview-stale">Preview out of date — select Refresh CMS-1500 preview below.</div>}</section> : null}{formError ? <div className="mbsf-alert" role="alert">{formError}</div> : null}<div className="mbsf-actions">{(!clean.claimForm || clean.claimForm === "cms1500") ? <button className="mbsf-secondary" type="button" disabled={locked || previewing || !previewClient} onClick={() => void previewCms1500()}>{previewing ? "Generating preview…" : cmsPreview ? "Refresh CMS-1500 preview" : "Preview CMS-1500"}</button> : null}{onSaveDraft ? <button className="mbsf-secondary" type="button" disabled={locked} onClick={() => {
     setSavingDraft(true); setFormError(null);
@@ -2181,7 +2458,7 @@ export function BillSubmissionForm({
     <form ref={formRef} className={`${className} mbsf`} style={{ ...mindBillAppearanceStyle(appearance), ...style }} onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
       <style>{css}</style>
       {attentionMessage ? <div className="mbsf-attention" role="status">{attentionMessage}</div> : null}
-      {reportAutofill ? <ReportAutofill {...reportAutofill} disabled={disabled || submitting} onApply={(result) => setBill((current) => applyReportAutofill(current, result, availableProfiles))} /> : null}
+      {reportAutofill ? <ReportAutofill {...(analytics !== undefined ? { analytics } : {})} {...(onAnalyticsEvent ? { onAnalyticsEvent } : {})} {...reportAutofill} disabled={disabled || submitting} onApply={(result) => { const carrier = reportAutofillInsuranceCarrier(result); if (carrier) setAutofillCarrier(carrier); setBill((current) => applyReportAutofill(current, result, availableProfiles)); }} /> : null}
       {children ?? defaultLayout}
       {routeDialog ? (
         <SendRouteDialog
@@ -2190,7 +2467,8 @@ export function BillSubmissionForm({
           submitting={submitting}
           error={routeError}
           onCancel={() => { if (!submitting) { setRouteDialog(null); setRouteError(null); } }}
-          onConfirm={(submission) => { void performSubmit({ ...routeDialog.value, submission }); }}
+          onConfirm={(submission) => { track("route_selected", { route: submission.route, billingMode: analyticsBillingMode }); void performSubmit({ ...routeDialog.value, submission }); }}
+          {...(previewClient ? { onPreviewPacket: (submission: SendRouteSubmission) => previewPacket(routeDialog.value, submission) } : {})}
         />
       ) : null}
     </form>

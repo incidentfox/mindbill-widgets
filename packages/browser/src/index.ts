@@ -15,6 +15,9 @@ export type BillLineFormData = BillFormData;
 export type { CaClaimFeeQuoteInput, CaClaimFeeQuoteResult, CaClaimLineQuote, CaFeeCalculation, CaFeeCitation, CaClaimEditFinding, CaClaimFeeFinding } from "./claim-fees";
 export { normalizeRfaFax, rfaAuthorizationDestinations, rfaAuthorizationGuidance } from "./rfa-directory";
 export type { RfaAuthorizationDestinationOption } from "./rfa-directory";
+import { rememberMindBillSessionDetails, withMindBillSdkFetch } from "./analytics";
+export * from "./analytics";
+export { MINDBILL_BROWSER_SDK_VERSION } from "./version";
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
 export const DEFAULT_SESSION_ENDPOINT = "/api/mindbill/session";
 export { parseSecondReviewCorrection, type CorrectionDraft } from "./second-review-corrections";
@@ -132,6 +135,8 @@ export type BillReviewPayerOption = {
   sourcePayerId?: string | null;
   clearinghousePayerIds?: Record<string, string>;
   preferredClearinghouse?: string | null;
+  /** True when this payer can receive the bill electronically. Absent on older APIs. */
+  electronic?: boolean;
 };
 
 export type BillReviewPayer = {
@@ -150,6 +155,10 @@ export type BillReviewPayer = {
   payerSelectionRequired?: boolean;
   /** Selectable payers (subpayors) under this claims administrator. */
   payers?: BillReviewPayerOption[];
+  /** Payer MindBill suggests preselecting (no patient data is used). Absent on older APIs. */
+  suggestedPayerId?: string;
+  /** Why `suggestedPayerId` is suggested: the only e-billable payer, or the payer most used for this administrator. */
+  suggestedPayerReason?: "single_ebill" | "most_used";
   aliases?: string[];
   affiliatedEntities?: string[];
   claimNumberHint?: string | null;
@@ -244,9 +253,13 @@ export type BillReviewData = {
   injury: {
     claimNumber?: string;
     employer?: string;
+    /** Date of injury; for a cumulative trauma (CT) claim, the START of the injury period. */
     doi?: string;
+    /** END of a cumulative trauma (CT) injury period. */
     injuryEndDate?: string;
     cumulativeTrauma?: boolean;
+    /** "cumulative" for a CT claim. Absent on older APIs; `cumulativeTrauma` carries the same fact. */
+    injuryType?: "specific" | "cumulative";
     adjNumber?: string;
     medicalProviderNetworkId?: string | null;
     claimsAdminId?: string;
@@ -542,6 +555,8 @@ export type BillClaimsAdministratorPayer = {
   sourcePayerId?: string | null;
   clearinghousePayerIds?: Record<string, string>;
   preferredClearinghouse?: string | null;
+  /** True when this payer can receive the bill electronically. Absent on older APIs. */
+  electronic?: boolean;
 };
 
 export type BillReviewPayerPage = {
@@ -581,6 +596,9 @@ export type BillClaimsAdministratorDirectory = {
   emailAddresses?: string[];
   webPortals?: string[];
   payers?: BillClaimsAdministratorPayer[];
+  /** Payer MindBill suggests preselecting. Absent on older APIs. */
+  suggestedPayerId?: string;
+  suggestedPayerReason?: "single_ebill" | "most_used";
   authorizationNotice?: string | null;
   billReview?: BillClaimsAdministratorContact[];
   authorization?: BillClaimsAdministratorContact[];
@@ -1073,8 +1091,27 @@ export type BillReferenceClientOptions = Omit<BillLifecycleClientOptions, "billI
 /** Browser-session options for an atomic immutable bill submission. */
 export type BillSubmissionClientOptions = BillReferenceClientOptions;
 
+/** Unsaved bill plus its documents, rendered as the packet that would be sent. Nothing is created or sent. */
+export type BillPacketPreviewInput = {
+  bill: BrowserBillSubmissionInput["bill"];
+  /** Documents in attachment order, exactly as they would be submitted. */
+  documents?: BrowserBillSubmissionDocument[];
+  /** Delivery route the packet is previewed for. Fax and mail packets begin with their cover sheet. */
+  route?: "ebill" | "fax" | "email" | "mail";
+  /** Fax/mail ATTENTION line. */
+  attention?: string;
+};
+
+export type BillPacketPreview = {
+  pdf: Blob;
+  /** Packet parts in order, from the X-MindBill-Packet-Sections header (e.g. "cover", "claim_form", "document", "w9"). Empty when not reported. */
+  sections: string[];
+};
+
 export type BillSubmissionClient = {
   previewCms1500: (bill: BrowserBillSubmissionInput["bill"]) => Promise<Blob>;
+  /** Render the complete packet (claim form, attachments, W-9) for the selected route without creating a bill. */
+  previewPacket: (input: BillPacketPreviewInput) => Promise<BillPacketPreview>;
   submitBill: (
     input: BrowserBillSubmissionInput,
     options?: { idempotencyKey?: string },
@@ -1490,6 +1527,29 @@ export function normalizeSecondReviewSuggestions(value: unknown): SecondReviewSu
   };
 }
 
+/** An error response from the MindBill API. `code` is the machine error code when the API returned one. */
+export class MindBillApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "MindBillApiError";
+    this.status = status;
+    if (code) this.code = code;
+  }
+}
+
+/** Machine error code from a problem/error body: `error`, `code`, or the last segment of `type`. */
+export function mindBillApiErrorCode(body: unknown): string | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const value = body as { error?: unknown; code?: unknown; type?: unknown };
+  const typeSuffix = typeof value.type === "string" ? value.type.split(/[/#:]/).filter(Boolean).at(-1) : undefined;
+  for (const candidate of [value.error, value.code, typeSuffix]) {
+    if (typeof candidate === "string" && /^[a-z0-9_]{1,64}$/.test(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 async function responseError(response: Response, fallback: string): Promise<Error> {
   const body: unknown = await response.json().catch(() => null);
   const detail = body && typeof body === "object"
@@ -1497,7 +1557,7 @@ async function responseError(response: Response, fallback: string): Promise<Erro
       ?? (body as { message?: unknown }).message
       ?? (body as { error?: unknown }).error
     : null;
-  return new Error(typeof detail === "string" ? detail : fallback);
+  return new MindBillApiError(typeof detail === "string" ? detail : fallback, response.status, mindBillApiErrorCode(body));
 }
 
 function isSessionFresh(session: BillLifecycleSession | null): boolean {
@@ -1517,6 +1577,7 @@ function normalizeSession(value: unknown): BillLifecycleSession {
   if (typeof session.token !== "string" || session.token.length < 8) {
     throw new Error("The billing session endpoint did not return a browser session token.");
   }
+  rememberMindBillSessionDetails(session);
   return {
     token: session.token,
     ...(typeof session.expiresAt === "string" ? { expiresAt: session.expiresAt } : {}),
@@ -1599,7 +1660,7 @@ export function createBillSubmissionClient({
   apiBaseUrl = DEFAULT_API_BASE_URL,
   fetch: fetchOverride,
 }: BillSubmissionClientOptions = {}): BillSubmissionClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   let session: BillLifecycleSession | null = null;
   let sessionRequest: Promise<BillLifecycleSession> | null = null;
@@ -1695,8 +1756,45 @@ export function createBillSubmissionClient({
     return response.blob();
   };
 
+  const previewPacket = async (input: BillPacketPreviewInput): Promise<BillPacketPreview> => {
+    const controller = new AbortController();
+    let browserSession = await mintSession(controller.signal);
+    const body = JSON.stringify({
+      bill: input.bill,
+      ...(input.documents ? { documents: input.documents } : {}),
+      ...(input.route ? { route: input.route } : {}),
+      ...(input.attention?.trim() ? { attention: input.attention.trim() } : {}),
+    });
+    const perform = (current: BillLifecycleSession) => {
+      const base = (current.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "");
+      return fetcher(`${base}/partner/v2/bills/preview-packet`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${current.token}`,
+          "content-type": "application/json",
+        },
+        body,
+        signal: controller.signal,
+      });
+    };
+    let response = await perform(browserSession);
+    if (response.status === 401) {
+      session = null;
+      browserSession = await mintSession(controller.signal, true);
+      response = await perform(browserSession);
+    }
+    if (!response.ok) throw await responseError(response, "The packet preview could not be generated.");
+    if (!response.headers.get("content-type")?.includes("application/pdf")) {
+      throw new Error("The billing service returned an invalid packet preview.");
+    }
+    const sections = (response.headers.get("x-mindbill-packet-sections") ?? "")
+      .split(",").map((part) => part.trim()).filter((part) => /^[a-z0-9_]{1,40}$/.test(part));
+    return { pdf: await response.blob(), sections };
+  };
+
   return {
     previewCms1500,
+    previewPacket,
     submitBill,
     clearSession() { session = null; sessionRequest = null; },
   };
@@ -1710,7 +1808,7 @@ export function createBillLifecycleClient({
   apiBaseUrl = DEFAULT_API_BASE_URL,
   fetch: fetchOverride,
 }: BillLifecycleClientOptions): BillLifecycleClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   let session: BillLifecycleSession | null = null;
   let sessionRequest: Promise<BillLifecycleSession> | null = null;
@@ -1831,6 +1929,7 @@ export function createBillLifecycleClient({
             ? { clearinghousePayerIds: Object.fromEntries(Object.entries(candidate.clearinghousePayerIds).filter((entry): entry is [string, string] => typeof entry[1] === "string")) }
             : {}),
           ...(typeof candidate.preferredClearinghouse === "string" ? { preferredClearinghouse: candidate.preferredClearinghouse } : {}),
+          ...(typeof candidate.electronic === "boolean" ? { electronic: candidate.electronic } : {}),
         }];
       }) : undefined;
       const claimNumberPatterns = Array.isArray(payer.claimNumberPatterns) ? payer.claimNumberPatterns.flatMap((value): BillClaimsAdministratorPattern[] => {
@@ -1853,6 +1952,8 @@ export function createBillLifecycleClient({
         ...(typeof payer.recommended === "boolean" ? { recommended: payer.recommended } : {}),
         ...(typeof payer.payerSelectionRequired === "boolean" ? { payerSelectionRequired: payer.payerSelectionRequired } : {}),
         ...(payers ? { payers } : {}),
+        ...(typeof payer.suggestedPayerId === "string" && payer.suggestedPayerId ? { suggestedPayerId: payer.suggestedPayerId } : {}),
+        ...(payer.suggestedPayerReason === "single_ebill" || payer.suggestedPayerReason === "most_used" ? { suggestedPayerReason: payer.suggestedPayerReason } : {}),
         ...(Array.isArray(payer.aliases) ? { aliases: payer.aliases.filter((item): item is string => typeof item === "string") } : {}),
         ...(Array.isArray(payer.affiliatedEntities) ? { affiliatedEntities: payer.affiliatedEntities.filter((item): item is string => typeof item === "string") } : {}),
         ...(typeof payer.claimNumberHint === "string" ? { claimNumberHint: payer.claimNumberHint } : {}),
@@ -2253,7 +2354,7 @@ export function createOrganizationClient({
   apiBaseUrl = DEFAULT_API_BASE_URL,
   fetch: fetchOverride,
 }: OrganizationClientOptions = {}): OrganizationClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   let session: BillLifecycleSession | null = null;
 
@@ -2620,7 +2721,7 @@ export type RfaTemplateRecord = { id: string; name: string; billingProviderId: s
 export type RfaTemplateSaveInput = { id?: string; name: string; billingProviderId: string; renderingProviderId?: string | null; active?: boolean; items: RfaTemplateItemRecord[] };
 /** Uses short-lived browser credentials. Never pass a partner API key. */
 export function createRfaClient({ sessionEndpoint = DEFAULT_SESSION_ENDPOINT, getSession, apiBaseUrl = DEFAULT_API_BASE_URL, fetch: fetchOverride }: OrganizationClientOptions = {}): RfaClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   let session: BillLifecycleSession | null = null;
   let pending: Promise<BillLifecycleSession> | null = null;
   const mint = (force = false): Promise<BillLifecycleSession> => {

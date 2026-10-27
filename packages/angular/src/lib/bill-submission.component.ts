@@ -13,7 +13,12 @@ import {
   type BrowserBillSubmissionDocument,
   type BrowserBillSubmissionInput,
   type BrowserBillSubmissionResult,
+  type MindBillAnalyticsEvent,
+  type MindBillAnalyticsEventName,
+  registerMindBillSdk,
+  trackMindBillAnalyticsEvent,
 } from "@mindbill/browser";
+import { MINDBILL_ANGULAR_SDK_VERSION } from "./version";
 import type { MindBillAngularAppearance } from "./bill-lifecycle.component";
 import { MindBillComboBoxComponent, MindBillDateInputComponent, type MindBillComboOption } from "./submission-controls";
 import { mindBillCustomProcedureOption, parseMindBillSubmissionDate } from "./submission-format";
@@ -140,6 +145,8 @@ async function blobToBase64(blob: Blob): Promise<string> {
   for (const byte of buffer) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
+
+registerMindBillSdk("@mindbill/angular", MINDBILL_ANGULAR_SDK_VERSION);
 
 @Component({
   selector: "mindbill-bill-submission",
@@ -279,6 +286,17 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   @Output() submitted = new EventEmitter<BrowserBillSubmissionResult>();
   @Output() submissionError = new EventEmitter<Error>();
   @Output() billChange = new EventEmitter<BrowserBillCreateInput>();
+  /** false stops sending privacy-safe usage events to MindBill; `analyticsEvent` still emits them. */
+  @Input() analytics = true;
+  /** Usage events (closed enums, durations and field paths only; never values or patient data). */
+  @Output() analyticsEvent = new EventEmitter<MindBillAnalyticsEvent>();
+  private analyticsMounted = false;
+  private track(name: MindBillAnalyticsEventName, errorCode?: string): void {
+    trackMindBillAnalyticsEvent(
+      { name, component: "MindBillBillSubmission", sdkPackage: "@mindbill/angular", sdkVersion: MINDBILL_ANGULAR_SDK_VERSION, ...(errorCode ? { errorCode } : {}) },
+      { send: this.analytics !== false, onEvent: (event) => this.analyticsEvent.emit(event) },
+    );
+  }
 
   bill = {} as BrowserBillCreateInput;
   get inlineBillingProvider(): Extract<BrowserBillCreateInput['billingProvider'], { name: string }> | null {
@@ -326,6 +344,7 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   private postalTimer?: ReturnType<typeof setTimeout>;
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (!this.analyticsMounted) { this.analyticsMounted = true; this.track("component_mounted"); }
     if (changes["initialBill"] && this.initialBill) {
       this.bill = deepCopyBill(this.initialBill);
       if (!this.bill.serviceLines.length) this.bill.serviceLines = [{ code: "", units: 1 }];
@@ -622,7 +641,8 @@ export class MindBillBillSubmissionComponent implements OnChanges {
   async submit(event: Event): Promise<void> {
     event.preventDefault();
     this.errorMessage = "";
-    if (!this.validate()) return;
+    this.track("submit_clicked");
+    if (!this.validate()) { this.track("validation_failed"); return; }
     this.submitting = true;
     try {
       const bill = deepCopyBill(this.bill);
@@ -639,9 +659,13 @@ export class MindBillBillSubmissionComponent implements OnChanges {
       const result = this.submitter
         ? await this.submitter(input)
         : await createBillSubmissionClient({ sessionEndpoint: this.sessionEndpoint, ...(this.getSession ? { getSession: this.getSession } : {}), ...(this.apiBaseUrl ? { apiBaseUrl: this.apiBaseUrl } : {}) }).submitBill(input);
+      this.track("submit_succeeded");
       this.submitted.emit(result);
     } catch (value) {
       const error = value instanceof Error ? value : new Error("The bill could not be submitted.");
+      const code = (error as { code?: unknown; status?: unknown }).code;
+      const status = (error as { status?: unknown }).status;
+      this.track("submit_failed", typeof code === "string" ? code : typeof status === "number" ? `http_${status}` : "unknown");
       this.errorMessage = error.message;
       this.submissionError.emit(error);
     } finally { this.submitting = false; this.changeDetector.markForCheck(); }

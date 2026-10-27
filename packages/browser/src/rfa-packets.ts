@@ -1,3 +1,4 @@
+import { withMindBillSdkFetch } from "./analytics";
 import type { BillLifecycleSession, OrganizationClientOptions } from "./index";
 
 /** `forward` packets are forwarded copies MindBill composed: a forward cover sheet and the documents chosen. */
@@ -20,7 +21,7 @@ export type RfaPacketsClient = {
 };
 
 export function createRfaPacketsClient({ sessionEndpoint = "/api/mindbill/session", getSession, apiBaseUrl = "https://app.mindbill.org", fetch: fetchOverride }: OrganizationClientOptions = {}): RfaPacketsClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   let session: BillLifecycleSession | null = null;
   let pending: Promise<BillLifecycleSession> | null = null;
   const failure = async (response: Response) => {

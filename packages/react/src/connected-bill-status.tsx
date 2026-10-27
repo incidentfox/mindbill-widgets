@@ -1,4 +1,5 @@
 "use client";
+import { withMindBillSdkFetch } from "@mindbill/browser";
 
 import {
   useCallback,
@@ -166,7 +167,7 @@ export function createBillStatusClient({
   apiBaseUrl = DEFAULT_API_BASE_URL,
   fetch: fetchOverride,
 }: BillStatusClientOptions): BillStatusClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   if (typeof fetcher !== "function") {
     throw new Error("A Fetch API implementation is required.");
   }

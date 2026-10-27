@@ -125,7 +125,7 @@ await saveBillId({ externalId: "evaluation_123", billId: bill.id });
 
 The first public bill state is `submitted`. There is no draft, update, upload, delete, or separate submit operation: a successful response means MindBill accepted one immutable snapshot for delivery. Editing a provider in your application never rewrites a past claim.
 
-For React applications, `BillSubmissionForm` supplies the entire authoring UI and contract: a responsive two-column form, paste-friendly dates, ZIP completion, ICD-10 chips, canonical payer search, QME/AME and psychiatric evaluation modifier defaults, fee-aware service lines, rich attachment uploads, validation, browser-side PDF encoding, and atomic Submit. Your application only supplies tenant bootstrap data and mints a short-lived browser session; bill payloads and attachment bytes never pass through your server.
+For React applications, `BillSubmissionForm` supplies the entire authoring UI and contract: a responsive two-column form, paste-friendly dates, ZIP completion, ICD-10 chips, canonical payer search, medical-legal evaluation modifier defaults, fee-aware service lines, rich attachment uploads, validation, browser-side PDF encoding, and atomic Submit. Your application only supplies tenant bootstrap data and mints a short-lived browser session; bill payloads and attachment bytes never pass through your server.
 
 ```tsx
 import { BillSubmissionForm } from "@mindbill/react";
@@ -155,17 +155,36 @@ directory rule; rules that cannot be evaluated safely remain informational. When
 selected claims administrator requires payer selection, both forms show a second "Payer"
 combo box listing every subpayor,
 its aliases, affiliated entities, claim-number hint, delivery route, clearinghouse, and
-payer identifiers. The biller must make an explicit choice before submission, sent as
-`claim.claimsAdministrator.payerId`; administrators without subpayors are
-unchanged. The component bundles MindBill's
+payer identifiers. The chosen payer is sent as `claim.claimsAdministrator.payerId`;
+administrators without subpayors are unchanged. The form preselects a suggested payer
+when one is identified — the administrator's only payer or only e-billable payer, the
+payer matching the insurance carrier named in `insuranceCarrierName` or the report, or
+the payer MindBill bills most often for that administrator — and labels it as a
+suggestion the biller can change. A claims administrator supplied in `initialBill` (or
+carried over by a correction) loads its payer list, so the carried-over payer appears
+preselected and editable. The component bundles MindBill's
 curated workers-comp procedure and modifier catalog, medical-legal fee rules, diagnosis
 quick picks, and locked practice W-9 behavior. Pass optional catalog props only to add
 organization-specific choices.
 
-Diagnosis codes sit beside the service lines. By default, one searchable ICD-10
-multiselect applies up to four diagnoses to every line. Clear “Apply the same diagnosis
-codes to all service lines” to choose diagnoses independently in each row; the bill
-supports twelve unique codes. Switching modes preserves diagnosis links by code.
+Diagnosis codes sit beside the service lines. A CMS-1500 lists at most twelve diagnoses
+(Box 21 A–L) and each line points to at most four. If `initialBill` carries more, the form
+keeps the first twelve and each line's first four pointers and shows a non-blocking notice.
+On a medical-legal bill every diagnosis applies to every line: the form lists the bill's
+diagnoses (up to twelve) and points each line to the first four, with no per-line picking.
+On a treatment bill, one searchable ICD-10 multiselect applies up to four diagnoses to every
+line by default; clear “Apply the same diagnosis codes to all service lines” to choose
+diagnoses independently in each row. Switching modes preserves diagnosis links by code.
+
+For a cumulative trauma (CT) claim, check **Cumulative trauma (CT)** and enter the injury
+period. `claim.dateOfInjury` is the start of the period and `claim.injuryEndDate` its end,
+sent with `claim.injuryType: "cumulative"`; the bill uses the end date unless the claims
+administrator has a different date of injury on file. Hosts can pass the same fields in
+`initialBill`, and report suggestions fill both dates when the report states a CT period.
+
+On medical-legal bills every attachment is sent as the med-legal report supporting
+document (report type `OZ:J4`), so the form shows no document-purpose or report-type
+picker. Treatment bills keep both pickers.
 Pass `treatmentBilling` to include treatment procedures in the existing procedure picker
 and obtain dated standard fee estimates through the browser session. Each priced line
 shows how the fee was calculated (RVUs, geographic factors, conversion factor). The
@@ -180,9 +199,11 @@ Pass `showFeeEstimates={false}` to show only the entered charges (no Expected (O
 columns, fee notes or calculation details); fee estimates are informational and the entered charge is what
 is billed. Treatment bills show the expected OMFS amount on the Explanation of Review.
 Treatment modifier choices include `25`, `GP/GO/GN` and `CQ/CO`; `93/95` labels
-follow the line’s treatment or medical-legal context and service date. The evaluator
-selector appears for medical-legal lines; pass `evaluationTypes` to offer only some
-evaluator types, for example `["psych_qme", "psych_ame"]` for a psychiatric practice. See [modifier meanings](./docs/evaluation-modifiers.md)
+follow the line’s treatment or medical-legal context and service date. Each medical-legal
+line's modifiers (−94 AME, −95 QME, −96 psychiatric, −93 interpreter) identify the
+evaluation; there is no separate evaluator selector, and `evaluationTypes` is ignored. A
+medical-legal evaluation code chosen without an evaluator modifier starts with −95 (QME); a
+modifier supplied by the host or a report is never replaced. See [modifier meanings](./docs/evaluation-modifiers.md)
 and [procedure search and fee quotes](./docs/procedure-fees.md).
 
 Select **Preview CMS-1500** to review the current bill inside the editor, including
@@ -204,6 +225,13 @@ Pass `deliveryRoutePicker="off"` to skip the dialog and submit on MindBill's
 recommended route, or render the exported `SendRouteDialog` yourself for a custom
 flow. When the preview is unavailable, the form submits directly — behavior on
 older deployments is unchanged.
+
+The dialog's **Preview packet** button shows the complete packet for the selected route
+exactly as it would be sent — the fax or mail cover sheet when that route uses one, then
+the CMS-1500, the report and other attachments in order, then the W-9 (the attached W-9 or
+the saved billing-provider W-9 MindBill would add). It renders from the unsaved form through
+`previewPacket` on the browser submission client and never creates, saves or sends a bill.
+Custom `SendRouteDialog` layouts can pass `onPreviewPacket`.
 
 Correction and Submit New Bill forms always require this confirmation. Their
 preview uses the administrator and subpayor selected in the edited form, so a
@@ -426,6 +454,10 @@ Dashboard colors, borders, radii, spacing, and aging palettes are configurable t
 The same bill contract supports California med-legal billing and `billingMode: "professional"` for IME, treatment, malpractice, hourly, and activity-based workflows. Professional service lines carry the explicit charge supplied by the partner; med-legal lines use MindBill fee-schedule logic.
 
 For organizations with treatment billing enabled, the browser reference and lifecycle clients expose `searchProcedureCodes` and `quoteFee`. Search the procedure catalog, then quote the service using its date and verified context. A priced quote returns the total line amount in cents; review outcomes require resolution before using a charge. See [procedure search and fee quotes](./docs/procedure-fees.md) for the contracts and examples.
+
+## Usage analytics and SDK version header
+
+The React and Angular components report privacy-safe usage events (for example `form_viewed`, `submit_succeeded`, `route_selected`) to MindBill so we can improve the embedded workflow. Events contain only closed event names, component name, SDK package and version, an anonymous per-tab id, durations, delivery-route enums, machine error codes and form field paths — never field values, free text, or patient information. Pass `analytics={false}` (React) or `[analytics]="false"` (Angular) to stop sending them; `onAnalyticsEvent` / `(analyticsEvent)` still receives every event for your own analytics. Browser API requests to MindBill also carry an `X-MindBill-SDK` header such as `@mindbill/browser/0.56.0 @mindbill/react/0.87.0`. See [SDK analytics](./docs/sdk-analytics.md).
 
 ## Reference
 

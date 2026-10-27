@@ -170,7 +170,7 @@ it("keeps a treatment review unpriced, explains the reason, and offers treatment
   }
 });
 
-it("retains evaluator controls and medical-legal modifier meanings for an ML line in treatment mode", async () => {
+it("keeps medical-legal modifier meanings for an ML line in treatment mode without an evaluator-type control", async () => {
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   try {
@@ -179,7 +179,7 @@ it("retains evaluator controls and medical-legal modifier meanings for an ML lin
       getSession: async () => ({ token: "synthetic_session" }), fetch: async () => Response.json({ data: [] }),
       treatmentBilling: true, deliveryRoutePicker: "off",
     })));
-    expect(container.querySelector('[aria-label="Evaluation type"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Evaluation type"]')).toBeNull();
     expect(container.querySelector('[aria-label="Remove modifier 95"]')).not.toBeNull();
     await act(async () => container.querySelector<HTMLInputElement>('[aria-label="Modifiers 1"]')!.focus());
     expect(container.querySelector('[role="listbox"]')?.textContent).toContain("Interpreter required");
@@ -221,18 +221,19 @@ it("shows the relative-value calculation behind a priced line instead of fee-bas
   }
 });
 
-it("offers only the evaluator types a practice supplies", async () => {
+it("never shows an evaluator-type control and never overrides a supplied evaluator modifier", async () => {
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   try {
     await act(async () => root.render(createElement(BillSubmissionForm, {
-      initialBill: { ...bill, billingMode: "med_legal", renderingProvider: { ...bill.renderingProvider, specialty: "Psychiatry" }, serviceLines: [{ code: "ML201", units: 1, serviceDate: "2026-08-24", diagnosisPointers: [1] }] },
+      initialBill: { ...bill, billingMode: "med_legal", renderingProvider: { ...bill.renderingProvider, specialty: "Psychiatry" }, serviceLines: [{ code: "ML201", units: 1, modifiers: ["94"], serviceDate: "2026-08-24", diagnosisPointers: [1] }] },
       getSession: async () => ({ token: "synthetic_session" }), fetch: vi.fn<typeof fetch>(async () => Response.json({ data: [] })),
       treatmentBilling: true, deliveryRoutePicker: "off", evaluationTypes: ["psych_qme", "psych_ame"],
     })));
-    const segments = [...container.querySelectorAll('[aria-label="Evaluation type"] button')].map((button) => button.textContent);
-    expect(segments).toEqual(["Psych QME", "Psych AME"]);
-    expect(container.querySelector('[aria-label="Evaluation type"] [aria-pressed="true"]')?.textContent).toBe("Psych QME");
+    expect(container.querySelector('[aria-label="Evaluation type"]')).toBeNull();
+    expect(container.textContent).not.toContain("QME (default)");
+    expect(container.querySelector('[aria-label="Remove modifier 94"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Remove modifier 95"]')).toBeNull();
   } finally {
     await act(async () => root.unmount()); container.remove();
   }
