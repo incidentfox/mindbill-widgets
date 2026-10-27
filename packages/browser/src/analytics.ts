@@ -318,7 +318,10 @@ export async function flushMindBillAnalytics(): Promise<void> {
     while (queue.length && !disabled) {
       const batch = queue.splice(0, BATCH_MAX);
       const body = JSON.stringify({ events: batch.map((event) => { const wire = { ...event }; delete wire.environment; return wire; }) });
-      const send = () => session.fetcher(`${session.apiBaseUrl}/partner/v2/browser/analytics`, {
+      // Call fetch as a plain function: invoking the platform fetch as a method of another object throws
+      // "Illegal invocation" in browsers.
+      const fetcher = session.fetcher;
+      const send = () => fetcher(`${session.apiBaseUrl}/partner/v2/browser/analytics`, {
         method: "POST",
         keepalive: true,
         credentials: "omit",

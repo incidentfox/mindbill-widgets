@@ -91,6 +91,20 @@ describe("analytics delivery", () => {
     expect(pendingMindBillAnalyticsEvents()).toHaveLength(0);
   });
 
+  it("calls the platform fetch as a plain function (a method call throws Illegal invocation in browsers)", async () => {
+    const calls: unknown[] = [];
+    const platformFetch = function (this: unknown) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      calls.push(this);
+      return Promise.resolve(okResponse());
+    } as unknown as typeof fetch;
+    trackMindBillAnalyticsEvent({ ...base, name: "form_viewed" });
+    noteMindBillAnalyticsSession({ ...session, expiresAt: new Date(Date.now() + 600_000).toISOString() }, platformFetch);
+    await flushMindBillAnalytics();
+    expect(calls).toHaveLength(1);
+    expect(pendingMindBillAnalyticsEvents()).toHaveLength(0);
+  });
+
   it("sends at most 50 events per request", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => okResponse());
     for (let index = 0; index < 75; index += 1) trackMindBillAnalyticsEvent({ ...base, name: "form_viewed" }, { send: true });
