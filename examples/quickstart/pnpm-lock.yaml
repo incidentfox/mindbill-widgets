@@ -188,8 +188,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@mindbill/browser@0.55.0':
-    resolution: {integrity: sha512-MQ2pW/iFDN8t5s39L9RKqKqn31inyO2I7SK8wbBnMIjA5ufe+Ufj0E7dDU/+AebAFMrOEIZYAVD4jG3jkN9pCg==}
+  '@mindbill/browser@0.55.1':
+    resolution: {integrity: sha512-2wUhN1iSXAgM5oaFwQUQ7M/Jw7dbsST/PfNlTf8aLAWllBhG8/nJfTHZtKYplqPF+QgNWNZr1EIwjQhmLh1jUg==}
 
   '@mindbill/embed@0.6.0':
     resolution: {integrity: sha512-xWBMiqv0OX/DLsJshboGNWBRg/YZnAxLCKK/GP5KjtT+AkawhFdkd8HphaGPD8QL8IkVpA3YB5l/OKSbK7+dkQ==}
@@ -487,7 +487,7 @@ snapshots:
   '@img/sharp-win32-x64@0.35.4':
     optional: true
 
-  '@mindbill/browser@0.55.0': {}
+  '@mindbill/browser@0.55.1': {}
 
   '@mindbill/embed@0.6.0': {}
 
@@ -495,7 +495,7 @@ snapshots:
 
   '@mindbill/react@0.86.1(react@19.2.8)':
     dependencies:
-      '@mindbill/browser': 0.55.0
+      '@mindbill/browser': 0.55.1
       '@mindbill/embed': 0.6.0
       react: 19.2.8
 
