@@ -101,8 +101,9 @@ const css = `
 .mbrd-card-main{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .mbrd-card[data-disabled=true] .mbrd-card-main{cursor:not-allowed}
 .mbrd-radio{flex:0 0 auto;width:18px;height:18px;border:2px solid var(--mb-border);border-radius:50%;display:grid;place-items:center}
-.mbrd-card[data-selected=true] .mbrd-radio{border-color:var(--mb-accent)}
-.mbrd-card[data-selected=true] .mbrd-radio:after{content:"";width:9px;height:9px;border-radius:50%;background:var(--mb-accent)}
+.mbrd-card[data-selected=true]>.mbrd-card-main .mbrd-radio,.mbrd-choice[data-selected=true] .mbrd-radio{border-color:var(--mb-accent)}
+.mbrd-card[data-selected=true]>.mbrd-card-main .mbrd-radio:after,.mbrd-choice[data-selected=true] .mbrd-radio:after{content:"";width:9px;height:9px;border-radius:50%;background:var(--mb-accent)}
+.mbrd-choice[data-selected=true] .mbrd-radio:after{width:7px;height:7px}
 .mbrd-card-text{min-width:0;flex:1}
 .mbrd-card-title{font-weight:700;line-height:1.3;overflow-wrap:anywhere}
 .mbrd-card-detail{margin-top:2px;color:var(--mb-muted);font-size:13px;line-height:1.35;overflow-wrap:anywhere}
