@@ -61,6 +61,8 @@ import { ReportBillStatusDialog } from "./report-bill-status-dialog";
 import { SecondReviewForm } from "./second-review-form";
 import { BillCourtesyCopyForm, type CourtesyCopyRecipientOption } from "./bill-courtesy-copy-form";
 import { DateField, Select } from "./form-controls";
+import { useMindBillAnalytics, type MindBillAnalyticsProps } from "./analytics";
+import { analyticsErrorCode } from "./report-autofill";
 
 export {
   SECOND_REVIEW_REASON_TEMPLATE,
@@ -407,7 +409,7 @@ export function useBillLifecycle({
   };
 }
 
-export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & BillDetailNavigationProps & {
+export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & BillDetailNavigationProps & MindBillAnalyticsProps & {
   /** Opens the host-provided CMS-1500 preview for the current bill. */
   onOpenCms1500?: (billId: string) => void;
   /** Opens the matching paper form for any supported claim family. */
@@ -617,6 +619,9 @@ export function correctionBill(data: BillLifecycleData): BillSubmissionInput {
       ...(data.injury.adjNumber ? { adjNumber: data.injury.adjNumber } : {}),
       employer: data.injury.employer || "",
       dateOfInjury: data.injury.doi || "",
+      // A cumulative trauma claim carries its period: doi is the start, injuryEndDate the end.
+      ...((data.injury.injuryType === "cumulative" || data.injury.cumulativeTrauma === true) && data.injury.injuryEndDate
+        ? { injuryType: "cumulative" as const, injuryEndDate: data.injury.injuryEndDate } : {}),
       ...(data.injury.injuryDescription ? { description: data.injury.injuryDescription } : {}),
       ...(data.injury.claimsAdminId && data.injury.claimsAdminName ? {
         // Keep the selected payer so a multi-payer administrator keeps its e-bill route.
@@ -737,7 +742,9 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
 }
 
 export function ConnectedBillLifecycle({
-  billingSettings, appearance, actorName, onOpenCms1500, onOpenClaimForm, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, ...options }: ConnectedBillLifecycleProps): ReactElement {
+  billingSettings, appearance, actorName, onOpenCms1500, onOpenClaimForm, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, analytics, onAnalyticsEvent, ...options }: ConnectedBillLifecycleProps): ReactElement {
+  const analyticsOptions = { ...(analytics !== undefined ? { analytics } : {}), ...(onAnalyticsEvent ? { onAnalyticsEvent } : {}) };
+  const track = useMindBillAnalytics("ConnectedBillLifecycle", analyticsOptions);
   const lifecycle = useBillLifecycle(options);
   const { data } = lifecycle;
   const [tab, setTab] = useState<Tab>("details");
@@ -758,6 +765,9 @@ export function ConnectedBillLifecycle({
     // different current bill/attempt after the next polling refresh.
     setPanel("");
   }, [currentAttemptKey]);
+  useEffect(() => {
+    if (panel === "resubmit" || panel === "submit_new_bill" || panel === "send_duplicate") track("correction_opened");
+  }, [panel, track]);
   const actor = actorName?.trim() ? { actorName: actorName.trim() } : {};
   const lastData = useRef<BillLifecycleData | null>(null);
   const correctionInitialBill = useMemo(() => data ? correctionBill(data) : null, [data]);
@@ -843,7 +853,9 @@ export function ConnectedBillLifecycle({
         ...(reason.trim() ? { reason: reason.trim() } : {}),
         ...actor,
       });
+      track("resubmit_succeeded", { ...(value.submission ? { route: value.submission.route } : {}) });
     } catch (cause) {
+      track("resubmit_failed", { ...(value.submission ? { route: value.submission.route } : {}), errorCode: analyticsErrorCode(cause) });
       // A failed resubmission must never look like a success: keep the dialog
       // (and the biller's corrections) open and show the server's reason inline
       // next to the submit control, like the other action panels do.
@@ -876,7 +888,9 @@ export function ConnectedBillLifecycle({
         ...(reason.trim() ? { reason: reason.trim() } : {}),
         ...actor,
       } satisfies SubmitNewBillInput);
+      track("submit_succeeded", { ...(value.submission ? { route: value.submission.route } : {}) });
     } catch (cause) {
+      track("submit_failed", { ...(value.submission ? { route: value.submission.route } : {}), errorCode: analyticsErrorCode(cause) });
       // Same contract as the correction dialog: a failed submission must never
       // look like a success — keep the form (and the biller's edits) open and
       // show the server's reason inline next to the submit control.
@@ -908,7 +922,9 @@ export function ConnectedBillLifecycle({
         ...(documents.length ? { documents } : {}),
         ...actor,
       });
+      track("submit_succeeded", { ...(value.submission ? { route: value.submission.route } : {}) });
     } catch (cause) {
+      track("submit_failed", { ...(value.submission ? { route: value.submission.route } : {}), errorCode: analyticsErrorCode(cause) });
       setDuplicateError(
         cause instanceof Error && cause.message
           ? cause.message
@@ -999,6 +1015,8 @@ export function ConnectedBillLifecycle({
       attentionMessage={correctionAttentionFields.length ? "The rejected response points to the highlighted fields. Confirm every required value before resubmitting." : "Confirm the bill information below before resubmitting."}
       submitLabel={lifecycle.isMutating ? "Resubmitting…" : "Resubmit bill"}
       deliveryRoutePicker="required"
+      {...analyticsOptions}
+      {...(data.injury.payerName ? { insuranceCarrierName: data.injury.payerName } : {})}
       deliveryRouteDialogTitle="Confirm corrected bill delivery"
       heading="Corrected bill information"
       description="The original submission stays unchanged. This form creates the next submission attempt."
@@ -1026,6 +1044,8 @@ export function ConnectedBillLifecycle({
       attentionMessage="Confirm every value carried over from the closed bill before submitting the new bill."
       submitLabel={lifecycle.isMutating ? "Submitting…" : "Submit New Bill"}
       deliveryRoutePicker="required"
+      {...analyticsOptions}
+      {...(data.injury.payerName ? { insuranceCarrierName: data.injury.payerName } : {})}
       deliveryRouteDialogTitle="Confirm new bill delivery"
       heading="New bill information"
       description="The closed bill stays unchanged. This form submits a fresh bill linked to it."
@@ -1069,6 +1089,8 @@ export function ConnectedBillLifecycle({
       attentionMessage="Confirm every carried-over value. You may edit any field before sending this duplicate."
       submitLabel={lifecycle.isMutating ? "Sending…" : "Send duplicate"}
       deliveryRoutePicker="required"
+      {...analyticsOptions}
+      {...(data.injury.payerName ? { insuranceCarrierName: data.injury.payerName } : {})}
       deliveryRouteDialogTitle="Confirm duplicate bill delivery"
       heading="Duplicate bill information"
       description="The submitted original remains immutable. This form creates and sends a linked duplicate."

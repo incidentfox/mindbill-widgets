@@ -49,3 +49,4 @@ export type {
   ReportBillStatusOption,
   SendDuplicateBillInput,
 } from "@mindbill/browser";
+export { MINDBILL_ANGULAR_SDK_VERSION } from "./lib/version";

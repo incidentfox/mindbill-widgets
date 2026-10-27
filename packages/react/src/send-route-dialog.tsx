@@ -60,7 +60,31 @@ export type SendRouteDialogProps = {
   error?: string | null;
   onCancel: () => void;
   onConfirm: (submission: SendRouteSubmission) => void;
+  /**
+   * Renders the complete packet for the selected route exactly as it would be sent (cover sheet for fax/mail,
+   * CMS-1500, attachments in order, W-9) without sending or saving anything. Shows a "Preview packet" button.
+   */
+  onPreviewPacket?: (submission: SendRouteSubmission) => Promise<Blob | SendRoutePacketPreview>;
+  /** Called when the biller changes the selected delivery route. */
+  onRouteChange?: (route: BillSubmissionRoute) => void;
 };
+
+/** A rendered packet preview; `sections` lists its parts in order, e.g. ["claim_form", "document", "w9"]. */
+export type SendRoutePacketPreview = { pdf: Blob; sections?: string[] };
+
+/** Human labels for packet sections, in packet order (attachments are numbered). */
+export function sendRoutePacketSectionLabels(sections: readonly string[], route: BillSubmissionRoute): string[] {
+  let attachment = 0;
+  return sections.map((section) => {
+    if (section === "cover") return route === "mail" ? "Mail cover sheet" : "Fax cover sheet";
+    if (section === "custom_cover") return "Uploaded cover page";
+    if (section === "claim_form" || section === "cms1500") return "CMS-1500";
+    if (section === "document") return `Attachment ${++attachment}`;
+    if (section === "w9") return "W-9";
+    if (section === "w9_saved") return "W-9 (saved billing provider W-9)";
+    return section.replace(/_/g, " ");
+  });
+}
 
 const css = `
 .mbrd-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:rgba(15,30,40,.45)}
@@ -77,8 +101,9 @@ const css = `
 .mbrd-card-main{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .mbrd-card[data-disabled=true] .mbrd-card-main{cursor:not-allowed}
 .mbrd-radio{flex:0 0 auto;width:18px;height:18px;border:2px solid var(--mb-border);border-radius:50%;display:grid;place-items:center}
-.mbrd-card[data-selected=true] .mbrd-radio{border-color:var(--mb-accent)}
-.mbrd-card[data-selected=true] .mbrd-radio:after{content:"";width:9px;height:9px;border-radius:50%;background:var(--mb-accent)}
+.mbrd-card[data-selected=true]>.mbrd-card-main .mbrd-radio,.mbrd-choice[data-selected=true] .mbrd-radio{border-color:var(--mb-accent)}
+.mbrd-card[data-selected=true]>.mbrd-card-main .mbrd-radio:after,.mbrd-choice[data-selected=true] .mbrd-radio:after{content:"";width:9px;height:9px;border-radius:50%;background:var(--mb-accent)}
+.mbrd-choice[data-selected=true] .mbrd-radio:after{width:7px;height:7px}
 .mbrd-card-text{min-width:0;flex:1}
 .mbrd-card-title{font-weight:700;line-height:1.3;overflow-wrap:anywhere}
 .mbrd-card-detail{margin-top:2px;color:var(--mb-muted);font-size:13px;line-height:1.35;overflow-wrap:anywhere}
@@ -108,6 +133,15 @@ const css = `
 .mbrd-cancel{min-height:42px;padding:9px 16px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius);background:var(--mb-surface);color:var(--mb-text);font:inherit;font-weight:680;cursor:pointer}
 .mbrd-confirm{min-height:42px;min-width:130px;padding:9px 18px;border:0;border-radius:var(--mb-control-radius);background:var(--mb-accent);color:var(--mb-accent-contrast);font:inherit;font-weight:760;cursor:pointer}
 .mbrd-confirm:disabled,.mbrd-cancel:disabled{opacity:.6;cursor:not-allowed}
+.mbrd[data-preview=true]{width:min(1080px,100%)}
+.mbrd-actions{flex-wrap:wrap}.mbrd-preview{margin-right:auto}
+a.mbrd-cancel{display:inline-flex;align-items:center;text-decoration:none}
+.mbrd-packet{display:grid;gap:10px;padding:12px;border:1px solid var(--mb-border);border-radius:var(--mb-control-radius)}
+.mbrd-packet-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:10px}
+.mbrd-packet-head p{margin:2px 0 0}
+.mbrd-packet-links{display:flex;flex-wrap:wrap;gap:8px}
+.mbrd-packet-order{display:flex;flex-wrap:wrap;gap:6px 18px;margin:8px 0 0;padding-left:18px;font-size:13px}
+.mbrd-packet-frame{width:100%;height:min(62vh,720px);border:1px solid var(--mb-border);border-radius:calc(var(--mb-control-radius) - 2px);background:#fff}
 `;
 
 const CONFIRM_LABELS: Record<BillSubmissionRoute, string> = {
@@ -200,6 +234,8 @@ export function SendRouteDialog({
   error = null,
   onCancel,
   onConfirm,
+  onPreviewPacket,
+  onRouteChange,
 }: SendRouteDialogProps): ReactElement {
   const ebillOption = delivery.options.find((option) => option.route === "ebill");
   const mailOption = delivery.options.find((option) => option.route === "mail");
@@ -251,6 +287,12 @@ export function SendRouteDialog({
     || (route === "fax" && !faxValid)
     || (route === "mail" && !mailValid);
 
+  const [packetPreview, setPacketPreview] = useState<{ url: string; key: string; sections: string[]; route: BillSubmissionRoute } | null>(null);
+  const [packetLoading, setPacketLoading] = useState(false);
+  const [packetError, setPacketError] = useState<string | null>(null);
+  useEffect(() => () => { if (packetPreview) URL.revokeObjectURL(packetPreview.url); }, [packetPreview]);
+  const selectRoute = (next: BillSubmissionRoute) => { setRoute(next); if (next !== route) onRouteChange?.(next); };
+
   const submission = useMemo((): SendRouteSubmission => {
     if (route === "email") {
       return {
@@ -274,11 +316,28 @@ export function SendRouteDialog({
     return { route };
     // ccList derives from ccInput.
   }, [route, effectiveEmail, subject, message, ccInput, effectiveFax, attention, mailTo]);
+  // The packet differs by route (fax and mail add a cover sheet) and by the fax ATTENTION line.
+  const packetKey = JSON.stringify([route, route === "fax" ? attention.trim() : ""]);
+  const packetCurrent = packetPreview?.key === packetKey;
+  const previewPacket = async (): Promise<void> => {
+    if (!onPreviewPacket || packetLoading) return;
+    setPacketLoading(true); setPacketError(null);
+    try {
+      const result = await onPreviewPacket(submission);
+      const pdf = result instanceof Blob ? result : result.pdf;
+      const sections = result instanceof Blob ? [] : result.sections ?? [];
+      setPacketPreview({ url: URL.createObjectURL(pdf), key: packetKey, sections, route });
+    } catch (caught) {
+      setPacketError(caught instanceof Error ? caught.message : "The packet preview could not be generated.");
+    } finally {
+      setPacketLoading(false);
+    }
+  };
 
   return (
     <div className="mbrd-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onCancel(); }}>
       <style>{css}</style>
-      <div className="mbrd" role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Send bill"}>
+      <div className="mbrd" data-preview={Boolean(packetPreview)} role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Send bill"}>
         <div className="mbrd-head">
           <div>
             <h3 className="mbrd-title">{title}</h3>
@@ -304,7 +363,7 @@ export function SendRouteDialog({
                   {!ebillOption.fallback ? <span className="mbrd-badge" data-tone="verified">Verified Route</span> : null}
                   {recommendedRoute === "ebill" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
                 </>}
-                onSelect={() => setRoute("ebill")}
+                onSelect={() => selectRoute("ebill")}
               />
             ) : null;
 
@@ -315,7 +374,7 @@ export function SendRouteDialog({
                 title="Email Bill"
                 detail={onFileEmail ?? "No claims email on file — enter a recipient."}
                 badges={recommendedRoute === "email" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
-                onSelect={() => setRoute("email")}
+                onSelect={() => selectRoute("email")}
               >
                 <div role="radiogroup" aria-label="Email recipient" style={{ display: "grid", gap: 8 }}>
                   <RecipientChoice
@@ -360,7 +419,7 @@ export function SendRouteDialog({
                 title="Fax Bill"
                 detail={onFileFax ? `${onFileFaxDisplay} — payer fax on file` : "No fax on file — enter a number."}
                 badges={recommendedRoute === "fax" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
-                onSelect={() => setRoute("fax")}
+                onSelect={() => selectRoute("fax")}
               >
                 <div role="radiogroup" aria-label="Fax recipient" style={{ display: "grid", gap: 8 }}>
                   <RecipientChoice
@@ -397,7 +456,7 @@ export function SendRouteDialog({
                 title="Mail Bill"
                 detail={onFileMail ? onFileMail.replace(/\n/g, ", ") : "Physical mail — enter the payer's mailing address."}
                 badges={recommendedRoute === "mail" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
-                onSelect={() => setRoute("mail")}
+                onSelect={() => selectRoute("mail")}
               >
                 <label className="mbrd-field">
                   <span className="mbrd-label">Mailing address <span className="mbrd-star">*</span></span>
@@ -425,9 +484,27 @@ export function SendRouteDialog({
           })()}
         </div>
 
+        {packetPreview ? (
+          <section className="mbrd-packet" aria-label="Packet preview">
+            <div className="mbrd-packet-head">
+              <div>
+                <strong>Packet preview</strong>
+                <p className="mbrd-help">{packetCurrent ? "Exactly as it will be sent on this route. Nothing has been sent." : "The delivery route changed. Refresh the preview to see this route's packet."}</p>
+                {packetPreview.sections.length ? <ol className="mbrd-packet-order" aria-label="Packet order">{sendRoutePacketSectionLabels(packetPreview.sections, packetPreview.route).map((label, index) => <li key={`${label}-${index}`}>{label}</li>)}</ol> : null}
+              </div>
+              <div className="mbrd-packet-links">
+                <a className="mbrd-cancel" href={packetPreview.url} target="_blank" rel="noopener noreferrer">Open in new tab</a>
+                <button className="mbrd-cancel" type="button" onClick={() => setPacketPreview(null)}>Close preview</button>
+              </div>
+            </div>
+            {packetCurrent ? <iframe className="mbrd-packet-frame" title="Bill packet PDF preview" src={packetPreview.url} /> : null}
+          </section>
+        ) : null}
+        {packetError ? <div className="mbrd-alert" role="alert">{packetError}</div> : null}
         {error ? <div className="mbrd-alert" role="alert">{error}</div> : null}
 
         <div className="mbrd-actions">
+          {onPreviewPacket ? <button className="mbrd-cancel mbrd-preview" type="button" disabled={submitting || packetLoading} onClick={() => { void previewPacket(); }}>{packetLoading ? "Building packet…" : packetPreview && !packetCurrent ? "Refresh packet preview" : "Preview packet"}</button> : null}
           <button className="mbrd-cancel" type="button" disabled={submitting} onClick={onCancel}>Cancel</button>
           <button
             className="mbrd-confirm"

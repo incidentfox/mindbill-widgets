@@ -397,3 +397,9 @@ export type { RfaClaimSelectorProps, RfaProviderSelectorProps } from "./rfa-crea
 export { BillUrDecisions, claimRfaCounts, claimRfaLifecycle, RelatedAuthorizationRecords, RfaClaimIndex, rfaReference } from "./rfa-records";
 export type { BillUrDecisionsProps, RelatedAuthorizationRecordsProps, RfaClaimIndexProps } from "./rfa-records";
 export type { BillUrDecision, BillUrDecisionsAttachInput, BillUrDecisionsAttachResult, BillUrDecisionsResult, ClaimRfaSummary, LinkedRfaEvidence, RelatedAuthorizationRecord, RelatedAuthorizationResult, RfaEvidenceState } from "@mindbill/browser";
+
+export { useMindBillAnalytics } from "./analytics";
+export type { MindBillAnalyticsProps, MindBillAnalyticsDetails, MindBillAnalyticsTracker } from "./analytics";
+export { MINDBILL_REACT_SDK_VERSION } from "./version";
+export { MINDBILL_ANALYTICS_EVENT_NAMES, trackMindBillAnalyticsEvent, flushMindBillAnalytics, mindBillSdkHeaderValue } from "@mindbill/browser";
+export type { MindBillAnalyticsEvent, MindBillAnalyticsEventName, MindBillAnalyticsRoute, MindBillAnalyticsBillingMode, MindBillSdkPackage, BillPacketPreview, BillPacketPreviewInput } from "@mindbill/browser";

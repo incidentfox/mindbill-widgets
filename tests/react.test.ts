@@ -1378,6 +1378,7 @@ describe("connected bill status", () => {
     );
     expect(fetcher.mock.calls[1]?.[1]?.headers).toEqual({
       authorization: "Bearer short-lived-session-token",
+      "x-mindbill-sdk": expect.stringMatching(/^@mindbill\/browser\/\d+\.\d+\.\d+/),
     });
   });
 
@@ -1408,6 +1409,7 @@ describe("connected bill status", () => {
     expect(fetcher).toHaveBeenCalledTimes(4);
     expect(fetcher.mock.calls[3]?.[1]?.headers).toEqual({
       authorization: "Bearer renewed-session-token",
+      "x-mindbill-sdk": expect.stringMatching(/^@mindbill\/browser\/\d+\.\d+\.\d+/),
     });
   });
 });

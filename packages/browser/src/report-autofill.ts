@@ -1,3 +1,4 @@
+import { withMindBillSdkFetch } from "./analytics";
 import type { BillLifecycleSession, OrganizationClientOptions } from "./index";
 
 export type ReportAutofillField = { key: string; value: string; sourceText: string; confidence: "high" | "medium" };
@@ -10,7 +11,7 @@ export type ReportAutofillResult = {
 export type ReportAutofillClient = { analyze(report: File): Promise<ReportAutofillResult>; clearSession(): void };
 /** Available only by written agreement, with an organization-wide autofill:run session. Does not save a document or submit a bill. */
 export function createReportAutofillClient({ sessionEndpoint = "/api/mindbill/session", getSession, apiBaseUrl = "https://app.mindbill.org", fetch: fetchOverride }: OrganizationClientOptions = {}): ReportAutofillClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   let session: BillLifecycleSession | null = null;
   const error = async (response: Response) => {
     const body = await response.json().catch(() => null) as { detail?: unknown; message?: unknown } | null;

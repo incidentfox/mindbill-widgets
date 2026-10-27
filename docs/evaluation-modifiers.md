@@ -1,25 +1,27 @@
 # Evaluation modifier defaults
 
-`BillSubmissionForm` supports `qme`, `ame`, `psych_qme`, and `psych_ame` evaluation types. The selector combines evaluator role with psychiatric or psychological evaluation status:
+A medical-legal line's modifiers are the single source of truth for the evaluation: −92 primary treating physician, −94 AME, −95 QME, −96 psychiatric or psychological, −93 interpreter. `BillSubmissionForm` has no separate evaluator-type selector (the `evaluationTypes` prop is accepted but ignored since @mindbill/react 0.87.0), and the fee shown for a line follows its modifiers.
 
-| Evaluation type | ML201, ML202, ML203 | ML200 and MLPRR |
+When the biller chooses a medical-legal evaluation code for a line that has no evaluator modifier (−92, −94 or −95), the line starts with the default for the rendering provider:
+
+| Rendering provider | ML201, ML202, ML203 | ML200 and MLPRR |
 | --- | --- | --- |
-| QME | 95 | 95 |
-| AME | 94 | None |
-| Psych QME | 95, 96 | 95 |
-| Psych AME | 94, 96 | None |
+| Default (QME) | 95 | 95 |
+| `isAme` | 94 | None |
+| Psychiatric specialty | 95, 96 | 95 |
+| Psychiatric specialty and `isAme` | 94, 96 | None |
 
-Switching evaluation type replaces modifiers 94, 95, and 96 while preserving other selected modifiers. Psychiatric multipliers do not apply to missed appointments or record-review lines. The initial selection considers both the rendering provider's specialty and `isAme` flag. Both psychiatric modes seed `Z04.6` only when no diagnosis was supplied.
+An evaluator modifier already on the line — supplied by the host, a report or the biller — is never replaced. A line supplied without any evaluator modifier is sent as supplied. Psychiatric multipliers do not apply to missed appointments or record-review lines. A psychiatric rendering provider seeds `Z04.6` only when no diagnosis was supplied.
 
-These defaults follow [California 8 CCR section 9795](https://www.dir.ca.gov/t8/9795.html). Modifier 96 applies when psychiatric or psychological evaluation is the primary focus. The user should select the mode appropriate to the actual evaluation.
+These defaults follow [California 8 CCR section 9795](https://www.dir.ca.gov/t8/9795.html). Modifier 96 applies when psychiatric or psychological evaluation is the primary focus. The biller should keep the modifiers that match the actual evaluation.
 
 Interpreter modifier 93 applies only to ML201 and ML202. The form does not offer it for other codes, removes it when a line changes to another code, prices ML203 without it (a psychiatric supplemental report with 95 and 96 is $1,300), and asks the biller to remove it from an imported ML203 line before submission.
 
 ## Treatment modifiers
 
-In treatment mode, a bill containing only treatment lines shows **Service lines**
-without the evaluator selector. Adding a medical-legal line restores that selector;
-its defaults still apply only to medical-legal codes. A bill with a medical-legal
+In treatment mode, a bill containing only treatment lines shows **Service lines**.
+Adding a medical-legal line titles the section **Evaluation & service lines**; the
+evaluator modifier defaults still apply only to medical-legal codes. A bill with a medical-legal
 line is a medical-legal bill; diagnostic tests performed for that evaluation go on
 the same bill and are priced from the treatment fee schedule.
 

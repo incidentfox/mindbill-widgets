@@ -4,6 +4,14 @@ import type { BillSubmissionProfileOptions } from "./billing-profile-options";
 
 const empty = (value: unknown): boolean => value == null || value === "" || (typeof value === "string" && !value.trim()) || (typeof value === "object" && Object.values(value).every(empty));
 const date = (value: string): string => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value ? value : "";
+/** Report autofill proposes at most this many diagnoses: the most one CMS-1500 service line can point to. */
+export const REPORT_AUTOFILL_MAX_DIAGNOSES = 4;
+
+/** The insurance carrier (payer) named in the report, used only to suggest the payer under a claims administrator. */
+export function reportAutofillInsuranceCarrier(result: ReportAutofillResult): string | undefined {
+  return result.fields.find(field => field.key === "insuranceCarrier")?.value.trim() || undefined;
+}
+
 /** Apply reviewed suggestions only to empty fields; never infer procedures, charges, or diagnosis pointers. */
 export function applyReportAutofill(bill: BillSubmissionInput, result: ReportAutofillResult, profiles?: BillSubmissionProfileOptions): BillSubmissionInput {
   const next = structuredClone(bill);
@@ -33,6 +41,12 @@ export function applyReportAutofill(bill: BillSubmissionInput, result: ReportAut
   if (empty(bill.billingProvider) && empty(next.billingProvider)) { next.billingProvider = {}; fill(next.billingProvider, "name", "billingProvider"); fill(next.billingProvider, "npi", "billingProviderNpi"); }
   if (empty(bill.renderingProvider) && empty(next.renderingProvider)) { next.renderingProvider = {}; fill(next.renderingProvider, "name", "renderingProvider"); fill(next.renderingProvider, "npi", "renderingProviderNpi"); }
   if (empty(bill.serviceLocation) && empty(next.serviceLocation)) { next.serviceLocation = {}; fill(next.serviceLocation, "name", "evaluationLocation"); }
-  if (empty(bill.diagnoses) && fields.get("dxCode")) next.diagnoses = [...new Set(fields.get("dxCode")!.split(",").map(code => code.trim().toUpperCase()).filter(Boolean))].slice(0, 12);
+  // A cumulative trauma (CT) period fills the claim's start (date of injury) and end dates together.
+  const ctStart = date(fields.get("ctStartDate") ?? ""); const ctEnd = date(fields.get("ctEndDate") ?? "");
+  if (ctStart && ctEnd && ctStart <= ctEnd && empty(bill.claim.dateOfInjury) && bill.claim.injuryType !== "cumulative") {
+    Object.assign(next.claim, { injuryType: "cumulative", dateOfInjury: ctStart, injuryEndDate: ctEnd });
+  }
+  // Only the report's primary diagnoses are proposed, at most four, so every proposed code can be pointed at.
+  if (empty(bill.diagnoses) && fields.get("dxCode")) next.diagnoses = [...new Set(fields.get("dxCode")!.split(",").map(code => code.trim().toUpperCase()).filter(Boolean))].slice(0, REPORT_AUTOFILL_MAX_DIAGNOSES);
   return next;
 }

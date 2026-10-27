@@ -1,3 +1,4 @@
+import { withMindBillSdkFetch } from "@mindbill/browser";
 import {
   DEFAULT_API_BASE_URL,
   DEFAULT_SESSION_ENDPOINT,
@@ -216,7 +217,7 @@ export function createBillingOperationsClient({
   apiBaseUrl = DEFAULT_API_BASE_URL,
   fetch: fetchOverride,
 }: BillingOperationsClientOptions = {}): BillingOperationsClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   if (typeof fetcher !== "function") throw new Error("A Fetch API implementation is required.");
   let session: BillLifecycleSession | null = null;
   let pendingSession: Promise<BillLifecycleSession> | null = null;

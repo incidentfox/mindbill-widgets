@@ -1,3 +1,4 @@
+import { withMindBillSdkFetch } from "./analytics";
 import type { BillLifecycleSession, BrowserBillCreateInput, OrganizationClientOptions } from "./index";
 import type { EncounterQuoteIdentity } from "./encounter-fees";
 
@@ -54,7 +55,7 @@ const draftOf = (value: unknown): BillDraft => {
 
 /** Unsent bill drafts through a short-lived browser session (`bills:read`; `bills:create` to save). Never pass an API key. */
 export function createBillDraftsClient({ sessionEndpoint = "/api/mindbill/session", getSession, apiBaseUrl = "https://app.mindbill.org", fetch: fetchOverride }: OrganizationClientOptions = {}): BillDraftsClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   let session: BillLifecycleSession | null = null;
   let pending: Promise<BillLifecycleSession> | null = null;
   const mint = (force = false): Promise<BillLifecycleSession> => {

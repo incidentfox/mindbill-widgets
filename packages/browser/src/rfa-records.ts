@@ -1,3 +1,4 @@
+import { withMindBillSdkFetch } from "./analytics";
 import type { BillLifecycleSession, OrganizationClientOptions, RfaListResult, RfaRecord } from "./index";
 
 /** One request for authorization on a claim, as the claim's RFA index shows it. */
@@ -120,7 +121,7 @@ const failure = async (response: Response) => {
 
 /** Claim RFA index, related records and bill UR decisions. Uses short-lived browser credentials; never pass a partner API key. */
 export function createRfaRecordsClient({ sessionEndpoint = "/api/mindbill/session", getSession, apiBaseUrl = "https://app.mindbill.org", fetch: fetchOverride }: OrganizationClientOptions = {}): RfaRecordsClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   let session: BillLifecycleSession | null = null;
   let pending: Promise<BillLifecycleSession> | null = null;
   const mint = (force = false): Promise<BillLifecycleSession> => {

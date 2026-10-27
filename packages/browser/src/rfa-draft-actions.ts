@@ -1,3 +1,4 @@
+import { withMindBillSdkFetch } from "./analytics";
 import type { BillLifecycleSession, OrganizationClientOptions, RfaRecord } from "./index";
 
 export type RfaDraftActionsClient = {
@@ -9,7 +10,7 @@ export type RfaDraftActionsClient = {
 };
 
 export function createRfaDraftActionsClient({ sessionEndpoint = "/api/mindbill/session", getSession, apiBaseUrl = "https://app.mindbill.org", fetch: fetchOverride }: OrganizationClientOptions = {}): RfaDraftActionsClient {
-  const fetcher = fetchOverride ?? globalThis.fetch;
+  const fetcher = withMindBillSdkFetch(fetchOverride ?? globalThis.fetch);
   let session: BillLifecycleSession | null = null;
   let pending: Promise<BillLifecycleSession> | null = null;
   const failure = async (response: Response) => {
