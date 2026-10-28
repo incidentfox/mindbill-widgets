@@ -52,6 +52,27 @@ describe("organization administration", () => {
       await click(container, "Confirm removal"); expect(fetcher.mock.calls.at(-1)?.[1]?.method).toBe("DELETE"); expect(container.textContent).not.toContain(admin.name);
     });
   });
+  it("edits a custom administrator's mailing address as separate fields", async () => {
+    const withMail = { ...admin, mailingAddress: "PO Box 1, Sacramento, CA 95814" };
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => init?.method === "PATCH"
+      ? Response.json({ data: { ...withMail, ...JSON.parse(String(init.body)) } })
+      : Response.json({ data: String(input).endsWith("/claims-administrators") ? [withMail] : profile }));
+    await mounted(createElement(BillingSettings, { getSession, fetch: fetcher }), async container => {
+      await click(container, "Claims administrators"); await click(container, withMail.name);
+      const field = (name: string) => container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+      expect([field("line1").value, field("city").value, field("state").value, field("postalCode").value]).toEqual(["PO Box 1", "Sacramento", "CA", "95814"]);
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      await act(async () => { setter.call(field("line2"), "Suite 2"); field("line2").dispatchEvent(new Event("input", { bubbles: true })); });
+      await act(async () => { setter.call(field("postalCode"), "958"); field("postalCode").dispatchEvent(new Event("input", { bubbles: true })); });
+      const save = [...container.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Save claims administrator")!;
+      expect(save.disabled).toBe(true);
+      await act(async () => { setter.call(field("postalCode"), "95814"); field("postalCode").dispatchEvent(new Event("input", { bubbles: true })); });
+      expect(save.disabled).toBe(false);
+      await click(container, "Save claims administrator");
+      const patch = fetcher.mock.calls.find(([, init]) => init?.method === "PATCH");
+      expect(JSON.parse(String(patch?.[1]?.body)).mailingAddress).toBe("PO Box 1, Suite 2, Sacramento, CA 95814");
+    });
+  });
   it("discards a previous organization response after the connection changes", async () => {
     let resolve!: (response: Response) => void;
     const oldFetch = vi.fn<typeof fetch>(async input => String(input).endsWith("/team") ? new Promise<Response>(done => { resolve = done; }) : Response.json({ data: profile }));

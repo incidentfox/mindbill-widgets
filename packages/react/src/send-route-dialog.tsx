@@ -8,7 +8,9 @@
 
 import type { ReactElement, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { BillDeliveryOptions, BillSubmissionRoute, SubmitBillInput } from "@mindbill/browser";
+import type { BillDeliveryOptions, BillSubmissionRoute, MailingAddressParts, SubmitBillInput } from "@mindbill/browser";
+import { composeMailingAddress, isMailingAddressValid, parseMailingAddress } from "@mindbill/browser";
+import { MailingAddressFields } from "./mailing-address-fields";
 
 const EMAIL_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
 
@@ -254,13 +256,13 @@ export function SendRouteDialog({
   const [ccInput, setCcInput] = useState("");
   const [faxTo, setFaxTo] = useState("");
   const [attention, setAttention] = useState("");
-  const [mailTo, setMailTo] = useState(onFileMail);
+  const [mailParts, setMailParts] = useState<MailingAddressParts>(() => parseMailingAddress(onFileMail).parts);
 
   useEffect(() => {
     setRoute(recommendedRoute);
     setEmailMode(onFileEmail ? "onfile" : "alt");
     setFaxMode(onFileFax ? "onfile" : "alt");
-    setMailTo(onFileMail);
+    setMailParts(parseMailingAddress(onFileMail).parts);
   }, [recommendedRoute, onFileEmail, onFileFax, onFileMail]);
 
   // Close on Escape (unless a submit is in flight — the caller owns that state).
@@ -279,7 +281,8 @@ export function SendRouteDialog({
   const ccList = ccInput.split(/[,;]/).map((entry) => entry.trim()).filter(Boolean);
   const ccValid = ccList.every((entry) => EMAIL_RE.test(entry));
   const faxValid = faxDigits.length >= 10;
-  const mailValid = mailTo.trim().length > 2;
+  const mailValid = isMailingAddressValid(mailParts);
+  const mailTo = composeMailingAddress(mailParts);
   const confirmDisabled =
     submitting
     || disabled
@@ -311,7 +314,7 @@ export function SendRouteDialog({
       };
     }
     if (route === "mail") {
-      return { route, destination: { mailingAddress: mailTo.trim() } };
+      return { route, destination: { mailingAddress: mailTo } };
     }
     return { route };
     // ccList derives from ccInput.
@@ -458,16 +461,14 @@ export function SendRouteDialog({
                 badges={recommendedRoute === "mail" ? <span className="mbrd-badge" data-tone="auto">Auto</span> : null}
                 onSelect={() => selectRoute("mail")}
               >
-                <label className="mbrd-field">
-                  <span className="mbrd-label">Mailing address <span className="mbrd-star">*</span></span>
-                  <textarea className="mbrd-textarea" value={mailTo} placeholder={"Payer Claims Dept\nPO Box 1234\nCity, ST 00000"} onChange={(event) => setMailTo(event.target.value)} />
-                  {!mailValid ? <span className="mbrd-error">Enter a mailing address.</span> : null}
+                <div className="mbrd-field">
+                  <MailingAddressFields label="Mailing address" value={mailParts} onChange={setMailParts} showErrors={Boolean(onFileMail)} disabled={submitting} />
                   <span className="mbrd-help">
                     {mailOption?.printAndMail
                       ? mailOption.detail
                       : "Sent as physical mail — printed and mailed to this address."}
                   </span>
-                </label>
+                </div>
               </RouteCard>
             );
 

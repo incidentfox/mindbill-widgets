@@ -233,6 +233,24 @@ the saved billing-provider W-9 MindBill would add). It renders from the unsaved 
 `previewPacket` on the browser submission client and never creates, saves or sends a bill.
 Custom `SendRouteDialog` layouts can pass `onPreviewPacket`.
 
+The mailing address is entered as separate fields — address line 1, address line 2
+(suite, floor, PMB, or attention), city, two-letter state, and 5-digit ZIP or ZIP+4 —
+prefilled by splitting the address on file. **Mail Bill** stays disabled until every
+required field is valid. The fields are composed into the single
+`destination.mailingAddress` string the API already accepts, in the form
+`line1[, line2], City, ST ZIP`; the API contract is unchanged. The same fields are
+exported as `MailingAddressFields`, and `@mindbill/browser` exports the
+`parseMailingAddress`, `composeMailingAddress`, and `validateMailingAddress` helpers
+for custom or non-React forms (Angular's Send Duplicate uses them too):
+
+```tsx
+import { MailingAddressFields, parseMailingAddress, composeMailingAddress } from "@mindbill/react";
+
+const [address, setAddress] = useState(() => parseMailingAddress(onFileAddress).parts);
+<MailingAddressFields label="Mailing address" value={address} onChange={setAddress} />;
+// submit: { route: "mail", destination: { mailingAddress: composeMailingAddress(address) } }
+```
+
 Correction and Submit New Bill forms always require this confirmation. Their
 preview uses the administrator and subpayor selected in the edited form, so a
 biller who corrects a rejected wrong-payor submission can inspect the new route

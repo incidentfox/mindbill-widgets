@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.89.0 — @mindbill/react 0.89.0 / @mindbill/browser 0.58.0 / @mindbill/angular 0.23.0
+
+No server changes are required: the composed address still travels as `destination.mailingAddress`.
+
+### Changed
+- `SendRouteDialog` (and the `BillSubmissionForm` delivery dialog): the free-text mailing-address box is replaced by
+  separate **Address line 1**, **Address line 2** (optional suite/floor/PMB/attention), **City**, **State** and **ZIP**
+  fields, prefilled by splitting the address on file, with per-field errors. **Mail Bill** is disabled until the
+  address is valid. The fields are sent as `line1[, line2], City, ST ZIP`.
+- `OrganizationAdministration` custom claims administrators: the mailing address uses the same fields (still
+  optional); a partly entered address must be completed before saving.
+- `@mindbill/angular` Send Duplicate by mail uses the same structured fields.
+
+### Added
+- `MailingAddressFields` React component.
+- `@mindbill/browser` (re-exported by `@mindbill/react`): `parseMailingAddress`, `composeMailingAddress`,
+  `validateMailingAddress`, `isMailingAddressValid`, `EMPTY_MAILING_ADDRESS`, and the `MailingAddressParts` type.
+
 ## 0.88.1 — @mindbill/react 0.88.1 / @mindbill/browser 0.57.1
 
 ### Added
