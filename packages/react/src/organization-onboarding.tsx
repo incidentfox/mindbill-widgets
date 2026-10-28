@@ -9,13 +9,13 @@ import {
   type OrganizationClient,
   type OrganizationLocationInput,
   type OrganizationProfileData,
-  type OrganizationRenderingProviderInput,
 } from "@mindbill/browser";
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { OrganizationAdministration } from "./organization-administration";
 import { TaxIdInput, taxIdWrite } from "./tax-id-input";
 import { W9Upload } from "./w9-upload";
-import { Select, Checkbox, Radio } from "./form-controls";
+import { Select, Radio } from "./form-controls";
+import { RenderingProvidersSettings, renderingProvidersCss } from "./rendering-providers-settings";
 
 // Embeddable organization onboarding (INC-1470): capture the practice name,
 // tax ID, group NPI, billing provider, locations, and W-9 ONCE, saved straight
@@ -87,7 +87,6 @@ const css = `
 `;
 
 const blankLocation = (): OrganizationLocationInput => ({ name: "", street: "", city: "", state: "", zip: "", isPrimary: false });
-const blankRendering = (): OrganizationRenderingProviderInput => ({ name: "", npi: "", specialty: "", taxonomy: "", active: true });
 
 async function fileToBase64(file: File): Promise<string> {
   const buffer = new Uint8Array(await file.arrayBuffer());
@@ -128,7 +127,6 @@ export function OrganizationOnboarding({
   const [identity, setIdentity] = useState<{ name: string; legalName: string; taxId: string; npi: string; phone: string; email: string; taxIdType?: "EIN" | "SSN"; taxIdLast4?: string; taxIdConfigured?: boolean }>({ name: "", legalName: "", taxId: "", npi: "", phone: "", email: "" });
   const [provider, setProvider] = useState<OrganizationBillingProviderInput>({ name: "", taxId: "", npi: "", billType: "Professional", phone: "", billingStreet: "", billingCity: "", billingState: "", billingZip: "" });
   const [locations, setLocations] = useState<OrganizationLocationInput[]>([blankLocation()]);
-  const [rendering, setRendering] = useState<OrganizationRenderingProviderInput>(blankRendering);
   const primaryGroup = useId();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -155,7 +153,6 @@ export function OrganizationOnboarding({
       email: next.practiceIdentity.email ?? "",
     });
     setProvider({ name: "", taxId: "", npi: "", billType: "Professional", ...next.billingProviders[0] });
-    setRendering(next.renderingProviders?.[0] ? { ...next.renderingProviders[0] } : blankRendering());
     setLocations(next.locations.length ? next.locations.map((item) => ({ ...item })) : [blankLocation()]);
     if (next.onboarding.complete && !completedFired.current) {
       completedFired.current = true;
@@ -280,23 +277,15 @@ export function OrganizationOnboarding({
     </div>
   );
 
+  const adoptRendering = (next: OrganizationProfileData) => {
+    if (activeClient.current !== client) return;
+    adoptProfile(next);
+    setSavedStep((current) => ({ ...current, rendering: true }));
+    onSaved?.(next);
+  };
   const renderingSection = <div>
-    <label className="mbob-field">Saved rendering provider
-      <Select disabled={saving} value={rendering.id ?? ""} onChange={(choice) => setRendering({ ...(profile?.renderingProviders?.find((item) => item.id === choice) ?? blankRendering()) })}>
-        <option value="">Add a rendering provider</option>
-        {profile?.renderingProviders?.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active === false ? " (inactive)" : ""}</option>)}
-      </Select>
-    </label>
-    <div className="mbob-grid" style={{ marginTop: 16 }}>
-      {field("Rendering provider name", rendering.name, (name) => setRendering((c) => ({ ...c, name })))}
-      {field("Rendering NPI", rendering.npi, (npi) => setRendering((c) => ({ ...c, npi })))}
-      {field("Taxonomy", rendering.taxonomy ?? "", (taxonomy) => setRendering((c) => ({ ...c, taxonomy })))}
-      {field("Specialty", rendering.specialty ?? "", (specialty) => setRendering((c) => ({ ...c, specialty })))}
-      {field("License number", rendering.licenseNumber ?? "", (licenseNumber) => setRendering((c) => ({ ...c, licenseNumber })))}
-      {field("License state", rendering.licenseState ?? "", (licenseState) => setRendering((c) => ({ ...c, licenseState: licenseState.toUpperCase().slice(0, 2) })))}
-      <label><Checkbox disabled={saving} checked={rendering.active !== false} onChange={(event) => setRendering((c) => ({ ...c, active: event.target.checked }))} /> Available for new bills</label>
-    </div>
-    <div className="mbob-actions"><span className="mbob-status">{savedStep["rendering"] ? "Saved to MindBill." : "Saved profiles do not change previously submitted bills."}</span><button className="mbob-save" type="button" disabled={saving || !rendering.name.trim()} onClick={() => run(() => client.saveBillingProfile({ renderingProviders: [rendering] }), "rendering")}>{saving ? "Saving…" : "Save rendering provider"}</button></div>
+    <RenderingProvidersSettings client={client} providers={profile?.renderingProviders ?? []} disabled={saving} onSaved={adoptRendering} {...(onError ? { onError } : {})} />
+    {variant === "onboarding" ? <div className="mbob-actions"><span className="mbob-status">{savedStep["rendering"] ? "Saved to MindBill." : "Add every doctor who renders services. You can add more later."}</span><button className="mbob-save" type="button" disabled={saving} onClick={() => setStep("locations")}>Continue to locations</button></div> : null}
   </div>;
 
   const locationsSection = (
@@ -335,7 +324,7 @@ export function OrganizationOnboarding({
 
   return (
     <div className={`mbob ${className}`.trim()} style={{ ...mindBillAppearanceStyle(appearance), ...style }}>
-      <style>{css}</style>
+      <style>{css + renderingProvidersCss}</style>
       <div className="mbob-card">
         <div className="mbob-head"><div><h2>{heading}</h2><p className="mbob-copy">{description}</p></div></div>
         {loadError ? <div className="mbob-error" role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Retry</button></div> : null}
@@ -353,7 +342,7 @@ export function OrganizationOnboarding({
         ) : (
           <>
             {practiceSection}
-            <h3 className="mbob-subhead">Rendering providers</h3>
+            <h3 className="mbob-subhead">Doctors (rendering providers)</h3>
             {renderingSection}
             <h3 className="mbob-subhead">Places of service</h3>
             {locationsSection}
@@ -377,6 +366,6 @@ export function BillingSettings(props: Omit<OrganizationOnboardingProps, "varian
     <nav className="mbsettings-nav" aria-label="Billing settings sections" style={mindBillAppearanceStyle(props.appearance)}>
       {([ ["profiles", "Billing profiles"], ["claims", "Claims administrators"], ["team", "Team"] ] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={section === id} onClick={() => setSection(id)}>{label}</button>)}
     </nav>
-    {section === "profiles" ? <OrganizationOnboarding heading="Billing settings" description="Manage providers, places of service, W-9, and organization settings." {...props} variant="settings" /> : <OrganizationAdministration {...props} section={section} />}
+    {section === "profiles" ? <OrganizationOnboarding heading="Billing settings" description="Manage the billing provider, doctors and their signatures, places of service, W-9, and organization settings." {...props} variant="settings" /> : <OrganizationAdministration {...props} section={section} />}
   </div>;
 }

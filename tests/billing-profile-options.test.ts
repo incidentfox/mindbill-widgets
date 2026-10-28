@@ -33,6 +33,13 @@ describe("saved billing profile options", () => {
     expect(options.billingProviders?.[0]?.value.address).toEqual({ line1: "1 Example St", city: "", state: "", postalCode: "" });
   });
 
+  it("labels each doctor with NPI and whether their signature prints in Box 31", () => {
+    const options = organizationProfileOptions({ ...profile, renderingProviders: [{ id: "rp-1", name: "Example Doctor", npi: "2222222222", specialty: "QME", signatureConfigured: true, signatureOnClaimForm: true }] });
+    expect(options.renderingProviders?.[0]).toMatchObject({ detail: "NPI 2222222222 · QME · signature saved", signatureOnClaimForm: true });
+    expect(options.renderingProviders?.[0]?.value).not.toHaveProperty("signatureOnClaimForm");
+    expect(organizationProfileOptions(profile).renderingProviders?.[0]).not.toHaveProperty("signatureOnClaimForm");
+  });
+
   it("does not mutate organization data and accepts older API responses", () => {
     const original = structuredClone(profile);
     const options = organizationProfileOptions(profile);

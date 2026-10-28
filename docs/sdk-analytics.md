@@ -54,7 +54,7 @@ use `useMindBillAnalytics(componentName, { analytics, onAnalyticsEvent })` from 
 ## SDK version header
 
 Requests from the browser clients to MindBill (a `mindbill.org` host or your own origin, authenticated with a
-browser session) carry `X-MindBill-SDK`, for example `@mindbill/browser/0.56.0 @mindbill/react/0.87.0`. Requests
+browser session) carry `X-MindBill-SDK`, for example `@mindbill/browser/0.57.0 @mindbill/react/0.88.0`. Requests
 to your session endpoint and to other origins are unchanged. The header is first sent on a read (GET) request;
 if a MindBill server does not accept it (an older deployment), that read is retried without it and the header is
 not sent to that origin again, so an older server never blocks a request. API error responses surface as `MindBillApiError`

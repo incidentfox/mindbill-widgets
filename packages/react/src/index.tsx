@@ -214,6 +214,9 @@ export type {
 } from "./report-bill-status-dialog";
 
 export { BillingSettings, OrganizationOnboarding } from "./organization-onboarding";
+export { RenderingProvidersSettings } from "./rendering-providers-settings";
+export type { RenderingProvidersSettingsProps } from "./rendering-providers-settings";
+export { signaturePngBase64 } from "./rfa-provider-signature-setup";
 export { W9Upload } from "./w9-upload";
 export type { W9UploadProps, W9ExtractionStatus } from "./w9-upload";
 export { ConnectedPaymentReview } from "./payment-review";

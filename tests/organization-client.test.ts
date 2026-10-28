@@ -40,6 +40,21 @@ describe("organization client", () => {
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
     expect(JSON.parse(put[1].body as string)).toEqual({ practiceIdentity: { taxIdType: "SSN" }, billingProviders: [{ id: "bp-1", name: "Synthetic", npi: "1111111111", taxIdType: "SSN" }] });
   });
+  it("never echoes response-only signature status and calls the provider signature routes", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => Promise.resolve(String(url).includes("/session") ? sessionResponse()
+      : new Response(JSON.stringify({ data: String(url).endsWith("/signature") ? { providerId: "rp-1", signatureConfigured: true, signatureOnClaimForm: true, contentType: "image/png", contentBase64: "AA==" } : profile }), { status: 200 })));
+    const client = createOrganizationClient({ apiBaseUrl: "https://api.test", fetch: fetchMock });
+    await client.saveBillingProfile({ renderingProviders: [{ id: "rp-1", name: "Synthetic Doctor", npi: "1111111111", signatureConfigured: true, signatureOnClaimForm: true } as never] });
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
+    expect(JSON.parse(put[1].body as string)).toEqual({ renderingProviders: [{ id: "rp-1", name: "Synthetic Doctor", npi: "1111111111" }] });
+    expect((await client.getRenderingProviderSignature("rp 1")).contentType).toBe("image/png");
+    expect(fetchMock.mock.calls.at(-1)![0]).toBe("https://api.test/partner/v2/organization/rendering-providers/rp%201/signature");
+    await client.saveRenderingProviderSignature("rp-1", { contentBase64: "AA==", physicianAuthorized: true, actorReference: "Synthetic staff" });
+    const last = fetchMock.mock.calls.at(-1)!;
+    expect(last[0]).toBe("https://api.test/partner/v2/organization/rendering-providers/rp-1/signature");
+    expect(last[1].method).toBe("PUT");
+    expect(JSON.parse(last[1].body as string)).toEqual({ contentBase64: "AA==", physicianAuthorized: true, actorReference: "Synthetic staff" });
+  });
   it("mints a session then GETs the profile with the bearer token", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(sessionResponse())

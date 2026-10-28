@@ -1,2 +1,2 @@
 /** Published @mindbill/browser version; kept equal to package.json by a test. */
-export const MINDBILL_BROWSER_SDK_VERSION = "0.56.0";
+export const MINDBILL_BROWSER_SDK_VERSION = "0.57.0";
