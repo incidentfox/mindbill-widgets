@@ -1556,6 +1556,13 @@ export function BillSubmissionForm({
     ...(billingSettings.apiBaseUrl ? { apiBaseUrl: billingSettings.apiBaseUrl } : {}),
     ...(billingSettings.fetch ? { fetch: billingSettings.fetch } : {}),
   }) : null, [billingSettings?.getSession, billingSettings?.sessionEndpoint, billingSettings?.apiBaseUrl, billingSettings?.fetch]);
+  // Without billingSettings, the form's own organization-wide bills:create session adds doctors and
+  // saves their signatures (servers from 2026-10-28). Older servers refuse; then details fill this bill only.
+  const billDoctorClient = useMemo(() => !billingSettings && (getSession || sessionEndpoint || connected)
+    ? createOrganizationClient({ ...(getSession ? { getSession } : {}), ...(sessionEndpoint ? { sessionEndpoint } : {}), ...(apiBaseUrl ? { apiBaseUrl } : {}), ...(fetchOverride ? { fetch: fetchOverride } : {}) }) : null,
+  [billingSettings, getSession, sessionEndpoint, apiBaseUrl, fetchOverride, connected]);
+  const [billDoctorWrites, setBillDoctorWrites] = useState(true);
+  const doctorClient = settingsClient ?? (billDoctorWrites ? billDoctorClient : null);
   // The settings panel renders below the form; bring it into view when opened.
   useEffect(() => { if (settingsOpen) settingsPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, [settingsOpen]);
   useEffect(() => {
@@ -2311,15 +2318,15 @@ export function BillSubmissionForm({
   const renderingSignatureHint = chosenRendering && chosenRendering.signatureOnClaimForm !== undefined ? <p className="mbsf-help mbsf-span" data-signature-hint={chosenRendering.signatureOnClaimForm ? "saved" : "missing"} role="note">
     {chosenRendering.signatureOnClaimForm
       ? <>✓ {chosenRendering.label}’s saved signature prints in Box 31 of the claim form.</>
-      : <>No signature saved for {chosenRendering.label} — Box 31 prints “Signature on File”. {settingsClient ? null : onManageSettings ? <button type="button" className="mbsf-text-btn" onClick={onManageSettings}>Add a signature</button> : "An administrator can add one in Billing settings."}</>}
+      : <>No signature saved for {chosenRendering.label} — Box 31 prints “Signature on File”. {doctorClient ? null : onManageSettings ? <button type="button" className="mbsf-text-btn" onClick={onManageSettings}>Add a signature</button> : "An administrator can add one in Billing settings."}</>}
   </p> : null;
   const doctorActions = <div className="mbsf-span mbsf-doctor-actions" style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
     <button type="button" className="mbsf-text-btn" disabled={locked} aria-expanded={doctorPanel === "add"} onClick={() => { setDoctorNote(""); setDoctorPanel((current) => current === "add" ? null : "add"); }}>+ Add new doctor</button>
-    {settingsClient && chosenRendering ? <button type="button" className="mbsf-text-btn" disabled={locked} aria-expanded={doctorPanel === "signature"} onClick={() => { setDoctorNote(""); setDoctorPanel((current) => current === "signature" ? null : "signature"); }}>{chosenRendering.signatureOnClaimForm ? "Replace signature" : "Add signature"}</button> : null}
+    {doctorClient && chosenRendering ? <button type="button" className="mbsf-text-btn" disabled={locked} aria-expanded={doctorPanel === "signature"} onClick={() => { setDoctorNote(""); setDoctorPanel((current) => current === "signature" ? null : "signature"); }}>{chosenRendering.signatureOnClaimForm ? "Replace signature" : "Add signature"}</button> : null}
     {doctorNote ? <span className="mbsf-help" role="status">{doctorNote}</span> : null}
   </div>;
   const doctorPanelView = doctorPanel ? <div className="mbob mbsf-span" style={{ fontSize: 15 }}><style>{organizationOnboardingCss + renderingProvidersCss}</style>
-    {doctorPanel === "add" ? <BillDoctorQuickAdd settingsClient={settingsClient} disabled={locked}
+    {doctorPanel === "add" ? <BillDoctorQuickAdd settingsClient={settingsClient} billClient={settingsClient ? null : doctorClient} onUnsupported={() => setBillDoctorWrites(false)} disabled={locked}
       onClose={() => setDoctorPanel(null)}
       onSaved={(profile, providerId) => { adoptSavedDoctor(profile, providerId); setDoctorPanel(null); setDoctorNote("Doctor saved and selected for this bill."); }}
       onUseForBill={(provider) => {
@@ -2328,9 +2335,10 @@ export function BillSubmissionForm({
           ...(provider.licenseNumber ? { licenseNumber: provider.licenseNumber } : {}), ...(provider.licenseState ? { licenseState: provider.licenseState } : {}) } }));
         setDoctorPanel(null); setDoctorNote("Doctor details filled for this bill only.");
       }} />
-      : settingsClient && chosenRendering ? <div className="mbrp-editor"><ProviderSignature key={chosenRendering.id} client={settingsClient} providerId={chosenRendering.id} providerName={chosenRendering.label}
+      : doctorClient && chosenRendering ? <div className="mbrp-editor"><ProviderSignature key={chosenRendering.id} client={doctorClient} providerId={chosenRendering.id} providerName={chosenRendering.label}
         configured={chosenRendering.signatureOnClaimForm === true} onClaimForm={chosenRendering.signatureOnClaimForm === true} disabled={locked}
-        onSaved={(profile) => { adoptSavedDoctor(profile); setDoctorNote("Signature saved."); }} />
+        onSaved={(profile) => { adoptSavedDoctor(profile); setDoctorNote("Signature saved."); }}
+        onError={(error) => { if (!settingsClient && (error as Error & { status?: number }).status === 403) { setBillDoctorWrites(false); setDoctorPanel(null); setDoctorNote("Signatures can’t be saved from this bill. An administrator can add one in Billing settings."); } }} />
         <div className="mbob-actions"><span /><button type="button" className="mbob-secondary" onClick={() => setDoctorPanel(null)}>Close</button></div></div> : null}
   </div> : null;
   const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend>

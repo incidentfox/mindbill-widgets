@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.88.1 — @mindbill/react 0.88.1 / @mindbill/browser 0.57.1
+
+### Added
+- `BillSubmissionForm` **+ Add new doctor** and **Add / Replace signature** now work with the form's own
+  organization-wide `bills:create` session — no `billingSettings` needed. The doctor (and optional signature) is
+  saved for future bills, the picker refreshes and the doctor is selected on the bill. `billingSettings` still wins
+  when passed. Older servers that refuse the bill session fall back to filling this bill only, with a note.
+  A doctor whose NPI is already saved is selected instead of duplicated. Editing saved doctors stays in settings.
+- `@mindbill/browser`: `OrganizationClient.addRenderingProvider()` (add-only; `rendering_provider_exists` errors
+  carry `existingProviderId`).
+
 ## 0.88.0 — @mindbill/react 0.88.0 / @mindbill/browser 0.57.0 / @mindbill/angular 0.22.0
 
 Requires a MindBill server with the rendering-provider signature endpoint (deployed 2026-10-28). No host code

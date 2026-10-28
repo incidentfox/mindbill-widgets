@@ -13,6 +13,10 @@ import { signaturePngBase64 } from "./rfa-provider-signature-setup";
 export type BillDoctorQuickAddProps = {
   /** organization:manage client (the form's `billingSettings`); null = this bill only. */
   settingsClient: OrganizationClient | null;
+  /** The bill form's own (bills:create) client, used when there is no settings client. */
+  billClient?: OrganizationClient | null;
+  /** The server or session cannot save doctors from a bill (older server): fill this bill only. */
+  onUnsupported?: () => void;
   disabled?: boolean;
   /** Saved: the refreshed profile and the new provider's id. */
   onSaved: (profile: OrganizationProfileData, providerId: string) => void;
@@ -23,7 +27,8 @@ export type BillDoctorQuickAddProps = {
 
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 
-export function BillDoctorQuickAdd({ settingsClient, disabled, onSaved, onUseForBill, onClose }: BillDoctorQuickAddProps): ReactElement {
+export function BillDoctorQuickAdd({ settingsClient, billClient, onUnsupported, disabled, onSaved, onUseForBill, onClose }: BillDoctorQuickAddProps): ReactElement {
+  const client = settingsClient ?? billClient ?? null;
   const [doctor, setDoctor] = useState<OrganizationRenderingProviderInput>({ name: "", npi: "", taxonomy: "", specialty: "", licenseNumber: "", licenseState: "", active: true });
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -39,8 +44,32 @@ export function BillDoctorQuickAdd({ settingsClient, disabled, onSaved, onUseFor
   const save = async () => {
     if (!valid || locked || !signatureReady) return;
     const input: OrganizationRenderingProviderInput = { ...doctor, name: doctor.name.trim(), npi: doctor.npi.trim() };
-    if (!settingsClient) { onUseForBill(input); return; }
+    if (!client) { onUseForBill(input); return; }
     setBusy(true); setError("");
+    if (!settingsClient && billClient) {
+      try {
+        let providerId: string; let next: OrganizationProfileData;
+        try {
+          const added = await billClient.addRenderingProvider({ name: input.name, npi: input.npi,
+            ...(input.taxonomy ? { taxonomy: input.taxonomy } : {}), ...(input.specialty ? { specialty: input.specialty } : {}),
+            ...(input.licenseNumber ? { licenseNumber: input.licenseNumber } : {}), ...(input.licenseState ? { licenseState: input.licenseState } : {}) });
+          providerId = added.providerId; next = added.profile;
+        } catch (caught) {
+          const failure = caught as Error & { status?: number; code?: string; existingProviderId?: string };
+          if (failure.code === "rendering_provider_exists" && failure.existingProviderId) {
+            providerId = failure.existingProviderId; next = await billClient.getBillingProfile();
+          } else if (failure.status === 403 || failure.status === 404 || failure.status === 405) {
+            onUnsupported?.(); onUseForBill(input); return;
+          } else throw caught;
+        }
+        if (file) next = await billClient.saveRenderingProviderSignature(providerId, { contentBase64: await signaturePngBase64(file), physicianAuthorized: true, actorReference: actor.trim() });
+        onSaved(next, providerId);
+      } catch (caught) {
+        setError(caught instanceof Error && caught.message ? caught.message : "The doctor could not be saved.");
+      } finally { setBusy(false); }
+      return;
+    }
+    if (!settingsClient) return;
     try {
       const before = await settingsClient.getOrganization().then((profile) => new Set((profile.renderingProviders ?? []).map((item) => item.id))).catch(() => new Set<string>());
       let next = await settingsClient.saveBillingProfile({ renderingProviders: [input] });
@@ -63,7 +92,7 @@ export function BillDoctorQuickAdd({ settingsClient, disabled, onSaved, onUseFor
 
   return <div className="mbrp-editor" role="group" aria-label="Add new doctor">
     <h4>Add new doctor</h4>
-    {!settingsClient ? <p className="mbrp-hint" style={{ marginBottom: 12 }}>These details fill this bill only. To save a doctor and their signature for future bills, an administrator can add them in Billing settings.</p> : null}
+    {!client ? <p className="mbrp-hint" style={{ marginBottom: 12 }}>These details fill this bill only. To save a doctor and their signature for future bills, an administrator can add them in Billing settings.</p> : null}
     <div className="mbob-grid">
       {field("Doctor name", "name")}
       {field("Rendering NPI", "npi", { inputMode: "numeric", maxLength: 10 })}
@@ -72,7 +101,7 @@ export function BillDoctorQuickAdd({ settingsClient, disabled, onSaved, onUseFor
       {field("License number", "licenseNumber")}
       {field("License state", "licenseState", { maxLength: 2, upper: true })}
     </div>
-    {settingsClient ? <div className="mbrp-signature">
+    {client ? <div className="mbrp-signature">
       <h5>Signature (optional)</h5>
       <p className="mbob-status">Prints in CMS-1500 Box 31 on this doctor’s bills. Without one, Box 31 reads “Signature on File”.</p>
       <label className="mbob-field">Signature image (PNG or JPEG)
@@ -95,7 +124,7 @@ export function BillDoctorQuickAdd({ settingsClient, disabled, onSaved, onUseFor
     {error ? <div className="mbob-error" role="alert">{error}</div> : null}
     <div className="mbob-actions">
       <button className="mbob-secondary" type="button" disabled={busy} onClick={onClose}>Cancel</button>
-      <button className="mbob-save" type="button" disabled={locked || !valid || !signatureReady} onClick={() => { void save(); }}>{busy ? "Saving…" : settingsClient ? "Save doctor and use on this bill" : "Use on this bill"}</button>
+      <button className="mbob-save" type="button" disabled={locked || !valid || !signatureReady} onClick={() => { void save(); }}>{busy ? "Saving…" : client ? "Save doctor and use on this bill" : "Use on this bill"}</button>
     </div>
   </div>;
 }
