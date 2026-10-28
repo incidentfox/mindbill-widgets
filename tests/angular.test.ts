@@ -179,3 +179,13 @@ describe("Angular bill tasks dashboard", () => {
     });
   });
 });
+
+describe("Angular duplicate mail address parity", () => {
+  it("uses structured fields and the shared compose helper", () => {
+    const source = readFileSync(new URL("../packages/angular/src/lib/bill-lifecycle.component.ts", import.meta.url), "utf8");
+    for (const name of ["duplicateMailLine1", "duplicateMailLine2", "duplicateMailCity", "duplicateMailState", "duplicateMailZip"]) expect(source).toContain(`name="${name}"`);
+    expect(source).not.toContain('name="duplicateMail"');
+    expect(source).toContain("mailingAddress: composeMailingAddress(this.duplicate.mail)");
+    expect(source).toContain("isMailingAddressValid(this.duplicate.mail)");
+  });
+});

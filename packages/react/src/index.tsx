@@ -137,6 +137,10 @@ export type {
 } from "./bill-submission-form";
 export { SendRouteDialog } from "./send-route-dialog";
 export type { SendRouteDialogProps, SendRouteSubmission } from "./send-route-dialog";
+export { MailingAddressFields } from "./mailing-address-fields";
+export type { MailingAddressFieldsProps } from "./mailing-address-fields";
+export { composeMailingAddress, parseMailingAddress, validateMailingAddress, isMailingAddressValid, EMPTY_MAILING_ADDRESS } from "@mindbill/browser";
+export type { MailingAddressParts, MailingAddressField, MailingAddressErrors } from "@mindbill/browser";
 
 export { calculateBillSubmissionAllowedAmount } from "./billing-catalog";
 export type {

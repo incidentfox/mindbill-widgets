@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import {
+  composeMailingAddress,
   createOrganizationClient,
+  EMPTY_MAILING_ADDRESS,
+  isMailingAddressValid,
+  parseMailingAddress,
+  type MailingAddressParts,
   type OrganizationClaimsAdministrator,
   type OrganizationClaimsAdministratorInput,
   type OrganizationTeam,
@@ -11,6 +16,7 @@ import {
 import { mindBillAppearanceStyle } from "./appearance";
 import type { OrganizationOnboardingProps } from "./organization-onboarding";
 import { Select } from "./form-controls";
+import { MailingAddressFields } from "./mailing-address-fields";
 
 const blank = (): OrganizationClaimsAdministratorInput => ({ name: "", fax: "", email: "", mailingAddress: "", notes: "" });
 const css = `
@@ -35,6 +41,7 @@ export function OrganizationAdministration({ section, sessionEndpoint, getSessio
   const [administrators, setAdministrators] = useState<OrganizationClaimsAdministrator[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(blank);
+  const [mailParts, setMailParts] = useState<MailingAddressParts>(() => ({ ...EMPTY_MAILING_ADDRESS }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -62,8 +69,10 @@ export function OrganizationAdministration({ section, sessionEndpoint, getSessio
     finally { if (current.current === started) setBusy(false); }
   }
   const pick = (row?: OrganizationClaimsAdministrator) => {
-    setSelected(row?.id ?? null); setDraft(row ? { name: row.name, fax: row.fax ?? "", email: row.email ?? "", mailingAddress: row.mailingAddress ?? "", notes: row.notes ?? "" } : blank()); setConfirmDelete(false); setNotice("");
+    setSelected(row?.id ?? null); setDraft(row ? { name: row.name, fax: row.fax ?? "", email: row.email ?? "", mailingAddress: row.mailingAddress ?? "", notes: row.notes ?? "" } : blank()); setMailParts(row?.mailingAddress ? parseMailingAddress(row.mailingAddress).parts : { ...EMPTY_MAILING_ADDRESS }); setConfirmDelete(false); setNotice("");
   };
+  const mailBlank = !Object.values(mailParts).some(part => part.trim());
+  const changeMail = (parts: MailingAddressParts) => { setMailParts(parts); setDraft(value => ({ ...value, mailingAddress: Object.values(parts).some(part => part.trim()) ? composeMailingAddress(parts) : "" })); };
   const saveAdministrator = () => mutate(async () => {
     const saved = selected ? await client.updateClaimsAdministrator(selected, draft) : await client.createClaimsAdministrator(draft);
     if (current.current !== connection) return;
@@ -95,9 +104,9 @@ export function OrganizationAdministration({ section, sessionEndpoint, getSessio
     </> : <div className="mbad-grid">
       <div className="mbad-list"><button type="button" disabled={busy} aria-pressed={selected === null} onClick={() => pick()}>+ Add claims administrator</button>{administrators.filter(row => row.active).map(row => <button type="button" disabled={busy} aria-pressed={selected === row.id} key={row.id} onClick={() => pick(row)}>{row.name}</button>)}</div>
       <form onSubmit={event => { event.preventDefault(); void saveAdministrator(); }}>
-        {field("name", "Administrator name")}{field("fax", "Fax")}{field("email", "Email")}{field("mailingAddress", "Mailing address", true)}{field("notes", "Notes", true)}
+        {field("name", "Administrator name")}{field("fax", "Fax")}{field("email", "Email")}<MailingAddressFields label="Mailing address" required={false} showErrors={Boolean(selected && draft.mailingAddress)} disabled={busy} value={mailParts} onChange={changeMail} />{field("notes", "Notes", true)}
         <p>Provide at least one delivery method: fax, email, or mailing address.</p>
-        <div className="mbad-actions"><button className="mbad-primary" type="submit" disabled={busy || !draft.name.trim() || ![draft.fax, draft.email, draft.mailingAddress].some(value => value?.trim())}>{busy ? "Saving…" : "Save claims administrator"}</button>{selected ? <button type="button" disabled={busy} onClick={() => setConfirmDelete(true)}>Remove administrator</button> : null}</div>
+        <div className="mbad-actions"><button className="mbad-primary" type="submit" disabled={busy || !draft.name.trim() || ![draft.fax, draft.email, draft.mailingAddress].some(value => value?.trim()) || (!mailBlank && !isMailingAddressValid(mailParts))}>{busy ? "Saving…" : "Save claims administrator"}</button>{selected ? <button type="button" disabled={busy} onClick={() => setConfirmDelete(true)}>Remove administrator</button> : null}</div>
         {confirmDelete ? <div><p>Remove this administrator from future selections? Existing bills keep their saved details.</p><div className="mbad-actions"><button disabled={busy} type="button" onClick={() => void removeAdministrator()}>Confirm removal</button><button disabled={busy} type="button" onClick={() => setConfirmDelete(false)}>Cancel</button></div></div> : null}
       </form>
     </div>}

@@ -5,6 +5,12 @@ import {
   REPORT_BILL_STATUS_OPTIONS,
   reportBillStatusContacts,
   parseSecondReviewCorrection,
+  composeMailingAddress,
+  isMailingAddressValid,
+  parseMailingAddress,
+  validateMailingAddress,
+  type MailingAddressField,
+  type MailingAddressParts,
   type CorrectionDraft,
   type BillDeliveryOption,
   type BillDeliveryOptions,
@@ -214,7 +220,18 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
               <label>Delivery method<select [(ngModel)]="duplicate.route" name="duplicateRoute">@for (option of duplicateRoutes(); track option.route) { <option [ngValue]="option.route">{{ option.label }}</option> }</select></label>
               @if (duplicate.route === 'fax') { <label>Fax number<input required [(ngModel)]="duplicate.faxNumber" name="duplicateFax" placeholder="(000) 000-0000"></label> }
               @if (duplicate.route === 'email') { <label>Email<input required type="email" [(ngModel)]="duplicate.email" name="duplicateEmail" placeholder="claims@payer.example"></label> }
-              @if (duplicate.route === 'mail') { <label>Mailing address<textarea required [(ngModel)]="duplicate.mailingAddress" name="duplicateMail"></textarea></label> }
+              @if (duplicate.route === 'mail') {
+                <fieldset class="mail-address"><legend>Mailing address</legend>
+                  <label>Address line 1<input required [(ngModel)]="duplicate.mail.line1" name="duplicateMailLine1" placeholder="Street address or PO box" autocomplete="address-line1" maxlength="120" [attr.aria-invalid]="mailError('line1') ? true : null"></label>
+                  @if (mailError('line1')) { <span class="field-error">{{ mailError('line1') }}</span> }
+                  <label>Address line 2 (optional)<input [(ngModel)]="duplicate.mail.line2" name="duplicateMailLine2" placeholder="Suite, floor, PMB, or attention" autocomplete="address-line2" maxlength="120"></label>
+                  <div class="mail-address-row">
+                    <label>City<input required [(ngModel)]="duplicate.mail.city" name="duplicateMailCity" autocomplete="address-level2" maxlength="60" [attr.aria-invalid]="mailError('city') ? true : null">@if (mailError('city')) { <span class="field-error">{{ mailError('city') }}</span> }</label>
+                    <label>State<input required [ngModel]="duplicate.mail.state" (ngModelChange)="setMailState($event)" name="duplicateMailState" placeholder="CA" autocomplete="address-level1" maxlength="2" [attr.aria-invalid]="mailError('state') ? true : null">@if (mailError('state')) { <span class="field-error">{{ mailError('state') }}</span> }</label>
+                    <label>ZIP<input required [(ngModel)]="duplicate.mail.postalCode" name="duplicateMailZip" placeholder="00000" inputmode="numeric" autocomplete="postal-code" maxlength="10" [attr.aria-invalid]="mailError('postalCode') ? true : null">@if (mailError('postalCode')) { <span class="field-error">{{ mailError('postalCode') }}</span> }</label>
+                  </div>
+                </fieldset>
+              }
               <div><button type="button" (click)="panel='duplicate'">Back</button><button class="primary" type="submit" [disabled]="store.mutating() || !duplicateReady()">Send duplicate</button></div>
             }
           </form>
@@ -245,6 +262,7 @@ export type { MindBillAngularAppearance, MindBillAngularThemePreset } from "./ap
     </section>
   `,
   styles: [`
+    .mail-address{border:0;padding:0;margin:0}.mail-address legend{font-weight:700;margin-bottom:4px}.mail-address-row{display:grid;grid-template-columns:minmax(0,1fr) 5rem 7rem;gap:10px}.mail-address-row label{min-width:0}.field-error{display:block;color:#9b1c1c;font-size:12px;font-weight:400}.mail-address input[aria-invalid=true]{border-color:#9b1c1c}@media (max-width:520px){.mail-address-row{grid-template-columns:5rem minmax(0,1fr)}.mail-address-row label:first-child{grid-column:1 / -1}}
     .action-form fieldset{box-sizing:border-box;width:100%;min-width:0;display:grid;gap:12px}.action-form label.review-check{display:flex;align-items:center;gap:8px}.review-check input{width:16px;height:16px;min-height:0;margin:0;padding:0}.action-form .error{color:var(--danger)}
     :host{display:block}.mb{font-family:var(--font);color:var(--t);background:var(--bg);padding:20px}.summary,.card,.columns,.rejection{display:block;max-width:1120px;margin:0 auto 16px}.summary{display:flex;justify-content:space-between;align-items:end}.summary h2{margin:4px 0}.summary p,.muted{color:var(--m)}.eyebrow,dt{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--m)}.money{text-align:right}.money span{display:block;font-size:28px;font-weight:800}.money small{color:var(--m)}.card{background:var(--s);border:1px solid var(--b);border-radius:var(--r);padding:20px}.card-title{display:flex;justify-content:space-between;gap:20px}.card-title h3{margin:0}.card-title p{margin:5px 0;color:var(--m)}.progress ol{display:flex;list-style:none;padding:0;margin:0}.progress li{flex:1;text-align:center;position:relative;color:var(--m)}.progress li:before{content:"";position:absolute;top:16px;left:0;right:0;border-top:2px solid var(--b)}.progress li:first-child:before{left:50%}.progress li:last-child:before{right:50%}.progress b{position:relative;z-index:1;display:grid;place-items:center;width:32px;height:32px;margin:auto;border:2px solid var(--b);border-radius:50%;background:var(--s)}.progress .complete b,.progress .current b{border-color:var(--a);background:var(--a);color:var(--ac)}.progress span{display:block;margin-top:8px;font-size:12px;font-weight:700}.snapshot dl,.columns dl{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.snapshot dd,.columns dd{font-weight:700;margin:6px 0}.columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}.columns .card{margin:0}.rows,.timeline{list-style:none;margin:12px 0 0;padding:0}.rows li{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--b)}.rows small{display:block;color:var(--m);margin-top:3px}.timeline li{display:flex;gap:14px;padding:10px 0}.timeline i{width:10px;height:10px;margin-top:5px;border:3px solid var(--a);border-radius:50%}.timeline p{margin:4px 0}.timeline small{color:var(--m)}button,input,select,textarea{font:inherit;border:1px solid var(--b);border-radius:var(--cr);padding:9px 12px;background:var(--s);color:var(--t)}button{cursor:pointer;font-weight:700}.primary{background:var(--a);border-color:var(--a);color:var(--ac)}.actions{max-width:1120px;margin:0 auto;display:flex;justify-content:flex-end;gap:10px}.action-form{display:grid;gap:12px}.action-form label{display:grid;gap:5px;font-weight:700}.action-form div{display:flex;justify-content:flex-end;gap:10px}.state{max-width:720px;margin:auto;padding:32px;text-align:center}.state span{display:block;margin:8px}.error{color:#9b1c1c}.notice{max-width:1120px;margin:0 auto 12px;color:var(--m)}@media(max-width:760px){.mb{padding:12px}.summary,.columns{display:block}.money{text-align:left;margin-top:12px}.columns .card{margin-bottom:12px}.snapshot dl,.columns dl{grid-template-columns:1fr 1fr}.progress span{font-size:10px}.card{padding:15px}}
     .history{border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-top:12px}.history-head{display:grid;grid-template-columns:96px 150px 130px minmax(0,1fr);gap:12px;padding:8px 14px;background:color-mix(in srgb,var(--b) 26%,var(--s));color:var(--m);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.history-rows{list-style:none;margin:0;padding:0}.history-rows>li{border-top:1px solid var(--b)}.history-rows>li.is-submission{background:color-mix(in srgb,var(--a) 9%,var(--s))}.history-rows>li.is-note{background:color-mix(in srgb,#f2c344 13%,var(--s))}
@@ -289,7 +307,7 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
   duplicateDelivery: BillDeliveryOptions | null = null;
   duplicateDeliveryError = "";
   duplicateDraftInput: BrowserBillSubmissionInput | null = null;
-  duplicate = { route: "ebill" as BillSubmissionRoute, faxNumber: "", email: "", mailingAddress: "" };
+  duplicate: { route: BillSubmissionRoute; faxNumber: string; email: string; mail: MailingAddressParts } = { route: "ebill", faxNumber: "", email: "", mail: parseMailingAddress("").parts };
   correctionInitialBill: BrowserBillCreateInput | null = null;
   correctionAttachments: MindBillSubmissionAttachment[] = [];
   correctionAttentionFields: string[] = [];
@@ -416,10 +434,16 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
       this.duplicate.route = delivery.recommended.route;
       this.duplicate.faxNumber = delivery.contacts.faxNumber || "";
       this.duplicate.email = delivery.contacts.claimsEmail || "";
-      this.duplicate.mailingAddress = delivery.contacts.mailingAddress || "";
+      this.duplicate.mail = parseMailingAddress(delivery.contacts.mailingAddress).parts;
     } catch (cause) {
       this.duplicateDeliveryError = cause instanceof Error ? cause.message : "Delivery options could not be loaded.";
     }
+  }
+  setMailState(value: string): void {
+    this.duplicate.mail.state = String(value ?? "").replace(/[^A-Za-z]/g, "").toUpperCase();
+  }
+  mailError(field: MailingAddressField): string | undefined {
+    return validateMailingAddress(this.duplicate.mail)[field];
   }
   duplicateRoutes(): BillDeliveryOption[] {
     const seen = new Set<BillSubmissionRoute>();
@@ -433,7 +457,7 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     if (!this.duplicateDraftInput) return false;
     if (this.duplicate.route === "fax") return this.duplicate.faxNumber.replace(/\D/g, "").length >= 10;
     if (this.duplicate.route === "email") return this.duplicate.email.includes("@");
-    if (this.duplicate.route === "mail") return this.duplicate.mailingAddress.trim().length > 2;
+    if (this.duplicate.route === "mail") return isMailingAddressValid(this.duplicate.mail);
     return true;
   }
   async sendDuplicate(): Promise<void> {
@@ -441,7 +465,7 @@ export class MindBillBillLifecycleComponent implements OnChanges, OnDestroy {
     const route = this.duplicate.route;
     const destination = route === "fax" ? { faxNumber: this.duplicate.faxNumber.trim() }
       : route === "email" ? { email: this.duplicate.email.trim() }
-      : route === "mail" ? { mailingAddress: this.duplicate.mailingAddress.trim() }
+      : route === "mail" ? { mailingAddress: composeMailingAddress(this.duplicate.mail) }
       : null;
     await this.store.sendDuplicateBill({
       bill: this.duplicateDraftInput.bill,

@@ -21,6 +21,7 @@ export { MINDBILL_BROWSER_SDK_VERSION } from "./version";
 export const DEFAULT_API_BASE_URL = "https://app.mindbill.org";
 export const DEFAULT_SESSION_ENDPOINT = "/api/mindbill/session";
 export { parseSecondReviewCorrection, type CorrectionDraft } from "./second-review-corrections";
+export * from "./mailing-address";
 
 export type BillReviewDocumentType =
   | "final_report"
