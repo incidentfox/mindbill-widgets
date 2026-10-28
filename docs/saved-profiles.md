@@ -47,8 +47,12 @@ response-only `signatureConfigured` and `signatureOnClaimForm` flags; the image 
 
 In `BillSubmissionForm`, choose the doctor under **Which doctor rendered this service?** (the collapsed summary has
 **Change doctor**). A note below says whether that doctor's signature prints in Box 31 and links to adding one.
-Pass `billingSettings` (an `organization:manage` session, administrators only) to open settings inside the form,
-or `onManageSettings` to send the user to your own settings page.
+Under the picker, **+ Add new doctor** opens an inline panel (name, NPI, taxonomy, specialty, license, optional
+signature). With `billingSettings` (an `organization:manage` session, administrators only) the doctor and signature
+are saved for future bills and selected on this bill, and **Add signature** / **Replace signature** manages the
+selected doctor's signature in place. Without `billingSettings`, a new doctor fills this bill only (the user is told
+so) and signature actions are hidden; ordinary bill sessions never gain settings access. Pass `onManageSettings` to
+send the user to your own settings page instead.
 
 ## Choose saved values when authoring a bill
 

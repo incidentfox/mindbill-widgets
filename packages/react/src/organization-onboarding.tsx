@@ -49,7 +49,7 @@ const STEPS: Array<{ id: StepId; label: string }> = [
   { id: "review", label: "Review" },
 ];
 
-const css = `
+export const organizationOnboardingCss = `
 .mbob{color:var(--mb-text);font-family:var(--mb-font);font-size:15px}.mbob *{box-sizing:border-box}.mbob h2,.mbob h3,.mbob p{margin:0}
 .mbob-card{border:1px solid var(--mb-border);border-radius:var(--mb-radius);background:var(--mb-surface);box-shadow:var(--mb-shadow);padding:24px}
 .mbob-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}.mbob-head h2{font-size:22px}.mbob-copy{color:var(--mb-muted);margin-top:5px!important}
@@ -324,7 +324,7 @@ export function OrganizationOnboarding({
 
   return (
     <div className={`mbob ${className}`.trim()} style={{ ...mindBillAppearanceStyle(appearance), ...style }}>
-      <style>{css + renderingProvidersCss}</style>
+      <style>{organizationOnboardingCss + renderingProvidersCss}</style>
       <div className="mbob-card">
         <div className="mbob-head"><div><h2>{heading}</h2><p className="mbob-copy">{description}</p></div></div>
         {loadError ? <div className="mbob-error" role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Retry</button></div> : null}

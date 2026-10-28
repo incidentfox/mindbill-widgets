@@ -20,6 +20,12 @@ signatures; no new permission is needed.
 - `BillSubmissionForm`: the rendering-provider picker reads "Which doctor rendered this service?", lists each
   doctor with NPI and specialty, and the collapsed summary offers **Change doctor**. A note under it says whether
   the chosen doctor's signature prints in Box 31, with an **Add a signature** link.
+- `BillSubmissionForm` **+ Add new doctor**: an inline panel under the doctor picker (name, NPI, taxonomy,
+  specialty, license number/state, optional signature with preview). With `billingSettings` (an
+  `organization:manage` session) the doctor and signature are saved for future bills, the picker refreshes, and the
+  doctor is selected on the current bill. Without it, the details fill this bill only, with a note.
+- `BillSubmissionForm` **Add signature / Replace signature** for the selected saved doctor (with `billingSettings`),
+  with a preview of the saved signature.
 - `BillSubmissionForm` `onManageSettings`: without `billingSettings`, shows a "Manage doctors & signatures" button
   that opens the host's own settings page. Without either, the form says where doctors and signatures are managed.
 

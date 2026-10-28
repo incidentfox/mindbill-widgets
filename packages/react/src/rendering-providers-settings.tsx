@@ -119,7 +119,7 @@ export function RenderingProvidersSettings({ client, providers, disabled, onSave
   </div>;
 }
 
-type ProviderSignatureProps = {
+export type ProviderSignatureProps = {
   client: OrganizationClient;
   providerId: string;
   providerName: string;
@@ -132,7 +132,7 @@ type ProviderSignatureProps = {
 
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 
-function ProviderSignature({ client, providerId, providerName, configured, onClaimForm, disabled, onSaved, onError }: ProviderSignatureProps): ReactElement {
+export function ProviderSignature({ client, providerId, providerName, configured, onClaimForm, disabled, onSaved, onError }: ProviderSignatureProps): ReactElement {
   const [saved, setSaved] = useState<string | null>(null);
   const [loading, setLoading] = useState(configured);
   const [replacing, setReplacing] = useState(false);
