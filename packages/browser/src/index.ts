@@ -2363,7 +2363,13 @@ export type OrganizationClient = {
   }) => Promise<OrganizationProfileData>;
   saveLocations: (locations: OrganizationLocationInput[]) => Promise<OrganizationProfileData>;
   saveW9: (input: { filename: string; contentBase64: string; taxYear?: number }) => Promise<OrganizationProfileData>;
-  /** The saved signature image for one rendering provider; requires organization:manage. */
+  /**
+   * Add a doctor (rendering provider). Add-only: a doctor already saved with the NPI rejects with a
+   * MindBillApiError whose code is "rendering_provider_exists" (providerId on `existingProviderId`).
+   * Works with organization:manage or an organization-wide bills:create session (servers from 2026-10-28).
+   */
+  addRenderingProvider: (input: Omit<OrganizationRenderingProviderInput, "id" | "externalId" | "active" | "email">) => Promise<{ providerId: string; profile: OrganizationProfileData }>;
+  /** The saved signature image for one rendering provider; organization:manage or bills:create. */
   getRenderingProviderSignature: (providerId: string) => Promise<OrganizationRenderingProviderSignature>;
   /**
    * Save or replace a rendering provider's signature (base64 PNG ≤512 KB, e.g. from signaturePngBase64). Bills created
@@ -2447,6 +2453,23 @@ export function createOrganizationClient({
       request("/partner/v2/organization/locations", { method: "PUT", body: JSON.stringify({ locations }) }),
     saveW9: (input) =>
       request("/partner/v2/organization/w9", { method: "PUT", body: JSON.stringify(input) }),
+    addRenderingProvider: async (input) => {
+      let current = await mintSession();
+      const send = (active: BillLifecycleSession) => fetcher(`${(active.apiBaseUrl ?? apiBaseUrl).replace(/\/$/, "")}/partner/v2/organization/rendering-providers`, {
+        method: "POST", headers: { authorization: `Bearer ${active.token}`, "content-type": "application/json" }, body: JSON.stringify(input),
+      });
+      let response = await send(current);
+      if (response.status === 401) { current = await mintSession(true); response = await send(current); }
+      if (!response.ok) {
+        const body = await response.clone().json().catch(() => null) as { providerId?: unknown } | null;
+        const error = await responseError(response, "The doctor could not be saved.") as Error & { existingProviderId?: string };
+        if (typeof body?.providerId === "string") error.existingProviderId = body.providerId;
+        throw error;
+      }
+      const body = await response.json() as { data?: { providerId?: unknown; profile?: OrganizationProfileData } };
+      if (typeof body.data?.providerId !== "string" || !body.data.profile) throw new Error("The organization response was invalid.");
+      return { providerId: body.data.providerId, profile: body.data.profile };
+    },
     getRenderingProviderSignature: (providerId) =>
       request<OrganizationRenderingProviderSignature>(`/partner/v2/organization/rendering-providers/${encodeURIComponent(providerId)}/signature`),
     saveRenderingProviderSignature: (providerId, input) =>

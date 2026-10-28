@@ -41,4 +41,33 @@ describe("bill form: add new doctor", () => {
     expect(onUseForBill).toHaveBeenCalledWith(expect.objectContaining({ name: "Dr Synthetic New", npi: "1245319607", taxonomy: "207X00000X" }));
     await act(async () => root.unmount()); container.remove();
   });
+  it("with only the bill session, adds the doctor (no billingSettings) and selects it", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      if (init?.method === "POST" && String(input).endsWith("/rendering-providers")) return Response.json({ data: { providerId: "rp_bill", profile } });
+      return Response.json({ data: profile });
+    });
+    const onSaved = vi.fn(); const onUseForBill = vi.fn();
+    const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+    await act(async () => root.render(createElement(BillDoctorQuickAdd, { settingsClient: null, billClient: createOrganizationClient({ getSession: async () => ({ token: "synthetic" }), fetch: fetcher }), onSaved, onUseForBill, onClose: () => undefined })));
+    expect(container.querySelector("input[type=file]")).not.toBeNull();
+    await fill(container);
+    await click(container, "Save doctor and use on this bill");
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ organizationId: "synthetic" }), "rp_bill");
+    const post = fetcher.mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(String(post[1]!.body))).toEqual({ name: "Dr Synthetic New", npi: "1245319607", taxonomy: "207X00000X" });
+    await act(async () => root.unmount()); container.remove();
+  });
+  it("selects an already-saved doctor on a 409 and falls back to this bill only on an older server (403)", async () => {
+    for (const [status, body] of [[409, { error: "rendering_provider_exists", providerId: "rp_existing" }], [403, { error: "insufficient_permission" }]] as const) {
+      const fetcher = vi.fn<typeof fetch>(async (_input, init) => init?.method === "POST" ? Response.json(body, { status }) : Response.json({ data: profile }));
+      const onSaved = vi.fn(); const onUseForBill = vi.fn(); const onUnsupported = vi.fn();
+      const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+      await act(async () => root.render(createElement(BillDoctorQuickAdd, { settingsClient: null, billClient: createOrganizationClient({ getSession: async () => ({ token: "synthetic" }), fetch: fetcher }), onSaved, onUseForBill, onUnsupported, onClose: () => undefined })));
+      await fill(container);
+      await click(container, "Save doctor and use on this bill");
+      if (status === 409) { expect(onSaved).toHaveBeenCalledWith(expect.anything(), "rp_existing"); expect(onUseForBill).not.toHaveBeenCalled(); }
+      else { expect(onUnsupported).toHaveBeenCalled(); expect(onUseForBill).toHaveBeenCalled(); expect(onSaved).not.toHaveBeenCalled(); }
+      await act(async () => root.unmount()); container.remove();
+    }
+  });
 });

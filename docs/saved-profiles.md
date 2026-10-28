@@ -50,8 +50,9 @@ In `BillSubmissionForm`, choose the doctor under **Which doctor rendered this se
 Under the picker, **+ Add new doctor** opens an inline panel (name, NPI, taxonomy, specialty, license, optional
 signature). With `billingSettings` (an `organization:manage` session, administrators only) the doctor and signature
 are saved for future bills and selected on this bill, and **Add signature** / **Replace signature** manages the
-selected doctor's signature in place. Without `billingSettings`, a new doctor fills this bill only (the user is told
-so) and signature actions are hidden; ordinary bill sessions never gain settings access. Pass `onManageSettings` to
+selected doctor's signature in place. Since React 0.88.1 the form's own organization-wide `bills:create` session can also add a new doctor and add or
+replace a doctor's signature (add-only: editing saved doctors stays in settings); it gains no other settings access.
+Customer- and single-bill-scoped sessions, and older servers, fill this bill only, with a note. Pass `onManageSettings` to
 send the user to your own settings page instead.
 
 ## Choose saved values when authoring a bill
