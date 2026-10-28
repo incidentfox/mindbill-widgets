@@ -2346,7 +2346,7 @@ export function BillSubmissionForm({
     {loadedProfiles?.client === profileClient && loadedProfiles.error ? <p role="status">{loadedProfiles.error} <button type="button" onClick={() => setProfileRetry((value) => value + 1)}>Retry</button></p> : null}
     {billingSettings ? <button type="button" className="mbsf-secondary" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}>Add or manage doctors, signatures, locations &amp; W-9</button>
       : onManageSettings ? <button type="button" className="mbsf-secondary" onClick={onManageSettings}>Manage doctors &amp; signatures</button>
-      : <p className="mbsf-help">To add a doctor or a doctor’s signature, open your practice’s Billing settings.</p>}
+      : <p className="mbsf-help">{doctorClient ? "Choose the doctor below, or use + Add new doctor. Edit saved doctors in Billing settings." : "To add a doctor or a doctor’s signature, open your practice’s Billing settings."}</p>}
     {compactProviders ? <p className="mbsf-help">{[bill.billingProvider?.name, bill.renderingProvider?.name, bill.serviceLocation?.name].filter(Boolean).join(" · ") || "Enter provider details or choose saved profiles."}</p> : null}
     <details open={!compactProviders || providerEditing || providerErrors}>
       <summary hidden={!compactProviders} onClick={(event) => { event.preventDefault(); setProviderEditing((current) => !current); }} style={{ cursor: "pointer", marginBottom: 12 }}>Review or edit provider details</summary>
