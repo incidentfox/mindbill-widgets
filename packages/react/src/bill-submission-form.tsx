@@ -15,6 +15,7 @@ import { createContext, Fragment, useCallback, useContext, useEffect, useId, use
 import {
   createOrganizationClient,
   type OrganizationClientOptions,
+  type OrganizationProfileData,
   createBillReferenceClient,
   createBillSubmissionClient,
   type BillDeliveryOptions,
@@ -48,7 +49,9 @@ import { equipmentCalculationContext, equipmentFields, type EquipmentDetails } f
 import { mindBillAppearanceStyle, type MindBillReactAppearance } from "./appearance";
 import { analyticsErrorCode, ReportAutofill } from "./report-autofill";
 import { applyReportAutofill, reportAutofillInsuranceCarrier } from "./report-autofill-values";
-import { BillingSettings } from "./organization-onboarding";
+import { BillingSettings, organizationOnboardingCss } from "./organization-onboarding";
+import { BillDoctorQuickAdd } from "./bill-doctor-quick-add";
+import { ProviderSignature, renderingProvidersCss } from "./rendering-providers-settings";
 import { SendRouteDialog, type SendRouteSubmission } from "./send-route-dialog";
 import { ClaimsAdministratorDirectoryDialog } from "./claims-administrator-directory-dialog";
 import { billSubmissionProfileSummary, matchingBillSubmissionProfileOption, organizationProfileOptions, type BillSubmissionProfileOptions, type BillSubmissionProfileSection } from "./billing-profile-options";
@@ -421,6 +424,11 @@ export type BillSubmissionFormProps = {
   profileOptions?: BillSubmissionProfileOptions;
   /** Separate organization:manage session. Supply only for users allowed to manage practice settings. */
   billingSettings?: OrganizationClientOptions;
+  /**
+   * Without `billingSettings`: opens the host's own practice-settings page (doctors, signatures, locations, W-9).
+   * The form shows a "Manage doctors & signatures" button that calls it.
+   */
+  onManageSettings?: () => void;
   /** Optional written-agreement feature; use a dedicated organization-wide autofill:run session. */
   reportAutofill?: OrganizationClientOptions;
   /**
@@ -1420,7 +1428,7 @@ export function BillSubmissionActions(): ReactElement { return <BillSubmissionSe
 
 export function BillSubmissionForm({
   initialBill, idempotencyKey, attachments = EMPTY_ATTACHMENTS, onSubmit, onSubmitted, getSession, sessionEndpoint, apiBaseUrl,
-  profileOptions, billingSettings, reportAutofill, profileDisplay = "auto",
+  profileOptions, billingSettings, onManageSettings, reportAutofill, profileDisplay = "auto",
   fetch: fetchOverride, onListMedicalProviderNetworks, onListClaimsAdministrators, onSearchClaimsAdministrators, onGetClaimsAdministratorDirectory, claimsAdministratorSources, claimsAdministratorHint,
   diagnosisOptions = [], onSearchDiagnoses,
   onLookupPostalCode, procedureOptions, draft, onSaveDraft, saveDraftLabel = "Save draft", treatmentBilling = false, companionLines, linkedAuthorizations, evaluationTypes, editableTreatmentCharges = false, showFeeEstimates = true, onSearchProcedureCodes, onQuoteFee, onQuoteEncounter, describeProcedureCode, modifierOptions, taxonomyOptions, deliveryRoutePicker = "auto", deliveryRouteDialogTitle = "Send bill", attachmentReportTypeMode = "auto",
@@ -1538,6 +1546,18 @@ export function BillSubmissionForm({
   const [loadedProfiles, setLoadedProfiles] = useState<{ client: typeof profileClient; options?: BillSubmissionProfileOptions; error?: string } | null>(null);
   const [profileRetry, setProfileRetry] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsPanel = useRef<HTMLElement | null>(null);
+  const [doctorPanel, setDoctorPanel] = useState<null | "add" | "signature">(null);
+  const [doctorNote, setDoctorNote] = useState("");
+  // Saving doctors/signatures from the bill form uses the separate organization:manage connection only.
+  const settingsClient = useMemo(() => billingSettings ? createOrganizationClient({
+    ...(billingSettings.getSession ? { getSession: billingSettings.getSession } : {}),
+    ...(billingSettings.sessionEndpoint ? { sessionEndpoint: billingSettings.sessionEndpoint } : {}),
+    ...(billingSettings.apiBaseUrl ? { apiBaseUrl: billingSettings.apiBaseUrl } : {}),
+    ...(billingSettings.fetch ? { fetch: billingSettings.fetch } : {}),
+  }) : null, [billingSettings?.getSession, billingSettings?.sessionEndpoint, billingSettings?.apiBaseUrl, billingSettings?.fetch]);
+  // The settings panel renders below the form; bring it into view when opened.
+  useEffect(() => { if (settingsOpen) settingsPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, [settingsOpen]);
   useEffect(() => {
     let alive = true;
     if (profileClient) {
@@ -2279,10 +2299,46 @@ export function BillSubmissionForm({
       <Field path="serviceLocation.address.postalCode" label="Service ZIP" required error={errors["serviceLocation.address.postalCode"]}>{text(bill.serviceLocation?.address?.postalCode, (postalCode) => setBill((c) => ({ ...c, serviceLocation: { ...c.serviceLocation, address: { line1: c.serviceLocation?.address?.line1 ?? "", line2: c.serviceLocation?.address?.line2 ?? "", city: c.serviceLocation?.address?.city ?? "", state: c.serviceLocation?.address?.state ?? "", postalCode } } })))}</Field>
     </>,
   };
+  // Box 31: whether the chosen doctor's saved signature will print (matched by rendering NPI, as the server does).
+  const chosenRendering = bill.renderingProvider?.npi?.trim()
+    ? availableProfiles?.renderingProviders?.find((option) => option.value.npi?.trim() === bill.renderingProvider?.npi?.trim()) : undefined;
+  const adoptSavedDoctor = (profile: OrganizationProfileData, providerId?: string) => {
+    const options = organizationProfileOptions(profile);
+    setLoadedProfiles({ client: profileClient, options });
+    const option = providerId ? options.renderingProviders?.find((item) => item.id === providerId) : undefined;
+    if (option) setBill((current) => ({ ...current, renderingProvider: structuredClone(option.value) }));
+  };
+  const renderingSignatureHint = chosenRendering && chosenRendering.signatureOnClaimForm !== undefined ? <p className="mbsf-help mbsf-span" data-signature-hint={chosenRendering.signatureOnClaimForm ? "saved" : "missing"} role="note">
+    {chosenRendering.signatureOnClaimForm
+      ? <>✓ {chosenRendering.label}’s saved signature prints in Box 31 of the claim form.</>
+      : <>No signature saved for {chosenRendering.label} — Box 31 prints “Signature on File”. {settingsClient ? null : onManageSettings ? <button type="button" className="mbsf-text-btn" onClick={onManageSettings}>Add a signature</button> : "An administrator can add one in Billing settings."}</>}
+  </p> : null;
+  const doctorActions = <div className="mbsf-span mbsf-doctor-actions" style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+    <button type="button" className="mbsf-text-btn" disabled={locked} aria-expanded={doctorPanel === "add"} onClick={() => { setDoctorNote(""); setDoctorPanel((current) => current === "add" ? null : "add"); }}>+ Add new doctor</button>
+    {settingsClient && chosenRendering ? <button type="button" className="mbsf-text-btn" disabled={locked} aria-expanded={doctorPanel === "signature"} onClick={() => { setDoctorNote(""); setDoctorPanel((current) => current === "signature" ? null : "signature"); }}>{chosenRendering.signatureOnClaimForm ? "Replace signature" : "Add signature"}</button> : null}
+    {doctorNote ? <span className="mbsf-help" role="status">{doctorNote}</span> : null}
+  </div>;
+  const doctorPanelView = doctorPanel ? <div className="mbob mbsf-span" style={{ fontSize: 15 }}><style>{organizationOnboardingCss + renderingProvidersCss}</style>
+    {doctorPanel === "add" ? <BillDoctorQuickAdd settingsClient={settingsClient} disabled={locked}
+      onClose={() => setDoctorPanel(null)}
+      onSaved={(profile, providerId) => { adoptSavedDoctor(profile, providerId); setDoctorPanel(null); setDoctorNote("Doctor saved and selected for this bill."); }}
+      onUseForBill={(provider) => {
+        setBill((current) => ({ ...current, renderingProvider: { name: provider.name, npi: provider.npi,
+          ...(provider.taxonomy ? { taxonomy: provider.taxonomy } : {}), ...(provider.specialty ? { specialty: provider.specialty } : {}),
+          ...(provider.licenseNumber ? { licenseNumber: provider.licenseNumber } : {}), ...(provider.licenseState ? { licenseState: provider.licenseState } : {}) } }));
+        setDoctorPanel(null); setDoctorNote("Doctor details filled for this bill only.");
+      }} />
+      : settingsClient && chosenRendering ? <div className="mbrp-editor"><ProviderSignature key={chosenRendering.id} client={settingsClient} providerId={chosenRendering.id} providerName={chosenRendering.label}
+        configured={chosenRendering.signatureOnClaimForm === true} onClaimForm={chosenRendering.signatureOnClaimForm === true} disabled={locked}
+        onSaved={(profile) => { adoptSavedDoctor(profile); setDoctorNote("Signature saved."); }} />
+        <div className="mbob-actions"><span /><button type="button" className="mbob-secondary" onClick={() => setDoctorPanel(null)}>Close</button></div></div> : null}
+  </div> : null;
   const providersSection = <fieldset className="mbsf-card" disabled={locked}><legend className="mbsf-legend">Providers &amp; place of service</legend>
     {profileClient && !loadedProfiles ? <p role="status" className="mbsf-help">Loading saved practice settings…</p> : null}
     {loadedProfiles?.client === profileClient && loadedProfiles.error ? <p role="status">{loadedProfiles.error} <button type="button" onClick={() => setProfileRetry((value) => value + 1)}>Retry</button></p> : null}
-    {billingSettings ? <button type="button" className="mbsf-secondary" onClick={() => setSettingsOpen((value) => !value)}>Add or manage providers, locations &amp; W-9</button> : null}
+    {billingSettings ? <button type="button" className="mbsf-secondary" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}>Add or manage doctors, signatures, locations &amp; W-9</button>
+      : onManageSettings ? <button type="button" className="mbsf-secondary" onClick={onManageSettings}>Manage doctors &amp; signatures</button>
+      : <p className="mbsf-help">To add a doctor or a doctor’s signature, open your practice’s Billing settings.</p>}
     {compactProviders ? <p className="mbsf-help">{[bill.billingProvider?.name, bill.renderingProvider?.name, bill.serviceLocation?.name].filter(Boolean).join(" · ") || "Enter provider details or choose saved profiles."}</p> : null}
     <details open={!compactProviders || providerEditing || providerErrors}>
       <summary hidden={!compactProviders} onClick={(event) => { event.preventDefault(); setProviderEditing((current) => !current); }} style={{ cursor: "pointer", marginBottom: 12 }}>Review or edit provider details</summary>
@@ -2296,8 +2352,8 @@ export function BillSubmissionForm({
         return <Fragment key={key}>
           <h4 className="mbsf-subhead">{label}</h4>
           {expanded ? <>
-            {options?.length ? <Field label={`Saved ${label === "Service facility" ? "service location" : label.toLowerCase()}`} span>
-              <ComboBox ariaLabel={`Saved ${label === "Service facility" ? "service location" : label.toLowerCase()}`} disabled={locked} value="" placeholder={bill[key]?.name || `Choose ${label.toLowerCase()}…`} options={options.map(({ id, label: optionLabel }) => ({ id, label: optionLabel }))} onSelect={({ id }) => {
+            {options?.length ? <Field label={key === "renderingProvider" ? "Which doctor rendered this service?" : `Saved ${label === "Service facility" ? "service location" : label.toLowerCase()}`} span>
+              <ComboBox ariaLabel={`Saved ${label === "Service facility" ? "service location" : label.toLowerCase()}`} disabled={locked} value="" placeholder={bill[key]?.name || (key === "renderingProvider" ? "Choose the doctor…" : `Choose ${label.toLowerCase()}…`)} options={options.map(({ id, label: optionLabel, detail }) => ({ id, label: optionLabel, ...(detail ? { detail } : {}) }))} onSelect={({ id }) => {
                 const option = options.find((candidate) => candidate.id === id);
                 if (option) setBill((current) => ({ ...current, [key]: structuredClone(option.value) }));
               }} />
@@ -2307,8 +2363,9 @@ export function BillSubmissionForm({
             {profileDisplay !== "expanded" && !needsFields ? <div className="mbsf-span"><button type="button" className="mbsf-text-btn" aria-controls={fieldsId} onClick={() => setOpenSections((current) => current.filter((item) => item !== key))}>Done editing {label.toLowerCase()}</button></div> : null}
           </> : <div className="mbsf-saved-choice mbsf-span" data-profile-summary={key}>
             <p className="mbsf-saved-text">{summary.length ? <><strong>{summary[0]}</strong>{summary.slice(1).map((part, index) => <Fragment key={index}><span aria-hidden="true"> · </span><span>{part}</span></Fragment>)}</> : "Saved choice"}</p>
-            <button type="button" className="mbsf-text-btn mbsf-edit-btn" aria-expanded="false" aria-controls={fieldsId} aria-label={`Edit ${label.toLowerCase()}`} disabled={locked} onClick={() => openSection(key)}>Edit</button>
+            <button type="button" className="mbsf-text-btn mbsf-edit-btn" aria-expanded="false" aria-controls={fieldsId} aria-label={`Edit ${label.toLowerCase()}`} disabled={locked} onClick={() => openSection(key)}>{key === "renderingProvider" && (options?.length ?? 0) > 1 ? "Change doctor" : "Edit"}</button>
           </div>}
+          {key === "renderingProvider" ? <>{renderingSignatureHint}{doctorActions}{doctorPanelView}</> : null}
         </Fragment>;
       })}
     </div></details></fieldset>;
@@ -2472,7 +2529,7 @@ export function BillSubmissionForm({
         />
       ) : null}
     </form>
-    {settingsOpen && billingSettings ? <section aria-label="Practice settings"><button type="button" onClick={() => setSettingsOpen(false)}>Close practice settings</button><BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} onSaved={(profile) => { setLoadedProfiles({ client: profileClient, options: organizationProfileOptions(profile) }); }} /></section> : null}
+    {settingsOpen && billingSettings ? <section aria-label="Practice settings" ref={settingsPanel}><button type="button" onClick={() => setSettingsOpen(false)}>Close practice settings</button><BillingSettings {...billingSettings} {...(appearance ? { appearance } : {})} onSaved={(profile) => { setLoadedProfiles({ client: profileClient, options: organizationProfileOptions(profile) }); }} /></section> : null}
     <ClaimsAdministratorDirectoryDialog
       open={directoryOpen}
       directory={directory}

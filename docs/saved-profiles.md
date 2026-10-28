@@ -24,6 +24,36 @@ exact-origin session with `organization:manage`. Do not give that permission to 
 bill-entry user. A hidden settings tab is not authorization. Permanent API keys stay
 on the server. See the [integration quickstart](https://docs.mindbill.org/learn/quickstart).
 
+## Doctors (rendering providers) and their signatures
+
+A practice can have any number of doctors. In `BillingSettings` (and the **Rendering providers** step of
+`OrganizationOnboarding`), the **Doctors (rendering providers)** section lists every saved doctor with NPI,
+specialty, an **Inactive** marker and whether a signature is saved. Click **Edit** on a doctor to change their
+details, mark them inactive (hidden from new bills) or manage their signature; click **+ Add provider** to add
+another doctor. The same list is available on its own as `RenderingProvidersSettings`.
+
+To add a doctor's signature, open the doctor with **Edit**, choose a PNG or JPEG image of the signature, enter your
+name or staff reference, confirm you have the doctor's authorization, and click **Save signature**. The saved
+signature is previewed with a **Replace signature** button. MindBill stores it as a PNG (≤512 KB, ≤4096 px a side;
+JPEGs and large PNGs are converted in the browser by `signaturePngBase64`).
+
+Bills created after the signature is saved for that doctor — matched by the bill's rendering-provider NPI — print
+the signature image in CMS-1500 Box 31, in the packet preview and in the packet MindBill sends. Without a
+signature, Box 31 prints "Signature on File", the standard attestation. Bills created earlier keep the provider
+snapshot they were created with. Saving a signature uses the same administrator settings session
+(`organization:manage`); no other permission is needed. Saved rendering providers in the profile carry the
+response-only `signatureConfigured` and `signatureOnClaimForm` flags; the image itself is only returned by
+`createOrganizationClient(...).getRenderingProviderSignature(providerId)` to settings sessions.
+
+In `BillSubmissionForm`, choose the doctor under **Which doctor rendered this service?** (the collapsed summary has
+**Change doctor**). A note below says whether that doctor's signature prints in Box 31 and links to adding one.
+Under the picker, **+ Add new doctor** opens an inline panel (name, NPI, taxonomy, specialty, license, optional
+signature). With `billingSettings` (an `organization:manage` session, administrators only) the doctor and signature
+are saved for future bills and selected on this bill, and **Add signature** / **Replace signature** manages the
+selected doctor's signature in place. Without `billingSettings`, a new doctor fills this bill only (the user is told
+so) and signature actions are hidden; ordinary bill sessions never gain settings access. Pass `onManageSettings` to
+send the user to your own settings page instead.
+
 ## Choose saved values when authoring a bill
 
 For manual loading, fetch a masked organization profile with `createOrganizationClient(...).getBillingProfile()`

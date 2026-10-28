@@ -2287,6 +2287,23 @@ export type OrganizationRenderingProviderInput = {
   isQME?: boolean; isAME?: boolean; email?: string; active?: boolean;
 };
 
+/** Response-only signature status on saved rendering providers (servers before 2026-10-28 omit it). */
+export type OrganizationRenderingProviderSignatureStatus = {
+  /** A signature image is saved for this provider. */
+  signatureConfigured?: boolean;
+  /** The saved signature prints in CMS-1500 Box 31 on this provider's bills; otherwise Box 31 reads "Signature on File". */
+  signatureOnClaimForm?: boolean;
+};
+
+/** A saved rendering provider's signature image, for a settings preview. */
+export type OrganizationRenderingProviderSignature = {
+  providerId: string;
+  signatureConfigured: boolean;
+  signatureOnClaimForm: boolean;
+  contentType: "image/png" | "image/jpeg" | null;
+  contentBase64: string | null;
+};
+
 export type OrganizationChecklistItem = { id: string; label: string; complete: boolean };
 
 export type OrganizationProfileData = {
@@ -2294,7 +2311,7 @@ export type OrganizationProfileData = {
   practiceIdentity: OrganizationPracticeIdentity;
   billingProviders: Array<OrganizationBillingProviderInput & { id: string }>;
   /** Optional for compatibility with older organization-profile responses. */
-  renderingProviders?: Array<OrganizationRenderingProviderInput & { id: string }>;
+  renderingProviders?: Array<OrganizationRenderingProviderInput & OrganizationRenderingProviderSignatureStatus & { id: string }>;
   locations: Array<OrganizationLocationInput & { id: string }>;
   w9: { filename: string; addDate: string; taxYear?: number } | null;
   onboarding: { status: string | null; complete: boolean; checklist: OrganizationChecklistItem[] };
@@ -2346,6 +2363,13 @@ export type OrganizationClient = {
   }) => Promise<OrganizationProfileData>;
   saveLocations: (locations: OrganizationLocationInput[]) => Promise<OrganizationProfileData>;
   saveW9: (input: { filename: string; contentBase64: string; taxYear?: number }) => Promise<OrganizationProfileData>;
+  /** The saved signature image for one rendering provider; requires organization:manage. */
+  getRenderingProviderSignature: (providerId: string) => Promise<OrganizationRenderingProviderSignature>;
+  /**
+   * Save or replace a rendering provider's signature (base64 PNG ≤512 KB, e.g. from signaturePngBase64). Bills created
+   * afterwards for that provider print it in CMS-1500 Box 31. Requires organization:manage. Returns the organization profile.
+   */
+  saveRenderingProviderSignature: (providerId: string, input: { contentBase64: string; physicianAuthorized: true; actorReference: string }) => Promise<OrganizationProfileData>;
 };
 
 export function createOrganizationClient({
@@ -2411,11 +2435,22 @@ export function createOrganizationClient({
         ...input,
         ...(input.practiceIdentity ? { practiceIdentity: organizationTaxIdWrite(input.practiceIdentity) } : {}),
         ...(input.billingProviders ? { billingProviders: input.billingProviders.map(organizationTaxIdWrite) } : {}),
+        // Signature status is response-only; never echo it back.
+        ...(input.renderingProviders ? { renderingProviders: input.renderingProviders.map((provider) => {
+          const write: OrganizationRenderingProviderInput & OrganizationRenderingProviderSignatureStatus = { ...provider };
+          delete write.signatureConfigured;
+          delete write.signatureOnClaimForm;
+          return write;
+        }) } : {}),
       }) }),
     saveLocations: (locations) =>
       request("/partner/v2/organization/locations", { method: "PUT", body: JSON.stringify({ locations }) }),
     saveW9: (input) =>
       request("/partner/v2/organization/w9", { method: "PUT", body: JSON.stringify(input) }),
+    getRenderingProviderSignature: (providerId) =>
+      request<OrganizationRenderingProviderSignature>(`/partner/v2/organization/rendering-providers/${encodeURIComponent(providerId)}/signature`),
+    saveRenderingProviderSignature: (providerId, input) =>
+      request(`/partner/v2/organization/rendering-providers/${encodeURIComponent(providerId)}/signature`, { method: "PUT", body: JSON.stringify(input) }),
   };
 }
 

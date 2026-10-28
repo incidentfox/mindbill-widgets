@@ -416,8 +416,10 @@ ignore drops originating inside `.mbw9` to avoid uploading the same file twice.
 
 ### Saved billing profiles
 
-`BillingSettings` provides reusable billing/rendering provider, service-location, and W-9
-setup. `BillSubmissionForm` accepts host-owned or MindBill-backed `profileOptions` and
+`BillingSettings` provides reusable billing provider, doctor (rendering provider), service-location, and W-9
+setup. Doctors are listed with **Edit** and **+ Add provider**; each doctor can have a saved signature that prints
+in CMS-1500 Box 31 on their bills (otherwise "Signature on File") — see
+[doctors and signatures](./docs/saved-profiles.md#doctors-rendering-providers-and-their-signatures). `BillSubmissionForm` accepts host-owned or MindBill-backed `profileOptions` and
 `profileDisplay="auto" | "expanded" | "compact"` (auto, the default, collapses saved choices to one-line summaries with Edit); selections become editable bill snapshots, not
 mutable references. See [saved profiles and authorization](./docs/saved-profiles.md).
 Billing tax IDs support EIN or SSN (`taxIdType`, default `EIN`). Saved SSNs are
@@ -457,7 +459,7 @@ For organizations with treatment billing enabled, the browser reference and life
 
 ## Usage analytics and SDK version header
 
-The React and Angular components report privacy-safe usage events (for example `form_viewed`, `submit_succeeded`, `route_selected`) to MindBill so we can improve the embedded workflow. Events contain only closed event names, component name, SDK package and version, an anonymous per-tab id, durations, delivery-route enums, machine error codes and form field paths — never field values, free text, or patient information. Pass `analytics={false}` (React) or `[analytics]="false"` (Angular) to stop sending them; `onAnalyticsEvent` / `(analyticsEvent)` still receives every event for your own analytics. Browser API requests to MindBill also carry an `X-MindBill-SDK` header such as `@mindbill/browser/0.56.0 @mindbill/react/0.87.0`. See [SDK analytics](./docs/sdk-analytics.md).
+The React and Angular components report privacy-safe usage events (for example `form_viewed`, `submit_succeeded`, `route_selected`) to MindBill so we can improve the embedded workflow. Events contain only closed event names, component name, SDK package and version, an anonymous per-tab id, durations, delivery-route enums, machine error codes and form field paths — never field values, free text, or patient information. Pass `analytics={false}` (React) or `[analytics]="false"` (Angular) to stop sending them; `onAnalyticsEvent` / `(analyticsEvent)` still receives every event for your own analytics. Browser API requests to MindBill also carry an `X-MindBill-SDK` header such as `@mindbill/browser/0.57.0 @mindbill/react/0.88.0`. See [SDK analytics](./docs/sdk-analytics.md).
 
 ## Reference
 

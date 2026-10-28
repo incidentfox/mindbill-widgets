@@ -4,6 +4,10 @@ import type { BillSubmissionInput } from "./bill-submission-form";
 export type BillSubmissionProfileOption<K extends "billingProvider" | "renderingProvider" | "serviceLocation"> = {
   id: string;
   label: string;
+  /** Secondary text in the picker (e.g. NPI and specialty). */
+  detail?: string;
+  /** Rendering providers only: the saved signature prints in CMS-1500 Box 31 (else "Signature on File"). */
+  signatureOnClaimForm?: boolean;
   value: NonNullable<BillSubmissionInput[K]>;
 };
 
@@ -26,6 +30,8 @@ export function organizationProfileOptions(profile: Pick<OrganizationProfileData
     })),
     renderingProviders: (profile.renderingProviders ?? []).filter((provider) => provider.active !== false).map((provider) => ({
       id: provider.id, label: provider.name,
+      detail: [provider.npi ? `NPI ${provider.npi}` : "", provider.specialty ?? "", provider.signatureOnClaimForm ? "signature saved" : ""].filter(Boolean).join(" · "),
+      ...(provider.signatureOnClaimForm !== undefined ? { signatureOnClaimForm: provider.signatureOnClaimForm } : {}),
       value: { name: provider.name, npi: provider.npi,
         ...(provider.specialty !== undefined ? { specialty: provider.specialty } : {}),
         ...(provider.taxonomy !== undefined ? { taxonomy: provider.taxonomy } : {}),

@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.88.0 — @mindbill/react 0.88.0 / @mindbill/browser 0.57.0 / @mindbill/angular 0.22.0
+
+Requires a MindBill server with the rendering-provider signature endpoint (deployed 2026-10-28). No host code
+changes are required: bump the package versions. Existing `organization:manage` settings sessions can save
+signatures; no new permission is needed.
+
+### Added
+- **Several doctors under one practice**: `BillingSettings` / `OrganizationOnboarding` list every saved rendering
+  provider with NPI, specialty, an **Inactive** marker and signature status, an **Edit** button on each and an
+  obvious **+ Add provider** button (replaces the "Add a rendering provider" dropdown option). A newly added doctor
+  stays open so their signature can be added right away. Also exported as `RenderingProvidersSettings`.
+- **Doctor signatures on bills**: upload a PNG or JPEG signature per doctor (converted to a PNG ≤512 KB in the
+  browser), with a preview of the saved signature and **Replace signature**. Bills created afterwards for that
+  doctor (matched by rendering NPI) print the image in CMS-1500 Box 31 — in the packet preview and in the sent
+  packet. Without one, Box 31 keeps "Signature on File". `@mindbill/browser`:
+  `OrganizationClient.getRenderingProviderSignature()` and `saveRenderingProviderSignature()`; saved rendering
+  providers carry response-only `signatureConfigured` and `signatureOnClaimForm`. `signaturePngBase64` is exported.
+- `BillSubmissionForm`: the rendering-provider picker reads "Which doctor rendered this service?", lists each
+  doctor with NPI and specialty, and the collapsed summary offers **Change doctor**. A note under it says whether
+  the chosen doctor's signature prints in Box 31, with an **Add a signature** link.
+- `BillSubmissionForm` **+ Add new doctor**: an inline panel under the doctor picker (name, NPI, taxonomy,
+  specialty, license number/state, optional signature with preview). With `billingSettings` (an
+  `organization:manage` session) the doctor and signature are saved for future bills, the picker refreshes, and the
+  doctor is selected on the current bill. Without it, the details fill this bill only, with a note.
+- `BillSubmissionForm` **Add signature / Replace signature** for the selected saved doctor (with `billingSettings`),
+  with a preview of the saved signature.
+- `BillSubmissionForm` `onManageSettings`: without `billingSettings`, shows a "Manage doctors & signatures" button
+  that opens the host's own settings page. Without either, the form says where doctors and signatures are managed.
+
+### Changed
+- The bill form's settings button reads "Add or manage doctors, signatures, locations & W-9" and scrolls the
+  settings panel into view.
+- `saveBillingProfile` never sends the response-only signature status back (also fixes older settings forms that
+  echoed it). `@mindbill/angular` 0.22.0 only moves to `@mindbill/browser` 0.57.0.
+
 ## 0.87.0 — @mindbill/react 0.87.0 / @mindbill/browser 0.56.0 / @mindbill/angular 0.21.0
 
 Requires a MindBill server with the packet preview endpoint, cumulative trauma fields and the SDK analytics
