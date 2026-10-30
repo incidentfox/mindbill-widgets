@@ -226,7 +226,8 @@ recommended route, or render the exported `SendRouteDialog` yourself for a custo
 flow. When the preview is unavailable, the form submits directly — behavior on
 older deployments is unchanged.
 
-The dialog's **Preview packet** button shows the complete packet for the selected route
+The dialog's **View packet** button opens the complete packet PDF for the selected route in a new
+browser tab (inline in the dialog when the browser blocks the tab)
 exactly as it would be sent — the fax or mail cover sheet when that route uses one, then
 the CMS-1500, the report and other attachments in order, then the W-9 (the attached W-9 or
 the saved billing-provider W-9 MindBill would add). It renders from the unsaved form through

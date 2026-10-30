@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.90.0 — @mindbill/react 0.90.0
+
+No server or host code changes are required.
+
+### Changed
+- `SendRouteDialog` (and the `BillSubmissionForm` delivery dialog): **Preview packet** is now **View packet** and
+  opens the packet PDF directly in a new browser tab, so billers can check it without leaving or cancelling the send
+  dialog. The tab is opened from the click itself, so popup blockers allow it; if the browser still refuses (or the
+  widget runs in a sandboxed iframe without `allow-popups`), the packet is shown inline in the dialog as before.
+
 ## 0.89.0 — @mindbill/react 0.89.0 / @mindbill/browser 0.58.0 / @mindbill/angular 0.23.0
 
 No server changes are required: the composed address still travels as `destination.mailingAddress`.
