@@ -64,12 +64,30 @@ export type SendRouteDialogProps = {
   onConfirm: (submission: SendRouteSubmission) => void;
   /**
    * Renders the complete packet for the selected route exactly as it would be sent (cover sheet for fax/mail,
-   * CMS-1500, attachments in order, W-9) without sending or saving anything. Shows a "Preview packet" button.
+   * CMS-1500, attachments in order, W-9) without sending or saving anything. Shows a "View packet" button that opens the PDF in a new tab (inline in the dialog when popups are blocked).
    */
   onPreviewPacket?: (submission: SendRouteSubmission) => Promise<Blob | SendRoutePacketPreview>;
   /** Called when the biller changes the selected delivery route. */
   onRouteChange?: (route: BillSubmissionRoute) => void;
 };
+
+const PACKET_TAB_URL_TTL_MS = 5 * 60_000;
+
+/** Opens a blank tab for the packet; null when the browser refuses (popup blocker, sandboxed iframe). */
+function openPacketTab(): Window | null {
+  if (typeof window === "undefined" || typeof window.open !== "function") return null;
+  try {
+    const tab = window.open("", "_blank");
+    if (!tab) return null;
+    try {
+      tab.document.title = "Bill packet";
+      tab.document.body.textContent = "Building the bill packet…";
+    } catch { /* the placeholder text is cosmetic */ }
+    return tab;
+  } catch {
+    return null;
+  }
+}
 
 /** A rendered packet preview; `sections` lists its parts in order, e.g. ["claim_form", "document", "w9"]. */
 export type SendRoutePacketPreview = { pdf: Blob; sections?: string[] };
@@ -322,15 +340,28 @@ export function SendRouteDialog({
   // The packet differs by route (fax and mail add a cover sheet) and by the fax ATTENTION line.
   const packetKey = JSON.stringify([route, route === "fax" ? attention.trim() : ""]);
   const packetCurrent = packetPreview?.key === packetKey;
+  // "View packet" opens the PDF in a new tab. The tab is opened synchronously in the click handler so popup
+  // blockers allow it, then pointed at the packet once it is built. When no tab can be opened (popups
+  // blocked, or a sandboxed embed), the packet is shown inline in the dialog instead.
   const previewPacket = async (): Promise<void> => {
     if (!onPreviewPacket || packetLoading) return;
+    const tab = openPacketTab();
     setPacketLoading(true); setPacketError(null);
     try {
       const result = await onPreviewPacket(submission);
       const pdf = result instanceof Blob ? result : result.pdf;
       const sections = result instanceof Blob ? [] : result.sections ?? [];
-      setPacketPreview({ url: URL.createObjectURL(pdf), key: packetKey, sections, route });
+      const url = URL.createObjectURL(pdf);
+      if (tab && !tab.closed) {
+        tab.location.href = url;
+        // The tab's PDF viewer has loaded the bytes by then; free the blob afterwards.
+        setTimeout(() => URL.revokeObjectURL(url), PACKET_TAB_URL_TTL_MS);
+        setPacketPreview(null);
+      } else {
+        setPacketPreview({ url, key: packetKey, sections, route });
+      }
     } catch (caught) {
+      if (tab && !tab.closed) tab.close();
       setPacketError(caught instanceof Error ? caught.message : "The packet preview could not be generated.");
     } finally {
       setPacketLoading(false);
@@ -505,7 +536,7 @@ export function SendRouteDialog({
         {error ? <div className="mbrd-alert" role="alert">{error}</div> : null}
 
         <div className="mbrd-actions">
-          {onPreviewPacket ? <button className="mbrd-cancel mbrd-preview" type="button" disabled={submitting || packetLoading} onClick={() => { void previewPacket(); }}>{packetLoading ? "Building packet…" : packetPreview && !packetCurrent ? "Refresh packet preview" : "Preview packet"}</button> : null}
+          {onPreviewPacket ? <button className="mbrd-cancel mbrd-preview" type="button" disabled={submitting || packetLoading} onClick={() => { void previewPacket(); }}>{packetLoading ? "Building packet…" : packetPreview && !packetCurrent ? "Refresh packet" : "View packet"}</button> : null}
           <button className="mbrd-cancel" type="button" disabled={submitting} onClick={onCancel}>Cancel</button>
           <button
             className="mbrd-confirm"

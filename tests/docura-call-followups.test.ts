@@ -255,14 +255,49 @@ describe("packet preview in the delivery-route dialog", () => {
     expect(sendRoutePacketSectionLabels(["cover", "claim_form"], "mail")[0]).toBe("Mail cover sheet");
   });
 
-  it("previews the packet for the selected route without confirming the send", async () => {
+  it("View packet opens the packet PDF in a new tab without confirming the send", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-packet");
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const tab = { closed: false, close: vi.fn(), location: { href: "" }, document: { title: "", body: { textContent: "" } } };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const onPreviewPacket = vi.fn(async () => ({ pdf: new Blob(["%PDF-1.4"], { type: "application/pdf" }), sections: ["cover", "claim_form"] }));
+    const onConfirm = vi.fn();
+    const view = await render(createElement(SendRouteDialog, { delivery, onCancel: () => undefined, onConfirm, onPreviewPacket }));
+    try {
+      const button = [...view.container.querySelectorAll("button")].find((item) => item.textContent === "View packet")!;
+      await act(async () => { button.click(); });
+      expect(open).toHaveBeenCalledWith("", "_blank");
+      expect(tab.location.href).toBe("blob:synthetic-packet");
+      expect(view.container.querySelector("iframe")).toBeNull();
+      expect(onConfirm).not.toHaveBeenCalled();
+      vi.runAllTimers();
+      expect(revoke).toHaveBeenCalledWith("blob:synthetic-packet");
+    } finally { vi.useRealTimers(); open.mockRestore(); await view.unmount(); }
+  });
+
+  it("closes the new tab when the packet cannot be built", async () => {
+    const tab = { closed: false, close: vi.fn(), location: { href: "" }, document: { title: "", body: { textContent: "" } } };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    const onPreviewPacket = vi.fn(async () => { throw new Error("Synthetic packet failure"); });
+    const view = await render(createElement(SendRouteDialog, { delivery, onCancel: () => undefined, onConfirm: () => undefined, onPreviewPacket }));
+    try {
+      const button = [...view.container.querySelectorAll("button")].find((item) => item.textContent === "View packet")!;
+      await act(async () => { button.click(); });
+      expect(tab.close).toHaveBeenCalled();
+      expect(view.container.textContent).toContain("Synthetic packet failure");
+    } finally { open.mockRestore(); await view.unmount(); }
+  });
+
+  it("shows the packet inline when the browser blocks the new tab", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("about:blank#synthetic-packet");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const onPreviewPacket = vi.fn(async () => ({ pdf: new Blob(["%PDF-1.4"], { type: "application/pdf" }), sections: ["cover", "claim_form", "document", "w9"] }));
     const onConfirm = vi.fn();
     const view = await render(createElement(SendRouteDialog, { delivery, onCancel: () => undefined, onConfirm, onPreviewPacket }));
     try {
-      const button = [...view.container.querySelectorAll("button")].find((item) => item.textContent === "Preview packet")!;
+      const button = [...view.container.querySelectorAll("button")].find((item) => item.textContent === "View packet")!;
       await act(async () => { button.click(); });
       expect(onPreviewPacket).toHaveBeenCalledWith({ route: "fax", destination: { faxNumber: "2135550100" } });
       expect(view.container.querySelector("iframe")?.getAttribute("src")).toBe("about:blank#synthetic-packet");
@@ -272,12 +307,12 @@ describe("packet preview in the delivery-route dialog", () => {
       const mail = [...view.container.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((item) => item.textContent?.includes("Mail Bill"))!;
       await act(async () => { mail.click(); });
       expect(view.container.querySelector("iframe")).toBeNull();
-      expect(view.container.textContent).toContain("Refresh packet preview");
-    } finally { await view.unmount(); }
+      expect(view.container.textContent).toContain("Refresh packet");
+    } finally { open.mockRestore(); await view.unmount(); }
   });
 
   it("hides the button when no packet preview is available", async () => {
     const view = await render(createElement(SendRouteDialog, { delivery, onCancel: () => undefined, onConfirm: () => undefined }));
-    try { expect(view.container.textContent).not.toContain("Preview packet"); } finally { await view.unmount(); }
+    try { expect(view.container.textContent).not.toContain("View packet"); } finally { await view.unmount(); }
   });
 });
