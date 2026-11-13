@@ -30,10 +30,12 @@ export type BillCourtesyCopyFormProps = {
   onPreview: (input: BillCourtesyCopyInput) => Promise<BillCourtesyCopyPreview>;
   onSend: (input: BillCourtesyCopyInput & { packetHash: string }, idempotencyKey: string) => Promise<BillCourtesyCopyResult>;
   onSent?: (result: BillCourtesyCopyResult) => void;
+  /** The signed-in sender's email. Offers a "CC me" checkbox. */
+  ccSelfEmail?: string;
 };
 
 /** A courtesy copy is never a payer submission. Preview and recipient confirmation are explicit. */
-export function BillCourtesyCopyForm({ documents, recipientOptions = [], subject: initialSubject = "Courtesy copy — bill packet", environment, appearance, onPreview, onSend, onSent }: BillCourtesyCopyFormProps) {
+export function BillCourtesyCopyForm({ documents, recipientOptions = [], subject: initialSubject = "Courtesy copy — bill packet", environment, appearance, onPreview, onSend, onSent, ccSelfEmail }: BillCourtesyCopyFormProps) {
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState(initialSubject);
@@ -48,7 +50,11 @@ export function BillCourtesyCopyForm({ documents, recipientOptions = [], subject
   const [result, setResult] = useState<BillCourtesyCopyResult | null>(null);
   const retryKey = useRef("");
   const addresses = (value: string) => value.split(/[,;\n]/).map((email) => email.trim()).filter(Boolean);
-  const input: BillCourtesyCopyInput = { to: addresses(to), cc: addresses(cc), subject, bodyText, documentIds, includeCms1500 };
+  const [ccSelf, setCcSelf] = useState(false);
+  const selfEmail = courtesyCopyRecipientOptions(ccSelfEmail ? [{ email: ccSelfEmail }] : [])[0]?.email ?? null;
+  const typedCc = addresses(cc);
+  const ccAll = selfEmail && ccSelf && !typedCc.some((email) => email.toLowerCase() === selfEmail.toLowerCase()) ? [...typedCc, selfEmail] : typedCc;
+  const input: BillCourtesyCopyInput = { to: addresses(to), cc: ccAll, subject, bodyText, documentIds, includeCms1500 };
   const choices = courtesyCopyRecipientOptions(recipientOptions);
   const selected = new Set([...input.to, ...(input.cc ?? [])].map((email) => email.toLowerCase()));
   const recipientPicker = (field: "To" | "CC", value: string, update: (value: string) => void) => choices.length ?
@@ -88,6 +94,7 @@ export function BillCourtesyCopyForm({ documents, recipientOptions = [], subject
           {recipientPicker("To", to, setTo)}
           <label>CC <span>(optional)</span><input value={cc} onChange={(event) => setCc(event.target.value)} autoComplete="off" /></label>
           {recipientPicker("CC", cc, setCc)}
+          {selfEmail ? <label className="mb-courtesy-cc-self"><Checkbox checked={ccSelf} onChange={(event) => setCcSelf(event.target.checked)} />CC me ({selfEmail})</label> : null}
           <small>Separate multiple email addresses with commas. Replies return to the workspace inbox.</small>
         </div><div className="mb-courtesy-documents"><h3>Combined PDF packet</h3>
           <label><Checkbox checked disabled />Proof of submission cover sheet — first page</label>

@@ -419,6 +419,8 @@ export type ConnectedBillLifecycleProps = UseBillLifecycleOptions & BillDetailNa
   appearance?: MindBillReactAppearance;
   /** Case-scoped suggestions; recipients must still be selected and confirmed. */
   courtesyCopyRecipientOptions?: readonly CourtesyCopyRecipientOption[];
+  /** The signed-in sender's email; the courtesy-copy form offers "CC me". */
+  ccSelfEmail?: string;
   /** Human-readable name recorded for user-initiated bill actions. */
   actorName?: string;
   /** Optional host-system claims-administrator name shown as a selection hint. */
@@ -742,7 +744,7 @@ export function shouldShowSandboxControls(environment: BillLifecycleData["enviro
 }
 
 export function ConnectedBillLifecycle({
-  billingSettings, appearance, actorName, onOpenCms1500, onOpenClaimForm, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, analytics, onAnalyticsEvent, ...options }: ConnectedBillLifecycleProps): ReactElement {
+  billingSettings, appearance, actorName, onOpenCms1500, onOpenClaimForm, validationIssues, requireLinkedEntityIds, onPatientClick, onRenderingProviderClick, onClaimsAdministratorClick, claimsAdministratorHint, claimsAdministratorSources, courtesyCopyRecipientOptions = [], ccSelfEmail, sandboxControls = false, className, style, loadingFallback, errorFallback, onChanged, analytics, onAnalyticsEvent, ...options }: ConnectedBillLifecycleProps): ReactElement {
   const analyticsOptions = { ...(analytics !== undefined ? { analytics } : {}), ...(onAnalyticsEvent ? { onAnalyticsEvent } : {}) };
   const track = useMindBillAnalytics("ConnectedBillLifecycle", analyticsOptions);
   const lifecycle = useBillLifecycle(options);
@@ -996,7 +998,7 @@ export function ConnectedBillLifecycle({
       }}>{action.label}</button>)}
     </aside> : null}
 
-    {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><section className="mb-lifecycle-courtesy"><h3>Forward courtesy copy</h3><BillCourtesyCopyForm documents={data.bill.attachments} recipientOptions={courtesyCopyRecipientOptions} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(appearance ? { appearance } : {})} /></section></LifecycleDialog> : null}
+    {activePanel === "courtesy_copy" ? <LifecycleDialog title="Forward courtesy copy" wide onClose={() => setPanel("")}><section className="mb-lifecycle-courtesy"><h3>Forward courtesy copy</h3><BillCourtesyCopyForm documents={data.bill.attachments} recipientOptions={courtesyCopyRecipientOptions} subject={`Courtesy copy — bill #${data.bill.billNumber}`} environment={data.environment} onPreview={lifecycle.previewCourtesyCopy} onSend={lifecycle.sendCourtesyCopy} onSent={() => { void lifecycle.refresh(); }} {...(ccSelfEmail ? { ccSelfEmail } : {})} {...(appearance ? { appearance } : {})} /></section></LifecycleDialog> : null}
     {activePanel === "ibr" ? <LifecycleDialog title="Prepare Independent Bill Review packet" onClose={() => setPanel("")}><section className="mb-lifecycle-panel"><header style={{ paddingRight: 44 }}><h3>Prepare Independent Bill Review packet</h3></header><p>Download a PDF packet for self-filing Independent Bill Review (IBR). Preparing this packet does not file the review, send it to a payer, or change the bill status.</p>{lifecycle.error ? <p role="alert" className="mb-lifecycle-message error">{lifecycle.error.message}</p> : null}<div className="mb-lifecycle-panel-actions"><button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("")}>Cancel</button><button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadIbrPacket().then(() => { setPanel(""); setNotice("IBR packet prepared for self-filing. The review has not been filed."); }).catch(() => undefined)}>{lifecycle.isMutating ? "Preparing…" : "Prepare IBR packet"}</button></div></section></LifecycleDialog> : null}
     {activePanel === "resubmit" && correctionInitialBill ? <LifecycleDialog title="Correct and resubmit" wide onClose={() => setPanel("")}><section className="mb-lifecycle-correction"><header><div><h3>Correct and resubmit</h3><p>Review the rejected snapshot, correct the highlighted information, and submit a new immutable attempt under this bill.</p></div></header>{data.environment === "live" ? <div className="mb-lifecycle-live-warning"><strong>Live clearinghouse submission</strong><span>Resubmitting sends a real bill. Confirm the corrected information before continuing.</span></div> : null}{data.rejection ? <CorrectionRejectionReason rejection={data.rejection} /> : null}<CorrectionVerificationContact delivery={data.delivery} /><label className="mb-lifecycle-correction-note"><span>Correction note (optional)</span><textarea value={reason} placeholder="What changed before resubmission?" onChange={(event) => setReason(event.target.value)} /></label><BillSubmissionForm
       className="mbsf-lifecycle-correction"
