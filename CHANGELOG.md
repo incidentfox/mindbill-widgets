@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.91.0 — @mindbill/react 0.91.0
+
+No server changes are required; both additions are optional props.
+
+### Added
+- `ccSelfEmail` on `SendRouteDialog`, `BillSubmissionForm`, `BillCourtesyCopyForm` and `ConnectedBillLifecycle`:
+  pass the signed-in sender's email and emailed bills and courtesy copies offer a **CC me** checkbox (off by default)
+  that adds that address to the Cc list.
+- `guidance="full" | "minimal"` on `BillSubmissionForm`. `"minimal"` hides explanatory hints (coding rules, search
+  tips, drop-zone copy) for experienced billers; validation errors, fee and routing status always show. Default
+  `"full"` keeps today's behavior.
+
 ## 0.90.0 — @mindbill/react 0.90.0
 
 No server or host code changes are required.

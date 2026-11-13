@@ -447,6 +447,8 @@ encrypted by MindBill and read back as an empty `taxId` with `taxIdLast4` and
 an unchanged SSN blank to preserve it, or let the user explicitly replace/clear it.
 Direct API callers must omit `taxId` to preserve it and send `taxId: ""` to clear it.
 `organizationTaxIdWrite` converts masked profile state to that write contract.
+`guidance="minimal"` hides explanatory hints for experienced billers (errors and status always show), and
+`ccSelfEmail="biller@example.com"` adds a **CC me** checkbox to the email send dialog and the courtesy-copy form.
 
 For bill creation, `organizationProfileOptions(profile)` converts an SSN provider
 to a server-resolved `billingProvider: { savedProviderId }` reference. MindBill

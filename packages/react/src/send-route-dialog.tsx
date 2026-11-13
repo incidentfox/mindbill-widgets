@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { BillDeliveryOptions, BillSubmissionRoute, MailingAddressParts, SubmitBillInput } from "@mindbill/browser";
 import { composeMailingAddress, isMailingAddressValid, parseMailingAddress } from "@mindbill/browser";
 import { MailingAddressFields } from "./mailing-address-fields";
+import { Checkbox } from "./form-controls";
 
 const EMAIL_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
 
@@ -69,6 +70,8 @@ export type SendRouteDialogProps = {
   onPreviewPacket?: (submission: SendRouteSubmission) => Promise<Blob | SendRoutePacketPreview>;
   /** Called when the biller changes the selected delivery route. */
   onRouteChange?: (route: BillSubmissionRoute) => void;
+  /** The signed-in sender's email. Emailed bills offer a "CC me" checkbox that copies this address. */
+  ccSelfEmail?: string;
 };
 
 const PACKET_TAB_URL_TTL_MS = 5 * 60_000;
@@ -141,6 +144,7 @@ const css = `
 .mbrd-choice-detail{margin-top:1px;color:var(--mb-muted);font-size:12px}
 .mbrd-choice-body{display:grid;gap:8px;padding:10px 11px;border-top:1px solid var(--mb-border)}
 .mbrd-field{display:grid;gap:5px;font-size:13px}
+.mbrd-cc-self{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer}.mbrd-cc-self-email{font-weight:400;color:var(--mb-muted,#64748b)}
 .mbrd-label{font-weight:650}
 .mbrd-star{color:var(--mb-danger)}
 .mbrd-input,.mbrd-textarea{width:100%;padding:9px 11px;border:1px solid var(--mb-border);border-radius:calc(var(--mb-control-radius) - 2px);background:var(--mb-input);color:var(--mb-text);font:inherit;font-size:14px}
@@ -256,6 +260,7 @@ export function SendRouteDialog({
   onConfirm,
   onPreviewPacket,
   onRouteChange,
+  ccSelfEmail,
 }: SendRouteDialogProps): ReactElement {
   const ebillOption = delivery.options.find((option) => option.route === "ebill");
   const mailOption = delivery.options.find((option) => option.route === "mail");
@@ -272,6 +277,8 @@ export function SendRouteDialog({
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [ccInput, setCcInput] = useState("");
+  const [ccSelf, setCcSelf] = useState(false);
+  const selfEmail = ccSelfEmail?.trim() && EMAIL_RE.test(ccSelfEmail.trim()) ? ccSelfEmail.trim() : null;
   const [faxTo, setFaxTo] = useState("");
   const [attention, setAttention] = useState("");
   const [mailParts, setMailParts] = useState<MailingAddressParts>(() => parseMailingAddress(onFileMail).parts);
@@ -296,8 +303,11 @@ export function SendRouteDialog({
   const effectiveFax = faxMode === "onfile" && onFileFax ? onFileFax : faxTo;
   const faxDigits = effectiveFax.replace(/\D/g, "");
   const emailValid = EMAIL_RE.test(effectiveEmail);
-  const ccList = ccInput.split(/[,;]/).map((entry) => entry.trim()).filter(Boolean);
-  const ccValid = ccList.every((entry) => EMAIL_RE.test(entry));
+  const typedCc = ccInput.split(/[,;]/).map((entry) => entry.trim()).filter(Boolean);
+  const ccValid = typedCc.every((entry) => EMAIL_RE.test(entry));
+  const ccList = selfEmail && ccSelf && !typedCc.some((entry) => entry.toLowerCase() === selfEmail.toLowerCase())
+    ? [...typedCc, selfEmail]
+    : typedCc;
   const faxValid = faxDigits.length >= 10;
   const mailValid = isMailingAddressValid(mailParts);
   const mailTo = composeMailingAddress(mailParts);
@@ -335,8 +345,8 @@ export function SendRouteDialog({
       return { route, destination: { mailingAddress: mailTo } };
     }
     return { route };
-    // ccList derives from ccInput.
-  }, [route, effectiveEmail, subject, message, ccInput, effectiveFax, attention, mailTo]);
+    // ccList derives from ccInput, ccSelf and selfEmail.
+  }, [route, effectiveEmail, subject, message, ccInput, ccSelf, selfEmail, effectiveFax, attention, mailTo]);
   // The packet differs by route (fax and mail add a cover sheet) and by the fax ATTENTION line.
   const packetKey = JSON.stringify([route, route === "fax" ? attention.trim() : ""]);
   const packetCurrent = packetPreview?.key === packetKey;
@@ -435,6 +445,12 @@ export function SendRouteDialog({
                   <input className="mbrd-input" value={ccInput} placeholder="adjuster@payer.com, supervisor@payer.com" onChange={(event) => setCcInput(event.target.value)} />
                   {!ccValid ? <span className="mbrd-error">Each Cc entry must be a valid email address (separate with commas).</span> : null}
                 </label>
+                {selfEmail ? (
+                  <label className="mbrd-cc-self">
+                    <Checkbox checked={ccSelf} onChange={(event) => setCcSelf(event.target.checked)} />
+                    <span>CC me <span className="mbrd-cc-self-email">({selfEmail})</span></span>
+                  </label>
+                ) : null}
                 <label className="mbrd-field">
                   <span className="mbrd-label">Email subject — optional</span>
                   <input className="mbrd-input" value={subject} maxLength={255} onChange={(event) => setSubject(event.target.value)} />
