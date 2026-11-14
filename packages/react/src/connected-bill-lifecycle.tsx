@@ -26,6 +26,7 @@ import {
   type BillLifecycleClient,
   type BillLifecycleClientOptions,
   type BillLifecycleData,
+  type BillAttemptSummary,
   type BillRejection,
   type CloseBillInput,
   type PostBillPaymentInput,
@@ -136,6 +137,13 @@ export function billTeamNotes(data: Pick<BillLifecycleData, "notes" | "history">
 }
 
 /** Resolve one attempt without substituting files or snapshots from another bill. */
+/** An earlier attempt has its own packet when it was its own bill, e.g. the original before a Second Review. */
+export function hasOwnSubmissionPacket(data: BillLifecycleData, attempt: BillAttemptSummary): boolean {
+  if (attempt.isCurrent || !attempt.billId) return false;
+  const current = data.attempts?.find((item) => item.isCurrent);
+  return Boolean(current?.billId && current.billId !== attempt.billId);
+}
+
 export function billLifecycleSubmissionSelection(
   data: Pick<BillLifecycleData, "history" | "attempts" | "submissionDetails">,
   selectedSubmissionId?: string,
@@ -174,6 +182,7 @@ export type UseBillLifecycleResult = {
   openAttachment: (attachment: Pick<BillReviewAttachment, "id">) => Promise<void>;
   openEor: (document: BillEorDocument) => Promise<void>;
   downloadPacket: () => Promise<void>;
+  downloadSubmissionPacket: (attemptId: string) => Promise<void>;
   downloadElectronicEor: () => Promise<void>;
   downloadSubmissionArtifact: (attemptId: string, artifactId: string, label: string) => Promise<void>;
   downloadIbrPacket: () => Promise<void>;
@@ -347,6 +356,16 @@ export function useBillLifecycle({
       throw nextError;
     }
   }, [client]);
+  const downloadSubmissionPacket = useCallback(async (attemptId: string) => {
+    setError(null);
+    try {
+      await openPdfFromUserGesture(() => client.getSubmissionPacket(attemptId));
+    } catch (cause) {
+      const nextError = cause instanceof Error ? cause : new Error("Submission packet could not be opened.");
+      if (mounted.current) setError(nextError);
+      throw nextError;
+    }
+  }, [client]);
   const downloadSubmissionArtifact = useCallback(async (attemptId: string, artifactId: string, label: string) => {
     setError(null);
     try {
@@ -391,6 +410,7 @@ export function useBillLifecycle({
     openAttachment,
     openEor,
     downloadPacket,
+    downloadSubmissionPacket,
     downloadElectronicEor,
     downloadSubmissionArtifact,
     downloadIbrPacket,
@@ -961,7 +981,7 @@ export function ConnectedBillLifecycle({
     <header className="mb-lifecycle-head">
       <div><div className="mb-lifecycle-title"><h2>{historical && !selectedAttempt ? "Previous submission" : `Bill #${historical ? selectedAttempt?.billNumber : data.bill.billNumber}`}</h2></div><p>{displayedData ? `Claim ${displayedData.injury.claimNumber || "—"}` : "Previous submission"}{lifecycle.isRefreshing ? " · Refreshing…" : ""}</p></div>
       {!historical ? <>{onOpenClaimForm ? <button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => onOpenClaimForm(data.bill.id, data.bill.claimForm ?? "cms1500")}>View {({ cms1500: "CMS-1500", ub04: "UB-04", ada: "ADA", ncpdp: "NCPDP" } as const)[data.bill.claimForm ?? "cms1500"]}</button> : onOpenCms1500 && (!data.bill.claimForm || data.bill.claimForm === "cms1500") ? <button type="button" className="mb-lifecycle-button primary" disabled={lifecycle.isMutating} onClick={() => onOpenCms1500(data.bill.id)}>View CMS-1500</button> : null}<button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => void lifecycle.downloadPacket().catch(() => undefined)}>Download packet</button>
-      <button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("courtesy_copy")}>Forward copy</button></> : null}
+      <button type="button" className="mb-lifecycle-button secondary" disabled={lifecycle.isMutating} onClick={() => setPanel("courtesy_copy")}>Forward copy</button></> : selectedAttempt && hasOwnSubmissionPacket(data, selectedAttempt) ? <button type="button" className="mb-lifecycle-button secondary" onClick={() => void lifecycle.downloadSubmissionPacket(selectedAttempt.id).catch(() => undefined)}>Download packet</button> : null}
     </header>
 
     <div className="mb-lifecycle-tabs" role="tablist" aria-label="Bill view">

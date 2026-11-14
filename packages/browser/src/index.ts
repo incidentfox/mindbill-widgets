@@ -1428,6 +1428,8 @@ export type BillLifecycleClient = {
   getElectronicEorPdf: () => Promise<Blob>;
   getPacket: () => Promise<Blob>;
   getSubmissionArtifact: (attemptId: string, artifactId: string) => Promise<Blob>;
+  /** Full packet of an earlier submission that was its own bill, e.g. the original before a Second Review. */
+  getSubmissionPacket: (attemptId: string) => Promise<Blob>;
   /** Prepare a self-filing packet. Does not file IBR or send anything to a payer. */
   prepareIbrPacket: () => Promise<Blob>;
   previewCourtesyCopy: (input: BillCourtesyCopyInput) => Promise<BillCourtesyCopyPreview>;
@@ -2156,6 +2158,11 @@ export function createBillLifecycleClient({
     async getPacket() {
       const response = await request(billPath("/packet"));
       if (!response.ok) throw await responseError(response, "Submission packet could not be downloaded.");
+      return response.blob();
+    },
+    async getSubmissionPacket(attemptId) {
+      const response = await request(billPath(`/submissions/${encodeURIComponent(attemptId)}/packet`));
+      if (!response.ok) throw await responseError(response, "The submission packet could not be downloaded.");
       return response.blob();
     },
     async getSubmissionArtifact(attemptId, artifactId) {
