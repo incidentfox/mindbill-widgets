@@ -13,6 +13,21 @@ describe("retained submission files and IBR preparation", () => {
     expect(new Headers(fetcher.mock.calls[1]![1]?.headers).get("authorization")).toBe("Bearer synthetic-token");
   });
 
+  it("downloads an earlier submission's own packet under the original root bill", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(session()).mockResolvedValueOnce(new Response("%PDF original packet"));
+    const client = createBillLifecycleClient({ billId: "root-bill", fetch: fetcher });
+    expect(await (await client.getSubmissionPacket("attempt/original")).text()).toBe("%PDF original packet");
+    expect(String(fetcher.mock.calls[1]![0])).toContain("/bills/root-bill/submissions/attempt%2Foriginal/packet");
+    expect(new Headers(fetcher.mock.calls[1]![1]?.headers).get("authorization")).toBe("Bearer synthetic-token");
+  });
+
+  it("reports an unavailable earlier packet instead of returning the current one", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(session()).mockResolvedValueOnce(new Response("", { status: 404 }));
+    const client = createBillLifecycleClient({ billId: "root-bill", fetch: fetcher });
+    await expect(client.getSubmissionPacket("old")).rejects.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["/partner/v2/browser/bills", "/partner/v2/bills"])("prepares and securely downloads a self-filing IBR packet via %s without submitting second review", async (prefix) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(session())
       .mockResolvedValueOnce(json({ ok: true, packetUrl: `${prefix}/current-linked-bill/ibr-packet` }))

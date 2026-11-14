@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BillLifecycleData, BillSubmissionDetail } from "../packages/browser/src/index";
-import { billLifecycleSubmissionSelection } from "../packages/react/src/connected-bill-lifecycle";
+import { billLifecycleSubmissionSelection, hasOwnSubmissionPacket } from "../packages/react/src/connected-bill-lifecycle";
 
 const attempt = (id: string, isCurrent: boolean) => ({ id, billId: `synthetic-bill-${id}`, label: id, isCurrent });
 const detail = (id: string): BillSubmissionDetail => ({
@@ -63,4 +63,14 @@ it("retains the 277 acceptance date with a resolved status and never invents ela
 it.each(["Zero-payment EOR", "Payment pending", "Unpaid", "Not paid"])("keeps %s neutral", (outcomeLabel) => {
   const selection = billLifecycleSubmissionSelection({ attempts: [{ ...attempt("current", true), outcomeLabel }] });
   expect(selection.ribbonItems[0]!.badgeTone).toBe("neutral");
+});
+
+describe("earlier submission packet", () => {
+  it("offers an earlier submission's packet only when it was its own bill", () => {
+    const [previous, current] = data.attempts!;
+    expect(hasOwnSubmissionPacket(data as BillLifecycleData, previous!)).toBe(true);
+    expect(hasOwnSubmissionPacket(data as BillLifecycleData, current!)).toBe(false);
+    const resend = { attempts: [{ ...previous!, billId: "synthetic-bill-current" }, current!] };
+    expect(hasOwnSubmissionPacket(resend as BillLifecycleData, resend.attempts[0]!)).toBe(false);
+  });
 });

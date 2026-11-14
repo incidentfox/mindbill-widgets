@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.92.0 — @mindbill/react 0.92.0 / @mindbill/browser 0.59.0
+
+Requires the MindBill server route `GET /partner/v2/bills/{billId}/submissions/{attemptId}/packet`.
+
+### Added
+- `ConnectedBillLifecycle`: selecting an earlier submission that was its own bill (for example the original bill
+  before a Second Review or correction) now shows **Download packet**, which opens that submission's complete packet
+  — proof, claim form as submitted, supporting documents and W-9. It is never rebuilt from the current bill.
+- Browser client `getSubmissionPacket(attemptId)` and lifecycle `downloadSubmissionPacket(attemptId)`.
+
 ## 0.91.0 — @mindbill/react 0.91.0
 
 No server changes are required; both additions are optional props.
